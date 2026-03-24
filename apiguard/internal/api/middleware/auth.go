@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 // claimsKey is the context key for storing JWT claims.
@@ -20,6 +22,7 @@ type Claims struct {
 	Sub string `json:"sub"`
 	Exp int64  `json:"exp"`
 	Iat int64  `json:"iat"`
+	Nbf int64  `json:"nbf,omitempty"`
 }
 
 // ClaimsFromContext retrieves the JWT claims from the request context.
@@ -60,7 +63,8 @@ func JWTAuth(secret string) func(next http.Handler) http.Handler {
 			// Validate JWT token signature and claims.
 			claims, err := validateJWT(token, secret)
 			if err != nil {
-				unauthorized(w, fmt.Sprintf("invalid token: %v", err))
+				log.Warn().Err(err).Str("remote_addr", r.RemoteAddr).Msg("JWT validation failed")
+				unauthorized(w, "invalid or expired token")
 				return
 			}
 
@@ -138,6 +142,11 @@ func validateJWT(token, secret string) (*Claims, error) {
 	if claims.Iat > 0 && claims.Iat > now+60 {
 		// Allow 60 seconds of clock skew.
 		return nil, fmt.Errorf("token issued in the future")
+	}
+
+	// Check not-before claim (with 60 second clock skew tolerance).
+	if claims.Nbf > 0 && now < claims.Nbf-60 {
+		return nil, fmt.Errorf("token is not yet valid")
 	}
 
 	return &claims, nil

@@ -120,6 +120,14 @@ func (d *DB) GetFinding(ctx context.Context, id uuid.UUID) (*Finding, error) {
 // ListFindings returns a filtered, paginated list of findings.
 // It returns the findings, the total count matching the filters, and any error.
 func (d *DB) ListFindings(ctx context.Context, filters FindingFilters, limit, offset int) ([]Finding, int, error) {
+	const maxPageSize = 100
+	if limit <= 0 || limit > maxPageSize {
+		limit = maxPageSize
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
 	var conditions []string
 	var args []interface{}
 	argIdx := 1

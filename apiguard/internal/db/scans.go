@@ -56,6 +56,14 @@ func (d *DB) GetScan(ctx context.Context, id uuid.UUID) (*Scan, error) {
 // ListScans returns a paginated list of scans ordered by creation date (newest first).
 // It returns the scans, the total count, and any error.
 func (d *DB) ListScans(ctx context.Context, limit, offset int) ([]Scan, int, error) {
+	const maxPageSize = 100
+	if limit <= 0 || limit > maxPageSize {
+		limit = maxPageSize
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
 	countQuery := `SELECT COUNT(*) FROM scans`
 	var total int
 	if err := d.Pool.QueryRow(ctx, countQuery).Scan(&total); err != nil {

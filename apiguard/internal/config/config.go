@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/spf13/viper"
@@ -29,7 +30,7 @@ type DatabaseConfig struct {
 // RedisConfig holds Redis connection settings.
 type RedisConfig struct {
 	URL      string `mapstructure:"url"`
-	Password string `mapstructure:"password"`
+	Password string `mapstructure:"password" json:"-"`
 	DB       int    `mapstructure:"db"`
 }
 
@@ -44,9 +45,18 @@ type ScannerConfig struct {
 
 // AuthConfig holds authentication settings.
 type AuthConfig struct {
-	JWTSecret     string        `mapstructure:"jwt_secret"`
+	JWTSecret     string        `mapstructure:"jwt_secret" json:"-"`
 	TokenExpiry   time.Duration `mapstructure:"token_expiry"`
 	EnableAPIKeys bool          `mapstructure:"enable_api_keys"`
+}
+
+// String returns a safe representation of AuthConfig with secrets redacted.
+func (a AuthConfig) String() string {
+	secret := "[REDACTED]"
+	if a.JWTSecret == "" {
+		secret = "[NOT SET]"
+	}
+	return fmt.Sprintf("AuthConfig{JWTSecret: %s}", secret)
 }
 
 // ReportConfig holds report generation settings.

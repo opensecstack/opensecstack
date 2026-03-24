@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -72,6 +74,8 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.RequestLogger(s.logger))
 	s.router.Use(chimw.Recoverer)
 	s.router.Use(chimw.Timeout(60 * time.Second))
+	s.router.Use(RateLimiter(120)) // 120 requests per minute per IP
+	s.router.Use(CORSMiddleware(nil)) // No cross-origin allowed by default (same-origin only)
 }
 
 func (s *Server) registerRoutes() {
@@ -80,4 +84,86 @@ func (s *Server) registerRoutes() {
 	f := handlers.NewFindings(s.logger)
 
 	RegisterRoutes(s.router, h, sc, f, s.config)
+}
+
+// RateLimiter returns a middleware that limits requests per IP using a sliding window.
+func RateLimiter(requestsPerMinute int) func(http.Handler) http.Handler {
+	type visitor struct {
+		count   int
+		resetAt time.Time
+	}
+	var mu sync.Mutex
+	visitors := make(map[string]*visitor)
+
+	// Cleanup old entries every 5 minutes.
+	go func() {
+		for {
+			time.Sleep(5 * time.Minute)
+			mu.Lock()
+			now := time.Now()
+			for ip, v := range visitors {
+				if now.After(v.resetAt) {
+					delete(visitors, ip)
+				}
+			}
+			mu.Unlock()
+		}
+	}()
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip := r.RemoteAddr
+			if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+				ip = strings.Split(fwd, ",")[0]
+			}
+			ip = strings.TrimSpace(ip)
+
+			mu.Lock()
+			v, exists := visitors[ip]
+			now := time.Now()
+			if !exists || now.After(v.resetAt) {
+				visitors[ip] = &visitor{count: 1, resetAt: now.Add(time.Minute)}
+				mu.Unlock()
+				next.ServeHTTP(w, r)
+				return
+			}
+			v.count++
+			if v.count > requestsPerMinute {
+				mu.Unlock()
+				w.Header().Set("Retry-After", "60")
+				http.Error(w, `{"error":"rate limit exceeded"}`, http.StatusTooManyRequests)
+				return
+			}
+			mu.Unlock()
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// CORSMiddleware returns a middleware that sets CORS headers for allowed origins.
+// If allowedOrigins is nil or empty, no CORS headers are set (same-origin only).
+func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			allowed := false
+			for _, o := range allowedOrigins {
+				if o == origin || o == "*" {
+					allowed = true
+					break
+				}
+			}
+			if allowed {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+				w.Header().Set("Access-Control-Max-Age", "86400")
+			}
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }

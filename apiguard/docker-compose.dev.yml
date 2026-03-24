@@ -13,6 +13,7 @@ services:
     environment:
       - APIGUARD_DB_URL=postgres://apiguard:changeme@postgres:5432/apiguard?sslmode=disable
       - APIGUARD_JWT_SECRET=dev-secret-do-not-use-in-production-min32chars
+      - APIGUARD_REDIS_URL=redis://localhost:6379/0
     volumes:
       - ./cmd:/app/cmd
       - ./internal:/app/internal
@@ -59,6 +60,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  vampi:
+    image: erev0s/vampi:latest
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
 
 volumes:
   pgdata-dev:

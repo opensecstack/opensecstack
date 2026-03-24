@@ -1,0 +1,21 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  bin = "./tmp/apiguard"
+  cmd = "go build -o ./tmp/apiguard ./cmd/apiguard/"
+  args_bin = ["server"]
+  delay = 1000
+  exclude_dir = ["vendor", "web", "rust", "testdata", "tmp"]
+  exclude_regex = ["_test\\.go$"]
+  include_dir = ["cmd", "internal"]
+  include_ext = ["go", "yaml", "yml"]
+  kill_delay = 500
+  send_interrupt = true
+  stop_on_error = true
+
+[log]
+  time = false
+
+[misc]
+  clean_on_exit = true

@@ -1,0 +1,132 @@
+package db
+
+import (
+	"database/sql"
+	"encoding/json"
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// ScanStatus represents the status of a scan.
+type ScanStatus string
+
+const (
+	ScanStatusPending   ScanStatus = "pending"
+	ScanStatusRunning   ScanStatus = "running"
+	ScanStatusCompleted ScanStatus = "completed"
+	ScanStatusFailed    ScanStatus = "failed"
+	ScanStatusCancelled ScanStatus = "cancelled"
+)
+
+// FindingSeverity represents the severity level of a finding.
+type FindingSeverity string
+
+const (
+	FindingSeverityCritical FindingSeverity = "critical"
+	FindingSeverityHigh     FindingSeverity = "high"
+	FindingSeverityMedium   FindingSeverity = "medium"
+	FindingSeverityLow      FindingSeverity = "low"
+	FindingSeverityInfo     FindingSeverity = "info"
+)
+
+// FindingStatus represents the triage status of a finding.
+type FindingStatus string
+
+const (
+	FindingStatusOpen          FindingStatus = "open"
+	FindingStatusConfirmed     FindingStatus = "confirmed"
+	FindingStatusFalsePositive FindingStatus = "false_positive"
+	FindingStatusAccepted      FindingStatus = "accepted"
+	FindingStatusFixed         FindingStatus = "fixed"
+)
+
+// Scan represents a row in the scans table.
+type Scan struct {
+	ID          uuid.UUID       `json:"id"`
+	SpecURL     sql.NullString  `json:"spec_url"`
+	SpecHash    sql.NullString  `json:"spec_hash"`
+	TargetURL   string          `json:"target_url"`
+	Status      ScanStatus      `json:"status"`
+	Modules     []string        `json:"modules"`
+	StartedAt   sql.NullTime    `json:"started_at"`
+	CompletedAt sql.NullTime    `json:"completed_at"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
+	ConfigJSON  json.RawMessage `json:"config_json"`
+
+	// Summary counts
+	TotalFindings int `json:"total_findings"`
+	CriticalCount int `json:"critical_count"`
+	HighCount     int `json:"high_count"`
+	MediumCount   int `json:"medium_count"`
+	LowCount      int `json:"low_count"`
+	InfoCount     int `json:"info_count"`
+
+	AuthType     sql.NullString `json:"auth_type"`
+	ErrorMessage sql.NullString `json:"error_message"`
+}
+
+// ScanSummary holds the aggregated finding counts for a completed scan.
+type ScanSummary struct {
+	TotalFindings int `json:"total_findings"`
+	CriticalCount int `json:"critical_count"`
+	HighCount     int `json:"high_count"`
+	MediumCount   int `json:"medium_count"`
+	LowCount      int `json:"low_count"`
+	InfoCount     int `json:"info_count"`
+}
+
+// Finding represents a row in the findings table.
+type Finding struct {
+	ID       uuid.UUID `json:"id"`
+	ScanID   uuid.UUID `json:"scan_id"`
+	OwaspID  string    `json:"owasp_id"`
+	ModuleID string    `json:"module_id"`
+
+	Title       string          `json:"title"`
+	Description string          `json:"description"`
+	Severity    FindingSeverity `json:"severity"`
+
+	CVSSScore  float64        `json:"cvss_score"`
+	CVSSVector sql.NullString `json:"cvss_vector"`
+
+	EndpointPath   string `json:"endpoint_path"`
+	EndpointMethod string `json:"endpoint_method"`
+
+	EvidenceRequest  sql.NullString  `json:"evidence_request"`
+	EvidenceResponse sql.NullString  `json:"evidence_response"`
+	EvidenceJSON     json.RawMessage `json:"evidence_json"`
+
+	Remediation sql.NullString `json:"remediation"`
+
+	Status     FindingStatus  `json:"status"`
+	TriagedBy  sql.NullString `json:"triaged_by"`
+	TriagedAt  sql.NullTime   `json:"triaged_at"`
+	TriageNote sql.NullString `json:"triage_note"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// FindingFilters holds optional filters for querying findings.
+type FindingFilters struct {
+	ScanID   *uuid.UUID
+	Severity *FindingSeverity
+	Status   *FindingStatus
+	OwaspID  *string
+	ModuleID *string
+}
+
+// APIInventory represents a row in the api_inventory table.
+type APIInventory struct {
+	ID            uuid.UUID      `json:"id"`
+	TargetURL     string         `json:"target_url"`
+	SpecHash      sql.NullString `json:"spec_hash"`
+	APIVersion    sql.NullString `json:"api_version"`
+	FirstSeenAt   time.Time      `json:"first_seen_at"`
+	LastScannedAt sql.NullTime   `json:"last_scanned_at"`
+	ScanCount     int            `json:"scan_count"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+}

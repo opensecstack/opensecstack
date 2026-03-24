@@ -1,0 +1,5 @@
+%YAML 1.1
+---
+key: [unclosed bracket
+  nested:
+    - also: {broken

@@ -1,0 +1,20 @@
+openapi: "3.0.3"
+info:
+  title: Circular Ref Test
+  version: "1.0.0"
+paths:
+  /test:
+    get:
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/A"
+components:
+  schemas:
+    A:
+      $ref: "#/components/schemas/B"
+    B:
+      $ref: "#/components/schemas/A"

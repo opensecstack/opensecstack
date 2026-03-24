@@ -9,8 +9,12 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - APIGUARD_DB_URL=postgres://apiguard:${POSTGRES_PASSWORD:-changeme}@postgres:5432/apiguard?sslmode=disable
-      - APIGUARD_JWT_SECRET=${APIGUARD_JWT_SECRET}
+      - APIGUARD_DB_URL=postgres://apiguard:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/apiguard?sslmode=disable
+      - APIGUARD_REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379
+      - APIGUARD_JWT_SECRET=${APIGUARD_JWT_SECRET:?APIGUARD_JWT_SECRET must be set}
+    networks:
+      - frontend
+      - backend
     depends_on:
       postgres:
         condition: service_healthy
@@ -25,20 +29,22 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
+    networks:
+      - frontend
     depends_on:
       - apiguard-api
     restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_USER: apiguard
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: apiguard
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - backend
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U apiguard"]
       interval: 5s
@@ -48,14 +54,19 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - backend
     restart: unless-stopped
 
 volumes:
   pgdata:
+
+networks:
+  frontend:
+  backend:

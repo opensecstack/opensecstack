@@ -5,6 +5,7 @@ members = [
     "analyser",
     "cvss",
     "modules",
+    "testgen",
 ]
 
 [workspace.package]

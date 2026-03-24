@@ -22,6 +22,7 @@ import (
 
 	"github.com/opensecstack/apiguard/internal/config"
 	"github.com/opensecstack/apiguard/internal/domain"
+	"github.com/opensecstack/apiguard/internal/testgen"
 )
 
 // Scanner performs API security scans.
@@ -363,7 +364,23 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 		Int("endpoint_count", len(parsedSpec.Endpoints)).
 		Msg("spec parsed successfully")
 
-	// Step 3: Return stub results (real scan modules will be wired in later).
+	// Step 3: Generate test cases from the parsed IR.
+	// The IR file path is the same temp file pattern used by parseSpec; we need to
+	// re-serialize the parsed spec to a temp file for the testgen to consume.
+	irTmpPath, err := s.writeIRToTempFile(parsedSpec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write IR for test generation: %w", err)
+	}
+	defer os.Remove(irTmpPath)
+
+	testGen := testgen.New(s.logger, req.Target, req.Modules)
+	suite, err := testGen.Generate(ctx, irTmpPath)
+	if err != nil {
+		return nil, fmt.Errorf("test generation failed: %w", err)
+	}
+	s.logger.Info().Int("test_cases", len(suite.TestCases)).Msg("test cases generated")
+
+	// Step 4: Return stub results (real scan modules will be wired in later).
 	result := &domain.ScanResult{
 		ID:          scanID,
 		Status:      domain.ScanStatusCompleted,
@@ -432,4 +449,22 @@ func (s *Scanner) parseSpec(ctx context.Context, specPath string) (*ParsedSpec, 
 	}
 
 	return &parsed, nil
+}
+
+// writeIRToTempFile serializes the parsed spec to a temporary JSON file
+// so the testgen package can consume it.
+func (s *Scanner) writeIRToTempFile(spec *ParsedSpec) (string, error) {
+	data, err := json.Marshal(spec)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal IR: %w", err)
+	}
+
+	tmpDir := os.TempDir()
+	outputPath := filepath.Join(tmpDir, fmt.Sprintf("apiguard-ir-%s.json", uuid.New().String()))
+
+	if err := os.WriteFile(outputPath, data, 0600); err != nil {
+		return "", fmt.Errorf("failed to write IR temp file: %w", err)
+	}
+
+	return outputPath, nil
 }

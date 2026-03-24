@@ -1,0 +1,79 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# Docker volumes
+pgdata/
+redisdata/
+
+# Build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go
+/bin/
+
+# Rust
+**/target/
+
+# Node
+**/node_modules/
+**/dist/
+**/build/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+**/venv/
+**/.venv/
+
+# Coverage
+coverage.out
+coverage.html
+*.coverprofile
+tarpaulin-report.html
+lcov.info
+
+# Reports (generated)
+**/reports/*.html
+**/reports/*.pdf
+**/reports/*.json
+**/reports/*.sarif
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
+
+# SDK build output
+sdk/dist/
+sdk/pkg/
+
+# Website build output
+website/.next/
+website/out/
+website/public/build/

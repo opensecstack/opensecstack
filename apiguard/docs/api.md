@@ -1,0 +1,737 @@
+# APIGuard REST API Reference
+
+Base URL: `http://localhost:8080/api/v1`
+
+All endpoints return JSON unless otherwise noted. Authenticated endpoints require a valid JWT token passed in the `Authorization` header as `Bearer <token>`.
+
+---
+
+## Table of Contents
+
+- [Authentication](#authentication)
+- [Health and Status](#health-and-status)
+- [Scans](#scans)
+- [Findings](#findings)
+- [API Inventory](#api-inventory)
+
+---
+
+## Authentication
+
+### POST /api/v1/auth/token
+
+Obtain a JWT access token and refresh token.
+
+**Auth required:** No
+
+**Request body:**
+
+```json
+{
+  "username": "admin",
+  "password": "secret"
+}
+```
+
+**Response (`200 OK`):**
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+  "token_type": "Bearer",
+  "expires_in": 3600
+}
+```
+
+| Status Code | Description                |
+|-------------|----------------------------|
+| 200         | Token issued successfully  |
+| 401         | Invalid credentials        |
+| 422         | Missing required fields    |
+
+---
+
+### POST /api/v1/auth/refresh
+
+Refresh an expired access token using a valid refresh token.
+
+**Auth required:** No
+
+**Request body:**
+
+```json
+{
+  "refresh_token": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+
+**Response (`200 OK`):**
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+  "token_type": "Bearer",
+  "expires_in": 3600
+}
+```
+
+| Status Code | Description                  |
+|-------------|------------------------------|
+| 200         | Token refreshed successfully |
+| 401         | Invalid or expired refresh token |
+
+---
+
+## Health and Status
+
+### GET /api/v1/health
+
+Returns the health status of the API server and its dependencies.
+
+**Auth required:** No
+
+**Response (`200 OK`):**
+
+```json
+{
+  "status": "healthy",
+  "timestamp": "2026-03-24T12:00:00Z",
+  "checks": {
+    "database": "up",
+    "rust_engine": "up",
+    "queue": "up"
+  }
+}
+```
+
+| Status Code | Description                        |
+|-------------|------------------------------------|
+| 200         | Service is healthy                 |
+| 503         | One or more dependencies are down  |
+
+---
+
+### GET /api/v1/version
+
+Returns build and version information.
+
+**Auth required:** No
+
+**Response (`200 OK`):**
+
+```json
+{
+  "version": "0.1.0",
+  "commit": "a1b2c3d",
+  "build_date": "2026-03-20T08:30:00Z",
+  "go_version": "go1.22.1",
+  "rust_engine_version": "0.1.0"
+}
+```
+
+| Status Code | Description          |
+|-------------|----------------------|
+| 200         | Version info returned |
+
+---
+
+## Scans
+
+### POST /api/v1/scans
+
+Create a new security scan. Provide either a `spec_url` pointing to a remote OpenAPI spec or an `inline_spec` with the spec content directly.
+
+**Auth required:** Yes
+
+**Request body:**
+
+```json
+{
+  "target_url": "https://api.example.com",
+  "spec_url": "https://api.example.com/openapi.json",
+  "inline_spec": null,
+  "modules": ["bola", "bfla", "injection", "ssrf", "auth-bypass"],
+  "auth": {
+    "type": "bearer",
+    "token": "target-api-token"
+  },
+  "options": {
+    "rate_limit": 50,
+    "timeout_seconds": 300,
+    "follow_redirects": true
+  }
+}
+```
+
+| Field          | Type     | Required | Description                                      |
+|----------------|----------|----------|--------------------------------------------------|
+| `target_url`   | string   | Yes      | Base URL of the API under test                   |
+| `spec_url`     | string   | No       | URL to an OpenAPI/Swagger spec                   |
+| `inline_spec`  | object   | No       | OpenAPI spec provided inline as JSON             |
+| `modules`      | string[] | No       | Security test modules to run (default: all)      |
+| `auth`         | object   | No       | Auth config for the target API                   |
+| `auth.type`    | string   | No       | `bearer`, `basic`, `api_key`, or `oauth2`        |
+| `auth.token`   | string   | No       | Token or key value                               |
+| `auth.header`  | string   | No       | Custom header name (for `api_key` type)          |
+| `auth.username` | string  | No       | Username (for `basic` type)                      |
+| `auth.password` | string  | No       | Password (for `basic` type)                      |
+| `options`      | object   | No       | Scan execution options                           |
+
+Either `spec_url` or `inline_spec` must be provided.
+
+**Response (`201 Created`):**
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "queued",
+  "target_url": "https://api.example.com",
+  "modules": ["bola", "bfla", "injection", "ssrf", "auth-bypass"],
+  "created_at": "2026-03-24T12:05:00Z"
+}
+```
+
+| Status Code | Description                    |
+|-------------|--------------------------------|
+| 201         | Scan created and queued        |
+| 400         | Invalid request body           |
+| 401         | Unauthorized                   |
+| 422         | Spec parsing failed            |
+
+---
+
+### GET /api/v1/scans
+
+List scans with optional filters and pagination.
+
+**Auth required:** Yes
+
+**Query parameters:**
+
+| Parameter  | Type   | Default | Description                                       |
+|------------|--------|---------|---------------------------------------------------|
+| `page`     | int    | 1       | Page number                                        |
+| `per_page` | int    | 20      | Results per page (max 100)                         |
+| `status`   | string | —       | Filter by status: `queued`, `running`, `completed`, `failed`, `cancelled` |
+| `since`    | string | —       | Filter scans created after this ISO 8601 timestamp |
+| `until`    | string | —       | Filter scans created before this ISO 8601 timestamp |
+| `sort`     | string | `created_at` | Sort field: `created_at`, `status`            |
+| `order`    | string | `desc`  | Sort order: `asc` or `desc`                        |
+
+**Response (`200 OK`):**
+
+```json
+{
+  "data": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "target_url": "https://api.example.com",
+      "status": "completed",
+      "modules": ["bola", "bfla", "injection"],
+      "finding_counts": {
+        "critical": 1,
+        "high": 3,
+        "medium": 5,
+        "low": 2,
+        "info": 4
+      },
+      "created_at": "2026-03-24T12:05:00Z",
+      "completed_at": "2026-03-24T12:08:42Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "per_page": 20,
+    "total": 1,
+    "total_pages": 1
+  }
+}
+```
+
+| Status Code | Description    |
+|-------------|----------------|
+| 200         | Scans returned |
+| 401         | Unauthorized   |
+
+---
+
+### GET /api/v1/scans/:id
+
+Get details for a specific scan including status, progress, and summary.
+
+**Auth required:** Yes
+
+**Response (`200 OK`):**
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "target_url": "https://api.example.com",
+  "spec_url": "https://api.example.com/openapi.json",
+  "status": "running",
+  "progress": {
+    "percentage": 65,
+    "current_module": "injection",
+    "endpoints_tested": 42,
+    "endpoints_total": 64
+  },
+  "modules": ["bola", "bfla", "injection", "ssrf", "auth-bypass"],
+  "finding_counts": {
+    "critical": 0,
+    "high": 2,
+    "medium": 3,
+    "low": 1,
+    "info": 2
+  },
+  "created_at": "2026-03-24T12:05:00Z",
+  "started_at": "2026-03-24T12:05:02Z",
+  "completed_at": null
+}
+```
+
+| Status Code | Description    |
+|-------------|----------------|
+| 200         | Scan returned  |
+| 401         | Unauthorized   |
+| 404         | Scan not found |
+
+---
+
+### GET /api/v1/scans/:id/findings
+
+Get findings for a specific scan with optional filters and pagination.
+
+**Auth required:** Yes
+
+**Query parameters:**
+
+| Parameter  | Type   | Default | Description                                           |
+|------------|--------|---------|-------------------------------------------------------|
+| `page`     | int    | 1       | Page number                                            |
+| `per_page` | int    | 20      | Results per page (max 100)                             |
+| `severity` | string | —       | Filter by severity: `critical`, `high`, `medium`, `low`, `info` |
+| `module`   | string | —       | Filter by module name                                  |
+| `status`   | string | —       | Filter by status: `open`, `confirmed`, `false_positive`, `accepted` |
+
+**Response (`200 OK`):**
+
+```json
+{
+  "data": [
+    {
+      "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+      "scan_id": "550e8400-e29b-41d4-a716-446655440000",
+      "module": "bola",
+      "severity": "high",
+      "title": "Broken Object Level Authorization on GET /users/:id",
+      "description": "Accessing user resources with another user's ID returns data without authorization check.",
+      "endpoint": "GET /users/{id}",
+      "status": "open",
+      "cvss_score": 7.5,
+      "created_at": "2026-03-24T12:06:15Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "per_page": 20,
+    "total": 1,
+    "total_pages": 1
+  }
+}
+```
+
+| Status Code | Description        |
+|-------------|--------------------|
+| 200         | Findings returned  |
+| 401         | Unauthorized       |
+| 404         | Scan not found     |
+
+---
+
+### GET /api/v1/scans/:id/report
+
+Download a scan report in the specified format.
+
+**Auth required:** Yes
+
+**Query parameters:**
+
+| Parameter | Type   | Default | Description                                   |
+|-----------|--------|---------|-----------------------------------------------|
+| `format`  | string | `json`  | Report format: `html`, `pdf`, `json`, `sarif` |
+
+**Response:**
+
+- `json` and `sarif` formats return `Content-Type: application/json`.
+- `html` returns `Content-Type: text/html`.
+- `pdf` returns `Content-Type: application/pdf`.
+
+**Response (`200 OK`, format=json):**
+
+```json
+{
+  "scan_id": "550e8400-e29b-41d4-a716-446655440000",
+  "target_url": "https://api.example.com",
+  "generated_at": "2026-03-24T12:10:00Z",
+  "summary": {
+    "total_findings": 15,
+    "critical": 1,
+    "high": 3,
+    "medium": 5,
+    "low": 2,
+    "info": 4,
+    "endpoints_tested": 64,
+    "duration_seconds": 222
+  },
+  "findings": [
+    {
+      "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+      "module": "bola",
+      "severity": "high",
+      "title": "Broken Object Level Authorization on GET /users/:id",
+      "description": "...",
+      "endpoint": "GET /users/{id}",
+      "evidence": { "..." : "..." },
+      "remediation": "Implement object-level authorization checks.",
+      "cvss_score": 7.5,
+      "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N"
+    }
+  ]
+}
+```
+
+| Status Code | Description                  |
+|-------------|------------------------------|
+| 200         | Report returned              |
+| 401         | Unauthorized                 |
+| 404         | Scan not found               |
+| 422         | Unsupported report format    |
+
+---
+
+### DELETE /api/v1/scans/:id
+
+Delete a scan and all associated findings. Running scans are cancelled before deletion.
+
+**Auth required:** Yes
+
+**Response (`204 No Content`):**
+
+No response body.
+
+| Status Code | Description            |
+|-------------|------------------------|
+| 204         | Scan deleted           |
+| 401         | Unauthorized           |
+| 404         | Scan not found         |
+
+---
+
+## Findings
+
+### GET /api/v1/findings
+
+List all findings across scans with optional filters and pagination.
+
+**Auth required:** Yes
+
+**Query parameters:**
+
+| Parameter  | Type   | Default      | Description                                           |
+|------------|--------|--------------|-------------------------------------------------------|
+| `page`     | int    | 1            | Page number                                            |
+| `per_page` | int    | 20           | Results per page (max 100)                             |
+| `severity` | string | —            | Filter by severity: `critical`, `high`, `medium`, `low`, `info` |
+| `module`   | string | —            | Filter by module name                                  |
+| `status`   | string | —            | Filter by status: `open`, `confirmed`, `false_positive`, `accepted` |
+| `scan_id`  | string | —            | Filter by scan ID                                      |
+| `sort`     | string | `created_at` | Sort field: `created_at`, `severity`, `cvss_score`     |
+| `order`    | string | `desc`       | Sort order: `asc` or `desc`                            |
+
+**Response (`200 OK`):**
+
+```json
+{
+  "data": [
+    {
+      "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+      "scan_id": "550e8400-e29b-41d4-a716-446655440000",
+      "module": "bola",
+      "severity": "high",
+      "title": "Broken Object Level Authorization on GET /users/:id",
+      "description": "Accessing user resources with another user's ID returns data without authorization check.",
+      "endpoint": "GET /users/{id}",
+      "status": "open",
+      "cvss_score": 7.5,
+      "created_at": "2026-03-24T12:06:15Z"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "per_page": 20,
+    "total": 1,
+    "total_pages": 1
+  }
+}
+```
+
+| Status Code | Description        |
+|-------------|--------------------|
+| 200         | Findings returned  |
+| 401         | Unauthorized       |
+
+---
+
+### GET /api/v1/findings/:id
+
+Get full details for a specific finding including evidence and CVSS breakdown.
+
+**Auth required:** Yes
+
+**Response (`200 OK`):**
+
+```json
+{
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "scan_id": "550e8400-e29b-41d4-a716-446655440000",
+  "module": "bola",
+  "severity": "high",
+  "title": "Broken Object Level Authorization on GET /users/:id",
+  "description": "Accessing user resources with another user's ID returns data without authorization check.",
+  "endpoint": "GET /users/{id}",
+  "status": "open",
+  "evidence": {
+    "request": {
+      "method": "GET",
+      "url": "https://api.example.com/users/42",
+      "headers": {
+        "Authorization": "Bearer <token_for_user_1>"
+      }
+    },
+    "response": {
+      "status_code": 200,
+      "body": "{\"id\":42,\"email\":\"other@example.com\",\"name\":\"Other User\"}"
+    },
+    "notes": "Authenticated as user 1 but retrieved user 42's data."
+  },
+  "cvss_score": 7.5,
+  "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N",
+  "cvss_breakdown": {
+    "attack_vector": "Network",
+    "attack_complexity": "Low",
+    "privileges_required": "Low",
+    "user_interaction": "None",
+    "scope": "Unchanged",
+    "confidentiality": "High",
+    "integrity": "None",
+    "availability": "None"
+  },
+  "remediation": "Implement object-level authorization checks to ensure users can only access their own resources.",
+  "references": [
+    "https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/"
+  ],
+  "created_at": "2026-03-24T12:06:15Z",
+  "updated_at": "2026-03-24T12:06:15Z"
+}
+```
+
+| Status Code | Description          |
+|-------------|----------------------|
+| 200         | Finding returned     |
+| 401         | Unauthorized         |
+| 404         | Finding not found    |
+
+---
+
+### PATCH /api/v1/findings/:id
+
+Update the triage status of a finding.
+
+**Auth required:** Yes
+
+**Request body:**
+
+```json
+{
+  "status": "false_positive",
+  "comment": "This endpoint requires an admin role which was used during testing."
+}
+```
+
+| Field     | Type   | Required | Description                                                  |
+|-----------|--------|----------|--------------------------------------------------------------|
+| `status`  | string | Yes      | New status: `confirmed`, `false_positive`, or `accepted`     |
+| `comment` | string | No       | Reason for the status change                                 |
+
+**Response (`200 OK`):**
+
+```json
+{
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "status": "false_positive",
+  "comment": "This endpoint requires an admin role which was used during testing.",
+  "updated_at": "2026-03-24T14:30:00Z"
+}
+```
+
+| Status Code | Description              |
+|-------------|--------------------------|
+| 200         | Finding updated          |
+| 400         | Invalid status value     |
+| 401         | Unauthorized             |
+| 404         | Finding not found        |
+
+---
+
+## API Inventory
+
+### GET /api/v1/inventory
+
+List all tracked APIs that have been scanned.
+
+**Auth required:** Yes
+
+**Query parameters:**
+
+| Parameter  | Type   | Default      | Description                    |
+|------------|--------|--------------|--------------------------------|
+| `page`     | int    | 1            | Page number                    |
+| `per_page` | int    | 20           | Results per page (max 100)     |
+| `sort`     | string | `last_scan`  | Sort field: `last_scan`, `url` |
+| `order`    | string | `desc`       | Sort order: `asc` or `desc`    |
+
+**Response (`200 OK`):**
+
+```json
+{
+  "data": [
+    {
+      "id": "c56a4180-65aa-42ec-a945-5fd21dec0538",
+      "url": "https://api.example.com",
+      "spec_url": "https://api.example.com/openapi.json",
+      "endpoint_count": 64,
+      "total_scans": 12,
+      "last_scan": "2026-03-24T12:05:00Z",
+      "last_scan_status": "completed",
+      "open_findings": {
+        "critical": 0,
+        "high": 1,
+        "medium": 3,
+        "low": 2,
+        "info": 4
+      }
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "per_page": 20,
+    "total": 1,
+    "total_pages": 1
+  }
+}
+```
+
+| Status Code | Description        |
+|-------------|--------------------|
+| 200         | Inventory returned |
+| 401         | Unauthorized       |
+
+---
+
+### GET /api/v1/inventory/:id/history
+
+Get the scan history for a specific tracked API.
+
+**Auth required:** Yes
+
+**Query parameters:**
+
+| Parameter  | Type   | Default | Description                |
+|------------|--------|---------|----------------------------|
+| `page`     | int    | 1       | Page number                |
+| `per_page` | int    | 20      | Results per page (max 100) |
+
+**Response (`200 OK`):**
+
+```json
+{
+  "api_id": "c56a4180-65aa-42ec-a945-5fd21dec0538",
+  "url": "https://api.example.com",
+  "data": [
+    {
+      "scan_id": "550e8400-e29b-41d4-a716-446655440000",
+      "status": "completed",
+      "modules": ["bola", "bfla", "injection"],
+      "finding_counts": {
+        "critical": 1,
+        "high": 3,
+        "medium": 5,
+        "low": 2,
+        "info": 4
+      },
+      "created_at": "2026-03-24T12:05:00Z",
+      "completed_at": "2026-03-24T12:08:42Z",
+      "duration_seconds": 222
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "per_page": 20,
+    "total": 1,
+    "total_pages": 1
+  }
+}
+```
+
+| Status Code | Description        |
+|-------------|--------------------|
+| 200         | History returned   |
+| 401         | Unauthorized       |
+| 404         | API not found      |
+
+---
+
+## Common Error Response
+
+All error responses follow a consistent structure:
+
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "Scan with ID 550e8400-e29b-41d4-a716-446655440000 not found."
+  }
+}
+```
+
+| Field     | Type   | Description                              |
+|-----------|--------|------------------------------------------|
+| `code`    | string | Machine-readable error code              |
+| `message` | string | Human-readable error description        |
+
+### Standard Error Codes
+
+| HTTP Status | Code              | Description                          |
+|-------------|-------------------|--------------------------------------|
+| 400         | `bad_request`     | Malformed request body or parameters |
+| 401         | `unauthorized`    | Missing or invalid auth token        |
+| 404         | `not_found`       | Resource does not exist              |
+| 422         | `validation_error`| Request failed validation            |
+| 429         | `rate_limited`    | Too many requests                    |
+| 500         | `internal_error`  | Unexpected server error              |
+
+---
+
+## Rate Limiting
+
+The API enforces rate limits on all endpoints. Rate limit headers are included in every response:
+
+| Header                  | Description                        |
+|-------------------------|------------------------------------|
+| `X-RateLimit-Limit`    | Maximum requests per window        |
+| `X-RateLimit-Remaining`| Requests remaining in current window |
+| `X-RateLimit-Reset`    | Unix timestamp when the window resets |
+
+When the rate limit is exceeded, the API returns `429 Too Many Requests`.

@@ -1,0 +1,19 @@
+# Local overrides
+docker-compose.override.yml
+docker-compose.local.yml
+
+# Generated TLS certificates
+certs/
+*.pem
+*.key
+*.crt
+*.csr
+
+# Environment
+.env
+.env.local
+
+# Persistent volumes
+volumes/
+pgdata/
+redisdata/

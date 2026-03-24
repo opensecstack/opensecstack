@@ -1,0 +1,66 @@
+version: "3.8"
+
+# Full opensecstack ecosystem stack
+# Usage: docker compose -f deploy/docker-compose.yml up
+
+services:
+  # --- APIGuard ---
+  apiguard-api:
+    image: ghcr.io/opensecstack/apiguard:latest
+    build:
+      context: ../apiguard
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - APIGUARD_DB_URL=postgres://apiguard:${POSTGRES_PASSWORD:-changeme}@postgres:5432/apiguard?sslmode=disable
+      - APIGUARD_JWT_SECRET=${APIGUARD_JWT_SECRET:-change-this-to-a-random-string-at-least-32-chars}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  apiguard-web:
+    image: ghcr.io/opensecstack/apiguard-web:latest
+    build:
+      context: ../apiguard/web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - apiguard-api
+    restart: unless-stopped
+
+  # --- Shared Infrastructure ---
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: opensecstack
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: opensecstack
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opensecstack"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:

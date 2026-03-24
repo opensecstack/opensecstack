@@ -1,0 +1,66 @@
+version: "3.8"
+
+# Development stack with hot reload
+# Usage: docker compose -f deploy/docker-compose.dev.yml up
+
+services:
+  # --- APIGuard (dev mode) ---
+  apiguard-api:
+    build:
+      context: ../apiguard
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8080:8080"
+    environment:
+      - APIGUARD_DB_URL=postgres://opensecstack:changeme@postgres:5432/opensecstack?sslmode=disable
+      - APIGUARD_JWT_SECRET=dev-secret-do-not-use-in-production-min32chars
+    volumes:
+      - ../apiguard/cmd:/app/cmd
+      - ../apiguard/internal:/app/internal
+      - ../apiguard/rust:/app/rust
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  apiguard-web:
+    build:
+      context: ../apiguard/web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../apiguard/web/src:/app/src
+    depends_on:
+      - apiguard-api
+
+  # --- Shared Infrastructure ---
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: opensecstack
+      POSTGRES_PASSWORD: changeme
+      POSTGRES_DB: opensecstack
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opensecstack"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata-dev:

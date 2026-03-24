@@ -1,0 +1,12 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+
+# Profiling
+perf.data
+perf.data.old
+flamegraph.svg
+
+# Coverage
+tarpaulin-report.html
+lcov.info

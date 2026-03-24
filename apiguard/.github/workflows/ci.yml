@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Go lint
+        uses: golangci/golangci-lint-action@v4
+      - name: Rust lint
+        run: cargo clippy --workspace -- -D warnings
+      - name: Rust format check
+        run: cargo fmt --all -- --check
+
+  test-rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run Rust tests
+        run: cargo test --workspace
+
+  test-go:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: apiguard
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: apiguard_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U apiguard"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Run Go tests
+        env:
+          APIGUARD_DB_URL: postgres://apiguard:testpass@localhost:5432/apiguard_test?sslmode=disable
+        run: go test ./...
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: [test-rust, test-go]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Start test targets
+        run: docker compose -f docker-compose.test.yml up -d
+      - name: Wait for targets
+        run: sleep 10
+      - name: Run integration tests
+        run: |
+          cargo test --test integration
+          go test ./tests/integration/...
+      - name: Run false positive tests
+        run: go test ./tests/fp/...

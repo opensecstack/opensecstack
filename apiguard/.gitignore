@@ -1,0 +1,25 @@
+# Environment
+.env
+
+# Build artifacts
+/bin/
+apiguard
+
+# Reports (generated, keep .gitkeep)
+/reports/*.html
+/reports/*.pdf
+/reports/*.json
+/reports/*.sarif
+
+# Coverage
+coverage.out
+coverage.html
+tarpaulin-report.html
+
+# Docker volumes
+pgdata/
+
+# Python
+__pycache__/
+*.pyc
+python/reporter/venv/

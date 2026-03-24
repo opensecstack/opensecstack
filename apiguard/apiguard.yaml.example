@@ -1,0 +1,46 @@
+# APIGuard Configuration
+# Environment variables take precedence over this file.
+# All secrets MUST use environment variables — never put secrets here.
+
+server:
+  host: 0.0.0.0
+  port: 8080
+  tls:
+    enabled: false
+    # cert_path: /path/to/cert.pem   # APIGUARD_TLS_CERT
+    # key_path: /path/to/key.pem     # APIGUARD_TLS_KEY
+
+database:
+  # url: set via APIGUARD_DB_URL (required)
+  max_connections: 20
+
+auth:
+  # jwt_secret: set via APIGUARD_JWT_SECRET (required, min 32 chars)
+  token_expiry: 86400  # seconds (24h)
+
+scanner:
+  max_concurrent_scans: 5
+  request_timeout: 30       # seconds per request
+  rate_limit_rps: 10        # requests per second to target API
+  max_spec_size_mb: 10
+
+citadel:
+  enabled: false
+  # endpoint: set via APIGUARD_CITADEL_URL
+  # api_key: set via APIGUARD_CITADEL_KEY
+
+reporting:
+  output_dir: ./reports
+  retention_days: 90
+
+modules:
+  a1_bola: true
+  a2_auth: true
+  a3_mass_assignment: true
+  a4_rate_limiting: true
+  a5_function_auth: true
+  a6_business_flow: false       # requires manual config
+  a7_ssrf: true
+  a8_misconfig: true
+  a9_inventory: true
+  a10_unsafe_consumption: false  # requires OAST setup

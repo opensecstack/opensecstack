@@ -1,0 +1,60 @@
+{
+  "name": "opensecstack",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+  "features": {
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.22"
+    },
+    "ghcr.io/devcontainers/features/rust:1": {
+      "version": "latest",
+      "profile": "default"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    },
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "latest",
+      "dockerDashComposeVersion": "v2"
+    },
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "configureZshAsDefaultShell": true
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "rust-lang.rust-analyzer",
+        "ms-python.python",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-docker",
+        "tamasfe.even-better-toml",
+        "serayuzgur.crates",
+        "vadimcn.vscode-lldb",
+        "ms-vscode.makefile-tools"
+      ],
+      "settings": {
+        "go.lintTool": "golangci-lint",
+        "rust-analyzer.check.command": "clippy",
+        "[go]": { "editor.defaultFormatter": "golang.go" },
+        "[rust]": { "editor.defaultFormatter": "rust-lang.rust-analyzer" },
+        "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+        "[typescriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" }
+      }
+    }
+  },
+  "postCreateCommand": "go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest && cargo install cargo-nextest",
+  "forwardPorts": [8080, 3000, 5432, 6379],
+  "portsAttributes": {
+    "8080": { "label": "APIGuard API" },
+    "3000": { "label": "Dashboard" },
+    "5432": { "label": "PostgreSQL" },
+    "6379": { "label": "Redis" }
+  },
+  "remoteUser": "vscode"
+}

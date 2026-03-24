@@ -15,6 +15,7 @@ services:
     environment:
       - APIGUARD_DB_URL=postgres://apiguard:${POSTGRES_PASSWORD:-changeme}@postgres:5432/apiguard?sslmode=disable
       - APIGUARD_JWT_SECRET=${APIGUARD_JWT_SECRET:-change-this-to-a-random-string-at-least-32-chars}
+      - APIGUARD_REDIS_URL=redis://redis:6379/0
     depends_on:
       postgres:
         condition: service_healthy
@@ -39,13 +40,13 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: opensecstack
+      POSTGRES_USER: apiguard
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
-      POSTGRES_DB: opensecstack
+      POSTGRES_DB: apiguard
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U opensecstack"]
+      test: ["CMD-SHELL", "pg_isready -U apiguard"]
       interval: 5s
       timeout: 5s
       retries: 5

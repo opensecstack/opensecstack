@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -74,7 +76,7 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.RequestLogger(s.logger))
 	s.router.Use(chimw.Recoverer)
 	s.router.Use(chimw.Timeout(60 * time.Second))
-	s.router.Use(RateLimiter(120)) // 120 requests per minute per IP
+	s.router.Use(RateLimiter(context.Background(), 120)) // 120 requests per minute per IP
 	s.router.Use(CORSMiddleware(nil)) // No cross-origin allowed by default (same-origin only)
 }
 
@@ -87,7 +89,9 @@ func (s *Server) registerRoutes() {
 }
 
 // RateLimiter returns a middleware that limits requests per IP using a sliding window.
-func RateLimiter(requestsPerMinute int) func(http.Handler) http.Handler {
+func RateLimiter(ctx context.Context, requestsPerMinute int) func(http.Handler) http.Handler {
+	const maxVisitors = 100000
+
 	type visitor struct {
 		count   int
 		resetAt time.Time
@@ -97,31 +101,46 @@ func RateLimiter(requestsPerMinute int) func(http.Handler) http.Handler {
 
 	// Cleanup old entries every 5 minutes.
 	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
 		for {
-			time.Sleep(5 * time.Minute)
-			mu.Lock()
-			now := time.Now()
-			for ip, v := range visitors {
-				if now.After(v.resetAt) {
-					delete(visitors, ip)
+			select {
+			case <-ticker.C:
+				mu.Lock()
+				now := time.Now()
+				for ip, v := range visitors {
+					if now.After(v.resetAt) {
+						delete(visitors, ip)
+					}
 				}
+				mu.Unlock()
+			case <-ctx.Done():
+				return
 			}
-			mu.Unlock()
 		}
 	}()
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Use RemoteAddr only (chimw.RealIP already normalizes it)
+			// Strip port to avoid per-connection buckets
 			ip := r.RemoteAddr
-			if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-				ip = strings.Split(fwd, ",")[0]
+			if host, _, err := net.SplitHostPort(ip); err == nil {
+				ip = host
 			}
-			ip = strings.TrimSpace(ip)
 
 			mu.Lock()
 			v, exists := visitors[ip]
 			now := time.Now()
 			if !exists || now.After(v.resetAt) {
+				if !exists && len(visitors) >= maxVisitors {
+					mu.Unlock()
+					w.Header().Set("Retry-After", "60")
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusTooManyRequests)
+					json.NewEncoder(w).Encode(map[string]string{"error": "too_many_clients", "message": "Too many clients. Try again later."})
+					return
+				}
 				visitors[ip] = &visitor{count: 1, resetAt: now.Add(time.Minute)}
 				mu.Unlock()
 				next.ServeHTTP(w, r)
@@ -131,7 +150,9 @@ func RateLimiter(requestsPerMinute int) func(http.Handler) http.Handler {
 			if v.count > requestsPerMinute {
 				mu.Unlock()
 				w.Header().Set("Retry-After", "60")
-				http.Error(w, `{"error":"rate limit exceeded"}`, http.StatusTooManyRequests)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				json.NewEncoder(w).Encode(map[string]string{"error": "rate_limit_exceeded", "message": "Too many requests. Try again later."})
 				return
 			}
 			mu.Unlock()
@@ -159,7 +180,7 @@ func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 				w.Header().Set("Access-Control-Max-Age", "86400")
 			}
-			if r.Method == "OPTIONS" {
+			if r.Method == "OPTIONS" && allowed {
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}

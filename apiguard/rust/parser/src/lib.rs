@@ -68,6 +68,18 @@ fn parse_bytes_to_value(input: &[u8]) -> Result<serde_json::Value, ParseError> {
         message: format!("input is not valid UTF-8: {e}"),
     })?;
 
+    // Reject documents with excessive YAML aliases (billion-laughs mitigation)
+    const MAX_YAML_ALIASES: usize = 10_000;
+    let alias_count = input_str.matches('*').count();
+    if alias_count > MAX_YAML_ALIASES {
+        return Err(ParseError::InvalidSchema {
+            errors: vec![format!(
+                "document contains {} YAML alias references, exceeding the maximum of {}",
+                alias_count, MAX_YAML_ALIASES
+            )],
+        });
+    }
+
     // serde_yml (actively maintained fork of serde_yaml) handles both YAML and JSON.
     let doc: serde_json::Value = serde_yml::from_str(input_str).map_err(|e| {
         ParseError::InvalidFormat {

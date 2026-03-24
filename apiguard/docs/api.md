@@ -152,7 +152,7 @@ Create a new security scan. Provide either a `spec_url` pointing to a remote Ope
   "target_url": "https://api.example.com",
   "spec_url": "https://api.example.com/openapi.json",
   "inline_spec": null,
-  "modules": ["bola", "bfla", "injection", "ssrf", "auth-bypass"],
+  "modules": ["a1_bola", "a5_function_auth", "a3_mass_assignment", "a7_ssrf", "a2_auth"],
   "auth": {
     "type": "bearer",
     "token": "target-api-token"
@@ -188,7 +188,7 @@ Either `spec_url` or `inline_spec` must be provided.
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "status": "queued",
   "target_url": "https://api.example.com",
-  "modules": ["bola", "bfla", "injection", "ssrf", "auth-bypass"],
+  "modules": ["a1_bola", "a5_function_auth", "a3_mass_assignment", "a7_ssrf", "a2_auth"],
   "created_at": "2026-03-24T12:05:00Z"
 }
 ```
@@ -229,7 +229,7 @@ List scans with optional filters and pagination.
       "id": "550e8400-e29b-41d4-a716-446655440000",
       "target_url": "https://api.example.com",
       "status": "completed",
-      "modules": ["bola", "bfla", "injection"],
+      "modules": ["a1_bola", "a5_function_auth", "a3_mass_assignment"],
       "finding_counts": {
         "critical": 1,
         "high": 3,
@@ -273,11 +273,11 @@ Get details for a specific scan including status, progress, and summary.
   "status": "running",
   "progress": {
     "percentage": 65,
-    "current_module": "injection",
+    "current_module": "a3_mass_assignment",
     "endpoints_tested": 42,
     "endpoints_total": 64
   },
-  "modules": ["bola", "bfla", "injection", "ssrf", "auth-bypass"],
+  "modules": ["a1_bola", "a5_function_auth", "a3_mass_assignment", "a7_ssrf", "a2_auth"],
   "finding_counts": {
     "critical": 0,
     "high": 2,
@@ -323,7 +323,7 @@ Get findings for a specific scan with optional filters and pagination.
     {
       "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
       "scan_id": "550e8400-e29b-41d4-a716-446655440000",
-      "module": "bola",
+      "module": "a1_bola",
       "severity": "high",
       "title": "Broken Object Level Authorization on GET /users/:id",
       "description": "Accessing user resources with another user's ID returns data without authorization check.",
@@ -388,7 +388,7 @@ Download a scan report in the specified format.
   "findings": [
     {
       "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-      "module": "bola",
+      "module": "a1_bola",
       "severity": "high",
       "title": "Broken Object Level Authorization on GET /users/:id",
       "description": "...",
@@ -458,7 +458,7 @@ List all findings across scans with optional filters and pagination.
     {
       "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
       "scan_id": "550e8400-e29b-41d4-a716-446655440000",
-      "module": "bola",
+      "module": "a1_bola",
       "severity": "high",
       "title": "Broken Object Level Authorization on GET /users/:id",
       "description": "Accessing user resources with another user's ID returns data without authorization check.",
@@ -496,7 +496,7 @@ Get full details for a specific finding including evidence and CVSS breakdown.
 {
   "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "scan_id": "550e8400-e29b-41d4-a716-446655440000",
-  "module": "bola",
+  "module": "a1_bola",
   "severity": "high",
   "title": "Broken Object Level Authorization on GET /users/:id",
   "description": "Accessing user resources with another user's ID returns data without authorization check.",
@@ -663,7 +663,7 @@ Get the scan history for a specific tracked API.
     {
       "scan_id": "550e8400-e29b-41d4-a716-446655440000",
       "status": "completed",
-      "modules": ["bola", "bfla", "injection"],
+      "modules": ["a1_bola", "a5_function_auth", "a3_mass_assignment"],
       "finding_counts": {
         "critical": 1,
         "high": 3,

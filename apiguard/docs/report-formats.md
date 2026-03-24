@@ -277,7 +277,7 @@ Each OWASP module registers as a distinct rule in the SARIF `tool.driver.rules` 
 To upload SARIF results to GitHub:
 
 ```bash
-apiguard scan --schema openapi.yaml --format sarif --output results.sarif
+apiguard scan --spec openapi.yaml --format sarif --output results.sarif
 gh api -X POST /repos/{owner}/{repo}/code-scanning/sarifs \
   -f "commit_sha=$(git rev-parse HEAD)" \
   -f "ref=$(git symbolic-ref HEAD)" \
@@ -311,7 +311,7 @@ The HTML report is a self-contained single-file document designed for human revi
 Override the default HTML template with `--template`:
 
 ```bash
-apiguard scan --schema openapi.yaml --format html --template ./my-template.html.j2
+apiguard scan --spec openapi.yaml --format html --template ./my-template.html.j2
 ```
 
 #### Jinja2 Template Variables
@@ -368,7 +368,7 @@ The built-in template includes CSS for:
 To override styles without replacing the entire template, use `--css`:
 
 ```bash
-apiguard scan --schema openapi.yaml --format html --css ./company-branding.css
+apiguard scan --spec openapi.yaml --format html --css ./company-branding.css
 ```
 
 The custom CSS is appended after the built-in styles, so it takes precedence.
@@ -382,7 +382,7 @@ The PDF report contains identical content to the HTML report. It is generated fr
 ### Generation
 
 ```bash
-apiguard scan --schema openapi.yaml --format pdf --output report.pdf
+apiguard scan --spec openapi.yaml --format pdf --output report.pdf
 ```
 
 WeasyPrint is a Python dependency bundled with the APIGuard report generator. It renders the HTML template to PDF with:
@@ -398,7 +398,7 @@ WeasyPrint is a Python dependency bundled with the APIGuard report generator. It
 PDF generation uses the same Jinja2 template system as HTML. The `--template` and `--css` flags apply to PDF output as well:
 
 ```bash
-apiguard scan --schema openapi.yaml --format pdf --template ./my-template.html.j2 --css ./print.css
+apiguard scan --spec openapi.yaml --format pdf --template ./my-template.html.j2 --css ./print.css
 ```
 
 ### When to Use PDF
@@ -430,16 +430,16 @@ apiguard scan --schema openapi.yaml --format pdf --template ./my-template.html.j
 
 ```bash
 # Write JSON to file
-apiguard scan --schema openapi.yaml --format json --output results.json
+apiguard scan --spec openapi.yaml --format json --output results.json
 
 # Write SARIF to stdout (default behaviour for JSON and SARIF)
-apiguard scan --schema openapi.yaml --format sarif
+apiguard scan --spec openapi.yaml --format sarif
 
 # Write HTML to file (required -- HTML cannot stream to stdout)
-apiguard scan --schema openapi.yaml --format html --output report.html
+apiguard scan --spec openapi.yaml --format html --output report.html
 
 # Write PDF to file (required -- PDF is binary)
-apiguard scan --schema openapi.yaml --format pdf --output report.pdf
+apiguard scan --spec openapi.yaml --format pdf --output report.pdf
 ```
 
 ### Multiple Formats in One Scan
@@ -447,7 +447,7 @@ apiguard scan --schema openapi.yaml --format pdf --output report.pdf
 Generate multiple formats from a single scan run. The scan executes once; only report generation runs per format.
 
 ```bash
-apiguard scan --schema openapi.yaml --format json,sarif,html --output ./reports/
+apiguard scan --spec openapi.yaml --format json,sarif,html --output ./reports/
 ```
 
 When `--output` is a directory and multiple formats are requested, files are named automatically:
@@ -479,13 +479,14 @@ The exit code is independent of report format. APIGuard returns:
 | `0` | Scan completed, all findings below threshold |
 | `1` | Scan completed, findings at or above threshold |
 | `2` | Scan failed (network error, invalid schema, configuration error) |
+| `3` | Scan failed (internal error) |
 
 The threshold is controlled by `--fail-on`:
 
 ```bash
 # Fail if any HIGH or CRITICAL findings exist
-apiguard scan --schema openapi.yaml --format sarif --fail-on high
+apiguard scan --spec openapi.yaml --format sarif --fail-on high
 
 # Fail only on CRITICAL
-apiguard scan --schema openapi.yaml --format json,sarif --fail-on critical
+apiguard scan --spec openapi.yaml --format json,sarif --fail-on critical
 ```

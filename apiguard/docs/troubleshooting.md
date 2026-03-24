@@ -21,7 +21,7 @@ This guide covers common issues encountered when installing, configuring, and ru
 |---------|-------|----------|
 | `invalid OpenAPI specification` | The spec file is malformed or does not conform to the OpenAPI standard | Validate your spec before scanning. Use `swagger-cli validate openapi.yaml` or `openapi-generator-cli validate -i openapi.yaml`. Fix all reported errors and re-run. |
 | `circular $ref exceeds depth 10` | The spec contains circular `$ref` references that exceed the parser's maximum recursion depth | Refactor the spec to break circular references. Extract shared schemas into standalone definitions and reference them without creating loops. If the circularity is intentional, consider flattening the spec with `swagger-cli bundle openapi.yaml -o flat.yaml`. |
-| `schema too large: exceeds max spec size` | The spec file exceeds the default maximum size limit | Increase the limit in your configuration: set `scanner.max_spec_size_mb` to a higher value (e.g., `scanner.max_spec_size_mb = 50`) in `apiguard.toml`, or pass `--max-spec-size-mb 50` on the command line. |
+| `schema too large: exceeds max spec size` | The spec file exceeds the default maximum size limit | Increase the limit in your configuration: set `scanner.max_spec_size_mb` to a higher value (e.g., `scanner.max_spec_size_mb: 50`) in `.apiguard.yaml`. This is a config-file-only setting. |
 | `unsupported specification version` | The spec uses a version that APIGuard does not support | APIGuard supports OpenAPI 3.0.x, OpenAPI 3.1.x, and Swagger 2.0. Convert older specs to a supported version using `swagger2openapi` or the Swagger Editor. |
 
 ---
@@ -109,11 +109,11 @@ export APIGUARD_LOG_LEVEL=debug
 apiguard server
 ```
 
-Or in `apiguard.toml`:
+Or in `.apiguard.yaml`:
 
-```toml
-[logging]
-level = "debug"
+```yaml
+log:
+  level: debug
 ```
 
 ### Request/Response Logging

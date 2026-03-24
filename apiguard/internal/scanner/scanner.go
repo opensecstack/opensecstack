@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -20,12 +21,14 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/opensecstack/apiguard/internal/config"
+	"github.com/opensecstack/apiguard/internal/domain"
 )
 
 // Scanner performs API security scans.
 type Scanner struct {
-	config *config.ScannerConfig
-	logger zerolog.Logger
+	config    *config.ScannerConfig
+	logger    zerolog.Logger
+	transport *http.Transport
 }
 
 // AuthConfig holds authentication settings for a scan request.
@@ -44,43 +47,59 @@ type ScanRequest struct {
 	Auth          AuthConfig
 }
 
-// ScanResult holds the outcome of a scan.
-type ScanResult struct {
-	ID        string      `json:"id"`
-	Status    string      `json:"status"` // running, completed, failed
-	StartedAt time.Time   `json:"started_at"`
-	EndedAt   time.Time   `json:"ended_at"`
-	Findings  []Finding   `json:"findings"`
-	Summary   ScanSummary `json:"summary"`
-}
-
-// Finding represents a single security finding.
-type Finding struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Severity    string `json:"severity"` // info, low, medium, high, critical
-	Module      string `json:"module"`
-	Endpoint    string `json:"endpoint"`
-	Method      string `json:"method"`
-	Evidence    string `json:"evidence"`
-}
-
-// ScanSummary provides aggregate counts of findings.
-type ScanSummary struct {
-	Total    int `json:"total"`
-	Critical int `json:"critical"`
-	High     int `json:"high"`
-	Medium   int `json:"medium"`
-	Low      int `json:"low"`
-	Info     int `json:"info"`
-}
-
 // ParsedSpec represents the intermediate representation from the Rust parser.
 type ParsedSpec struct {
-	Version   string          `json:"version"`
-	Title     string          `json:"title"`
-	Endpoints json.RawMessage `json:"endpoints"`
+	Endpoints   []ParsedEndpoint   `json:"endpoints"`
+	AuthSchemes []ParsedAuthScheme `json:"auth_schemes"`
+	Metadata    ParsedMetadata     `json:"metadata"`
+}
+
+// ParsedEndpoint represents a single API endpoint from the Rust IR.
+type ParsedEndpoint struct {
+	Path        string                    `json:"path"`
+	Method      string                    `json:"method"`
+	Parameters  []ParsedParameter         `json:"parameters"`
+	RequestBody *ParsedRequestBody        `json:"request_body,omitempty"`
+	Responses   map[string]ParsedResponse `json:"responses"`
+	Security    []string                  `json:"security"`
+	Tags        []string                  `json:"tags"`
+	XApiguard   map[string]interface{}    `json:"x_apiguard"`
+}
+
+// ParsedParameter represents a parameter from the Rust IR.
+type ParsedParameter struct {
+	Name     string  `json:"name"`
+	Location string  `json:"location"`
+	Required bool    `json:"required"`
+	Schema   *string `json:"schema,omitempty"`
+}
+
+// ParsedRequestBody represents a request body from the Rust IR.
+type ParsedRequestBody struct {
+	ContentTypes []string `json:"content_types"`
+	Schema       *string  `json:"schema,omitempty"`
+	Required     bool     `json:"required"`
+}
+
+// ParsedResponse represents a response from the Rust IR.
+type ParsedResponse struct {
+	Description string  `json:"description"`
+	Schema      *string `json:"schema,omitempty"`
+}
+
+// ParsedAuthScheme represents an authentication scheme from the Rust IR.
+type ParsedAuthScheme struct {
+	Name       string  `json:"name"`
+	SchemeType string  `json:"scheme_type"`
+	Location   *string `json:"location,omitempty"`
+	HeaderName *string `json:"header_name,omitempty"`
+}
+
+// ParsedMetadata holds API metadata from the Rust IR.
+type ParsedMetadata struct {
+	BaseURL    string `json:"base_url"`
+	APIVersion string `json:"api_version"`
+	SchemaHash string `json:"schema_hash"`
 }
 
 // shellMetachars matches characters that could be used for shell injection.
@@ -159,6 +178,10 @@ func validateTargetURL(rawURL string, allowInternal bool) ([]net.IP, error) {
 		return nil, fmt.Errorf("invalid target URL: %w", err)
 	}
 
+	if parsed.User != nil {
+		return nil, fmt.Errorf("URLs with userinfo are not allowed as scan targets")
+	}
+
 	// Only allow http and https schemes.
 	scheme := strings.ToLower(parsed.Scheme)
 	if scheme != "http" && scheme != "https" {
@@ -166,6 +189,10 @@ func validateTargetURL(rawURL string, allowInternal bool) ([]net.IP, error) {
 	}
 
 	hostname := parsed.Hostname()
+
+	if strings.Contains(hostname, "%") {
+		return nil, fmt.Errorf("IPv6 zone IDs are not allowed in target URLs")
+	}
 
 	if allowInternal {
 		return nil, nil
@@ -226,6 +253,10 @@ func (s *Scanner) validateSpecPath(specPath string) (string, []byte, error) {
 		return "", nil, fmt.Errorf("invalid spec path: %w", err)
 	}
 	absPath = filepath.Clean(absPath)
+
+	if runtime.GOOS == "windows" && strings.HasPrefix(absPath, "\\\\") {
+		return "", nil, fmt.Errorf("UNC paths are not allowed for spec files")
+	}
 
 	// Open file first, then check via the file descriptor (no TOCTOU)
 	f, err := os.Open(absPath)
@@ -288,7 +319,7 @@ func validateParserBin(binPath string) error {
 }
 
 // Run executes a scan against the target API.
-func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*ScanResult, error) {
+func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult, error) {
 	scanID := uuid.New().String()
 	startedAt := time.Now()
 
@@ -300,7 +331,7 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*ScanResult, error)
 
 	// Store pinned transport for use by scan modules (prevents DNS rebinding).
 	if parsedURL, err := url.Parse(req.Target); err == nil && len(validatedIPs) > 0 {
-		_ = CreatePinnedTransport(parsedURL.Hostname(), validatedIPs, false)
+		s.transport = CreatePinnedTransport(parsedURL.Hostname(), validatedIPs, false)
 	}
 
 	// Validate and sanitize the spec file path (open-then-stat to avoid TOCTOU).
@@ -320,42 +351,40 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*ScanResult, error)
 		Int("spec_bytes", len(specData)).
 		Msg("spec file loaded")
 
-	// Step 2: Attempt to call the Rust parser via JSON file exchange.
+	// Step 2: Call the Rust parser via JSON file exchange.
 	parsedSpec, err := s.parseSpec(ctx, req.SpecPath)
 	if err != nil {
-		s.logger.Warn().Err(err).Msg("rust parser not available, using stub results")
-		// Continue with stub results when the parser binary is not available.
-		parsedSpec = nil
+		return nil, fmt.Errorf("spec parsing failed: %w; install apiguard-parser or set APIGUARD_PARSER_BIN", err)
 	}
 
-	if parsedSpec != nil {
-		s.logger.Info().
-			Str("spec_title", parsedSpec.Title).
-			Str("spec_version", parsedSpec.Version).
-			Msg("spec parsed successfully")
-	}
+	s.logger.Info().
+		Str("base_url", parsedSpec.Metadata.BaseURL).
+		Str("api_version", parsedSpec.Metadata.APIVersion).
+		Int("endpoint_count", len(parsedSpec.Endpoints)).
+		Msg("spec parsed successfully")
 
 	// Step 3: Return stub results (real scan modules will be wired in later).
-	result := &ScanResult{
-		ID:        scanID,
-		Status:    "completed",
-		StartedAt: startedAt,
-		EndedAt:   time.Now(),
-		Findings:  []Finding{},
-		Summary: ScanSummary{
-			Total:    0,
-			Critical: 0,
-			High:     0,
-			Medium:   0,
-			Low:      0,
-			Info:     0,
+	result := &domain.ScanResult{
+		ID:          scanID,
+		Status:      domain.ScanStatusCompleted,
+		Target:      req.Target,
+		Findings:    []domain.Finding{},
+		Summary: domain.ScanSummary{
+			TotalFindings: 0,
+			Critical:      0,
+			High:          0,
+			Medium:        0,
+			Low:           0,
+			Info:          0,
 		},
+		StartedAt:   startedAt,
+		CompletedAt: time.Now(),
 	}
 
 	s.logger.Info().
 		Str("scan_id", scanID).
-		Str("status", result.Status).
-		Dur("duration", result.EndedAt.Sub(result.StartedAt)).
+		Str("status", string(result.Status)).
+		Dur("duration", result.CompletedAt.Sub(result.StartedAt)).
 		Msg("scan completed")
 
 	return result, nil

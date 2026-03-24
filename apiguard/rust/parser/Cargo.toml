@@ -12,6 +12,9 @@ serde_yml = "0.0.12"
 url = "2"
 sha2 = "0.10"
 thiserror = "2"
-indexmap = { version = "2", features = ["serde"] }
+
+[[bin]]
+name = "apiguard-parser"
+path = "src/main.rs"
 
 [dev-dependencies]

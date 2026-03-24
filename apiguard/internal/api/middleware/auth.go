@@ -149,6 +149,10 @@ func validateJWT(token, secret string) (*Claims, error) {
 		return nil, fmt.Errorf("token is not yet valid")
 	}
 
+	if claims.Sub == "" {
+		return nil, fmt.Errorf("missing sub claim")
+	}
+
 	return &claims, nil
 }
 

@@ -11,8 +11,6 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
-# Copy Rust binaries
-COPY --from=rust-builder /build/rust/target/release/libparser.so /usr/local/lib/
 ARG VERSION=dev
 ARG COMMIT=unknown
 RUN CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION} -X main.commit=${COMMIT}" -o /apiguard ./cmd/apiguard/
@@ -22,7 +20,6 @@ FROM alpine:3.19
 RUN apk add --no-cache ca-certificates
 RUN addgroup -S apiguard && adduser -S apiguard -G apiguard
 COPY --from=go-builder /apiguard /usr/local/bin/apiguard
-COPY --from=rust-builder /build/rust/target/release/libparser.so /usr/local/lib/
 USER apiguard
 EXPOSE 8080
 ENTRYPOINT ["apiguard"]

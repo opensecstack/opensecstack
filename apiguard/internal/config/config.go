@@ -131,7 +131,7 @@ func setDefaults() {
 	// Scanner defaults.
 	viper.SetDefault("scanner.timeout", 5*time.Minute)
 	viper.SetDefault("scanner.concurrency", 10)
-	viper.SetDefault("scanner.max_spec_size", 50) // 50 MB
+	viper.SetDefault("scanner.max_spec_size", 10) // 10 MB
 	viper.SetDefault("scanner.rate_limit", 0)
 	viper.SetDefault("scanner.tls_skip_verify", false)
 
@@ -140,7 +140,7 @@ func setDefaults() {
 	viper.SetDefault("auth.enable_api_keys", false)
 
 	// Report defaults.
-	viper.SetDefault("report.default_format", "table")
+	viper.SetDefault("report.default_format", "json")
 	viper.SetDefault("report.output_dir", "./reports")
 
 	// Dashboard defaults.

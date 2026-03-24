@@ -116,7 +116,7 @@ auth:
 # Report output
 # ---------------------------------------------------------------------------
 report:
-  format: html                 # html, pdf, json, sarif
+  format: json                 # html, pdf, json, sarif
   output_dir: ./reports        # Directory for report files
   template: ""                 # Path to custom Jinja2 template (HTML/PDF only)
   include_evidence: true       # Include raw HTTP request/response evidence
@@ -190,7 +190,7 @@ Every environment variable is prefixed with `APIGUARD_`. Variables map directly 
 | `APIGUARD_TIMEOUT` | `scanner.timeout_seconds` | int | `30` | Per-request timeout in seconds. |
 | `APIGUARD_RATE_LIMIT` | `scanner.rate_limit_rps` | int | `50` | Maximum requests per second to the target. |
 | `APIGUARD_TLS_SKIP_VERIFY` | `scanner.tls_skip_verify` | bool | `false` | Skip TLS certificate verification. |
-| `APIGUARD_REPORT_FORMAT` | `report.format` | string | `html` | Default report format. |
+| `APIGUARD_REPORT_FORMAT` | `report.format` | string | `json` | Default report format. |
 | `APIGUARD_REPORT_DIR` | `report.output_dir` | string | `./reports` | Default report output directory. |
 | `APIGUARD_DASHBOARD_PORT` | `dashboard.port` | int | `3000` | Dashboard UI port. |
 | `CITADEL_API_KEY` | `citadel.api_key` | string | (none) | API key for CITADEL webhook authentication. |
@@ -207,7 +207,7 @@ All flags are passed to the `apiguard scan` command unless noted otherwise.
 | `--spec` | `-s` | string | (required) | (none) | Path or URL to OpenAPI/Swagger/GraphQL schema. |
 | `--target` | `-t` | string | (required) | (none) | Base URL of the live API to test. |
 | `--format` | `-f` | string | `json` | `report.format` | Output format: `html`, `pdf`, `json`, `sarif`. |
-| `--output` | `-o` | string | `./reports` | `report.output_dir` | Output directory for report files. |
+| `--output` | `-o` | string | stdout | `report.output_dir` | File path for report output. Writes to stdout when omitted. |
 | `--fail-on` | | string | `HIGH` | (none) | Minimum severity that causes a non-zero exit code. Values: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `NONE`. |
 | `--modules` | `-m` | string | (all enabled) | `modules.*` | Comma-separated list of modules to run. Example: `a1_bola,a2_auth,a8_misconfig`. |
 | `--timeout` | | int | `30` | `scanner.timeout_seconds` | Per-request timeout in seconds. |
@@ -396,7 +396,7 @@ auth:
 
 | Setting | Config Path | Env Var | CLI Flag | Default | Description |
 |---------|-----------|---------|----------|---------|-------------|
-| Format | `report.format` | `APIGUARD_REPORT_FORMAT` | `--format` | `html` | Output format: `html`, `pdf`, `json`, `sarif`. |
+| Format | `report.format` | `APIGUARD_REPORT_FORMAT` | `--format` | `json` | Output format: `html`, `pdf`, `json`, `sarif`. |
 | Output directory | `report.output_dir` | `APIGUARD_REPORT_DIR` | `--output` | `./reports` | Directory where report files are written. Created if it does not exist. |
 | Template | `report.template` | -- | -- | (built-in) | Path to a custom Jinja2 template for HTML/PDF reports. |
 | Include evidence | `report.include_evidence` | -- | -- | `true` | Include raw HTTP request/response pairs as evidence in findings. |
@@ -483,8 +483,8 @@ Example: if `scanner.timeout_seconds` is set to `60` in the config file, `APIGUA
 | Setting | CLI Flag | Env Var | Config File | Default |
 |---------|----------|---------|-------------|---------|
 | Log level | `--verbose` / `--quiet` | `APIGUARD_LOG_LEVEL` | `log.level` | `info` |
-| Report format | `--format` | `APIGUARD_REPORT_FORMAT` | `report.format` | `html` |
-| Output directory | `--output` | `APIGUARD_REPORT_DIR` | `report.output_dir` | `./reports` |
+| Report format | `--format` | `APIGUARD_REPORT_FORMAT` | `report.format` | `json` |
+| Output path | `--output` | `APIGUARD_REPORT_DIR` | `report.output_dir` | stdout |
 | Auth token | `--auth-token` | `APIGUARD_AUTH_TOKEN` | `auth.token` | (none) |
 | Auth type | `--auth-type` | `APIGUARD_AUTH_TYPE` | `auth.type` | `bearer` |
 | Timeout | `--timeout` | `APIGUARD_TIMEOUT` | `scanner.timeout_seconds` | `30` |

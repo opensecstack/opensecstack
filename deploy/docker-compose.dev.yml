@@ -12,8 +12,9 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - APIGUARD_DB_URL=postgres://opensecstack:changeme@postgres:5432/opensecstack?sslmode=disable
+      - APIGUARD_DB_URL=postgres://apiguard:changeme@postgres:5432/apiguard?sslmode=disable
       - APIGUARD_JWT_SECRET=dev-secret-do-not-use-in-production-min32chars
+      - APIGUARD_REDIS_URL=redis://redis:6379/0
     volumes:
       - ../apiguard/cmd:/app/cmd
       - ../apiguard/internal:/app/internal
@@ -41,13 +42,13 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: opensecstack
+      POSTGRES_USER: apiguard
       POSTGRES_PASSWORD: changeme
-      POSTGRES_DB: opensecstack
+      POSTGRES_DB: apiguard
     volumes:
       - pgdata-dev:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U opensecstack"]
+      test: ["CMD-SHELL", "pg_isready -U apiguard"]
       interval: 5s
       timeout: 5s
       retries: 5

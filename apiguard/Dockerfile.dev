@@ -2,7 +2,7 @@ FROM golang:1.22
 
 RUN go install github.com/air-verse/air@latest
 
-RUN useradd -ms /bin/bash apiguard
+RUN useradd -ms /bin/bash apiguard && mkdir -p /app && chown apiguard:apiguard /app
 WORKDIR /app
 COPY --chown=apiguard:apiguard . .
 USER apiguard

@@ -20,3 +20,12 @@ testdata/
 .idea/
 tmp/
 *.log
+*.key
+*.pem
+*.crt
+*.secret
+apiguard.yaml
+docker-compose*.yml
+Dockerfile*
+Makefile
+rust/target/

@@ -13,7 +13,7 @@ services:
     environment:
       - APIGUARD_DB_URL=postgres://apiguard:changeme@postgres:5432/apiguard?sslmode=disable
       - APIGUARD_JWT_SECRET=dev-secret-do-not-use-in-production-min32chars
-      - APIGUARD_REDIS_URL=redis://localhost:6379/0
+      - APIGUARD_REDIS_URL=redis://redis:6379/0
     volumes:
       - ./cmd:/app/cmd
       - ./internal:/app/internal

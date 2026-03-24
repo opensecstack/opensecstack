@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+
+	"github.com/opensecstack/apiguard/internal/version"
 )
 
 var startTime = time.Now()
@@ -40,13 +42,6 @@ type VersionResponse struct {
 	Arch      string `json:"arch"`
 }
 
-// Build-time variables (same as CLI, injected via ldflags).
-var (
-	version   = "dev"
-	gitCommit = "unknown"
-	buildDate = "unknown"
-)
-
 // Health returns the server health status.
 func (h *Health) Health(w http.ResponseWriter, r *http.Request) {
 	resp := HealthResponse{
@@ -65,9 +60,9 @@ func (h *Health) Health(w http.ResponseWriter, r *http.Request) {
 // Version returns the server version information.
 func (h *Health) Version(w http.ResponseWriter, r *http.Request) {
 	resp := VersionResponse{
-		Version:   version,
-		GitCommit: gitCommit,
-		BuildDate: buildDate,
+		Version:   version.Version,
+		GitCommit: version.GitCommit,
+		BuildDate: version.BuildDate,
 		GoVersion: runtime.Version(),
 		OS:        runtime.GOOS,
 		Arch:      runtime.GOARCH,

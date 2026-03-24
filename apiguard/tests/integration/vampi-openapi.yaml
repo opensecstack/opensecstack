@@ -1,0 +1,137 @@
+openapi: "3.0.3"
+info:
+  title: VAmPI - Vulnerable API
+  description: Deliberately vulnerable REST API for testing
+  version: "0.1.0"
+servers:
+  - url: http://localhost:5000
+paths:
+  /users/v1:
+    get:
+      summary: List all users
+      tags: [users]
+      responses:
+        "200":
+          description: List of users
+  /users/v1/{username}:
+    get:
+      summary: Get user by username
+      tags: [users]
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User details
+      security:
+        - bearerAuth: []
+  /users/v1/register:
+    post:
+      summary: Register a new user
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                email:
+                  type: string
+      responses:
+        "200":
+          description: User registered
+  /users/v1/login:
+    post:
+      summary: Login and get auth token
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Auth token returned
+  /users/v1/{username}/email:
+    put:
+      summary: Update user email
+      tags: [users]
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+      responses:
+        "204":
+          description: Email updated
+      security:
+        - bearerAuth: []
+  /books/v1:
+    get:
+      summary: List all books
+      tags: [books]
+      responses:
+        "200":
+          description: List of books
+    post:
+      summary: Add a new book
+      tags: [books]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                book_title:
+                  type: string
+                secret:
+                  type: string
+      responses:
+        "200":
+          description: Book added
+      security:
+        - bearerAuth: []
+  /books/v1/{book_title}:
+    get:
+      summary: Get book by title
+      tags: [books]
+      parameters:
+        - name: book_title
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Book details
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

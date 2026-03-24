@@ -19,7 +19,7 @@ auth:
   token_expiry: 86400  # seconds (24h)
 
 scanner:
-  max_concurrent_scans: 5
+  concurrency: 5
   request_timeout: 30       # seconds per request
   rate_limit_rps: 10        # requests per second to target API
   max_spec_size_mb: 10

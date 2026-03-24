@@ -102,17 +102,20 @@ fn extract_parameters(doc: &Value, params: Option<&Value>) -> Vec<Parameter> {
 
     arr.iter()
         .filter_map(|p| {
-            let p = resolve::resolve_value(doc, p, 0).ok()?;
-            let name = p.get("name")?.as_str()?.to_string();
-            let loc = match p.get("in")?.as_str()? {
+            let resolved = match resolve::resolve_value(doc, p, 0) {
+                Ok(v) => v,
+                Err(_) => p.clone(), // Use unresolved value rather than dropping
+            };
+            let name = resolved.get("name")?.as_str()?.to_string();
+            let loc = match resolved.get("in")?.as_str()? {
                 "path" => ParameterLocation::Path,
                 "query" => ParameterLocation::Query,
                 "header" => ParameterLocation::Header,
                 "cookie" => ParameterLocation::Cookie,
                 _ => return None,
             };
-            let required = p.get("required").and_then(|v| v.as_bool()).unwrap_or(false);
-            let schema = p.get("schema").and_then(|s| parse_schema_type(doc, s, 0));
+            let required = resolved.get("required").and_then(|v| v.as_bool()).unwrap_or(false);
+            let schema = resolved.get("schema").and_then(|s| parse_schema_type(doc, s, 0));
 
             Some(Parameter {
                 name,
@@ -126,7 +129,7 @@ fn extract_parameters(doc: &Value, params: Option<&Value>) -> Vec<Parameter> {
 
 fn extract_request_body(doc: &Value, operation: &Value) -> Option<RequestBody> {
     let rb = operation.get("requestBody")?;
-    let rb = resolve::resolve_value(doc, rb, 0).ok()?;
+    let rb = resolve::resolve_value(doc, rb, 0).unwrap_or_else(|_| rb.clone());
     let required = rb.get("required").and_then(|v| v.as_bool()).unwrap_or(false);
     let content = rb.get("content")?.as_object()?;
 

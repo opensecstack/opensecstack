@@ -133,6 +133,8 @@ const (
 	AuditActionSpecParsed           AuditAction = "spec_parsed"
 	AuditActionReportGenerated      AuditAction = "report_generated"
 	AuditActionReportExported       AuditAction = "report_exported"
+	AuditActionAPIKeyCreated        AuditAction = "api_key_created"
+	AuditActionAPIKeyRevoked        AuditAction = "api_key_revoked"
 )
 
 // AuditLog represents a row in the audit_log table.

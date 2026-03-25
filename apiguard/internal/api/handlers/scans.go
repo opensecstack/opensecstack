@@ -280,25 +280,13 @@ type listScansResponse struct {
 func (s *Scans) List(w http.ResponseWriter, r *http.Request) {
 	page, perPage := parsePagination(r, 1, 20, 100)
 	offset := (page - 1) * perPage
+	statusFilter := r.URL.Query().Get("status")
 
-	scans, total, err := s.db.ListScans(r.Context(), perPage, offset)
+	scans, total, err := s.db.ListScans(r.Context(), perPage, offset, statusFilter)
 	if err != nil {
 		s.logger.Error().Err(err).Msg("failed to list scans")
 		writeError(w, http.StatusInternalServerError, "failed to list scans")
 		return
-	}
-
-	// Apply optional status filter in-process (DB layer has no status filter param).
-	// Update total to reflect the filtered count so pagination metadata is accurate.
-	if statusFilter := r.URL.Query().Get("status"); statusFilter != "" {
-		filtered := scans[:0]
-		for _, sc := range scans {
-			if string(sc.Status) == statusFilter {
-				filtered = append(filtered, sc)
-			}
-		}
-		scans = filtered
-		total = len(filtered)
 	}
 
 	if scans == nil {

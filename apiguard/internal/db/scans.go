@@ -54,8 +54,9 @@ func (d *DB) GetScan(ctx context.Context, id uuid.UUID) (*Scan, error) {
 }
 
 // ListScans returns a paginated list of scans ordered by creation date (newest first).
-// It returns the scans, the total count, and any error.
-func (d *DB) ListScans(ctx context.Context, limit, offset int) ([]Scan, int, error) {
+// statusFilter, when non-empty, restricts results to scans with that exact status value.
+// It returns the scans, the total count matching the filter, and any error.
+func (d *DB) ListScans(ctx context.Context, limit, offset int, statusFilter string) ([]Scan, int, error) {
 	const maxPageSize = 100
 	if limit <= 0 || limit > maxPageSize {
 		limit = maxPageSize
@@ -64,22 +65,34 @@ func (d *DB) ListScans(ctx context.Context, limit, offset int) ([]Scan, int, err
 		offset = 0
 	}
 
-	countQuery := `SELECT COUNT(*) FROM scans`
 	var total int
-	if err := d.Pool.QueryRow(ctx, countQuery).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("counting scans: %w", err)
+	if statusFilter != "" {
+		if err := d.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM scans WHERE status = $1`, statusFilter).Scan(&total); err != nil {
+			return nil, 0, fmt.Errorf("counting scans: %w", err)
+		}
+	} else {
+		if err := d.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM scans`).Scan(&total); err != nil {
+			return nil, 0, fmt.Errorf("counting scans: %w", err)
+		}
 	}
 
-	query := `
+	const selectCols = `
 		SELECT id, spec_url, spec_hash, target_url, status, modules,
 		       started_at, completed_at, created_at, updated_at,
 		       config_json, total_findings, critical_count, high_count,
 		       medium_count, low_count, info_count, auth_type, error_message
-		FROM scans
-		ORDER BY created_at DESC
-		LIMIT $1 OFFSET $2`
+		FROM scans`
 
-	rows, err := d.Pool.Query(ctx, query, limit, offset)
+	var (
+		rows pgx.Rows
+		err  error
+	)
+	if statusFilter != "" {
+		rows, err = d.Pool.Query(ctx, selectCols+` WHERE status = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
+			statusFilter, limit, offset)
+	} else {
+		rows, err = d.Pool.Query(ctx, selectCols+` ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset)
+	}
 	if err != nil {
 		return nil, 0, fmt.Errorf("querying scans: %w", err)
 	}

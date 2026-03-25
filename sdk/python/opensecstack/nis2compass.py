@@ -1,8 +1,9 @@
 """
 opensecstack SDK — NIS2 Compass client.
 
-All requests are authenticated with a static API key passed in the
-``X-API-Key`` header, matching the NIS2 Compass middleware contract.
+Authentication uses a two-step flow: the API key is exchanged for a
+short-lived JWT via ``POST /api/v1/auth/token``.  The JWT is cached in
+the session and refreshed automatically on HTTP 401.
 """
 
 from __future__ import annotations
@@ -32,11 +33,11 @@ class NIS2CompassClient:
 
     def __init__(self, base_url: str, api_key: str, timeout: int = 30) -> None:
         self._base = base_url.rstrip("/")
+        self._api_key = api_key
         self._timeout = timeout
         self._session = requests.Session()
         self._session.headers.update(
             {
-                "X-API-Key": api_key,
                 "Accept": "application/json",
                 "Content-Type": "application/json",
             }
@@ -49,9 +50,28 @@ class NIS2CompassClient:
     def _url(self, path: str) -> str:
         return f"{self._base}/api/v1/{path.lstrip('/')}"
 
-    def _raise_for_status(self, resp: requests.Response) -> None:
+    def _authenticate(self) -> None:
+        """Exchange the API key for a JWT and store it in the session."""
+        resp = self._session.post(
+            self._url("auth/token"),
+            json={"api_key": self._api_key},
+            timeout=self._timeout,
+        )
         if resp.status_code == 401:
             raise AuthenticationError("Invalid or missing API key")
+        if resp.status_code >= 400:
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = resp.text
+            raise APIError(resp.status_code, detail)
+        data = resp.json()
+        token = data.get("token") or data.get("access_token")
+        if not token:
+            raise AuthenticationError("No token received from auth/token endpoint")
+        self._session.headers["Authorization"] = f"Bearer {token}"
+
+    def _raise_for_status(self, resp: requests.Response) -> None:
         if resp.status_code == 404:
             raise NotFoundError(resp.text)
         if resp.status_code >= 400:
@@ -61,20 +81,26 @@ class NIS2CompassClient:
                 detail = resp.text
             raise APIError(resp.status_code, detail)
 
-    def _get(self, path: str, params: Optional[dict] = None) -> requests.Response:
-        resp = self._session.get(self._url(path), params=params, timeout=self._timeout)
+    def _request(self, method: str, path: str, **kwargs) -> requests.Response:
+        """Execute a request, authenticating (and retrying once on 401)."""
+        if "Authorization" not in self._session.headers:
+            self._authenticate()
+        resp = getattr(self._session, method)(self._url(path), timeout=self._timeout, **kwargs)
+        if resp.status_code == 401:
+            # Token expired — re-authenticate and retry once.
+            self._authenticate()
+            resp = getattr(self._session, method)(self._url(path), timeout=self._timeout, **kwargs)
         self._raise_for_status(resp)
         return resp
+
+    def _get(self, path: str, params: Optional[dict] = None) -> requests.Response:
+        return self._request("get", path, params=params)
 
     def _post(self, path: str, json: Optional[dict] = None) -> requests.Response:
-        resp = self._session.post(self._url(path), json=json, timeout=self._timeout)
-        self._raise_for_status(resp)
-        return resp
+        return self._request("post", path, json=json)
 
     def _patch(self, path: str, json: Optional[dict] = None) -> requests.Response:
-        resp = self._session.patch(self._url(path), json=json, timeout=self._timeout)
-        self._raise_for_status(resp)
-        return resp
+        return self._request("patch", path, json=json)
 
     # ------------------------------------------------------------------
     # Organisations

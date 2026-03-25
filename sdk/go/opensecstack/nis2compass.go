@@ -10,21 +10,26 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 // NIS2CompassClient is an HTTP client for the NIS2 Compass API.
 //
-// Authentication uses a direct API key sent as the X-API-Key request header.
-// No token exchange is required; the key is included on every request.
+// Authentication uses a two-step flow: the APIKey is exchanged for a
+// short-lived JWT via POST /api/v1/auth/token. The JWT is cached and
+// refreshed automatically on expiry (HTTP 401).
 type NIS2CompassClient struct {
 	// BaseURL is the root URL of the NIS2 Compass instance (no trailing slash).
 	BaseURL string
-	// APIKey is the pre-shared key included on every request via X-API-Key.
+	// APIKey is the pre-shared key used to obtain JWTs.
 	APIKey string
 	// HTTPClient is the underlying HTTP client. A default client with a
 	// 30-second timeout is used when nil.
 	HTTPClient *http.Client
+
+	mu  sync.Mutex
+	jwt string // cached Bearer token; empty means unauthenticated
 }
 
 // NewNIS2CompassClient creates a NIS2CompassClient with sensible defaults.
@@ -46,18 +51,92 @@ func (c *NIS2CompassClient) apiURL(path string) string {
 	return fmt.Sprintf("%s/api/v1/%s", c.BaseURL, strings.TrimLeft(path, "/"))
 }
 
-// do builds and executes an authenticated HTTP request.
-func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io.Reader, extraHeaders map[string]string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, method, c.apiURL(path), body)
+// authenticate exchanges the API key for a JWT and caches it.
+// Must be called with c.mu held.
+func (c *NIS2CompassClient) authenticate(ctx context.Context) error {
+	body, _ := json.Marshal(map[string]string{"api_key": c.APIKey})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.apiURL("auth/token"), bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("building request: %w", err)
+		return fmt.Errorf("building auth request: %w", err)
 	}
-	req.Header.Set("X-API-Key", c.APIKey)
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	for k, v := range extraHeaders {
-		req.Header.Set(k, v)
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("auth request failed: %w", err)
 	}
-	return c.HTTPClient.Do(req)
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("authentication failed: invalid API key")
+	}
+	if resp.StatusCode >= 400 {
+		raw, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("auth error HTTP %d: %s", resp.StatusCode, string(raw))
+	}
+
+	var data map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return fmt.Errorf("decoding auth response: %w", err)
+	}
+	token, _ := data["token"].(string)
+	if token == "" {
+		token, _ = data["access_token"].(string)
+	}
+	if token == "" {
+		return fmt.Errorf("no token in auth response")
+	}
+	c.jwt = token
+	return nil
+}
+
+// do builds and executes an authenticated HTTP request, re-authenticating
+// once on HTTP 401.
+func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io.Reader, extraHeaders map[string]string) (*http.Response, error) {
+	c.mu.Lock()
+	if c.jwt == "" {
+		if err := c.authenticate(ctx); err != nil {
+			c.mu.Unlock()
+			return nil, err
+		}
+	}
+	jwt := c.jwt
+	c.mu.Unlock()
+
+	doReq := func(tok string) (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, method, c.apiURL(path), body)
+		if err != nil {
+			return nil, fmt.Errorf("building request: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+tok)
+		req.Header.Set("Accept", "application/json")
+		for k, v := range extraHeaders {
+			req.Header.Set(k, v)
+		}
+		return c.HTTPClient.Do(req)
+	}
+
+	resp, err := doReq(jwt)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		resp.Body.Close()
+		c.mu.Lock()
+		if err := c.authenticate(ctx); err != nil {
+			c.mu.Unlock()
+			return nil, err
+		}
+		jwt = c.jwt
+		c.mu.Unlock()
+		// body was already consumed; callers must supply a fresh reader for retries
+		resp, err = doReq(jwt)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return resp, nil
 }
 
 func (c *NIS2CompassClient) getJSON(ctx context.Context, path string, params url.Values, out interface{}) error {

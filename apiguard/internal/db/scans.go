@@ -156,6 +156,26 @@ func (d *DB) UpdateScanSummary(ctx context.Context, id uuid.UUID, summary ScanSu
 	return nil
 }
 
+// UpdateScanError records an error message on a failed scan and sets the status
+// to failed. This is the single method to call when a scan fails so that both
+// the status transition and the error detail are written atomically.
+func (d *DB) UpdateScanError(ctx context.Context, id uuid.UUID, errMsg string) error {
+	query := `
+		UPDATE scans
+		SET status = $1, error_message = $2, completed_at = $3, updated_at = $3
+		WHERE id = $4`
+
+	now := time.Now()
+	ct, err := d.Pool.Exec(ctx, query, ScanStatusFailed, errMsg, now, id)
+	if err != nil {
+		return fmt.Errorf("updating scan error: %w", err)
+	}
+	if ct.RowsAffected() == 0 {
+		return fmt.Errorf("scan not found: %s", id)
+	}
+	return nil
+}
+
 // DeleteScan removes a scan and its associated findings (via CASCADE).
 func (d *DB) DeleteScan(ctx context.Context, id uuid.UUID) error {
 	query := `DELETE FROM scans WHERE id = $1`

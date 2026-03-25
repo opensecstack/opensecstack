@@ -5,7 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -94,13 +97,27 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 			Header: req.AuthHeader,
 		},
 	}
-	if req.SpecURL != "" && req.SpecPath == "" {
-		scanReq.SpecPath = req.SpecURL
-	}
 
 	// Launch scan in background using a detached context so it outlives the request.
 	go func() {
 		bgCtx := context.Background()
+
+		// If a spec URL was provided (and no local path), download it to a temp
+		// file so the scanner's validateSpecPath can open it as a local file.
+		var tempSpecFile string
+		if req.SpecURL != "" && req.SpecPath == "" {
+			path, dlErr := downloadSpecToTemp(bgCtx, req.SpecURL)
+			if dlErr != nil {
+				s.logger.Error().Err(dlErr).Str("scan_id", scanID.String()).Str("spec_url", req.SpecURL).Msg("failed to download spec")
+				if dbErr := s.db.UpdateScanError(bgCtx, scanID, fmt.Sprintf("failed to download spec: %v", dlErr)); dbErr != nil {
+					s.logger.Error().Err(dbErr).Str("scan_id", scanID.String()).Msg("failed to record scan error")
+				}
+				return
+			}
+			tempSpecFile = path
+			defer os.Remove(tempSpecFile)
+			scanReq.SpecPath = tempSpecFile
+		}
 
 		if err := s.db.UpdateScanStatus(bgCtx, scanID, db.ScanStatusRunning); err != nil {
 			s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to set scan status to running")
@@ -109,8 +126,8 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 		result, err := s.scanner.Run(bgCtx, scanReq)
 		if err != nil {
 			s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("scan failed")
-			if statusErr := s.db.UpdateScanStatus(bgCtx, scanID, db.ScanStatusFailed); statusErr != nil {
-				s.logger.Error().Err(statusErr).Str("scan_id", scanID.String()).Msg("failed to set scan status to failed")
+			if dbErr := s.db.UpdateScanError(bgCtx, scanID, err.Error()); dbErr != nil {
+				s.logger.Error().Err(dbErr).Str("scan_id", scanID.String()).Msg("failed to record scan error")
 			}
 			return
 		}
@@ -200,6 +217,7 @@ func (s *Scans) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Apply optional status filter in-process (DB layer has no status filter param).
+	// Update total to reflect the filtered count so pagination metadata is accurate.
 	if statusFilter := r.URL.Query().Get("status"); statusFilter != "" {
 		filtered := scans[:0]
 		for _, sc := range scans {
@@ -208,6 +226,7 @@ func (s *Scans) List(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		scans = filtered
+		total = len(filtered)
 	}
 
 	if scans == nil {
@@ -491,11 +510,41 @@ func writeError(w http.ResponseWriter, code int, message string) {
 	})
 }
 
-func notImplemented(w http.ResponseWriter, resource string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"error":   "not_implemented",
-		"message": resource + " endpoint is not yet implemented",
-	})
+// downloadSpecToTemp fetches a remote OpenAPI spec URL and writes it to a
+// temporary file, returning the file path. The caller is responsible for
+// removing the file when done (e.g. with defer os.Remove(path)).
+func downloadSpecToTemp(ctx context.Context, specURL string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, specURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("building request: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetching spec: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("spec URL returned HTTP %d", resp.StatusCode)
+	}
+
+	const maxSpecBytes = 20 * 1024 * 1024 // 20 MB hard cap
+	f, err := os.CreateTemp("", "apiguard-spec-*.json")
+	if err != nil {
+		return "", fmt.Errorf("creating temp file: %w", err)
+	}
+
+	if _, err := io.Copy(f, io.LimitReader(resp.Body, maxSpecBytes)); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return "", fmt.Errorf("writing spec to temp file: %w", err)
+	}
+
+	if err := f.Close(); err != nil {
+		_ = os.Remove(f.Name())
+		return "", fmt.Errorf("closing temp file: %w", err)
+	}
+
+	return f.Name(), nil
 }

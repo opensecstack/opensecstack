@@ -213,6 +213,23 @@ func (c *APIGuardClient) postJSON(ctx context.Context, path string, reqBody inte
 	return json.Unmarshal(raw, out)
 }
 
+func (c *APIGuardClient) patchJSON(ctx context.Context, path string, reqBody interface{}, out interface{}) error {
+	encoded, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("encoding request body: %w", err)
+	}
+	resp, err := c.do(ctx, http.MethodPatch, path, bytes.NewReader(encoded),
+		map[string]string{"Content-Type": "application/json"})
+	if err != nil {
+		return err
+	}
+	raw, err := checkResponse(resp)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, out)
+}
+
 // ----------------------------------------------------------------------------
 // Public API
 // ----------------------------------------------------------------------------
@@ -307,6 +324,17 @@ func (c *APIGuardClient) GetFindings(ctx context.Context, scanID string) ([]Find
 		return nil, fmt.Errorf("GetFindings %s: unexpected response format: %w", scanID, jsonErr)
 	}
 	return findings, nil
+}
+
+// PatchFinding triages a single finding by updating its status and optional note.
+// id is the UUID of the finding to update. Status must be one of:
+// "open", "confirmed", "false_positive", "accepted", "fixed".
+func (c *APIGuardClient) PatchFinding(ctx context.Context, id string, req PatchFindingRequest) (*Finding, error) {
+	var finding Finding
+	if err := c.patchJSON(ctx, "findings/"+id, req, &finding); err != nil {
+		return nil, fmt.Errorf("PatchFinding %s: %w", id, err)
+	}
+	return &finding, nil
 }
 
 // GetAuditLog retrieves the most recent audit log entries (up to limit).

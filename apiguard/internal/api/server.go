@@ -135,7 +135,7 @@ func (s *Server) setupMiddleware() {
 func (s *Server) registerRoutes() {
 	h := handlers.NewHealth(s.logger)
 	a := handlers.NewAuthWithDB(s.logger, s.config, s.db)
-	sc := handlers.NewScansWithCitadel(s.logger, s.db, s.scanner, s.citadel)
+	sc := handlers.NewScansWithCitadel(s.logger, s.db, s.scanner, s.citadel, s.shutdownCtx)
 	f := handlers.NewFindingsWithCitadel(s.logger, s.db, s.citadel)
 	sp := handlers.NewSpecs(s.logger, "")
 	au := handlers.NewAudit(s.logger, s.db)

@@ -47,7 +47,7 @@ def _forward_to_citadel(log_entry: dict) -> None:
         import requests  # lazy import — only used if CITADEL is configured
         payload = {
             'action_type': log_entry.get('action'),
-            'actor_user_id': log_entry.get('actor', 'unknown'),
+            'actor_user_id': 0,  # system/API-key requests have no numeric user id
             'actor_role': 'NIS2_COMPASS',
             'result_status': 'EXECUTED',
             'system_module': 'nis2compass',
@@ -57,6 +57,7 @@ def _forward_to_citadel(log_entry: dict) -> None:
                 'resource_type': log_entry.get('resource_type'),
                 'risk_class': log_entry.get('risk_class', 'INFO'),
                 'platform': 'nis2compass',
+                'actor_identity': log_entry.get('actor', 'unknown'),
             }
         }
         try:
@@ -143,14 +144,23 @@ def write_audit(
     )
     db_session.add(entry)
 
-    # Fire-and-forget webhook delivery (does not block the request)
+    # Fire-and-forget webhook delivery — deferred until after commit so that
+    # the webhook is only sent for writes that actually persisted.
     try:
         from flask import current_app
         webhook_url = current_app.config.get('WEBHOOK_URL', '')
         webhook_secret = current_app.config.get('WEBHOOK_SECRET', '')
         if webhook_url:
             from .webhook import dispatch
-            dispatch(entry.to_dict(), webhook_url, webhook_secret)
+            entry_dict = entry.to_dict()
+
+            from sqlalchemy import event as sa_event
+
+            def _after_commit(session):
+                dispatch(entry_dict, webhook_url, webhook_secret)
+                sa_event.remove(session, 'after_commit', _after_commit)
+
+            sa_event.listen(db_session, 'after_commit', _after_commit)
     except RuntimeError:
         pass  # No app context (e.g. during testing without full stack)
 

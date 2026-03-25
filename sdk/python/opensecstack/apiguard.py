@@ -111,6 +111,9 @@ class APIGuardClient:
     def _post(self, path: str, **kwargs) -> requests.Response:
         return self._request("POST", path, **kwargs)
 
+    def _patch(self, path: str, json: Optional[dict] = None) -> requests.Response:
+        return self._request("PATCH", path, json=json)
+
     # ------------------------------------------------------------------
     # Specs
     # ------------------------------------------------------------------
@@ -215,6 +218,27 @@ class APIGuardClient:
         if isinstance(payload, dict) and "data" in payload:
             return payload["data"]
         return payload  # defensive: return as-is if shape differs
+
+    def patch_finding(
+        self,
+        finding_id: str,
+        status: str,
+        note: str = "",
+    ) -> dict:
+        """
+        Triage a finding by updating its status.
+
+        Parameters
+        ----------
+        finding_id: UUID of the finding to update.
+        status:     One of ``open``, ``confirmed``, ``false_positive``,
+                    ``accepted``, ``fixed``.
+        note:       Optional free-text triage note.
+        """
+        body: dict = {"status": status}
+        if note:
+            body["note"] = note
+        return self._patch(f"findings/{finding_id}", json=body).json()
 
     # ------------------------------------------------------------------
     # Audit log

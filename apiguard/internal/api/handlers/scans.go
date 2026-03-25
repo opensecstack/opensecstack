@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/opensecstack/apiguard/internal/api/middleware"
 	"github.com/opensecstack/apiguard/internal/citadel"
 	"github.com/opensecstack/apiguard/internal/db"
 	"github.com/opensecstack/apiguard/internal/domain"
@@ -27,10 +28,16 @@ import (
 // Errors are logged as warnings but never returned to callers — audit failures
 // must not break normal operations.
 func (s *Scans) auditLog(ctx context.Context, action db.AuditAction, resourceType string, resourceID *uuid.UUID, ip, ua string, meta map[string]interface{}) {
+	actorID := "system"
+	actorType := "system"
+	if claims, ok := middleware.ClaimsFromContext(ctx); ok && claims.Sub != "" {
+		actorID = claims.Sub
+		actorType = "user"
+	}
 	metaJSON, _ := json.Marshal(meta)
 	entry := &db.AuditLog{
-		ActorID:      "system",
-		ActorType:    "system",
+		ActorID:      actorID,
+		ActorType:    actorType,
 		Action:       action,
 		ResourceType: resourceType,
 		ResourceID:   resourceID,
@@ -49,28 +56,33 @@ func (s *Scans) auditLog(ctx context.Context, action db.AuditAction, resourceTyp
 
 // Scans handles scan-related API endpoints.
 type Scans struct {
-	logger  zerolog.Logger
-	db      *db.DB
-	scanner *scanner.Scanner
-	citadel *citadel.Client
+	logger      zerolog.Logger
+	db          *db.DB
+	scanner     *scanner.Scanner
+	citadel     *citadel.Client
+	shutdownCtx context.Context // cancelled when the server is shutting down
 }
 
 // NewScans creates a new Scans handler.
 func NewScans(logger zerolog.Logger, database *db.DB, sc *scanner.Scanner) *Scans {
 	return &Scans{
-		logger:  logger.With().Str("handler", "scans").Logger(),
-		db:      database,
-		scanner: sc,
+		logger:      logger.With().Str("handler", "scans").Logger(),
+		db:          database,
+		scanner:     sc,
+		shutdownCtx: context.Background(),
 	}
 }
 
 // NewScansWithCitadel creates a new Scans handler with a CITADEL forwarding client.
-func NewScansWithCitadel(logger zerolog.Logger, database *db.DB, sc *scanner.Scanner, cc *citadel.Client) *Scans {
+// shutdownCtx should be the server's shutdown context; scan goroutines are parented
+// to it so they are cancelled when the server receives SIGTERM.
+func NewScansWithCitadel(logger zerolog.Logger, database *db.DB, sc *scanner.Scanner, cc *citadel.Client, shutdownCtx context.Context) *Scans {
 	return &Scans{
-		logger:  logger.With().Str("handler", "scans").Logger(),
-		db:      database,
-		scanner: sc,
-		citadel: cc,
+		logger:      logger.With().Str("handler", "scans").Logger(),
+		db:          database,
+		scanner:     sc,
+		citadel:     cc,
+		shutdownCtx: shutdownCtx,
 	}
 }
 
@@ -136,9 +148,10 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	// Launch scan in background using a detached context so it outlives the request.
+	// Launch scan in background using a context derived from the server shutdown
+	// context so the goroutine is cancelled on SIGTERM rather than leaking.
 	go func() {
-		bgCtx := context.Background()
+		bgCtx := s.shutdownCtx
 
 		// If a spec URL was provided (and no local path), download it to a temp
 		// file so the scanner's validateSpecPath can open it as a local file.

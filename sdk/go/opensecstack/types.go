@@ -142,37 +142,57 @@ type Organisation struct {
 	UpdatedAt          time.Time `json:"updated_at"`
 }
 
+// AssessmentStats is the aggregated control summary included in single-record
+// GET and PATCH responses for an Assessment (when the server sets include_stats=true).
+type AssessmentStats struct {
+	Total        int            `json:"total"`
+	ByStatus     map[string]int `json:"by_status"`
+	AvgRiskScore *float64       `json:"avg_risk_score"`
+}
+
 // Assessment represents a NIS2 compliance assessment for an organisation.
 // The server may include a summary block (aggregated control counts and overall
 // risk score) on single-record GET and PATCH responses.
 type Assessment struct {
-	ID               string     `json:"id"`
-	OrgID            string     `json:"org_id"`
-	Title            string     `json:"title"`
-	Status           string     `json:"status"`
-	FrameworkVersion string     `json:"framework_version"`
-	Scope            string     `json:"scope,omitempty"`
-	Assessor         string     `json:"assessor,omitempty"`
-	DueDate          string     `json:"due_date,omitempty"`
-	CompletedAt      *time.Time `json:"completed_at,omitempty"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
+	ID               string           `json:"id"`
+	OrgID            string           `json:"org_id"`
+	Title            string           `json:"title"`
+	Status           string           `json:"status"`
+	FrameworkVersion string           `json:"framework_version"`
+	Scope            string           `json:"scope,omitempty"`
+	Assessor         string           `json:"assessor,omitempty"`
+	DueDate          string           `json:"due_date,omitempty"`
+	CompletedAt      *time.Time       `json:"completed_at,omitempty"`
+	CreatedAt        time.Time        `json:"created_at"`
+	UpdatedAt        time.Time        `json:"updated_at"`
+	Stats            *AssessmentStats `json:"stats,omitempty"`
 }
 
 // Control represents one of the 10 NIS2 Article 21(2) measure entries within
 // an assessment (measures a through j).
 type Control struct {
-	ID              string   `json:"id"`
-	AssessmentID    string   `json:"assessment_id"`
-	MeasureRef      string   `json:"measure_ref"`
-	ArticleRef      string   `json:"article_ref"`
-	Title           string   `json:"title"`
-	NistCategory    string   `json:"nist_category"`
-	Status          string   `json:"status"`
-	RiskScore       *float64 `json:"risk_score,omitempty"`
-	Notes           string   `json:"notes,omitempty"`
-	GapDescription  string   `json:"gap_description,omitempty"`
-	RemediationPlan string   `json:"remediation_plan,omitempty"`
+	ID                 string                 `json:"id"`
+	AssessmentID       string                 `json:"assessment_id"`
+	MeasureRef         string                 `json:"measure_ref"`
+	ArticleRef         string                 `json:"article_ref"`
+	Title              string                 `json:"title"`
+	Description        string                 `json:"description,omitempty"`
+	NistCategory       string                 `json:"nist_category"`
+	Status             string                 `json:"status"`
+	Evidence           map[string]interface{} `json:"evidence,omitempty"`
+	RiskScore          *float64               `json:"risk_score,omitempty"`
+	Notes              string                 `json:"notes,omitempty"`
+	GapDescription     string                 `json:"gap_description,omitempty"`
+	RemediationPlan    string                 `json:"remediation_plan,omitempty"`
+	RemediationDue     string                 `json:"remediation_due,omitempty"`
+	RemediationOwner   string                 `json:"remediation_owner,omitempty"`
+	RemediationStatus  string                 `json:"remediation_status,omitempty"`
+	ExternalTicketURL  string                 `json:"external_ticket_url,omitempty"`
+	RemediationNotes   string                 `json:"remediation_notes,omitempty"`
+	AssessedBy         string                 `json:"assessed_by,omitempty"`
+	AssessedAt         *time.Time             `json:"assessed_at,omitempty"`
+	CreatedAt          time.Time              `json:"created_at"`
+	UpdatedAt          time.Time              `json:"updated_at"`
 }
 
 // CreateOrganisationRequest is the body sent to POST /api/v1/organisations.
@@ -201,18 +221,45 @@ type CreateAssessmentRequest struct {
 type PatchAssessmentRequest struct {
 	Status   string `json:"status,omitempty"`
 	Title    string `json:"title,omitempty"`
+	Scope    string `json:"scope,omitempty"`
 	Assessor string `json:"assessor,omitempty"`
+	DueDate  string `json:"due_date,omitempty"`
 }
 
 // PatchControlRequest is the body sent to
 // PATCH /api/v1/assessments/{id}/controls/{measure_ref}.
 // All fields are optional; only non-zero fields are sent.
 type PatchControlRequest struct {
-	Status          string   `json:"status,omitempty"`
-	Notes           string   `json:"notes,omitempty"`
-	GapDescription  string   `json:"gap_description,omitempty"`
-	RemediationPlan string   `json:"remediation_plan,omitempty"`
-	RiskScore       *float64 `json:"risk_score,omitempty"`
+	Status            string                 `json:"status,omitempty"`
+	Notes             string                 `json:"notes,omitempty"`
+	GapDescription    string                 `json:"gap_description,omitempty"`
+	RemediationPlan   string                 `json:"remediation_plan,omitempty"`
+	RemediationDue    string                 `json:"remediation_due,omitempty"`
+	RemediationOwner  string                 `json:"remediation_owner,omitempty"`
+	RemediationStatus string                 `json:"remediation_status,omitempty"`
+	ExternalTicketURL string                 `json:"external_ticket_url,omitempty"`
+	RemediationNotes  string                 `json:"remediation_notes,omitempty"`
+	Evidence          map[string]interface{} `json:"evidence,omitempty"`
+	RiskScore         *float64               `json:"risk_score,omitempty"`
+}
+
+// PatchOrganisationRequest is the body sent to PATCH /api/v1/organisations/{id}.
+// All fields are optional; only non-zero fields are sent.
+type PatchOrganisationRequest struct {
+	Name               string `json:"name,omitempty"`
+	Industry           string `json:"industry,omitempty"`
+	Country            string `json:"country,omitempty"`
+	Size               string `json:"size,omitempty"`
+	EntityType         string `json:"entity_type,omitempty"`
+	RegistrationNumber string `json:"registration_number,omitempty"`
+	ContactEmail       string `json:"contact_email,omitempty"`
+}
+
+// PatchFindingRequest is the body sent to PATCH /api/v1/findings/{id}.
+// Status is required; Note is optional triage commentary.
+type PatchFindingRequest struct {
+	Status string `json:"status"`
+	Note   string `json:"note,omitempty"`
 }
 
 // NIS2AuditEntry is a single entry in the NIS2 Compass immutable audit log.

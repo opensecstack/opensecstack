@@ -25,7 +25,8 @@ CREATE TABLE organisations (
     registration_number VARCHAR(100),
     contact_email       VARCHAR(255),
     created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+    updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    created_by          VARCHAR(255)
 );
 CREATE INDEX idx_organisations_country  ON organisations(country);
 CREATE INDEX idx_organisations_industry ON organisations(industry);
@@ -42,7 +43,8 @@ CREATE TABLE assessments (
     due_date          DATE,
     completed_at      TIMESTAMPTZ,
     created_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-    updated_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    updated_at        TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    created_by        VARCHAR(255)
 );
 CREATE INDEX idx_assessments_org_id ON assessments(org_id);
 CREATE INDEX idx_assessments_status ON assessments(status);

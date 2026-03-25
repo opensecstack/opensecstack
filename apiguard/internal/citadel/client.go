@@ -22,7 +22,7 @@ func New(baseURL, apiKey string) *Client {
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
-		http:    &http.Client{Timeout: 2 * time.Second},
+		http:    &http.Client{Timeout: 15 * time.Second},
 	}
 }
 
@@ -37,7 +37,7 @@ func (c *Client) LogEvent(
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		_ = c.logEvent(ctx, actionType, actorUserID, actorRole, resultStatus, systemModule, resourceID, metadata)
 	}()
@@ -48,14 +48,26 @@ func (c *Client) logEvent(
 	actionType, actorUserID, actorRole, resultStatus, systemModule, resourceID string,
 	metadata map[string]interface{},
 ) error {
+	// CITADEL server expects actor_user_id as an integer. We send 0 as the
+	// canonical system/service-account value because APIGuard authenticates
+	// with service tokens rather than per-user CITADEL accounts.
+	// The real actor identifier (JWT sub) is forwarded in metadata so it is
+	// never lost.
+	enriched := make(map[string]interface{}, len(metadata)+1)
+	for k, v := range metadata {
+		enriched[k] = v
+	}
+	if actorUserID != "" {
+		enriched["actor_subject"] = actorUserID
+	}
 	payload := map[string]interface{}{
 		"action_type":   actionType,
-		"actor_user_id": actorUserID,
+		"actor_user_id": 0,
 		"actor_role":    actorRole,
 		"result_status": resultStatus,
 		"system_module": systemModule,
 		"resource_id":   resourceID,
-		"metadata":      metadata,
+		"metadata":      enriched,
 	}
 
 	body, err := json.Marshal(payload)

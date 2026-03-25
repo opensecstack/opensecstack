@@ -208,6 +208,15 @@ func (c *NIS2CompassClient) patchJSON(ctx context.Context, path string, reqBody 
 	return json.Unmarshal(raw, out)
 }
 
+func (c *NIS2CompassClient) deleteJSON(ctx context.Context, path string) error {
+	resp, err := c.do(ctx, http.MethodDelete, path, nil, nil)
+	if err != nil {
+		return err
+	}
+	_, err = checkResponse(resp)
+	return err
+}
+
 // ----------------------------------------------------------------------------
 // Organisations
 // ----------------------------------------------------------------------------
@@ -243,6 +252,25 @@ func (c *NIS2CompassClient) GetOrganisation(ctx context.Context, id string) (*Or
 		return nil, fmt.Errorf("GetOrganisation %s: %w", id, err)
 	}
 	return &org, nil
+}
+
+// PatchOrganisation updates one or more fields on an organisation.
+// Only fields present in req are modified; omitted fields retain their current values.
+func (c *NIS2CompassClient) PatchOrganisation(ctx context.Context, id string, req PatchOrganisationRequest) (*Organisation, error) {
+	var org Organisation
+	if err := c.patchJSON(ctx, "organisations/"+id, req, &org); err != nil {
+		return nil, fmt.Errorf("PatchOrganisation %s: %w", id, err)
+	}
+	return &org, nil
+}
+
+// DeleteOrganisation permanently removes an organisation and all its assessments.
+// The server returns HTTP 204 on success.
+func (c *NIS2CompassClient) DeleteOrganisation(ctx context.Context, id string) error {
+	if err := c.deleteJSON(ctx, "organisations/"+id); err != nil {
+		return fmt.Errorf("DeleteOrganisation %s: %w", id, err)
+	}
+	return nil
 }
 
 // ----------------------------------------------------------------------------
@@ -293,6 +321,15 @@ func (c *NIS2CompassClient) PatchAssessment(ctx context.Context, id string, req 
 	return &assessment, nil
 }
 
+// DeleteAssessment permanently removes an assessment and its associated controls.
+// The server returns HTTP 204 on success.
+func (c *NIS2CompassClient) DeleteAssessment(ctx context.Context, id string) error {
+	if err := c.deleteJSON(ctx, "assessments/"+id); err != nil {
+		return fmt.Errorf("DeleteAssessment %s: %w", id, err)
+	}
+	return nil
+}
+
 // ----------------------------------------------------------------------------
 // Controls
 // ----------------------------------------------------------------------------
@@ -302,6 +339,38 @@ func (c *NIS2CompassClient) GetControls(ctx context.Context, assessmentID string
 	var controls []Control
 	if err := c.getJSON(ctx, "assessments/"+assessmentID+"/controls", nil, &controls); err != nil {
 		return nil, fmt.Errorf("GetControls assessment=%s: %w", assessmentID, err)
+	}
+	return controls, nil
+}
+
+// ListControlsOptions holds optional filter parameters for ListControls.
+type ListControlsOptions struct {
+	// Status filters by control status (e.g. "compliant", "non_compliant").
+	Status string
+	// NistCategory filters by NIST CSF category (e.g. "identify", "protect").
+	NistCategory string
+	// MeasureRef filters by a single measure reference letter ('a' through 'j').
+	MeasureRef string
+}
+
+// ListControls returns control entries for the given assessment UUID, with
+// optional server-side filtering. Pass a zero-value ListControlsOptions{} to
+// return all controls (equivalent to GetControls).
+func (c *NIS2CompassClient) ListControls(ctx context.Context, assessmentID string, opts ListControlsOptions) ([]Control, error) {
+	params := url.Values{}
+	if opts.Status != "" {
+		params.Set("status", opts.Status)
+	}
+	if opts.NistCategory != "" {
+		params.Set("nist_category", opts.NistCategory)
+	}
+	if opts.MeasureRef != "" {
+		params.Set("measure_ref", opts.MeasureRef)
+	}
+
+	var controls []Control
+	if err := c.getJSON(ctx, "assessments/"+assessmentID+"/controls", params, &controls); err != nil {
+		return nil, fmt.Errorf("ListControls assessment=%s: %w", assessmentID, err)
 	}
 	return controls, nil
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/opensecstack/apiguard/internal/api/middleware"
 	"github.com/opensecstack/apiguard/internal/citadel"
 	"github.com/opensecstack/apiguard/internal/db"
 )
@@ -16,10 +17,16 @@ import (
 // auditLog appends an audit log entry locally and forwards it to CITADEL.
 // Errors are logged as warnings but never returned to callers.
 func (f *Findings) auditLog(ctx context.Context, action db.AuditAction, resourceType string, resourceID *uuid.UUID, ip, ua string, meta map[string]interface{}) {
+	actorID := "system"
+	actorType := "system"
+	if claims, ok := middleware.ClaimsFromContext(ctx); ok && claims.Sub != "" {
+		actorID = claims.Sub
+		actorType = "user"
+	}
 	metaJSON, _ := json.Marshal(meta)
 	entry := &db.AuditLog{
-		ActorID:      "system",
-		ActorType:    "system",
+		ActorID:      actorID,
+		ActorType:    actorType,
 		Action:       action,
 		ResourceType: resourceType,
 		ResourceID:   resourceID,
@@ -164,7 +171,11 @@ func (f *Findings) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := f.db.UpdateFindingStatus(r.Context(), id, db.FindingStatus(req.Status), req.Note, "system"); err != nil {
+	actorID := "system"
+	if claims, ok := middleware.ClaimsFromContext(r.Context()); ok && claims.Sub != "" {
+		actorID = claims.Sub
+	}
+	if err := f.db.UpdateFindingStatus(r.Context(), id, db.FindingStatus(req.Status), req.Note, actorID); err != nil {
 		if isNotFound(err) {
 			writeError(w, http.StatusNotFound, "finding not found")
 			return

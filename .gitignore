@@ -1,7 +1,26 @@
+# Claude Code (AI assistant settings — never commit)
+.claude/
+
+# CITADEL governance runtime (local governance state — not for VCS)
+.citadel/
+
 # Environment
 .env
 .env.local
 .env.*.local
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Secrets / keys
+*.key
+*.pem
+*.p12
+*.pfx
+*.cert
+*.crt
+secrets/
+**/secrets/
 
 # IDE
 .idea/

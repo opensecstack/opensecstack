@@ -4,7 +4,8 @@ def test_health_returns_200(client):
 
 
 def test_health_returns_ok(client):
-    data = resp = client.get('/health').get_json()
+    resp = client.get('/health')
+    data = resp.get_json()
     assert data['status'] == 'ok'
     assert 'version' in data
 

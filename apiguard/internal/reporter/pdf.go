@@ -11,15 +11,15 @@ import (
 	"github.com/opensecstack/apiguard/internal/version"
 )
 
-// PDFReporter generates a well-formatted, human-readable security report that
-// is returned with Content-Type: application/pdf and a .pdf filename so that
-// browsers and API clients treat it as a downloadable PDF attachment.
+// PDFReporter generates a well-formatted, human-readable security report
+// served as text/plain with a .txt filename.  The format is designed to be
+// easily readable in any text viewer and is structurally equivalent to a
+// printed report.
 //
-// Implementation note: this reporter does not depend on an external PDF
-// rendering library. It produces a structured plain-text document.  To add
-// true PDF rendering in the future, replace the Generate body with a call to
-// a library such as github.com/go-pdf/fpdf while keeping this file's public
-// interface identical.
+// To upgrade to true binary PDF output in the future, replace the Generate
+// body with a call to a library such as github.com/go-pdf/fpdf while keeping
+// this file's public interface identical, and update reportContentType in
+// scans.go to return "application/pdf".
 type PDFReporter struct{}
 
 const (

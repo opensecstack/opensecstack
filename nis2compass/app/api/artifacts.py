@@ -204,6 +204,7 @@ def delete_artifact(artifact_id):
     if artifact is None:
         return jsonify({'error': 'Artifact not found', 'code': 'NOT_FOUND'}), 404
 
+    file_path = artifact.file_path
     write_audit(
         db.session,
         action='artifact_deleted',
@@ -215,4 +216,12 @@ def delete_artifact(artifact_id):
     )
     db.session.delete(artifact)
     db.session.commit()
+
+    # Remove the file from disk after the DB commit succeeds.
+    if file_path and os.path.isfile(file_path):
+        try:
+            os.remove(file_path)
+        except OSError as exc:
+            current_app.logger.warning('artifact file could not be removed: %s — %s', file_path, exc)
+
     return '', 204

@@ -56,14 +56,17 @@ class TestValidateApiKey:
             # 'test-api-key' is in TestConfig.API_KEYS
             # validate_api_key tries DB first (may fail in unit test), then env var
             result = validate_api_key('test-api-key')
+        # validate_api_key returns (valid: bool, scope: str)
         # In unit test context DB may be unavailable — result depends on environment
-        # Just ensure no exception is raised
-        assert isinstance(result, bool)
+        # Just ensure no exception is raised and a tuple is returned
+        assert isinstance(result, tuple)
+        assert isinstance(result[0], bool)
 
     def test_invalid_key(self, app):
         with app.app_context():
             result = validate_api_key('definitely-not-a-valid-key-xxxx')
-        assert result is False
+        # validate_api_key returns (valid: bool, scope: str)
+        assert result[0] is False
 
 
 # ------------------------------------------------------------------ #

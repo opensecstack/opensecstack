@@ -1,7 +1,10 @@
+import logging
 import time
 from flask import request, jsonify
 from flask_cors import CORS
 from . import extensions
+
+_log = logging.getLogger(__name__)
 
 
 def _get_client_ip() -> str:
@@ -22,7 +25,8 @@ def _check_rate_limit(ip: str, limit: int, window: int = 60) -> tuple[bool, int]
     """
     rc = extensions.redis_client
     if rc is None:
-        return True, 0  # fail open if Redis is unavailable
+        _log.warning('rate_limit: Redis unavailable — rate limiting disabled')
+        return True, 0
 
     now = time.time()
     key = f'rate:{ip}'
@@ -38,8 +42,9 @@ def _check_rate_limit(ip: str, limit: int, window: int = 60) -> tuple[bool, int]
     try:
         results = pipe.execute()
         count = results[1]
-    except Exception:
-        return True, 0  # fail open on Redis errors
+    except Exception as exc:
+        _log.warning('rate_limit: Redis error, failing open: %s', exc)
+        return True, 0
 
     if count >= limit:
         oldest_score = rc.zrange(key, 0, 0, withscores=True)

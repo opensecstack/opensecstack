@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 
@@ -8,21 +10,54 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/opensecstack/apiguard/internal/api/middleware"
+	"github.com/opensecstack/apiguard/internal/citadel"
 	"github.com/opensecstack/apiguard/internal/db"
 )
 
 // APIKeys handles API key management endpoints.
 type APIKeys struct {
-	logger zerolog.Logger
-	db     *db.DB
+	logger  zerolog.Logger
+	db      *db.DB
+	citadel *citadel.Client
 }
 
 // NewAPIKeys creates a new APIKeys handler.
-func NewAPIKeys(logger zerolog.Logger, database *db.DB) *APIKeys {
+func NewAPIKeys(logger zerolog.Logger, database *db.DB, citadelClient *citadel.Client) *APIKeys {
 	return &APIKeys{
-		logger: logger.With().Str("handler", "apikeys").Logger(),
-		db:     database,
+		logger:  logger.With().Str("handler", "apikeys").Logger(),
+		db:      database,
+		citadel: citadelClient,
 	}
+}
+
+// auditLog appends an audit entry and forwards it to CITADEL (fire-and-forget).
+func (h *APIKeys) auditLog(ctx context.Context, action db.AuditAction, resourceType string, resourceID *uuid.UUID, ip, ua, actor string) {
+	entry := &db.AuditLog{
+		ActorID:      actor,
+		ActorType:    "user",
+		Action:       action,
+		ResourceType: resourceType,
+		ResourceID:   resourceID,
+	}
+	if ip != "" {
+		entry.IPAddress = sql.NullString{String: ip, Valid: true}
+	}
+	if ua != "" {
+		entry.UserAgent = sql.NullString{String: ua, Valid: true}
+	}
+	if err := h.db.AppendAuditLog(ctx, entry, h.citadel); err != nil {
+		h.logger.Warn().Err(err).Str("action", string(action)).Msg("audit log write failed")
+	}
+}
+
+// actorFromContext extracts the subject claim from the JWT in context,
+// falling back to "api-client" if claims are absent (e.g. during tests).
+func actorFromContext(ctx context.Context) string {
+	if claims, ok := middleware.ClaimsFromContext(ctx); ok && claims.Sub != "" {
+		return claims.Sub
+	}
+	return "api-client"
 }
 
 // List handles GET /api/v1/api-keys.
@@ -60,9 +95,7 @@ func (h *APIKeys) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use a fixed actor identifier; in a multi-user system this would come
-	// from the JWT claims in the request context.
-	createdBy := "api-client"
+	createdBy := actorFromContext(r.Context())
 
 	key, plaintext, err := h.db.CreateAPIKey(r.Context(), req.Label, createdBy)
 	if err != nil {
@@ -70,6 +103,9 @@ func (h *APIKeys) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to create api key")
 		return
 	}
+
+	h.auditLog(r.Context(), db.AuditActionAPIKeyCreated, "api_keys", &key.ID,
+		r.RemoteAddr, r.UserAgent(), createdBy)
 
 	writeJSON(w, http.StatusCreated, createAPIKeyResponse{
 		APIKey:  key,
@@ -88,15 +124,16 @@ func (h *APIKeys) Revoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use a fixed actor identifier; in a multi-user system this would come
-	// from the JWT claims in the request context.
-	revokedBy := "api-client"
+	revokedBy := actorFromContext(r.Context())
 
 	if err := h.db.RevokeAPIKey(r.Context(), id, revokedBy); err != nil {
 		h.logger.Error().Err(err).Str("id", idStr).Msg("revoking api key")
 		writeError(w, http.StatusNotFound, "api key not found or already revoked")
 		return
 	}
+
+	h.auditLog(r.Context(), db.AuditActionAPIKeyRevoked, "api_keys", &id,
+		r.RemoteAddr, r.UserAgent(), revokedBy)
 
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -138,7 +138,7 @@ func (s *Server) registerRoutes() {
 	f := handlers.NewFindingsWithCitadel(s.logger, s.db, s.citadel)
 	sp := handlers.NewSpecs(s.logger, "")
 	au := handlers.NewAudit(s.logger, s.db)
-	ak := handlers.NewAPIKeys(s.logger, s.db)
+	ak := handlers.NewAPIKeys(s.logger, s.db, s.citadel)
 
 	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, s.config)
 }

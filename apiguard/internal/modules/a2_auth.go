@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/opensecstack/apiguard/internal/cvss"
 	"github.com/opensecstack/apiguard/internal/domain"
 )
 
@@ -98,7 +99,7 @@ func (m *AuthModule) executeAuthRemoval(ctx context.Context, exec HTTPExecutor, 
 			Title:          "Missing Authentication on " + endpoint,
 			Description:    fmt.Sprintf("The endpoint %s returned HTTP %d without any authentication credentials. The endpoint is accessible to unauthenticated users.", endpoint, resp.StatusCode),
 			Severity:       domain.SeverityCritical,
-			CVSSScore:      9.1,
+			CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N"),
 			CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
 			EndpointPath:   tc.Path,
 			EndpointMethod: tc.Method,
@@ -142,7 +143,7 @@ func (m *AuthModule) executeExpiredToken(ctx context.Context, exec HTTPExecutor,
 			Title:          "Expired Token Accepted on " + endpoint,
 			Description:    fmt.Sprintf("The endpoint %s returned HTTP %d when presented with an expired JWT token. The server is not validating token expiration.", endpoint, resp.StatusCode),
 			Severity:       domain.SeverityHigh,
-			CVSSScore:      7.4,
+			CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"),
 			CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
 			EndpointPath:   tc.Path,
 			EndpointMethod: tc.Method,
@@ -194,7 +195,7 @@ func (m *AuthModule) executeTokenReplay(ctx context.Context, exec HTTPExecutor, 
 			Title:          "Token Replay Not Detected on " + endpoint,
 			Description:    fmt.Sprintf("The endpoint %s accepted the same authentication token on two successive requests (HTTP %d, HTTP %d). The server does not implement replay-detection or token binding.", endpoint, resp1.StatusCode, resp2.StatusCode),
 			Severity:       domain.SeverityLow,
-			CVSSScore:      3.1,
+			CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:L/I:N/A:N"),
 			CVSSVector:     "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:L/I:N/A:N",
 			EndpointPath:   tc.Path,
 			EndpointMethod: tc.Method,
@@ -239,7 +240,7 @@ func (m *AuthModule) executeInvalidToken(ctx context.Context, exec HTTPExecutor,
 			Title:          "Invalid Token Accepted on " + endpoint,
 			Description:    fmt.Sprintf("The endpoint %s returned HTTP %d when presented with a malformed token. The server is not properly validating token signatures or format.", endpoint, resp.StatusCode),
 			Severity:       domain.SeverityCritical,
-			CVSSScore:      9.1,
+			CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N"),
 			CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
 			EndpointPath:   tc.Path,
 			EndpointMethod: tc.Method,
@@ -283,7 +284,7 @@ func (m *AuthModule) executeUnprotectedWrite(ctx context.Context, exec HTTPExecu
 			Title:          "Unprotected State-Changing Endpoint: " + endpoint,
 			Description:    fmt.Sprintf("The state-changing endpoint %s returned HTTP %d without authentication. State-changing operations should require authentication.", endpoint, resp.StatusCode),
 			Severity:       domain.SeverityMedium,
-			CVSSScore:      5.3,
+			CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"),
 			CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N",
 			EndpointPath:   tc.Path,
 			EndpointMethod: method,
@@ -303,6 +304,12 @@ func (m *AuthModule) executeUnprotectedWrite(ctx context.Context, exec HTTPExecu
 	return nil, nil
 }
 
+// testProbeHMACKey is the signing key used exclusively for generating
+// synthetic probe tokens (expired / invalid JWTs) during security tests.
+// It is intentionally distinct from any production secret and carries no
+// access privileges on real APIs.
+const testProbeHMACKey = "apiguard-test-probe-key-do-not-use-in-production"
+
 // generateExpiredJWT creates a JWT token with an expiration time in the past.
 func generateExpiredJWT() string {
 	header := base64URLEncode([]byte(`{"alg":"HS256","typ":"JWT"}`))
@@ -312,7 +319,7 @@ func generateExpiredJWT() string {
 		time.Now().Add(-1*time.Hour).Unix(),
 	)))
 	signingInput := header + "." + payload
-	sig := hmacSHA256([]byte("apiguard-test-key"), []byte(signingInput))
+	sig := hmacSHA256([]byte(testProbeHMACKey), []byte(signingInput))
 	return signingInput + "." + base64URLEncode(sig)
 }
 

@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/opensecstack/apiguard/internal/cvss"
 	"github.com/opensecstack/apiguard/internal/domain"
 )
 
@@ -115,7 +116,7 @@ func (m *InventoryModule) runAPIVersion(ctx context.Context, exec HTTPExecutor, 
 				Title:          "Old API Version Accessible",
 				Description:    fmt.Sprintf("An older or unexpected API version path %q returned HTTP 200. Stale API versions may lack current security controls and expose deprecated functionality.", prefix+resourcePath),
 				Severity:       domain.SeverityMedium,
-				CVSSScore:      5.3,
+				CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"),
 				CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
 				Status:         domain.FindingStatusOpen,
 				EndpointPath:   tc.Path,
@@ -155,7 +156,7 @@ func (m *InventoryModule) runDeprecatedHeader(ctx context.Context, exec HTTPExec
 				Title:          fmt.Sprintf("API Lifecycle Header %q Exposed", headerName),
 				Description:    fmt.Sprintf("Endpoint %s %s returns a %s header with value %q. This reveals API lifecycle information that attackers can use to target soon-to-be-deprecated endpoints.", tc.Method, tc.Path, headerName, val),
 				Severity:       domain.SeverityInfo,
-				CVSSScore:      2.0,
+				CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"),
 				CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
 				Status:         domain.FindingStatusOpen,
 				EndpointPath:   tc.Path,
@@ -217,7 +218,7 @@ func (m *InventoryModule) runDebugEndpoints(ctx context.Context, exec HTTPExecut
 				Title:          "Debug or Monitoring Endpoint Exposed",
 				Description:    fmt.Sprintf("The path %q returned HTTP 200 without authentication. Exposed debug and monitoring endpoints can leak sensitive configuration, environment variables, and internal system state.", path),
 				Severity:       domain.SeverityHigh,
-				CVSSScore:      7.5,
+				CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"),
 				CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
 				Status:         domain.FindingStatusOpen,
 				EndpointPath:   path,

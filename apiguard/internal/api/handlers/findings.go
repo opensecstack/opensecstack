@@ -152,7 +152,7 @@ func (f *Findings) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := f.db.UpdateFindingStatus(r.Context(), id, db.FindingStatus(req.Status), req.Note); err != nil {
+	if err := f.db.UpdateFindingStatus(r.Context(), id, db.FindingStatus(req.Status), req.Note, "system"); err != nil {
 		if isNotFound(err) {
 			writeError(w, http.StatusNotFound, "finding not found")
 			return

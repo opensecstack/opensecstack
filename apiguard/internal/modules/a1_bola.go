@@ -203,12 +203,6 @@ func buildURL(target, pathTemplate, id string) string {
 	return strings.TrimRight(target, "/") + replaced
 }
 
-// sanitizeID returns a filesystem/id safe version of a path.
-func sanitizeID(path string) string {
-	r := strings.NewReplacer("/", "-", "{", "", "}", "", " ", "-")
-	return strings.Trim(r.Replace(path), "-")
-}
-
 // doRequest builds and executes an HTTP request applying auth headers.
 func doRequest(ctx context.Context, exec HTTPExecutor, method, url string, headers map[string]string, body []byte, auth *AuthConfig) (*HTTPResponse, error) {
 	var bodyReader *bytes.Reader
@@ -261,5 +255,3 @@ func applyAuth(req *http.Request, auth *AuthConfig) {
 	}
 }
 
-// ensure sanitizeID is used to avoid a compile error if it is only referenced internally.
-var _ = sanitizeID

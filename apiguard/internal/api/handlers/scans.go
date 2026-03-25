@@ -195,6 +195,12 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 
 			if err := s.db.CreateFindings(bgCtx, dbFindings); err != nil {
 				s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to persist findings")
+				if dbErr := s.db.UpdateScanError(bgCtx, scanID, "failed to persist findings: "+err.Error()); dbErr != nil {
+					s.logger.Error().Err(dbErr).Str("scan_id", scanID.String()).Msg("failed to record scan error")
+				}
+				s.auditLog(bgCtx, db.AuditActionScanFailed, "scans", &scanID, "", "",
+					map[string]interface{}{"error": "failed to persist findings"})
+				return
 			}
 		}
 

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/opensecstack/apiguard/internal/cvss"
 	"github.com/opensecstack/apiguard/internal/domain"
 )
 
@@ -90,7 +91,7 @@ func (m *FunctionAuthModule) runAdminEndpoint(ctx context.Context, exec HTTPExec
 			Title:          "Admin Endpoint Accessible Without Authentication: " + endpoint,
 			Description:    fmt.Sprintf("The administrative endpoint %s returned HTTP %d without any authentication credentials. Administrative endpoints must require authentication.", endpoint, respNoAuth.StatusCode),
 			Severity:       domain.SeverityCritical,
-			CVSSScore:      9.8,
+			CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"),
 			CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
 			EndpointPath:   tc.Path,
 			EndpointMethod: tc.Method,
@@ -122,7 +123,7 @@ func (m *FunctionAuthModule) runAdminEndpoint(ctx context.Context, exec HTTPExec
 				Title:          "Admin Endpoint Accessible With Regular User Token: " + endpoint,
 				Description:    fmt.Sprintf("The administrative endpoint %s returned HTTP %d when accessed with a regular user token. Function-level authorization is not enforced.", endpoint, respWithAuth.StatusCode),
 				Severity:       domain.SeverityMedium,
-				CVSSScore:      5.3,
+				CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:N"),
 				CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:N",
 				EndpointPath:   tc.Path,
 				EndpointMethod: tc.Method,
@@ -198,7 +199,7 @@ func (m *FunctionAuthModule) runMethodSwap(ctx context.Context, exec HTTPExecuto
 				Title:          fmt.Sprintf("HTTP Method Swap Bypasses Authorization on %s (tried %s)", endpoint, altMethod),
 				Description:    fmt.Sprintf("Swapping the HTTP method from %s to %s on endpoint %s returned HTTP %d without authentication. The server may not enforce method-level authorization.", tc.Method, altMethod, tc.Path, resp.StatusCode),
 				Severity:       domain.SeverityHigh,
-				CVSSScore:      7.1,
+				CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N"),
 				CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N",
 				EndpointPath:   tc.Path,
 				EndpointMethod: tc.Method,
@@ -244,7 +245,7 @@ func (m *FunctionAuthModule) runPrivilegeEscalation(ctx context.Context, exec HT
 				Title:          "Privilege Escalation via Regular User Token on " + endpoint,
 				Description:    fmt.Sprintf("Endpoint %s returned HTTP %d when accessed with a regular bearer token. This endpoint may be reserved for higher-privilege roles but is accessible to standard users.", endpoint, resp.StatusCode),
 				Severity:       domain.SeverityHigh,
-				CVSSScore:      7.1,
+				CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:L/A:N"),
 				CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:L/A:N",
 				EndpointPath:   tc.Path,
 				EndpointMethod: tc.Method,

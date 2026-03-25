@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/opensecstack/apiguard/internal/cvss"
 	"github.com/opensecstack/apiguard/internal/domain"
 )
 
@@ -108,7 +109,7 @@ func (m *SensitiveFlowModule) runMassCreate(ctx context.Context, exec HTTPExecut
 				Title:          "Mass Resource Creation Accepted on " + endpoint,
 				Description:    fmt.Sprintf("Endpoint %s accepted a batch request containing 100 items and returned HTTP %d. Unrestricted batch creation can be exploited to exhaust resources or manipulate business flows.", endpoint, resp.StatusCode),
 				Severity:       domain.SeverityMedium,
-				CVSSScore:      5.3,
+				CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L"),
 				CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L",
 				EndpointPath:   tc.Path,
 				EndpointMethod: method,
@@ -183,7 +184,7 @@ func (m *SensitiveFlowModule) runNoCaptchaSignal(ctx context.Context, exec HTTPE
 			Title:          "No CAPTCHA / Bot-Protection Signal on Sensitive Endpoint: " + endpoint,
 			Description:    fmt.Sprintf("Endpoint %s appears to be a sensitive authentication or registration flow but does not return any CAPTCHA or bot-protection headers (x-recaptcha, cf-mitigated). Automated abuse may be possible.", endpoint),
 			Severity:       domain.SeverityInfo,
-			CVSSScore:      2.7,
+			CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L"),
 			CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L",
 			EndpointPath:   tc.Path,
 			EndpointMethod: tc.Method,
@@ -251,7 +252,7 @@ func (m *SensitiveFlowModule) runReplay(ctx context.Context, exec HTTPExecutor, 
 				Title:          "Request Replay Accepted Without Idempotency Protection: " + endpoint,
 				Description:    fmt.Sprintf("Sending the same POST request to %s twice returned HTTP %d and %d respectively with no conflict response. The endpoint lacks idempotency protection, allowing replay attacks.", endpoint, resp1.StatusCode, resp2.StatusCode),
 				Severity:       domain.SeverityMedium,
-				CVSSScore:      4.3,
+				CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N"),
 				CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N",
 				EndpointPath:   tc.Path,
 				EndpointMethod: tc.Method,

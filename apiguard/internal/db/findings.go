@@ -208,14 +208,14 @@ func (d *DB) ListFindings(ctx context.Context, filters FindingFilters, limit, of
 	return findings, total, nil
 }
 
-// UpdateFindingStatus updates the triage status and note on a finding.
-func (d *DB) UpdateFindingStatus(ctx context.Context, id uuid.UUID, status FindingStatus, note string) error {
+// UpdateFindingStatus updates the triage status, note, and actor on a finding.
+func (d *DB) UpdateFindingStatus(ctx context.Context, id uuid.UUID, status FindingStatus, note, actorID string) error {
 	query := `
 		UPDATE findings
-		SET status = $1, triage_note = $2, triaged_at = NOW(), updated_at = NOW()
-		WHERE id = $3`
+		SET status = $1, triage_note = $2, triaged_by = $3, triaged_at = NOW(), updated_at = NOW()
+		WHERE id = $4`
 
-	ct, err := d.Pool.Exec(ctx, query, status, note, id)
+	ct, err := d.Pool.Exec(ctx, query, status, note, actorID, id)
 	if err != nil {
 		return fmt.Errorf("updating finding status: %w", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/opensecstack/apiguard/internal/cvss"
 	"github.com/opensecstack/apiguard/internal/domain"
 )
 
@@ -95,7 +96,7 @@ func (m *MassAssignmentModule) executeExtraFields(ctx context.Context, exec HTTP
 					Title:          "Mass Assignment Vulnerability on " + method + " " + path,
 					Description:    "The endpoint accepts and processes additional fields that were not part of the original schema. Injected field: " + fieldName,
 					Severity:       domain.SeverityHigh,
-					CVSSScore:      7.5,
+					CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N"),
 					CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N",
 					EndpointPath:   path,
 					EndpointMethod: method,
@@ -103,11 +104,12 @@ func (m *MassAssignmentModule) executeExtraFields(ctx context.Context, exec HTTP
 						Request:  fmt.Sprintf("%s %s (injected: %s)", method, url, fieldName),
 						Response: fmt.Sprintf("HTTP %d", attackResp.StatusCode),
 						Detail: map[string]interface{}{
-							"injected_field":  fieldName,
-							"baseline_status": baselineResp.StatusCode,
-							"attack_status":   attackResp.StatusCode,
-							"field_reflected": true,
-							"category":        "mass_assign_extra_fields",
+							"injected_field":        fieldName,
+							"all_injected_fields":   formatInjectedFields(injectedFields),
+							"baseline_status":       baselineResp.StatusCode,
+							"attack_status":         attackResp.StatusCode,
+							"field_reflected":       true,
+							"category":              "mass_assign_extra_fields",
 						},
 					},
 					Remediation: "Implement allowlist-based input validation. Only accept fields explicitly defined in the API schema. Reject or ignore unknown properties.",
@@ -123,7 +125,7 @@ func (m *MassAssignmentModule) executeExtraFields(ctx context.Context, exec HTTP
 					Title:          "Extra Fields Accepted Without Validation on " + method + " " + path,
 					Description:    "The endpoint accepts requests containing additional fields not defined in the API schema without rejecting them.",
 					Severity:       domain.SeverityMedium,
-					CVSSScore:      5.3,
+					CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:N"),
 					CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:N",
 					EndpointPath:   path,
 					EndpointMethod: method,
@@ -176,7 +178,7 @@ func (m *MassAssignmentModule) executeReadOnly(ctx context.Context, exec HTTPExe
 				Title:          "Read-Only Field Overwrite on " + method + " " + path,
 				Description:    "The endpoint allows modification of read-only field: " + fieldName,
 				Severity:       domain.SeverityHigh,
-				CVSSScore:      6.5,
+				CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N"),
 				CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N",
 				EndpointPath:   path,
 				EndpointMethod: method,
@@ -325,5 +327,3 @@ func formatInjectedFields(fields map[string]interface{}) string {
 	return strings.Join(parts, ", ")
 }
 
-// ensure formatInjectedFields is used to avoid an unused function compile error.
-var _ = formatInjectedFields

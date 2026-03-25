@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/opensecstack/apiguard/internal/cvss"
 	"github.com/opensecstack/apiguard/internal/domain"
 )
 
@@ -100,7 +101,7 @@ func (m *RateLimitModule) runBurst(ctx context.Context, exec HTTPExecutor, tc Te
 				Title:          "No Rate Limiting Detected on " + endpoint,
 				Description:    fmt.Sprintf("Endpoint %s accepted all %d rapid successive requests without returning HTTP 429 or 503. No rate limiting is enforced, allowing unrestricted resource consumption.", endpoint, successCount),
 				Severity:       domain.SeverityHigh,
-				CVSSScore:      7.5,
+				CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"),
 				CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
 				EndpointPath:   tc.Path,
 				EndpointMethod: tc.Method,
@@ -158,8 +159,6 @@ func (m *RateLimitModule) runHeaderCheck(ctx context.Context, exec HTTPExecutor,
 			Title:          "Missing Rate Limit Headers on " + endpoint,
 			Description:    fmt.Sprintf("Endpoint %s does not return any rate limit headers (X-RateLimit-*, RateLimit-*, Retry-After). Clients have no indication of rate limit policies.", endpoint),
 			Severity:       domain.SeverityInfo,
-			CVSSScore:      0.0,
-			CVSSVector:     "",
 			EndpointPath:   tc.Path,
 			EndpointMethod: tc.Method,
 			Evidence: domain.Evidence{

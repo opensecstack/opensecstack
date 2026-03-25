@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/opensecstack/apiguard/internal/cvss"
 	"github.com/opensecstack/apiguard/internal/domain"
 )
 
@@ -93,7 +94,7 @@ func (m *MisconfigModule) runSecurityHeaders(ctx context.Context, exec HTTPExecu
 			Title:          "Missing X-Content-Type-Options Header",
 			Description:    fmt.Sprintf("Endpoint %s %s does not return the X-Content-Type-Options: nosniff header, allowing MIME-type sniffing attacks.", tc.Method, tc.Path),
 			Severity:       domain.SeverityMedium,
-			CVSSScore:      5.3,
+			CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N"),
 			CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
 			Status:         domain.FindingStatusOpen,
 			EndpointPath:   tc.Path,
@@ -117,7 +118,7 @@ func (m *MisconfigModule) runSecurityHeaders(ctx context.Context, exec HTTPExecu
 			Title:          "Missing Clickjacking Protection Header",
 			Description:    fmt.Sprintf("Endpoint %s %s does not return X-Frame-Options or Content-Security-Policy, leaving it open to clickjacking attacks.", tc.Method, tc.Path),
 			Severity:       domain.SeverityMedium,
-			CVSSScore:      5.3,
+			CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N"),
 			CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N",
 			Status:         domain.FindingStatusOpen,
 			EndpointPath:   tc.Path,
@@ -142,7 +143,7 @@ func (m *MisconfigModule) runSecurityHeaders(ctx context.Context, exec HTTPExecu
 			Title:          "Server Header Exposes Version Information",
 			Description:    fmt.Sprintf("Endpoint %s %s returns a Server header that includes version information: %q. This aids targeted attacks against known vulnerabilities.", tc.Method, tc.Path, serverHeader),
 			Severity:       domain.SeverityLow,
-			CVSSScore:      3.1,
+			CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:N/A:N"),
 			CVSSVector:     "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:N/A:N",
 			Status:         domain.FindingStatusOpen,
 			EndpointPath:   tc.Path,
@@ -167,7 +168,7 @@ func (m *MisconfigModule) runSecurityHeaders(ctx context.Context, exec HTTPExecu
 			Title:          "X-Powered-By Header Exposes Technology Stack",
 			Description:    fmt.Sprintf("Endpoint %s %s returns X-Powered-By: %q, revealing the underlying technology stack to potential attackers.", tc.Method, tc.Path, poweredBy),
 			Severity:       domain.SeverityLow,
-			CVSSScore:      3.1,
+			CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:N/A:N"),
 			CVSSVector:     "CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:N/A:N",
 			Status:         domain.FindingStatusOpen,
 			EndpointPath:   tc.Path,
@@ -192,7 +193,7 @@ func (m *MisconfigModule) runSecurityHeaders(ctx context.Context, exec HTTPExecu
 			Title:          "Wildcard CORS on Authenticated Endpoint",
 			Description:    fmt.Sprintf("Endpoint %s %s returns Access-Control-Allow-Origin: * on what appears to be an authenticated endpoint. This allows any origin to read the response via cross-site requests.", tc.Method, tc.Path),
 			Severity:       domain.SeverityMedium,
-			CVSSScore:      5.3,
+			CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:N/A:N"),
 			CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:N/A:N",
 			Status:         domain.FindingStatusOpen,
 			EndpointPath:   tc.Path,
@@ -239,7 +240,7 @@ func (m *MisconfigModule) runDebugInfo(ctx context.Context, exec HTTPExecutor, t
 				Title:          "Debug Information Leaked in Response",
 				Description:    fmt.Sprintf("Endpoint %s %s returns a response containing debug or stack-trace information matching the pattern %q. This can expose application internals to attackers.", tc.Method, tc.Path, pat.String()),
 				Severity:       domain.SeverityHigh,
-				CVSSScore:      7.5,
+				CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"),
 				CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
 				Status:         domain.FindingStatusOpen,
 				EndpointPath:   tc.Path,
@@ -286,7 +287,7 @@ func (m *MisconfigModule) runHTTPMethods(ctx context.Context, exec HTTPExecutor,
 				Title:          fmt.Sprintf("Dangerous HTTP Method %s Allowed", dangerous),
 				Description:    fmt.Sprintf("Endpoint %s %s advertises the %s HTTP method via OPTIONS. This method can be abused for cross-site tracing attacks or tunnelling through proxies.", tc.Method, tc.Path, dangerous),
 				Severity:       domain.SeverityMedium,
-				CVSSScore:      4.3,
+				CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:N/A:N"),
 				CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:N/A:N",
 				Status:         domain.FindingStatusOpen,
 				EndpointPath:   tc.Path,

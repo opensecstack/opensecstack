@@ -376,7 +376,6 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 	if err != nil {
 		return nil, fmt.Errorf("failed to create auth handler: %w", err)
 	}
-	_ = authHandler // will be consumed by scan modules in a future step
 
 	// Step 3: Generate test cases from the parsed IR.
 	// The IR file path is the same temp file pattern used by parseSpec; we need to
@@ -400,9 +399,16 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 	httpExec := modules.NewDefaultExecutor(s.transport, 30*time.Second)
 
 	// Build the auth config for modules from the scan request credentials.
+	// Generate a synthetic "other user" JWT so BOLA cross-user tests can run
+	// even when the caller didn't supply a second token explicitly.
 	authConfig := &modules.AuthConfig{
 		Type:  req.Auth.Type,
 		Token: req.Auth.Token,
+	}
+	if otherToken, genErr := authHandler.GenerateOtherUserToken("apiguard-probe-user-2"); genErr == nil {
+		authConfig.OtherTokens = []string{otherToken}
+	} else {
+		s.logger.Warn().Err(genErr).Msg("could not generate other-user token for BOLA cross-user tests")
 	}
 
 	// Convert testgen.TestSuite cases to modules.TestSuite cases.

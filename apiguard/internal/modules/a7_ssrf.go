@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/opensecstack/apiguard/internal/cvss"
 	"github.com/opensecstack/apiguard/internal/domain"
 )
 
@@ -184,7 +185,7 @@ func (m *SSRFModule) newFinding(tc TestCase, reqURL, payload, indicator string) 
 		Title:          "Server Side Request Forgery (SSRF)",
 		Description:    fmt.Sprintf("Endpoint %s %s appears vulnerable to SSRF. Injecting the payload %q triggered: %s", tc.Method, tc.Path, payload, indicator),
 		Severity:       domain.SeverityHigh,
-		CVSSScore:      8.6,
+		CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:N/A:N"),
 		CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:N/A:N",
 		Status:         domain.FindingStatusOpen,
 		EndpointPath:   tc.Path,

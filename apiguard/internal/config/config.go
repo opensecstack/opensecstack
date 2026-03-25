@@ -48,6 +48,9 @@ type AuthConfig struct {
 	JWTSecret     string        `mapstructure:"jwt_secret" json:"-"`
 	TokenExpiry   time.Duration `mapstructure:"token_expiry"`
 	EnableAPIKeys bool          `mapstructure:"enable_api_keys"`
+	// APIKeys is the list of pre-shared keys accepted by POST /api/v1/auth/token.
+	// Set via APIGUARD_AUTH_API_KEYS (comma-separated) or auth.api_keys in config.
+	APIKeys []string `mapstructure:"api_keys" json:"-"`
 }
 
 // String returns a safe representation of AuthConfig with secrets redacted.
@@ -100,6 +103,7 @@ func Load() *Config {
 			JWTSecret:     viper.GetString("auth.jwt_secret"),
 			TokenExpiry:   viper.GetDuration("auth.token_expiry"),
 			EnableAPIKeys: viper.GetBool("auth.enable_api_keys"),
+			APIKeys:       viper.GetStringSlice("auth.api_keys"),
 		},
 		Report: ReportConfig{
 			DefaultFormat: viper.GetString("report.default_format"),

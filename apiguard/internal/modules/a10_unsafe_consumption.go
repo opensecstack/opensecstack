@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/opensecstack/apiguard/internal/cvss"
 	"github.com/opensecstack/apiguard/internal/domain"
 )
 
@@ -115,7 +116,7 @@ func (m *UnsafeConsumptionModule) runOpenRedirect(ctx context.Context, exec HTTP
 			Title:          "Open Redirect to External Domain",
 			Description:    fmt.Sprintf("Endpoint %s %s returned HTTP %d with a Location header pointing to an external domain %q (target host: %q). An attacker can exploit this to redirect users to malicious sites.", tc.Method, tc.Path, resp.StatusCode, locationHost, targetHost),
 			Severity:       domain.SeverityHigh,
-			CVSSScore:      7.2,
+			CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:L/A:N"),
 			CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:L/A:N",
 			Status:         domain.FindingStatusOpen,
 			EndpointPath:   tc.Path,
@@ -168,7 +169,7 @@ func (m *UnsafeConsumptionModule) runContentTypeMismatch(ctx context.Context, ex
 			Title:          "Missing Content-Type Header in Response",
 			Description:    fmt.Sprintf("Endpoint %s %s returned HTTP 200 with no Content-Type header, despite the request specifying Accept: application/json. This can cause clients to misinterpret the response.", tc.Method, tc.Path),
 			Severity:       domain.SeverityMedium,
-			CVSSScore:      4.3,
+			CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N"),
 			CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N",
 			Status:         domain.FindingStatusOpen,
 			EndpointPath:   tc.Path,
@@ -193,7 +194,7 @@ func (m *UnsafeConsumptionModule) runContentTypeMismatch(ctx context.Context, ex
 			Title:          "Content-Type Mismatch in API Response",
 			Description:    fmt.Sprintf("Endpoint %s %s returned HTTP 200 with Content-Type %q, but the request specified Accept: application/json. This mismatch may indicate improper content negotiation or that the server is returning unexpected data formats.", tc.Method, tc.Path, contentType),
 			Severity:       domain.SeverityMedium,
-			CVSSScore:      4.3,
+			CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N"),
 			CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N",
 			Status:         domain.FindingStatusOpen,
 			EndpointPath:   tc.Path,
@@ -258,7 +259,7 @@ func (m *UnsafeConsumptionModule) runThirdPartyData(ctx context.Context, exec HT
 			Title:          "Third-Party Domain URLs in API Response",
 			Description:    fmt.Sprintf("Endpoint %s %s returned a response body containing URLs from third-party domains: %s. If this data originates from an upstream API, it may not be validated before being forwarded to clients.", tc.Method, tc.Path, strings.Join(domains, ", ")),
 			Severity:       domain.SeverityInfo,
-			CVSSScore:      2.0,
+			CVSSScore:      cvss.MustScore("CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:N/A:N"),
 			CVSSVector:     "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:N/A:N",
 			Status:         domain.FindingStatusOpen,
 			EndpointPath:   tc.Path,

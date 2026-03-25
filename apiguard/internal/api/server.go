@@ -88,10 +88,12 @@ func (s *Server) setupMiddleware() {
 
 func (s *Server) registerRoutes() {
 	h := handlers.NewHealth(s.logger)
+	a := handlers.NewAuth(s.logger, s.config)
 	sc := handlers.NewScans(s.logger, s.db, s.scanner)
 	f := handlers.NewFindings(s.logger, s.db)
+	sp := handlers.NewSpecs(s.logger, "")
 
-	RegisterRoutes(s.router, h, sc, f, s.config)
+	RegisterRoutes(s.router, h, a, sc, f, sp, s.config)
 }
 
 // RateLimiter returns a middleware that limits requests per IP using a sliding window.

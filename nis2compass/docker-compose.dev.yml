@@ -19,6 +19,8 @@ services:
       - NIS2_JWT_SECRET=dev-jwt-secret-32-chars-minimum-ok
       - NIS2_ENV=development
       - NIS2_DEBUG=true
+      - NIS2_API_KEYS=dev-api-key-change-me
+      - NIS2_UPLOAD_DIR=/app/uploads
     networks:
       - frontend
       - backend

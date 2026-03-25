@@ -1,8 +1,8 @@
+from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
-from sqlalchemy import and_
-from app.extensions import db
-from app.models import AuditLog
-from app.auth import require_auth
+from ..extensions import db
+from ..models import AuditLog
+from ..auth import require_auth
 
 audit_api_bp = Blueprint('audit_api', __name__)
 
@@ -26,7 +26,6 @@ def list_audit():
     if risk_class := request.args.get('risk_class'):
         query = query.filter(AuditLog.risk_class == risk_class)
     if after := request.args.get('after'):
-        from datetime import datetime, timezone
         try:
             after_dt = datetime.fromisoformat(after.replace('Z', '+00:00'))
             query = query.filter(AuditLog.timestamp > after_dt)

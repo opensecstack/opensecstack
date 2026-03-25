@@ -2,10 +2,10 @@ import hashlib
 import os
 import uuid as uuid_lib
 from flask import Blueprint, request, jsonify, g, current_app
-from app.extensions import db
-from app.models import Assessment, Control, Artifact
-from app.auth import require_auth
-from app.audit import write_audit
+from ..extensions import db
+from ..models import Assessment, Control, Artifact
+from ..auth import require_auth
+from ..audit import write_audit
 
 artifacts_bp = Blueprint('artifacts', __name__)
 

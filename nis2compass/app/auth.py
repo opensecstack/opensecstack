@@ -11,10 +11,44 @@ def _constant_eq(a: str, b: str) -> bool:
 
 
 def validate_api_key(api_key: str) -> bool:
-    """Check the provided key against the configured API_KEYS list."""
+    """
+    Check the provided key against DB api_keys table.
+    Falls back to NIS2_API_KEYS env var list for bootstrapping
+    (used when no DB keys exist yet, e.g. first run).
+    """
+    import hashlib
+
+    key_hash = hashlib.sha256(api_key.encode('utf-8')).hexdigest()
+
+    # Try database first (inside app context)
+    try:
+        from .models import ApiKey
+        from .extensions import db
+        from sqlalchemy import text as sa_text
+
+        record = (
+            db.session.query(ApiKey)
+            .filter(ApiKey.key_hash == key_hash, ApiKey.is_active == True)
+            .first()
+        )
+        if record is not None:
+            # Update last_used_at without triggering audit
+            record.last_used_at = datetime.now(timezone.utc)
+            db.session.commit()
+            return True
+
+        # If DB has any active keys, don't fall through to env-var
+        if db.session.query(ApiKey).filter(ApiKey.is_active == True).count() > 0:
+            return False
+    except Exception:
+        # DB unavailable — fall through to env-var check
+        pass
+
+    # Bootstrap fallback: env-var keys (constant-time comparison)
     for valid_key in current_app.config.get('API_KEYS', []):
         if _constant_eq(api_key, valid_key):
             return True
+
     return False
 
 

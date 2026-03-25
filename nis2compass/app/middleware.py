@@ -1,6 +1,7 @@
 import time
-from flask import request, jsonify, g
-from .extensions import redis_client
+from flask import request, jsonify
+from flask_cors import CORS
+from . import extensions
 
 
 def _get_client_ip() -> str:
@@ -19,12 +20,13 @@ def _check_rate_limit(ip: str, limit: int, window: int = 60) -> tuple[bool, int]
     Key pattern: rate:{ip}
     Uses a sorted set where score = timestamp of each request.
     """
-    if redis_client is None:
+    rc = extensions.redis_client
+    if rc is None:
         return True, 0  # fail open if Redis is unavailable
 
     now = time.time()
     key = f'rate:{ip}'
-    pipe = redis_client.pipeline()
+    pipe = rc.pipeline()
     # Remove entries outside the current window
     pipe.zremrangebyscore(key, 0, now - window)
     # Count remaining entries
@@ -40,7 +42,7 @@ def _check_rate_limit(ip: str, limit: int, window: int = 60) -> tuple[bool, int]
         return True, 0  # fail open on Redis errors
 
     if count >= limit:
-        oldest_score = redis_client.zrange(key, 0, 0, withscores=True)
+        oldest_score = rc.zrange(key, 0, 0, withscores=True)
         if oldest_score:
             retry_after = int(window - (now - oldest_score[0][1])) + 1
         else:
@@ -52,6 +54,10 @@ def _check_rate_limit(ip: str, limit: int, window: int = 60) -> tuple[bool, int]
 
 def apply_middleware(app) -> None:
     """Register before/after request hooks on the Flask app."""
+
+    # CORS — restrict to configured origins in production
+    allowed_origins = app.config.get('CORS_ORIGINS', '*' if app.debug else [])
+    CORS(app, origins=allowed_origins, supports_credentials=False)
 
     @app.before_request
     def rate_limit():

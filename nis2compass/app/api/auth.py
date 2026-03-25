@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, current_app
-from app.auth import validate_api_key, issue_jwt
+from ..auth import validate_api_key, issue_jwt
 
 auth_bp = Blueprint('auth_api', __name__)
 

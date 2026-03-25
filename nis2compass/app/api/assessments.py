@@ -1,9 +1,9 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from flask import Blueprint, request, jsonify, g
-from app.extensions import db
-from app.models import Assessment, Control, ControlTemplate, Organisation
-from app.auth import require_auth
-from app.audit import write_audit
+from ..extensions import db
+from ..models import Assessment, Control, ControlTemplate, Organisation
+from ..auth import require_auth
+from ..audit import write_audit
 
 assessments_bp = Blueprint('assessments', __name__)
 
@@ -102,7 +102,6 @@ def create_assessment(org_id):
     due_date = None
     if data.get('due_date'):
         try:
-            from datetime import date
             due_date = date.fromisoformat(data['due_date'])
         except ValueError:
             return jsonify({'error': 'due_date must be YYYY-MM-DD', 'code': 'INVALID_INPUT'}), 400
@@ -186,7 +185,6 @@ def update_assessment(assessment_id):
         assessment.assessor = data['assessor']
     if 'due_date' in data:
         try:
-            from datetime import date
             assessment.due_date = date.fromisoformat(data['due_date']) if data['due_date'] else None
         except ValueError:
             return jsonify({'error': 'due_date must be YYYY-MM-DD', 'code': 'INVALID_INPUT'}), 400

@@ -40,11 +40,6 @@ services:
       - .:/app:ro
     command: >
       sh -c "pip install -q alembic psycopg2-binary sqlalchemy &&
-             NIS2_DB_HOST=postgres
-             NIS2_DB_PORT=5432
-             NIS2_DB_USER=nis2compass
-             NIS2_DB_PASSWORD=${NIS2_DB_PASSWORD}
-             NIS2_DB_NAME=nis2compass
              alembic upgrade head"
     environment:
       - NIS2_DB_HOST=postgres

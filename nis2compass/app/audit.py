@@ -99,3 +99,14 @@ def write_audit(
         timestamp=now,
     )
     db_session.add(entry)
+
+    # Fire-and-forget webhook delivery (does not block the request)
+    try:
+        from flask import current_app
+        webhook_url = current_app.config.get('WEBHOOK_URL', '')
+        webhook_secret = current_app.config.get('WEBHOOK_SECRET', '')
+        if webhook_url:
+            from .webhook import dispatch
+            dispatch(entry.to_dict(), webhook_url, webhook_secret)
+    except RuntimeError:
+        pass  # No app context (e.g. during testing without full stack)

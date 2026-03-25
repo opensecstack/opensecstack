@@ -44,7 +44,12 @@ class Config:
     # ------------------------------------------------------------------ #
     SECRET_KEY = os.getenv('NIS2_SECRET_KEY', 'dev-secret-key-do-not-use-in-production')
     DEBUG = os.getenv('NIS2_DEBUG', 'false').lower() == 'true'
+    WEBHOOK_URL = os.getenv('NIS2_WEBHOOK_URL', '')           # POST target; empty = disabled
+    WEBHOOK_SECRET = os.getenv('NIS2_WEBHOOK_SECRET', '')     # HMAC-SHA256 signing secret
     ENV = os.getenv('NIS2_ENV', 'production')
+    CORS_ORIGINS = os.getenv('NIS2_CORS_ORIGINS', '*').split(',') if os.getenv('NIS2_CORS_ORIGINS') else (
+        ['*'] if os.getenv('NIS2_ENV', 'production') == 'development' else []
+    )
 
     # ------------------------------------------------------------------ #
     # Rate limiting                                                        #

@@ -27,22 +27,6 @@ def get_connection():
     )
 
 # ---------------------------------------------------------------------------
-# DDL
-# ---------------------------------------------------------------------------
-
-CREATE_TABLE_SQL = """
-CREATE TABLE IF NOT EXISTS control_templates (
-    id            SERIAL       PRIMARY KEY,
-    measure_ref   CHAR(1)      NOT NULL UNIQUE,
-    article_ref   VARCHAR(20)  NOT NULL,
-    title         VARCHAR(255) NOT NULL,
-    description   TEXT         NOT NULL,
-    nist_category VARCHAR(20)  NOT NULL,
-    guidance      TEXT
-);
-"""
-
-# ---------------------------------------------------------------------------
 # Seed data — all 10 NIS2 Article 21(2) measures
 # ---------------------------------------------------------------------------
 
@@ -286,7 +270,6 @@ def main():
     try:
         with conn:
             with conn.cursor() as cur:
-                cur.execute(CREATE_TABLE_SQL)
                 count = 0
                 for control in CONTROLS:
                     cur.execute(UPSERT_SQL, control)

@@ -211,6 +211,30 @@ class AuditLog(db.Model):
         }
 
 
+class ApiKey(db.Model):
+    __tablename__ = 'api_keys'
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text('gen_random_uuid()'))
+    key_hash = db.Column(db.String(64), nullable=False, unique=True)  # SHA-256 hex of plaintext key
+    label = db.Column(db.String(100), nullable=True)
+    scope = db.Column(db.String(20), nullable=False, server_default='read_write')
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_by = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text('NOW()'))
+    last_used_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': str(self.id),
+            'label': self.label,
+            'scope': self.scope,
+            'is_active': self.is_active,
+            'created_by': self.created_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'last_used_at': self.last_used_at.isoformat() if self.last_used_at else None,
+        }
+
+
 class ControlTemplate(db.Model):
     __tablename__ = 'control_templates'
 

@@ -1,9 +1,9 @@
 from flask import Blueprint, request, jsonify, g
 from sqlalchemy.exc import IntegrityError
-from app.extensions import db
-from app.models import Organisation
-from app.auth import require_auth
-from app.audit import write_audit
+from ..extensions import db
+from ..models import Organisation
+from ..auth import require_auth
+from ..audit import write_audit
 
 organisations_bp = Blueprint('organisations', __name__)
 

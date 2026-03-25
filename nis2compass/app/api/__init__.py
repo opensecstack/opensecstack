@@ -10,6 +10,8 @@ def register_blueprints(app: Flask) -> None:
     from .controls import controls_bp
     from .artifacts import artifacts_bp
     from .audit_api import audit_api_bp
+    from .api_keys import api_keys_bp
+    from .openapi import openapi_bp
 
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp,              url_prefix='/api/v1')
@@ -19,3 +21,5 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(controls_bp,          url_prefix='/api/v1')
     app.register_blueprint(artifacts_bp,         url_prefix='/api/v1')
     app.register_blueprint(audit_api_bp,         url_prefix='/api/v1')
+    app.register_blueprint(api_keys_bp,          url_prefix='/api/v1')
+    app.register_blueprint(openapi_bp,           url_prefix='/api/v1')

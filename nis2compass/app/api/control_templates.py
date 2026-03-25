@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify
-from app.extensions import db
-from app.models import ControlTemplate
-from app.auth import require_auth
+from ..extensions import db
+from ..models import ControlTemplate
+from ..auth import require_auth
 
 control_templates_bp = Blueprint('control_templates', __name__)
 

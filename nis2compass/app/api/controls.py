@@ -1,9 +1,9 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from flask import Blueprint, request, jsonify, g
-from app.extensions import db
-from app.models import Assessment, Control
-from app.auth import require_auth
-from app.audit import write_audit
+from ..extensions import db
+from ..models import Assessment, Control
+from ..auth import require_auth
+from ..audit import write_audit
 
 controls_bp = Blueprint('controls', __name__)
 
@@ -102,7 +102,6 @@ def update_control(assessment_id, measure_ref):
         control.remediation_plan = data['remediation_plan']
     if 'remediation_due' in data:
         try:
-            from datetime import date
             control.remediation_due = date.fromisoformat(data['remediation_due']) if data['remediation_due'] else None
         except ValueError:
             return jsonify({'error': 'remediation_due must be YYYY-MM-DD', 'code': 'INVALID_INPUT'}), 400

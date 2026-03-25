@@ -32,8 +32,10 @@ func TestKnownVectors(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Score(%q) error: %v", tt.vector, err)
 			}
-			if math.Abs(got-tt.wantScore) > 0.05 {
-				t.Errorf("Score(%q) = %.1f, want %.1f", tt.vector, got, tt.wantScore)
+			// Allow at most 0.01 deviation — smaller than the CVSS 3.1 precision
+			// step of 0.1 so any rounding mistake will be caught.
+			if math.Abs(got-tt.wantScore) > 0.01 {
+				t.Errorf("Score(%q) = %.2f, want %.1f (diff %.3f)", tt.vector, got, tt.wantScore, got-tt.wantScore)
 			}
 			if sev := Severity(got); sev != tt.wantSev {
 				t.Errorf("Severity(%.1f) = %q, want %q", got, sev, tt.wantSev)

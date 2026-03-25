@@ -90,9 +90,9 @@ func (s *Specs) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Detect file extension from content or Content-Type.
+	// Detect file extension from content (check first non-whitespace byte).
 	ext := ".yaml"
-	if json := strings.TrimSpace(string(content)); strings.HasPrefix(json, "{") || strings.HasPrefix(json, "[") {
+	if trimmed := strings.TrimSpace(string(content)); strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
 		ext = ".json"
 	}
 

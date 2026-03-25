@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -41,9 +40,19 @@ type tokenResponse struct {
 // Token handles POST /api/v1/auth/token.
 // It accepts an API key and returns a signed JWT for use on protected endpoints.
 func (a *Auth) Token(w http.ResponseWriter, r *http.Request) {
+	// Fail fast if the server isn't fully configured for auth.
+	if a.cfg.Auth.JWTSecret == "" {
+		writeError(w, http.StatusServiceUnavailable, "authentication not configured: jwt_secret is missing")
+		return
+	}
+	if len(a.cfg.Auth.APIKeys) == 0 {
+		writeError(w, http.StatusServiceUnavailable, "authentication not configured: no api_keys defined — set auth.api_keys in config or APIGUARD_AUTH_API_KEYS env var")
+		return
+	}
+
 	var req tokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -115,25 +124,14 @@ func jwtBase64(data []byte) string {
 	return base64.RawURLEncoding.EncodeToString(data)
 }
 
-// TokenFromEnv handles GET /api/v1/auth/token — returns a dev token when the
-// server is started with a single configured API key (for quick local testing).
-// This endpoint is only reachable if EnableAPIKeys is true.
+// Ping handles GET /api/v1/auth/token.
+// Returns usage instructions for the token endpoint.
 func (a *Auth) Ping(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"auth":       "ok",
-		"api_keys":   len(a.cfg.Auth.APIKeys),
-		"hint":       "POST /api/v1/auth/token with {\"api_key\":\"...\"} to obtain a Bearer token",
+	configured := a.cfg.Auth.JWTSecret != "" && len(a.cfg.Auth.APIKeys) > 0
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"configured": configured,
+		"hint":       "POST /api/v1/auth/token with {\"api_key\":\"<your-key>\"} to obtain a Bearer token",
 		"token_type": "HS256 JWT",
 		"algorithms": []string{"HS256"},
 	})
-}
-
-// stripPort removes the port suffix from an address like "1.2.3.4:5678".
-func stripPort(addr string) string {
-	if i := strings.LastIndex(addr, ":"); i >= 0 {
-		return addr[:i]
-	}
-	return addr
 }

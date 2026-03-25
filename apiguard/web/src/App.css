@@ -27,3 +27,13 @@
 .nav-item.active { background: var(--primary); color: white; }
 
 .main { flex: 1; overflow-y: auto; padding: 32px; }
+
+.nav-logout {
+  margin-top: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-size: 14px;
+}

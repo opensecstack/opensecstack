@@ -12,6 +12,10 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   })
   if (!res.ok) {
+    if (res.status === 401) {
+      localStorage.removeItem('apiguard_token')
+      window.location.reload()
+    }
     const err = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error(err.error ?? res.statusText)
   }
@@ -19,6 +23,21 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  auth: {
+    login: async (apiKey: string): Promise<string> => {
+      const res = await fetch(`${BASE}/auth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ api_key: apiKey }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error ?? res.statusText)
+      }
+      const data: { token: string } = await res.json()
+      return data.token
+    },
+  },
   scans: {
     list: (page = 1, perPage = 20) =>
       request<Scan[]>(`/scans?page=${page}&per_page=${perPage}`),

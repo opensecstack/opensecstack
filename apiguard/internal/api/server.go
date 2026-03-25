@@ -3,11 +3,14 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -54,7 +57,7 @@ func NewServer(cfg *config.Config, database *db.DB, sc *scanner.Scanner) *Server
 	return s
 }
 
-// Start begins listening for HTTP requests.
+// Start begins listening for HTTP requests and shuts down gracefully on SIGINT/SIGTERM.
 func (s *Server) Start() error {
 	addr := fmt.Sprintf(":%d", s.port)
 	s.logger.Info().Str("addr", addr).Msg("API server listening")
@@ -68,7 +71,32 @@ func (s *Server) Start() error {
 		IdleTimeout:       120 * time.Second,
 	}
 
-	return srv.ListenAndServe()
+	// Capture SIGINT / SIGTERM for graceful shutdown.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	serveErr := make(chan error, 1)
+	go func() {
+		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+			serveErr <- err
+		}
+		close(serveErr)
+	}()
+
+	select {
+	case err := <-serveErr:
+		return err
+	case <-ctx.Done():
+		stop() // release signal resources promptly
+		s.logger.Info().Msg("shutdown signal received — draining connections")
+		shutCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutCtx); err != nil {
+			return fmt.Errorf("graceful shutdown: %w", err)
+		}
+		s.logger.Info().Msg("server stopped cleanly")
+		return nil
+	}
 }
 
 // Router returns the chi router for testing.

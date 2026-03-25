@@ -17,18 +17,22 @@ import (
 	"github.com/opensecstack/apiguard/internal/api/handlers"
 	"github.com/opensecstack/apiguard/internal/api/middleware"
 	"github.com/opensecstack/apiguard/internal/config"
+	"github.com/opensecstack/apiguard/internal/db"
+	"github.com/opensecstack/apiguard/internal/scanner"
 )
 
 // Server is the APIGuard HTTP server.
 type Server struct {
-	router chi.Router
-	logger zerolog.Logger
-	port   int
-	config *config.Config
+	router  chi.Router
+	logger  zerolog.Logger
+	port    int
+	config  *config.Config
+	db      *db.DB
+	scanner *scanner.Scanner
 }
 
 // NewServer creates a new API server with routes registered.
-func NewServer(cfg *config.Config) *Server {
+func NewServer(cfg *config.Config, database *db.DB, sc *scanner.Scanner) *Server {
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).
 		With().
 		Timestamp().
@@ -36,10 +40,12 @@ func NewServer(cfg *config.Config) *Server {
 		Logger()
 
 	s := &Server{
-		router: chi.NewRouter(),
-		logger: logger,
-		port:   cfg.Port,
-		config: cfg,
+		router:  chi.NewRouter(),
+		logger:  logger,
+		port:    cfg.Port,
+		config:  cfg,
+		db:      database,
+		scanner: sc,
 	}
 
 	s.setupMiddleware()
@@ -77,13 +83,13 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(chimw.Recoverer)
 	s.router.Use(chimw.Timeout(60 * time.Second))
 	s.router.Use(RateLimiter(context.Background(), 120)) // 120 requests per minute per IP
-	s.router.Use(CORSMiddleware(nil)) // No cross-origin allowed by default (same-origin only)
+	s.router.Use(CORSMiddleware(nil))                    // No cross-origin allowed by default (same-origin only)
 }
 
 func (s *Server) registerRoutes() {
 	h := handlers.NewHealth(s.logger)
-	sc := handlers.NewScans(s.logger)
-	f := handlers.NewFindings(s.logger)
+	sc := handlers.NewScans(s.logger, s.db, s.scanner)
+	f := handlers.NewFindings(s.logger, s.db)
 
 	RegisterRoutes(s.router, h, sc, f, s.config)
 }

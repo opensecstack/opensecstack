@@ -30,7 +30,13 @@
       "Read(//c/Users/user/RustroverProjects/opensecstack/=== Actual files in docs/**)",
       "Bash(__NEW_LINE_e240cb00f9818b68__ cd:*)",
       "Bash(__NEW_LINE_e240cb00f9818b68__ echo:*)",
-      "Bash(__NEW_LINE_d0bef11f9c79ea2d__ echo:*)"
+      "Bash(__NEW_LINE_d0bef11f9c79ea2d__ echo:*)",
+      "Bash(go build:*)",
+      "Bash(export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin)",
+      "Bash(cmd.exe /c \"where go 2>nul && go version\")",
+      "Bash(powershell.exe -Command \"& { $goPath = \\(Get-Command go -ErrorAction SilentlyContinue\\).Source; if \\($goPath\\) { Write-Host $goPath } else { Get-ChildItem ''C:\\\\'' -Recurse -Name ''go.exe'' -ErrorAction SilentlyContinue | Select-Object -First 5 } }\")",
+      "Bash(xargs wc:*)",
+      "Bash(find /c/Users/user/RustroverProjects/opensecstack/apiguard/internal/modules -name \"*.go\" -exec basename {})"
     ]
   }
 }

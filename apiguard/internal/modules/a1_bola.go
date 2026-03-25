@@ -3,368 +3,263 @@ package modules
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 
-	"github.com/google/uuid"
-	"github.com/rs/zerolog"
-
 	"github.com/opensecstack/apiguard/internal/domain"
-	"github.com/opensecstack/apiguard/internal/testgen"
 )
 
-// BolaModule implements the OWASP API1:2023 Broken Object Level Authorization check.
-type BolaModule struct {
-	executor *HTTPExecutor
-	logger   zerolog.Logger
-}
+// BOLAModule implements OWASP API1:2023 — Broken Object Level Authorization.
+type BOLAModule struct{}
 
-// NewBolaModule creates a new BOLA module.
-func NewBolaModule(executor *HTTPExecutor, logger zerolog.Logger) *BolaModule {
-	return &BolaModule{
-		executor: executor,
-		logger:   logger.With().Str("module", "a1_bola").Logger(),
-	}
-}
+func (m *BOLAModule) ID() string   { return "a1_bola" }
+func (m *BOLAModule) Name() string { return "Broken Object Level Authorization (BOLA)" }
 
-// ID returns the module identifier.
-func (m *BolaModule) ID() string { return "a1_bola" }
-
-// Name returns the human-readable module name.
-func (m *BolaModule) Name() string { return "Broken Object Level Authorization" }
-
-// Execute runs all BOLA test cases and returns findings.
-func (m *BolaModule) Execute(ctx context.Context, cases []testgen.TestCase) ([]domain.Finding, error) {
+// Run executes BOLA test cases from the provided suite against the target.
+func (m *BOLAModule) Run(ctx context.Context, exec HTTPExecutor, suite TestSuite, target string, auth *AuthConfig) ([]domain.Finding, error) {
 	var findings []domain.Finding
 
-	for i := range cases {
-		tc := &cases[i]
-		m.logger.Info().
-			Str("test_case", tc.ID).
-			Str("category", tc.Category).
-			Str("endpoint", fmt.Sprintf("%s %s", tc.EndpointMethod, tc.EndpointPath)).
-			Int("requests", len(tc.Requests)).
-			Msg("executing test case")
+	for _, tc := range suite.Cases {
+		if tc.Category != "bola_id_enum" && tc.Category != "bola_cross_user" {
+			continue
+		}
 
-		var tcFindings []domain.Finding
-		var err error
+		select {
+		case <-ctx.Done():
+			return findings, ctx.Err()
+		default:
+		}
 
 		switch tc.Category {
 		case "bola_id_enum":
-			tcFindings, err = m.executeIDEnumeration(ctx, tc)
+			f, err := m.runIDEnumeration(ctx, exec, tc, target, auth)
+			if err != nil {
+				// Log but continue — one failing test should not abort the whole module.
+				continue
+			}
+			findings = append(findings, f...)
 		case "bola_cross_user":
-			tcFindings, err = m.executeCrossUser(ctx, tc)
-		default:
-			m.logger.Warn().Str("category", tc.Category).Msg("unknown BOLA test category, skipping")
-			continue
+			f, err := m.runCrossUser(ctx, exec, tc, target, auth)
+			if err != nil {
+				continue
+			}
+			findings = append(findings, f...)
 		}
-
-		if err != nil {
-			m.logger.Error().Err(err).Str("test_case", tc.ID).Msg("test case execution failed")
-			continue
-		}
-
-		findings = append(findings, tcFindings...)
 	}
 
-	m.logger.Info().Int("findings", len(findings)).Msg("BOLA module completed")
 	return findings, nil
 }
 
-// executeIDEnumeration tests whether different object IDs can be accessed with the same auth token.
-func (m *BolaModule) executeIDEnumeration(ctx context.Context, tc *testgen.TestCase) ([]domain.Finding, error) {
-	if len(tc.Requests) < 2 {
-		m.logger.Debug().Msg("ID enumeration requires at least 2 requests, skipping")
-		return nil, nil
-	}
+// runIDEnumeration tests whether sequential or predictable IDs are accepted
+// for resources that should require object-level authorization.
+func (m *BOLAModule) runIDEnumeration(ctx context.Context, exec HTTPExecutor, tc TestCase, target string, auth *AuthConfig) ([]domain.Finding, error) {
+	var findings []domain.Finding
 
-	// Send baseline request (first request with valid auth).
-	baselineReq := tc.Requests[0]
-	baselineResp, err := m.executor.ExecuteRequest(ctx, baselineReq)
+	// Try a set of predictable IDs to see if the server returns 200 without proper authz.
+	testIDs := generateTestIDs(tc.Path)
+
+	// Baseline: request with auth to establish the expected authorized response.
+	baselineResp, err := doRequest(ctx, exec, tc.Method, resolveFirstID(target, tc.Path, testIDs), tc.Headers, tc.Body, auth)
 	if err != nil {
 		return nil, fmt.Errorf("baseline request failed: %w", err)
 	}
 
-	m.logger.Debug().
-		Int("status", baselineResp.StatusCode).
-		Str("path", baselineReq.Path).
-		Msg("baseline response received")
-
-	// If baseline doesn't succeed, we can't reliably test enumeration.
-	if baselineResp.StatusCode < 200 || baselineResp.StatusCode >= 300 {
-		m.logger.Debug().Int("status", baselineResp.StatusCode).Msg("baseline request did not succeed, skipping")
+	// If baseline itself returns 401/403, skip (endpoint is protected as expected).
+	if baselineResp.StatusCode == http.StatusUnauthorized || baselineResp.StatusCode == http.StatusForbidden {
 		return nil, nil
 	}
 
-	var findings []domain.Finding
+	// Try IDs that definitely don't belong to the authenticated user.
+	for _, testID := range testIDs[1:] {
+		select {
+		case <-ctx.Done():
+			return findings, ctx.Err()
+		default:
+		}
 
-	// Send remaining requests with different IDs.
-	for i := 1; i < len(tc.Requests); i++ {
-		enumReq := tc.Requests[i]
-		enumResp, err := m.executor.ExecuteRequest(ctx, enumReq)
+		url := buildURL(target, tc.Path, testID)
+		resp, err := doRequest(ctx, exec, tc.Method, url, tc.Headers, tc.Body, auth)
 		if err != nil {
-			m.logger.Warn().Err(err).Str("path", enumReq.Path).Msg("enum request failed, skipping")
 			continue
 		}
 
-		endpoint := fmt.Sprintf("%s %s", tc.EndpointMethod, tc.EndpointPath)
-
-		// Check: non-existent IDs returning 200 instead of 404 (information disclosure).
-		if enumResp.StatusCode == 200 && !responsesAreSimilar(baselineResp, enumResp) {
-			// Different data for different IDs with same auth = potential BOLA.
-			finding := domain.Finding{
-				ID:             uuid.New().String(),
+		// BOLA finding: server returns 200 for an ID that likely belongs to another user.
+		if resp.StatusCode == http.StatusOK {
+			findings = append(findings, domain.Finding{
 				OWASPId:        "API1:2023",
-				ModuleID:       "a1_bola",
-				Title:          "Broken Object Level Authorization - ID Enumeration on " + endpoint,
-				Description:    fmt.Sprintf("The endpoint %s returns different data for different object IDs using the same authentication token. An attacker can enumerate and access objects belonging to other users by manipulating the object ID parameter. Request to %s returned status %d with different data than the baseline request to %s.", endpoint, enumReq.Path, enumResp.StatusCode, baselineReq.Path),
-				Severity:       domain.SeverityHigh,
-				CVSSScore:      7.5,
-				CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N",
-				EndpointPath:   tc.EndpointPath,
-				EndpointMethod: tc.EndpointMethod,
+				ModuleID:       m.ID(),
+				Title:          "Broken Object Level Authorization — ID Enumeration",
+				Description:    fmt.Sprintf("Endpoint %s %s returned HTTP 200 for object ID %q without apparent object-level authorization check. An attacker may enumerate IDs to access arbitrary objects.", tc.Method, tc.Path, testID),
+				Severity:       domain.SeverityCritical,
+				Status:         domain.FindingStatusOpen,
+				EndpointPath:   tc.Path,
+				EndpointMethod: tc.Method,
 				Evidence: domain.Evidence{
-					Request:  formatRequest(enumReq),
-					Response: formatResponse(enumResp),
+					Request:  fmt.Sprintf("%s %s", tc.Method, url),
+					Response: fmt.Sprintf("HTTP %d", resp.StatusCode),
 					Detail: map[string]interface{}{
-						"baseline_status": baselineResp.StatusCode,
-						"enum_status":     enumResp.StatusCode,
-						"baseline_path":   baselineReq.Path,
-						"enum_path":       enumReq.Path,
-						"test_case_id":    tc.ID,
+						"test_id":                testID,
+						"notes":                  "Object returned without authorization check on resource ID",
 					},
 				},
-				Remediation: "Implement object-level authorization checks. Verify that the authenticated user has permission to access the requested object before returning its data. Use the user's session/token to determine ownership and enforce access control on every object-level operation.",
-				Status:      domain.FindingStatusOpen,
-			}
-			findings = append(findings, finding)
-			m.logger.Warn().
-				Str("path", enumReq.Path).
-				Int("status", enumResp.StatusCode).
-				Msg("potential BOLA: different IDs return different data")
-		} else if enumResp.StatusCode == 200 && responsesAreSimilar(baselineResp, enumResp) {
-			// Same data for different IDs - could be static/shared data, less likely BOLA.
-			m.logger.Debug().
-				Str("path", enumReq.Path).
-				Msg("same response for different ID, likely shared resource")
-		}
-
-		// Check: IDs that should not exist still returning 200.
-		if enumReq.Description != "" && strings.Contains(strings.ToLower(enumReq.Description), "non-existent") {
-			if enumResp.StatusCode == 200 {
-				finding := domain.Finding{
-					ID:             uuid.New().String(),
-					OWASPId:        "API1:2023",
-					ModuleID:       "a1_bola",
-					Title:          "Information Disclosure via ID Enumeration on " + endpoint,
-					Description:    fmt.Sprintf("The endpoint %s returns HTTP 200 for a non-existent object ID (%s) instead of 404 Not Found. This may indicate the API does not properly validate object existence or authorization, enabling attackers to enumerate valid and invalid IDs.", endpoint, enumReq.Path),
-					Severity:       domain.SeverityMedium,
-					CVSSScore:      5.3,
-					CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N",
-					EndpointPath:   tc.EndpointPath,
-					EndpointMethod: tc.EndpointMethod,
-					Evidence: domain.Evidence{
-						Request:  formatRequest(enumReq),
-						Response: formatResponse(enumResp),
-						Detail: map[string]interface{}{
-							"expected_status": 404,
-							"actual_status":   enumResp.StatusCode,
-							"test_case_id":    tc.ID,
-						},
-					},
-					Remediation: "Return HTTP 404 Not Found for requests to non-existent resources. Ensure object existence checks are performed after authorization checks to avoid disclosing which IDs are valid.",
-					Status:      domain.FindingStatusOpen,
-				}
-				findings = append(findings, finding)
-			}
+				Remediation: "Implement object-level authorization checks. Verify that the authenticated user owns or has explicit access to the requested resource ID before returning it.",
+			})
+			// One confirmed finding per path is sufficient.
+			break
 		}
 	}
 
 	return findings, nil
 }
 
-// executeCrossUser tests whether one user can access another user's objects.
-func (m *BolaModule) executeCrossUser(ctx context.Context, tc *testgen.TestCase) ([]domain.Finding, error) {
-	if len(tc.Requests) < 2 {
-		m.logger.Debug().Msg("cross-user test requires at least 2 requests, skipping")
+// runCrossUser tests whether a token belonging to user A can access resources of user B.
+func (m *BOLAModule) runCrossUser(ctx context.Context, exec HTTPExecutor, tc TestCase, target string, auth *AuthConfig) ([]domain.Finding, error) {
+	if auth == nil || len(auth.OtherTokens) == 0 {
+		// Cannot run cross-user test without a second token — skip, not an error.
 		return nil, nil
 	}
-
-	// Find the "valid" auth request (user A baseline) and "other_user" auth request (user B).
-	var validReq, otherReq *testgen.TestRequest
-	for i := range tc.Requests {
-		switch tc.Requests[i].Auth {
-		case "valid":
-			validReq = &tc.Requests[i]
-		case "other_user":
-			otherReq = &tc.Requests[i]
-		}
-	}
-
-	if validReq == nil || otherReq == nil {
-		m.logger.Debug().Msg("cross-user test missing valid or other_user request, skipping")
-		return nil, nil
-	}
-
-	// Send request as user A (valid auth).
-	validResp, err := m.executor.ExecuteRequest(ctx, *validReq)
-	if err != nil {
-		return nil, fmt.Errorf("valid user request failed: %w", err)
-	}
-
-	m.logger.Debug().
-		Int("status", validResp.StatusCode).
-		Str("path", validReq.Path).
-		Msg("user A (valid) response received")
-
-	// If user A can't access the resource, we can't test cross-user.
-	if validResp.StatusCode < 200 || validResp.StatusCode >= 300 {
-		m.logger.Debug().Int("status", validResp.StatusCode).Msg("user A request did not succeed, skipping cross-user test")
-		return nil, nil
-	}
-
-	// Send same request as user B (other_user auth).
-	otherResp, err := m.executor.ExecuteRequest(ctx, *otherReq)
-	if err != nil {
-		return nil, fmt.Errorf("other user request failed: %w", err)
-	}
-
-	m.logger.Debug().
-		Int("status", otherResp.StatusCode).
-		Str("path", otherReq.Path).
-		Msg("user B (other_user) response received")
 
 	var findings []domain.Finding
-	endpoint := fmt.Sprintf("%s %s", tc.EndpointMethod, tc.EndpointPath)
 
-	// If user B gets 200 with same/similar data as user A, BOLA is confirmed.
-	if otherResp.StatusCode >= 200 && otherResp.StatusCode < 300 {
-		if responsesAreSimilar(validResp, otherResp) {
-			finding := domain.Finding{
-				ID:             uuid.New().String(),
+	// Step 1: Establish a resource URL using user A's token.
+	testIDs := generateTestIDs(tc.Path)
+	if len(testIDs) == 0 {
+		return nil, nil
+	}
+
+	url := buildURL(target, tc.Path, testIDs[0])
+
+	// Step 2: Access the same resource using user B's token.
+	for _, otherToken := range auth.OtherTokens {
+		select {
+		case <-ctx.Done():
+			return findings, ctx.Err()
+		default:
+		}
+
+		altAuth := &AuthConfig{
+			Type:  auth.Type,
+			Token: otherToken,
+		}
+		resp, err := doRequest(ctx, exec, tc.Method, url, tc.Headers, tc.Body, altAuth)
+		if err != nil {
+			continue
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			findings = append(findings, domain.Finding{
 				OWASPId:        "API1:2023",
-				ModuleID:       "a1_bola",
-				Title:          "Broken Object Level Authorization - Cross-User Access on " + endpoint,
-				Description:    fmt.Sprintf("The endpoint %s allows User B to access User A's object. Both users received HTTP %d responses with similar data, confirming that the API does not enforce object-level authorization. An attacker authenticated as any user can access objects belonging to other users.", endpoint, otherResp.StatusCode),
-				Severity:       domain.SeverityHigh,
-				CVSSScore:      7.5,
-				CVSSVector:     "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N",
-				EndpointPath:   tc.EndpointPath,
-				EndpointMethod: tc.EndpointMethod,
+				ModuleID:       m.ID(),
+				Title:          "Broken Object Level Authorization — Cross-User Access",
+				Description:    fmt.Sprintf("Endpoint %s %s returned HTTP 200 when accessed with a different user's token. User B can access resources belonging to User A.", tc.Method, tc.Path),
+				Severity:       domain.SeverityCritical,
+				Status:         domain.FindingStatusOpen,
+				EndpointPath:   tc.Path,
+				EndpointMethod: tc.Method,
 				Evidence: domain.Evidence{
-					Request:  formatRequest(*otherReq),
-					Response: formatResponse(otherResp),
+					Request:  fmt.Sprintf("%s %s (with alternate user token)", tc.Method, url),
+					Response: fmt.Sprintf("HTTP %d", resp.StatusCode),
 					Detail: map[string]interface{}{
-						"user_a_status":    validResp.StatusCode,
-						"user_b_status":    otherResp.StatusCode,
-						"responses_match":  true,
-						"user_a_body_size": len(validResp.Body),
-						"user_b_body_size": len(otherResp.Body),
-						"test_case_id":     tc.ID,
+						"notes": "Resource accessible by a different authenticated user",
 					},
 				},
-				Remediation: "Implement object-level authorization checks. Verify that the authenticated user has permission to access the requested object before returning its data. Use the user's session/token to determine ownership and enforce access control on every object-level operation.",
-				Status:      domain.FindingStatusOpen,
-			}
-			findings = append(findings, finding)
-			m.logger.Warn().
-				Str("endpoint", endpoint).
-				Msg("BOLA confirmed: User B can access User A's object")
-		} else {
-			// User B got 200 but different data - might be accessing their own object.
-			m.logger.Debug().
-				Str("endpoint", endpoint).
-				Msg("User B got 200 but different data, may be accessing own object")
+				Remediation: "Enforce per-object ownership checks. Use the authenticated user's identity (from the token) to validate access to each object, not just route-level authorization.",
+			})
+			break
 		}
-	} else if otherResp.StatusCode == 401 || otherResp.StatusCode == 403 {
-		// Properly protected - user B is denied access.
-		m.logger.Info().
-			Str("endpoint", endpoint).
-			Int("status", otherResp.StatusCode).
-			Msg("endpoint properly protected: cross-user access denied")
 	}
 
 	return findings, nil
 }
 
-// dynamicFieldPattern matches common dynamic fields in JSON responses that should
-// be ignored when comparing responses (timestamps, generated IDs, etc.).
-var dynamicFieldPattern = regexp.MustCompile(
-	`"(?:created_at|updated_at|modified_at|timestamp|date|time|` +
-		`request_id|trace_id|correlation_id|` +
-		`token|csrf|nonce|session)"\s*:\s*"[^"]*"`,
-)
+// --- helpers ---
 
-// responsesAreSimilar compares two HTTP responses, ignoring dynamic fields like
-// timestamps and generated IDs. Returns true if the responses are structurally similar.
-func responsesAreSimilar(a, b *HTTPResponse) bool {
-	// Different status codes are never similar.
-	if a.StatusCode != b.StatusCode {
-		return false
-	}
+var numericIDPattern = regexp.MustCompile(`\{[^}]+\}`)
 
-	// Normalize response bodies by removing dynamic fields.
-	normA := normalizebody(a.Body)
-	normB := normalizebody(b.Body)
-
-	// Exact match after normalization.
-	if bytes.Equal(normA, normB) {
-		return true
+// generateTestIDs extracts the path template and returns a set of test IDs to probe.
+func generateTestIDs(pathTemplate string) []string {
+	if !numericIDPattern.MatchString(pathTemplate) {
+		return nil
 	}
-
-	// Check structural similarity for JSON responses.
-	if isJSON(a.Body) && isJSON(b.Body) {
-		return jsonStructurallySimilar(a.Body, b.Body)
-	}
-
-	// For non-JSON, check if body lengths are within 10% of each other.
-	if len(normA) == 0 && len(normB) == 0 {
-		return true
-	}
-	if len(normA) == 0 || len(normB) == 0 {
-		return false
-	}
-	ratio := float64(len(normA)) / float64(len(normB))
-	return ratio >= 0.9 && ratio <= 1.1
+	// Use a mix of sequential integers and common values for broad coverage.
+	return []string{"1", "2", "3", "100", "9999", "0", "-1"}
 }
 
-// normalizebody removes dynamic fields from a response body.
-func normalizebody(body []byte) []byte {
-	return dynamicFieldPattern.ReplaceAll(body, []byte(`"_dynamic_":"_removed_"`))
-}
-
-// isJSON checks if the data looks like JSON.
-func isJSON(data []byte) bool {
-	data = bytes.TrimSpace(data)
-	if len(data) == 0 {
-		return false
+// resolveFirstID returns the URL with the first test ID substituted.
+func resolveFirstID(target, pathTemplate string, ids []string) string {
+	if len(ids) == 0 {
+		return target + pathTemplate
 	}
-	return (data[0] == '{' || data[0] == '[')
+	return buildURL(target, pathTemplate, ids[0])
 }
 
-// jsonStructurallySimilar compares two JSON payloads by their top-level key structure.
-func jsonStructurallySimilar(a, b []byte) bool {
-	var objA, objB map[string]json.RawMessage
-	if json.Unmarshal(a, &objA) != nil || json.Unmarshal(b, &objB) != nil {
-		// If not objects, try arrays.
-		var arrA, arrB []json.RawMessage
-		if json.Unmarshal(a, &arrA) != nil || json.Unmarshal(b, &arrB) != nil {
-			return false
+// buildURL substitutes the first path parameter with id and prepends target.
+func buildURL(target, pathTemplate, id string) string {
+	replaced := numericIDPattern.ReplaceAllStringFunc(pathTemplate, func(s string) string {
+		return id
+	})
+	return strings.TrimRight(target, "/") + replaced
+}
+
+// sanitizeID returns a filesystem/id safe version of a path.
+func sanitizeID(path string) string {
+	r := strings.NewReplacer("/", "-", "{", "", "}", "", " ", "-")
+	return strings.Trim(r.Replace(path), "-")
+}
+
+// doRequest builds and executes an HTTP request applying auth headers.
+func doRequest(ctx context.Context, exec HTTPExecutor, method, url string, headers map[string]string, body []byte, auth *AuthConfig) (*HTTPResponse, error) {
+	var bodyReader *bytes.Reader
+	if len(body) > 0 {
+		bodyReader = bytes.NewReader(body)
+	} else {
+		bodyReader = bytes.NewReader(nil)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+
+	// Apply headers from the test case.
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	// Apply authentication.
+	if auth != nil {
+		applyAuth(req, auth)
+	}
+
+	return exec.Do(ctx, req)
+}
+
+// applyAuth sets the appropriate authentication headers on req.
+func applyAuth(req *http.Request, auth *AuthConfig) {
+	switch strings.ToLower(auth.Type) {
+	case "bearer", "jwt", "oauth2":
+		if auth.Token != "" {
+			req.Header.Set("Authorization", "Bearer "+auth.Token)
 		}
-		// Arrays are similar if they have the same length.
-		return len(arrA) == len(arrB)
-	}
-
-	// Objects are similar if they have the same set of keys.
-	if len(objA) != len(objB) {
-		return false
-	}
-	for key := range objA {
-		if _, ok := objB[key]; !ok {
-			return false
+	case "apikey":
+		if auth.APIKey != "" {
+			switch strings.ToLower(auth.APIKeyIn) {
+			case "query":
+				q := req.URL.Query()
+				q.Set(auth.APIKeyName, auth.APIKey)
+				req.URL.RawQuery = q.Encode()
+			default: // header
+				req.Header.Set(auth.APIKeyName, auth.APIKey)
+			}
+		}
+	case "basic":
+		if auth.Username != "" {
+			req.SetBasicAuth(auth.Username, auth.Password)
 		}
 	}
-	return true
 }
+
+// ensure sanitizeID is used to avoid a compile error if it is only referenced internally.
+var _ = sanitizeID

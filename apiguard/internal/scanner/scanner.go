@@ -20,8 +20,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/opensecstack/apiguard/internal/auth"
 	"github.com/opensecstack/apiguard/internal/config"
 	"github.com/opensecstack/apiguard/internal/domain"
+	"github.com/opensecstack/apiguard/internal/modules"
 	"github.com/opensecstack/apiguard/internal/testgen"
 )
 
@@ -364,6 +366,17 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 		Int("endpoint_count", len(parsedSpec.Endpoints)).
 		Msg("spec parsed successfully")
 
+	// Step 2b: Initialise the auth handler from the scan request credentials.
+	authCfg := auth.Config{
+		Type:  auth.TokenType(req.Auth.Type),
+		Token: req.Auth.Token,
+	}
+	authHandler, err := auth.NewHandler(authCfg, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create auth handler: %w", err)
+	}
+	_ = authHandler // will be consumed by scan modules in a future step
+
 	// Step 3: Generate test cases from the parsed IR.
 	// The IR file path is the same temp file pattern used by parseSpec; we need to
 	// re-serialize the parsed spec to a temp file for the testgen to consume.
@@ -380,20 +393,102 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 	}
 	s.logger.Info().Int("test_cases", len(suite.TestCases)).Msg("test cases generated")
 
-	// Step 4: Return stub results (real scan modules will be wired in later).
+	// Step 4: Execute scan modules against the test suite.
+
+	// Build the HTTP executor using the pinned transport (prevents DNS rebinding).
+	httpExec := modules.NewDefaultExecutor(s.transport, 30*time.Second)
+
+	// Build the auth config for modules from the scan request credentials.
+	authConfig := &modules.AuthConfig{
+		Type:  req.Auth.Type,
+		Token: req.Auth.Token,
+	}
+
+	// Convert testgen.TestSuite cases to modules.TestSuite cases.
+	modSuite := modules.TestSuite{Cases: make([]modules.TestCase, 0, len(suite.TestCases))}
+	for _, tc := range suite.TestCases {
+		// Flatten the first request's headers and body for use by modules.
+		var headers map[string]string
+		var body []byte
+		if len(tc.Requests) > 0 {
+			first := tc.Requests[0]
+			headers = make(map[string]string, len(first.Headers))
+			for _, h := range first.Headers {
+				if len(h) == 2 {
+					headers[h[0]] = h[1]
+				}
+			}
+			if len(first.Body) > 0 && string(first.Body) != "null" {
+				body = first.Body
+			}
+		}
+		modSuite.Cases = append(modSuite.Cases, modules.TestCase{
+			ID:       tc.ID,
+			Category: tc.Category,
+			Method:   tc.EndpointMethod,
+			Path:     tc.EndpointPath,
+			Headers:  headers,
+			Body:     body,
+		})
+	}
+
+	// Build an enabled-module set for fast lookup (empty = run all).
+	enabledModules := make(map[string]bool, len(req.Modules))
+	for _, id := range req.Modules {
+		enabledModules[id] = true
+	}
+
+	registry := modules.NewRegistry()
+	var allFindings []domain.Finding
+
+	for _, mod := range registry.All() {
+		if len(enabledModules) > 0 && !enabledModules[mod.ID()] {
+			continue
+		}
+
+		s.logger.Info().Str("module", mod.ID()).Msg("running module")
+
+		modFindings, modErr := mod.Run(ctx, httpExec, modSuite, req.Target, authConfig)
+		if modErr != nil {
+			s.logger.Error().Err(modErr).Str("module", mod.ID()).Msg("module execution failed")
+			continue
+		}
+
+		s.logger.Info().
+			Str("module", mod.ID()).
+			Int("findings", len(modFindings)).
+			Msg("module completed")
+
+		allFindings = append(allFindings, modFindings...)
+	}
+
+	// Compute summary counts.
+	summary := domain.ScanSummary{TotalFindings: len(allFindings)}
+	for _, f := range allFindings {
+		switch f.Severity {
+		case domain.SeverityCritical:
+			summary.Critical++
+		case domain.SeverityHigh:
+			summary.High++
+		case domain.SeverityMedium:
+			summary.Medium++
+		case domain.SeverityLow:
+			summary.Low++
+		case domain.SeverityInfo:
+			summary.Info++
+		}
+	}
+
+	if allFindings == nil {
+		allFindings = []domain.Finding{}
+	}
+
 	result := &domain.ScanResult{
 		ID:          scanID,
 		Status:      domain.ScanStatusCompleted,
 		Target:      req.Target,
-		Findings:    []domain.Finding{},
-		Summary: domain.ScanSummary{
-			TotalFindings: 0,
-			Critical:      0,
-			High:          0,
-			Medium:        0,
-			Low:           0,
-			Info:          0,
-		},
+		Findings:    allFindings,
+		Summary:     summary,
 		StartedAt:   startedAt,
 		CompletedAt: time.Now(),
 	}
@@ -401,6 +496,7 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 	s.logger.Info().
 		Str("scan_id", scanID).
 		Str("status", string(result.Status)).
+		Int("findings", len(allFindings)).
 		Dur("duration", result.CompletedAt.Sub(result.StartedAt)).
 		Msg("scan completed")
 

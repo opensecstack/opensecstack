@@ -19,7 +19,8 @@ RUN CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION} -X main.commit=$
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates
 RUN addgroup -S apiguard && adduser -S apiguard -G apiguard
-COPY --from=go-builder /apiguard /usr/local/bin/apiguard
+COPY --from=go-builder  /apiguard                                   /usr/local/bin/apiguard
+COPY --from=rust-builder /build/rust/target/release/apiguard-parser /usr/local/bin/apiguard-parser
 USER apiguard
 EXPOSE 8080
 ENTRYPOINT ["apiguard"]

@@ -36,7 +36,18 @@
       "Bash(cmd.exe /c \"where go 2>nul && go version\")",
       "Bash(powershell.exe -Command \"& { $goPath = \\(Get-Command go -ErrorAction SilentlyContinue\\).Source; if \\($goPath\\) { Write-Host $goPath } else { Get-ChildItem ''C:\\\\'' -Recurse -Name ''go.exe'' -ErrorAction SilentlyContinue | Select-Object -First 5 } }\")",
       "Bash(xargs wc:*)",
-      "Bash(find /c/Users/user/RustroverProjects/opensecstack/apiguard/internal/modules -name \"*.go\" -exec basename {})"
+      "Bash(find /c/Users/user/RustroverProjects/opensecstack/apiguard/internal/modules -name \"*.go\" -exec basename {})",
+      "Bash(export PATH=\"$PATH:/c/Program Files/Go/bin:/c/Go/bin:/c/Users/user/go/bin\")",
+      "Bash(where go:*)",
+      "Bash(/usr/local/go/bin/go version:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)",
+      "Bash(cmd.exe /c \"cd /d C:\\\\Users\\\\user\\\\RustroverProjects\\\\opensecstack\\\\apiguard && go build ./internal/modules/... 2>&1\")",
+      "Read(//c/Users/user/AppData/Local/Programs//**)",
+      "Read(//c/Users/user/AppData/Roaming//**)",
+      "Read(//c/ProgramData/chocolatey/lib//**)",
+      "Read(//c//**)",
+      "Read(//c/Users/user/**)"
     ]
   }
 }

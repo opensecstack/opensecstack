@@ -75,6 +75,10 @@ func NewRegistry() *Registry {
 	r.Register(&RateLimitModule{})
 	r.Register(&FunctionAuthModule{})
 	r.Register(&SensitiveFlowModule{})
+	r.Register(&SSRFModule{})
+	r.Register(&MisconfigModule{})
+	r.Register(&InventoryModule{})
+	r.Register(&UnsafeConsumptionModule{})
 	return r
 }
 

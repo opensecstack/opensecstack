@@ -47,6 +47,31 @@ export const api = {
     create: (body: { spec_url?: string; spec_path?: string; target: string; modules?: string[] }) =>
       request<{ id: string; status: string }>('/scans', { method: 'POST', body: JSON.stringify(body) }),
     delete: (id: string) => request<void>(`/scans/${id}`, { method: 'DELETE' }),
+    cancel: (id: string) => request<void>(`/scans/${id}`, { method: 'DELETE' }),
+    getReport: async (
+      scanId: string,
+      format: 'json' | 'html',
+    ): Promise<{ data: string; format: string } | Blob> => {
+      const token = localStorage.getItem('apiguard_token')
+      const res = await fetch(`${BASE}/scans/${scanId}/report?format=${format}`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      })
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem('apiguard_token')
+          window.location.reload()
+        }
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error ?? res.statusText)
+      }
+      if (format === 'html') {
+        return res.blob()
+      }
+      const text = await res.text()
+      return { data: text, format: 'json' }
+    },
   },
   findings: {
     list: (params?: { scan_id?: string; severity?: string; status?: string; page?: number }) => {

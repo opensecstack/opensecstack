@@ -7,6 +7,7 @@ export interface Scan {
   status: ScanStatus
   target: string
   spec_hash?: string
+  modules?: string[]
   summary: ScanSummary
   started_at: string
   completed_at?: string

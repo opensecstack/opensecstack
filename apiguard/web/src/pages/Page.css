@@ -78,3 +78,83 @@
 .toggle-btn:first-child { border-radius: var(--radius) 0 0 var(--radius); }
 .toggle-btn:last-child { border-radius: 0 var(--radius) var(--radius) 0; border-left: none; }
 .toggle-btn.active { background: var(--primary); border-color: var(--primary); color: white; }
+
+/* ── Advanced Options (Scans form) ─────────────────────────────────── */
+.advanced-section { margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.advanced-toggle { width: 100%; background: var(--surface2); border: none; border-radius: 0; padding: 10px 14px; font-size: 13px; color: var(--text-muted); text-align: left; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.advanced-toggle:hover { color: var(--text); }
+.advanced-chevron { display: inline-block; font-size: 10px; transition: transform 0.2s; }
+.advanced-chevron.open { transform: rotate(90deg); }
+.advanced-body { padding: 16px; border-top: 1px solid var(--border); }
+
+.modules-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.modules-label { font-size: 13px; font-weight: 600; color: var(--text); }
+.modules-actions { display: flex; align-items: center; gap: 6px; }
+.modules-sep { color: var(--text-muted); }
+.btn-link { background: none; border: none; padding: 0; font-size: 13px; color: var(--primary); cursor: pointer; text-decoration: underline; }
+.btn-link:hover { opacity: 0.8; }
+.modules-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+.module-checkbox { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); cursor: pointer; padding: 4px 0; }
+.module-checkbox input[type="checkbox"] { accent-color: var(--primary); width: 15px; height: 15px; flex-shrink: 0; }
+.modules-count { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+.form-hint { font-size: 12px; color: #f87171; margin-left: 12px; }
+
+/* ── Module badges ──────────────────────────────────────────────────── */
+.module-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; background: var(--surface2); border: 1px solid var(--border); color: var(--text-muted); }
+.module-badge-dim { opacity: 0.75; }
+
+/* ── Scan progress banner ───────────────────────────────────────────── */
+.scan-progress-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; background: #3b82f611; border: 1px solid #3b82f633; border-radius: var(--radius); padding: 14px 18px; margin-bottom: 24px; }
+.scan-progress-text { font-size: 14px; font-weight: 500; color: #60a5fa; }
+.scan-modules-running { display: flex; flex-wrap: wrap; gap: 6px; }
+.scan-modules-info { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 16px; }
+.scan-modules-info-label { font-size: 12px; color: var(--text-muted); margin-right: 4px; }
+
+/* ── Spinner ────────────────────────────────────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #3b82f644; border-top-color: #60a5fa; border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+
+/* ── Page header actions ────────────────────────────────────────────── */
+.page-header-actions { display: flex; align-items: center; gap: 12px; }
+.btn-danger { background: #ef4444; color: white; border: none; border-radius: var(--radius); padding: 8px 16px; font-size: 14px; font-weight: 500; cursor: pointer; }
+.btn-danger:hover:not(:disabled) { background: #dc2626; }
+.btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Report section ─────────────────────────────────────────────────── */
+.report-section { margin-bottom: 24px; }
+.report-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 0; }
+.report-controls .toggle-group { margin-bottom: 0; }
+.report-preview { margin-top: 16px; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.report-iframe { display: block; width: 100%; height: 600px; border: none; background: white; }
+
+/* ── JSON Report renderer ───────────────────────────────────────────── */
+.report-json-preview { padding: 20px; background: var(--surface); }
+.json-report { display: flex; flex-direction: column; gap: 20px; }
+.json-report-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.json-report-summary-table { margin-bottom: 0; }
+.json-report-summary-table td { text-align: center; font-size: 15px; font-weight: 600; }
+.json-report-group { display: flex; flex-direction: column; gap: 8px; }
+.json-report-group-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; text-transform: capitalize; }
+.report-raw-json { font-family: monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; color: var(--text-muted); padding: 16px; background: var(--surface2); border-radius: var(--radius); overflow: auto; max-height: 500px; }
+
+/* Severity counts in report table */
+.severity-count { text-align: center; }
+.severity-count-critical { color: #f87171; }
+.severity-count-high     { color: #fb923c; }
+.severity-count-medium   { color: #fbbf24; }
+.severity-count-low      { color: #4ade80; }
+.severity-count-info     { color: #60a5fa; }
+
+/* Severity group headings */
+.severity-heading-critical { color: #f87171; }
+.severity-heading-high     { color: #fb923c; }
+.severity-heading-medium   { color: #fbbf24; }
+.severity-heading-low      { color: #4ade80; }
+.severity-heading-info     { color: #60a5fa; }
+
+/* Severity badges in JSON report */
+.badge-sev-critical { background: #ef444422; color: #f87171; border: 1px solid #ef444444; }
+.badge-sev-high     { background: #f9731622; color: #fb923c; border: 1px solid #f9731644; }
+.badge-sev-medium   { background: #eab30822; color: #fbbf24; border: 1px solid #eab30844; }
+.badge-sev-low      { background: #22c55e22; color: #4ade80; border: 1px solid #22c55e44; }
+.badge-sev-info     { background: #3b82f622; color: #60a5fa; border: 1px solid #3b82f644; }

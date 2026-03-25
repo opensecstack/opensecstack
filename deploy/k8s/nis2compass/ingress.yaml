@@ -1,0 +1,37 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nis2compass-ingress
+  namespace: opensecstack
+  labels:
+    app: nis2compass
+    app.kubernetes.io/part-of: opensecstack
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # Uncomment below to enable HTTPS redirect once TLS is configured
+    # nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: nis2compass.opensecstack.local   # Replace with your actual hostname
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nis2compass-service
+                port:
+                  number: 8090
+
+  # TLS — uncomment and populate once a certificate is available.
+  # Create the TLS secret first:
+  #   kubectl create secret tls nis2compass-tls \
+  #     --cert=path/to/tls.crt \
+  #     --key=path/to/tls.key \
+  #     -n opensecstack
+  #
+  # tls:
+  #   - hosts:
+  #       - nis2compass.opensecstack.local
+  #     secretName: nis2compass-tls

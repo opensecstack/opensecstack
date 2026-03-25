@@ -71,6 +71,36 @@ export interface Control {
   assessed_at?: string | null
   created_at: string
   updated_at: string
+  // Remediation panel fields
+  remediation_owner?: string | null
+  remediation_status?: RemediationStatus | null
+  external_ticket_url?: string | null
+  remediation_notes?: string | null
+}
+
+export type RemediationStatus = 'not_started' | 'in_progress' | 'blocked' | 'completed'
+
+export type ArtifactType =
+  | 'policy'
+  | 'procedure'
+  | 'evidence'
+  | 'report'
+  | 'screenshot'
+  | 'log'
+  | 'certificate'
+  | 'contract'
+
+export interface Artifact {
+  id: string
+  assessment_id: string
+  control_id?: string | null
+  type: ArtifactType
+  filename: string
+  size_bytes: number
+  mime_type: string
+  description?: string | null
+  created_by: string
+  created_at: string
 }
 
 export interface ControlTemplate {

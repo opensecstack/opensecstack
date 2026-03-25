@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: opensecstack
+  labels:
+    app: postgres
+    app.kubernetes.io/part-of: opensecstack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  strategy:
+    type: Recreate   # Required for single-replica stateful workloads with RWO volumes
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            # Superuser — apiguard is the primary DB user, matching docker-compose
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: opensecstack-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: opensecstack-db-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: opensecstack-config
+                  key: APIGUARD_DB_NAME
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            # To initialise the NIS2 database on first boot, mount an init SQL
+            # script here. Create a ConfigMap from the file in deploy/scripts/ and
+            # uncomment the lines below.
+            # - name: init-sql
+            #   mountPath: /docker-entrypoint-initdb.d/02-init-nis2.sql
+            #   subPath: init-nis2.sql
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - apiguard
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - apiguard
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-pvc
+        # - name: init-sql
+        #   configMap:
+        #     name: postgres-init-sql

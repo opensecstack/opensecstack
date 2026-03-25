@@ -1,6 +1,6 @@
 # opensecstack Go SDK
 
-Go client library for the opensecstack platform APIs — currently APIGuard.
+Go client library for the opensecstack platform APIs — APIGuard and NIS2 Compass.
 
 ## Requirements
 
@@ -102,7 +102,91 @@ for _, e := range entries {
 }
 ```
 
-## Types
+## NIS2 Compass
+
+NIS2 Compass tracks organisational NIS2 Article 21 compliance through assessments and controls.
+Authentication uses a direct `X-API-Key` header — no token exchange is needed.
+
+### Run a full compliance workflow
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "os"
+
+    "github.com/opensecstack/sdk/opensecstack"
+)
+
+func main() {
+    ctx := context.Background()
+
+    client := opensecstack.NewNIS2CompassClient("http://localhost:8090", "your-api-key")
+
+    // Create an organisation.
+    org, err := client.CreateOrganisation(ctx, opensecstack.CreateOrganisationRequest{
+        Name: "Acme GmbH", Industry: "energy", Country: "DE", Size: "large",
+    })
+    if err != nil {
+        log.Fatalf("create organisation: %v", err)
+    }
+    fmt.Printf("Organisation %s created\n", org.ID)
+
+    // Create an assessment — 10 controls (a–j) are seeded automatically.
+    assessment, err := client.CreateAssessment(ctx, org.ID, opensecstack.CreateAssessmentRequest{
+        Title: "NIS2 2026 Q1 Assessment",
+    })
+    if err != nil {
+        log.Fatalf("create assessment: %v", err)
+    }
+    fmt.Printf("Assessment %s created (status: %s)\n", assessment.ID, assessment.Status)
+
+    // Transition the assessment to in_progress.
+    assessment, err = client.PatchAssessment(ctx, assessment.ID, opensecstack.PatchAssessmentRequest{
+        Status: "in_progress",
+    })
+    if err != nil {
+        log.Fatalf("patch assessment: %v", err)
+    }
+
+    // Update a control finding.
+    ctrl, err := client.PatchControl(ctx, assessment.ID, "a", opensecstack.PatchControlRequest{
+        Status: "compliant", Notes: "ISO 27001 certified",
+    })
+    if err != nil {
+        log.Fatalf("patch control: %v", err)
+    }
+    fmt.Printf("Control %s (%s) status: %s\n", ctrl.MeasureRef, ctrl.ArticleRef, ctrl.Status)
+
+    // Generate a PDF compliance report.
+    pdf, err := client.GenerateReport(ctx, assessment.ID)
+    if err != nil {
+        log.Fatalf("generate report: %v", err)
+    }
+    if err := os.WriteFile("report.pdf", pdf, 0644); err != nil {
+        log.Fatalf("write report: %v", err)
+    }
+    fmt.Printf("Report written (%d bytes)\n", len(pdf))
+}
+```
+
+### Audit log
+
+```go
+entries, err := client.GetAuditLog(ctx, 20)
+if err != nil {
+    log.Fatalf("audit log: %v", err)
+}
+for _, e := range entries {
+    fmt.Printf("%s  [%s]  %s  %s\n",
+        e.Timestamp.Format(time.RFC3339), e.RiskClass, e.Action, e.Actor)
+}
+```
+
+## APIGuard types
 
 | Type | Description |
 |------|-------------|
@@ -112,6 +196,19 @@ for _, e := range entries {
 | `ScanStatus` | Enum: `pending`, `running`, `completed`, `failed`, `cancelled` |
 | `FindingSeverity` | Enum: `critical`, `high`, `medium`, `low`, `info` |
 | `FindingStatus` | Enum: `open`, `confirmed`, `false_positive`, `accepted`, `fixed` |
+
+## NIS2 Compass types
+
+| Type | Description |
+|------|-------------|
+| `Organisation` | A registered NIS2-subject organisation |
+| `Assessment` | A NIS2 Article 21 compliance assessment with status lifecycle |
+| `Control` | One of 10 Article 21(2) measure entries (a–j) within an assessment |
+| `NIS2AuditEntry` | An immutable WORM-chained NIS2 audit log entry |
+| `CreateOrganisationRequest` | Body for `POST /organisations` |
+| `CreateAssessmentRequest` | Body for `POST /organisations/{id}/assessments` |
+| `PatchAssessmentRequest` | Body for `PATCH /assessments/{id}` |
+| `PatchControlRequest` | Body for `PATCH /assessments/{id}/controls/{measure_ref}` |
 
 ## Licence
 

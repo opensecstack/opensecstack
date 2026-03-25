@@ -113,6 +113,10 @@ class Control(db.Model):
     remediation_due = db.Column(db.Date, nullable=True)
     risk_score = db.Column(db.Numeric(3, 1), nullable=True)
     notes = db.Column(db.Text, nullable=True)
+    remediation_owner = db.Column(db.String(255), nullable=True)
+    remediation_status = db.Column(db.String(20), nullable=True, server_default='not_started')
+    external_ticket_url = db.Column(db.Text, nullable=True)
+    remediation_notes = db.Column(db.Text, nullable=True)
     assessed_by = db.Column(db.String(255), nullable=True)
     assessed_at = db.Column(db.DateTime(timezone=True), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text('NOW()'))
@@ -134,6 +138,10 @@ class Control(db.Model):
             'remediation_due': self.remediation_due.isoformat() if self.remediation_due else None,
             'risk_score': float(self.risk_score) if self.risk_score is not None else None,
             'notes': self.notes,
+            'remediation_owner': self.remediation_owner,
+            'remediation_status': self.remediation_status,
+            'external_ticket_url': self.external_ticket_url,
+            'remediation_notes': self.remediation_notes,
             'assessed_by': self.assessed_by,
             'assessed_at': self.assessed_at.isoformat() if self.assessed_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,

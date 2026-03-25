@@ -17,6 +17,7 @@ func RegisterRoutes(
 	findings *handlers.Findings,
 	specs *handlers.Specs,
 	audit *handlers.Audit,
+	apiKeys *handlers.APIKeys,
 	cfg *config.Config,
 ) {
 	r.Route("/api/v1", func(r chi.Router) {
@@ -52,6 +53,13 @@ func RegisterRoutes(
 
 			// Audit log.
 			r.Get("/audit", audit.List)
+
+			// API key management.
+			r.Route("/api-keys", func(r chi.Router) {
+				r.Get("/", apiKeys.List)
+				r.Post("/", apiKeys.Create)
+				r.Delete("/{id}", apiKeys.Revoke)
+			})
 		})
 	})
 }

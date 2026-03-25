@@ -1,4 +1,4 @@
-import type { Organisation, Assessment, Control, AuditEntry } from './types'
+import type { Organisation, Assessment, Control, AuditEntry, Artifact } from './types'
 
 const BASE = '/api/v1'
 const TOKEN_KEY = 'nis2compass_token'
@@ -126,12 +126,71 @@ export const api = {
         remediation_due: string
         risk_score: number
         evidence: Record<string, unknown>
+        remediation_owner: string
+        remediation_status: string
+        external_ticket_url: string
+        remediation_notes: string
       }>,
     ) =>
       request<Control>(`/assessments/${assessmentId}/controls/${measureRef}`, {
         method: 'PATCH',
         body: JSON.stringify(data),
       }),
+  },
+
+  artifacts: {
+    list: (assessmentId: string) =>
+      request<Artifact[]>(`/assessments/${assessmentId}/artifacts`),
+
+    download: async (artifactId: string): Promise<Blob> => {
+      const token = localStorage.getItem(TOKEN_KEY)
+      const res = await fetch(`${BASE}/artifacts/${artifactId}/download`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      })
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem(TOKEN_KEY)
+          window.location.reload()
+        }
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error ?? res.statusText)
+      }
+      return res.blob()
+    },
+
+    delete: (artifactId: string) =>
+      request<void>(`/artifacts/${artifactId}`, { method: 'DELETE' }),
+
+    upload: async (
+      assessmentId: string,
+      file: File,
+      type: string,
+      description?: string,
+    ): Promise<Artifact> => {
+      const token = localStorage.getItem(TOKEN_KEY)
+      const form = new FormData()
+      form.append('file', file)
+      form.append('type', type)
+      if (description) form.append('description', description)
+      const res = await fetch(`${BASE}/assessments/${assessmentId}/artifacts`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: form,
+      })
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem(TOKEN_KEY)
+          window.location.reload()
+        }
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error ?? res.statusText)
+      }
+      return res.json()
+    },
   },
 
   reports: {

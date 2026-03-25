@@ -117,8 +117,114 @@ type createScanRequest struct {
 	AuthHeader string   `json:"auth_header,omitempty"`
 }
 
-// apiError is the JSON error body returned by APIGuard on 4xx/5xx responses.
+// apiError is the JSON error body returned by APIGuard and NIS2 Compass on
+// 4xx/5xx responses.
 type apiError struct {
 	Error   string `json:"error"`
 	Message string `json:"message"`
+}
+
+// ----------------------------------------------------------------------------
+// NIS2 Compass types
+// ----------------------------------------------------------------------------
+
+// Organisation represents a registered NIS2-subject organisation.
+type Organisation struct {
+	ID                 string    `json:"id"`
+	Name               string    `json:"name"`
+	Industry           string    `json:"industry"`
+	Country            string    `json:"country"`
+	Size               string    `json:"size"`
+	EntityType         string    `json:"entity_type"`
+	RegistrationNumber string    `json:"registration_number,omitempty"`
+	ContactEmail       string    `json:"contact_email,omitempty"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
+// Assessment represents a NIS2 compliance assessment for an organisation.
+// The server may include a summary block (aggregated control counts and overall
+// risk score) on single-record GET and PATCH responses.
+type Assessment struct {
+	ID               string     `json:"id"`
+	OrgID            string     `json:"org_id"`
+	Title            string     `json:"title"`
+	Status           string     `json:"status"`
+	FrameworkVersion string     `json:"framework_version"`
+	Scope            string     `json:"scope,omitempty"`
+	Assessor         string     `json:"assessor,omitempty"`
+	DueDate          string     `json:"due_date,omitempty"`
+	CompletedAt      *time.Time `json:"completed_at,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+}
+
+// Control represents one of the 10 NIS2 Article 21(2) measure entries within
+// an assessment (measures a through j).
+type Control struct {
+	ID              string   `json:"id"`
+	AssessmentID    string   `json:"assessment_id"`
+	MeasureRef      string   `json:"measure_ref"`
+	ArticleRef      string   `json:"article_ref"`
+	Title           string   `json:"title"`
+	NistCategory    string   `json:"nist_category"`
+	Status          string   `json:"status"`
+	RiskScore       *float64 `json:"risk_score,omitempty"`
+	Notes           string   `json:"notes,omitempty"`
+	GapDescription  string   `json:"gap_description,omitempty"`
+	RemediationPlan string   `json:"remediation_plan,omitempty"`
+}
+
+// CreateOrganisationRequest is the body sent to POST /api/v1/organisations.
+type CreateOrganisationRequest struct {
+	Name               string `json:"name"`
+	Industry           string `json:"industry"`
+	Country            string `json:"country"`
+	Size               string `json:"size,omitempty"`
+	EntityType         string `json:"entity_type,omitempty"`
+	RegistrationNumber string `json:"registration_number,omitempty"`
+	ContactEmail       string `json:"contact_email,omitempty"`
+}
+
+// CreateAssessmentRequest is the body sent to
+// POST /api/v1/organisations/{org_id}/assessments.
+type CreateAssessmentRequest struct {
+	Title            string `json:"title"`
+	FrameworkVersion string `json:"framework_version,omitempty"`
+	Scope            string `json:"scope,omitempty"`
+	Assessor         string `json:"assessor,omitempty"`
+	DueDate          string `json:"due_date,omitempty"`
+}
+
+// PatchAssessmentRequest is the body sent to PATCH /api/v1/assessments/{id}.
+// All fields are optional; only non-zero fields are sent.
+type PatchAssessmentRequest struct {
+	Status   string `json:"status,omitempty"`
+	Title    string `json:"title,omitempty"`
+	Assessor string `json:"assessor,omitempty"`
+}
+
+// PatchControlRequest is the body sent to
+// PATCH /api/v1/assessments/{id}/controls/{measure_ref}.
+// All fields are optional; only non-zero fields are sent.
+type PatchControlRequest struct {
+	Status          string   `json:"status,omitempty"`
+	Notes           string   `json:"notes,omitempty"`
+	GapDescription  string   `json:"gap_description,omitempty"`
+	RemediationPlan string   `json:"remediation_plan,omitempty"`
+	RiskScore       *float64 `json:"risk_score,omitempty"`
+}
+
+// NIS2AuditEntry is a single entry in the NIS2 Compass immutable audit log.
+// The chain_hash and prev_hash fields provide a WORM integrity chain.
+type NIS2AuditEntry struct {
+	ID           string    `json:"id"`
+	Action       string    `json:"action"`
+	Actor        string    `json:"actor"`
+	ResourceType string    `json:"resource_type"`
+	ResourceID   string    `json:"resource_id,omitempty"`
+	RiskClass    string    `json:"risk_class"`
+	ChainHash    string    `json:"chain_hash"`
+	PrevHash     string    `json:"prev_hash,omitempty"`
+	Timestamp    time.Time `json:"timestamp"`
 }

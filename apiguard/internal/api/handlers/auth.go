@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,12 +15,14 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/opensecstack/apiguard/internal/config"
+	"github.com/opensecstack/apiguard/internal/db"
 )
 
 // Auth handles authentication endpoints.
 type Auth struct {
 	logger zerolog.Logger
 	cfg    *config.Config
+	db     *db.DB
 }
 
 // NewAuth creates a new Auth handler.
@@ -26,6 +30,16 @@ func NewAuth(logger zerolog.Logger, cfg *config.Config) *Auth {
 	return &Auth{
 		logger: logger.With().Str("handler", "auth").Logger(),
 		cfg:    cfg,
+	}
+}
+
+// NewAuthWithDB creates a new Auth handler that can also validate keys stored
+// in the database, falling back to the static config keys when DB is unavailable.
+func NewAuthWithDB(logger zerolog.Logger, cfg *config.Config, database *db.DB) *Auth {
+	return &Auth{
+		logger: logger.With().Str("handler", "auth").Logger(),
+		cfg:    cfg,
+		db:     database,
 	}
 }
 
@@ -47,7 +61,9 @@ func (a *Auth) Token(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "authentication not configured: jwt_secret is missing")
 		return
 	}
-	if len(a.cfg.Auth.APIKeys) == 0 {
+	// Allow DB-managed keys to substitute for static config keys, so only
+	// fail when both sources are absent.
+	if len(a.cfg.Auth.APIKeys) == 0 && a.db == nil {
 		writeError(w, http.StatusServiceUnavailable, "authentication not configured: no api_keys defined — set auth.api_keys in config or APIGUARD_AUTH_API_KEYS env var")
 		return
 	}
@@ -89,8 +105,26 @@ func (a *Auth) Token(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// validAPIKey returns true when key matches one of the configured API keys.
+// validAPIKey returns true when key matches either an active DB-managed key or
+// one of the statically configured API keys.
+//
+// DB lookup is attempted first. If the DB is unavailable the error is logged
+// and validation falls through to the static config keys so the system remains
+// operational (same graceful-degradation pattern used elsewhere).
 func (a *Auth) validAPIKey(key string) bool {
+	// --- DB-backed key check ---
+	if a.db != nil {
+		sum := sha256.Sum256([]byte(key))
+		keyHash := hex.EncodeToString(sum[:])
+		found, err := a.db.LookupAPIKeyByHash(context.Background(), keyHash)
+		if err != nil {
+			a.logger.Warn().Err(err).Msg("db api key lookup failed, falling back to config keys")
+		} else if found {
+			return true
+		}
+	}
+
+	// --- Static config key fallback ---
 	for _, k := range a.cfg.Auth.APIKeys {
 		if hmac.Equal([]byte(k), []byte(key)) {
 			return true

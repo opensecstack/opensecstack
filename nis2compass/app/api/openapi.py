@@ -84,6 +84,10 @@ _SPEC = {
                     "remediation_due": {"type": "string", "format": "date", "nullable": True},
                     "risk_score": {"type": "number", "minimum": 0, "maximum": 10, "nullable": True},
                     "notes": {"type": "string", "nullable": True},
+                    "remediation_owner": {"type": "string", "nullable": True, "maxLength": 255, "description": "Person or team responsible for remediation"},
+                    "remediation_status": {"type": "string", "nullable": True, "enum": ["not_started", "in_progress", "blocked", "completed"], "description": "Progress of the remediation effort"},
+                    "external_ticket_url": {"type": "string", "nullable": True, "maxLength": 2048, "description": "URL of the linked Jira/GitHub/Linear ticket (must start with http:// or https://)"},
+                    "remediation_notes": {"type": "string", "nullable": True, "description": "Free-text notes on the remediation effort"},
                     "assessed_by": {"type": "string", "nullable": True},
                     "assessed_at": {"type": "string", "format": "date-time", "nullable": True}
                 }
@@ -211,7 +215,7 @@ _SPEC = {
         "/assessments/{id}/controls/{measure_ref}": {
             "parameters": [{"name": "id", "in": "path", "required": True, "schema": {"type": "string", "format": "uuid"}}, {"name": "measure_ref", "in": "path", "required": True, "schema": {"type": "string", "enum": list("abcdefghij")}}],
             "get": {"tags": ["Controls"], "summary": "Get control by measure ref", "responses": {"200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Control"}}}}}},
-            "patch": {"tags": ["Controls"], "summary": "Update control status and evidence", "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {"status": {"type": "string"}, "evidence": {"type": "object"}, "gap_description": {"type": "string"}, "remediation_plan": {"type": "string"}, "remediation_due": {"type": "string", "format": "date"}, "risk_score": {"type": "number"}, "notes": {"type": "string"}}}}}}, "responses": {"200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Control"}}}}}}
+            "patch": {"tags": ["Controls"], "summary": "Update control status and evidence", "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {"status": {"type": "string", "enum": ["not_assessed", "compliant", "partially_compliant", "non_compliant", "not_applicable"]}, "evidence": {"type": "object"}, "gap_description": {"type": "string"}, "remediation_plan": {"type": "string"}, "remediation_due": {"type": "string", "format": "date"}, "risk_score": {"type": "number", "minimum": 0, "maximum": 10}, "notes": {"type": "string"}, "remediation_owner": {"type": "string", "maxLength": 255, "description": "Person or team responsible for remediation"}, "remediation_status": {"type": "string", "enum": ["not_started", "in_progress", "blocked", "completed"], "description": "Progress of the remediation effort"}, "external_ticket_url": {"type": "string", "maxLength": 2048, "description": "URL of the linked Jira/GitHub/Linear ticket (must start with http:// or https://)"}, "remediation_notes": {"type": "string", "description": "Free-text notes on the remediation effort"}}}}}}, "responses": {"200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Control"}}}}}}
         },
         "/assessments/{id}/artifacts": {
             "parameters": [{"name": "id", "in": "path", "required": True, "schema": {"type": "string", "format": "uuid"}}],
@@ -222,6 +226,22 @@ _SPEC = {
             "parameters": [{"name": "id", "in": "path", "required": True, "schema": {"type": "string", "format": "uuid"}}],
             "get": {"tags": ["Artifacts"], "summary": "Get artifact metadata", "responses": {"200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Artifact"}}}}}},
             "delete": {"tags": ["Artifacts"], "summary": "Delete artifact record", "responses": {"204": {"description": "Deleted"}}}
+        },
+        "/artifacts/{id}/download": {
+            "parameters": [{"name": "id", "in": "path", "required": True, "schema": {"type": "string", "format": "uuid"}}],
+            "get": {
+                "tags": ["Artifacts"],
+                "summary": "Download artifact file",
+                "description": "Streams the artifact file as an attachment. Returns 410 Gone if the file has been removed from disk.",
+                "responses": {
+                    "200": {
+                        "description": "File content streamed as attachment",
+                        "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}
+                    },
+                    "404": {"description": "Artifact record not found", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
+                    "410": {"description": "File no longer available on disk", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+                }
+            }
         },
         "/audit": {
             "get": {

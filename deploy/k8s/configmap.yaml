@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opensecstack-config
+  namespace: opensecstack
+  labels:
+    app.kubernetes.io/part-of: opensecstack
+data:
+  # Database names
+  APIGUARD_DB_NAME: "apiguard"
+  NIS2_DB_NAME: "nis2compass"
+
+  # Shared infrastructure hostnames (Kubernetes service DNS names)
+  POSTGRES_HOST: "postgres-service"
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: "apiguard"
+
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+
+  # Application log level
+  LOG_LEVEL: "info"

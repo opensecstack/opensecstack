@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: apiguard-service
+  namespace: opensecstack
+  labels:
+    app: apiguard
+    app.kubernetes.io/part-of: opensecstack
+spec:
+  type: ClusterIP
+  selector:
+    app: apiguard
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP

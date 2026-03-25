@@ -9,6 +9,7 @@ controls_bp = Blueprint('controls', __name__)
 
 VALID_STATUSES = {'not_assessed', 'compliant', 'partially_compliant', 'non_compliant', 'not_applicable'}
 VALID_MEASURE_REFS = set('abcdefghij')
+VALID_REMEDIATION_STATUSES = {'not_started', 'in_progress', 'blocked', 'completed'}
 
 
 # ------------------------------------------------------------------ #
@@ -117,6 +118,26 @@ def update_control(assessment_id, measure_ref):
         control.risk_score = score
     if 'notes' in data:
         control.notes = data['notes']
+
+    if 'remediation_owner' in data:
+        control.remediation_owner = data['remediation_owner']
+
+    if 'remediation_status' in data:
+        if data['remediation_status'] not in VALID_REMEDIATION_STATUSES:
+            return jsonify({'error': f'remediation_status must be one of: {", ".join(sorted(VALID_REMEDIATION_STATUSES))}', 'code': 'INVALID_INPUT'}), 400
+        control.remediation_status = data['remediation_status']
+
+    if 'external_ticket_url' in data:
+        url = data['external_ticket_url']
+        if url is not None:
+            if not isinstance(url, str) or not (url.startswith('http://') or url.startswith('https://')):
+                return jsonify({'error': 'external_ticket_url must start with http:// or https://', 'code': 'INVALID_INPUT'}), 400
+            if len(url) > 2048:
+                return jsonify({'error': 'external_ticket_url must not exceed 2048 characters', 'code': 'INVALID_INPUT'}), 400
+        control.external_ticket_url = url
+
+    if 'remediation_notes' in data:
+        control.remediation_notes = data['remediation_notes']
 
     # Determine risk_class for audit entry
     after = control.to_dict()

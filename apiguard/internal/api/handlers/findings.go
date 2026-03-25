@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 
@@ -9,6 +11,28 @@ import (
 
 	"github.com/opensecstack/apiguard/internal/db"
 )
+
+// auditLog appends a CITADEL audit log entry. Errors are logged as warnings.
+func (f *Findings) auditLog(ctx context.Context, action db.AuditAction, resourceType string, resourceID *uuid.UUID, ip, ua string, meta map[string]interface{}) {
+	metaJSON, _ := json.Marshal(meta)
+	entry := &db.AuditLog{
+		ActorID:      "system",
+		ActorType:    "system",
+		Action:       action,
+		ResourceType: resourceType,
+		ResourceID:   resourceID,
+		Metadata:     metaJSON,
+	}
+	if ip != "" {
+		entry.IPAddress = sql.NullString{String: ip, Valid: true}
+	}
+	if ua != "" {
+		entry.UserAgent = sql.NullString{String: ua, Valid: true}
+	}
+	if err := f.db.AppendAuditLog(ctx, entry); err != nil {
+		f.logger.Warn().Err(err).Str("action", string(action)).Msg("audit log write failed")
+	}
+}
 
 // Findings handles finding-related API endpoints.
 type Findings struct {
@@ -137,6 +161,9 @@ func (f *Findings) Update(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to update finding")
 		return
 	}
+
+	f.auditLog(r.Context(), db.AuditActionFindingStatusChanged, "findings", &id,
+		r.RemoteAddr, r.UserAgent(), map[string]interface{}{"status": req.Status, "note": req.Note})
 
 	// Return the updated finding.
 	finding, err := f.db.GetFinding(r.Context(), id)

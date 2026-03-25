@@ -118,6 +118,58 @@ type FindingFilters struct {
 	ModuleID *string
 }
 
+// AuditAction enumerates the event types recorded in the audit log.
+type AuditAction string
+
+const (
+	AuditActionScanCreated          AuditAction = "scan_created"
+	AuditActionScanStarted          AuditAction = "scan_started"
+	AuditActionScanCompleted        AuditAction = "scan_completed"
+	AuditActionScanFailed           AuditAction = "scan_failed"
+	AuditActionScanDeleted          AuditAction = "scan_deleted"
+	AuditActionFindingTriaged       AuditAction = "finding_triaged"
+	AuditActionFindingStatusChanged AuditAction = "finding_status_changed"
+	AuditActionSpecUploaded         AuditAction = "spec_uploaded"
+	AuditActionSpecParsed           AuditAction = "spec_parsed"
+	AuditActionReportGenerated      AuditAction = "report_generated"
+	AuditActionReportExported       AuditAction = "report_exported"
+)
+
+// AuditLog represents a row in the audit_log table.
+type AuditLog struct {
+	ID           uuid.UUID       `json:"id"`
+	ActorID      string          `json:"actor_id"`
+	ActorType    string          `json:"actor_type"`
+	Action       AuditAction     `json:"action"`
+	ResourceType string          `json:"resource_type"`
+	ResourceID   *uuid.UUID      `json:"resource_id"`
+	IPAddress    sql.NullString  `json:"ip_address"`
+	UserAgent    sql.NullString  `json:"user_agent"`
+	BeforeState  json.RawMessage `json:"before_state"`
+	AfterState   json.RawMessage `json:"after_state"`
+	Metadata     json.RawMessage `json:"metadata"`
+	PrevHash     *string         `json:"prev_hash"`
+	ChainHash    string          `json:"chain_hash"`
+	CreatedAt    time.Time       `json:"created_at"`
+}
+
+// APISpec represents a row in the api_specs table.
+type APISpec struct {
+	ID            uuid.UUID       `json:"id"`
+	SpecHash      string          `json:"spec_hash"`
+	SpecURL       sql.NullString  `json:"spec_url"`
+	SpecFormat    string          `json:"spec_format"`
+	Title         sql.NullString  `json:"title"`
+	Version       sql.NullString  `json:"version"`
+	BaseURL       sql.NullString  `json:"base_url"`
+	EndpointCount int             `json:"endpoint_count"`
+	AuthSchemes   json.RawMessage `json:"auth_schemes"`
+	RawSpec       sql.NullString  `json:"raw_spec"`
+	ParsedIR      json.RawMessage `json:"parsed_ir"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+}
+
 // APIInventory represents a row in the api_inventory table.
 type APIInventory struct {
 	ID            uuid.UUID      `json:"id"`

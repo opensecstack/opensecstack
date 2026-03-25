@@ -22,6 +22,29 @@ import (
 	"github.com/opensecstack/apiguard/internal/scanner"
 )
 
+// auditLog appends a CITADEL audit log entry. Errors are logged as warnings
+// but never returned to callers — audit failures must not break normal operations.
+func (s *Scans) auditLog(ctx context.Context, action db.AuditAction, resourceType string, resourceID *uuid.UUID, ip, ua string, meta map[string]interface{}) {
+	metaJSON, _ := json.Marshal(meta)
+	entry := &db.AuditLog{
+		ActorID:      "system",
+		ActorType:    "system",
+		Action:       action,
+		ResourceType: resourceType,
+		ResourceID:   resourceID,
+		Metadata:     metaJSON,
+	}
+	if ip != "" {
+		entry.IPAddress = sql.NullString{String: ip, Valid: true}
+	}
+	if ua != "" {
+		entry.UserAgent = sql.NullString{String: ua, Valid: true}
+	}
+	if err := s.db.AppendAuditLog(ctx, entry); err != nil {
+		s.logger.Warn().Err(err).Str("action", string(action)).Msg("audit log write failed")
+	}
+}
+
 // Scans handles scan-related API endpoints.
 type Scans struct {
 	logger  zerolog.Logger
@@ -85,6 +108,8 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	scanID := scan.ID
+	s.auditLog(r.Context(), db.AuditActionScanCreated, "scans", &scanID,
+		r.RemoteAddr, r.UserAgent(), map[string]interface{}{"target": req.Target})
 
 	// Build scanner request.
 	scanReq := scanner.ScanRequest{
@@ -122,6 +147,7 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 		if err := s.db.UpdateScanStatus(bgCtx, scanID, db.ScanStatusRunning); err != nil {
 			s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to set scan status to running")
 		}
+		s.auditLog(bgCtx, db.AuditActionScanStarted, "scans", &scanID, "", "", nil)
 
 		result, err := s.scanner.Run(bgCtx, scanReq)
 		if err != nil {
@@ -129,6 +155,8 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 			if dbErr := s.db.UpdateScanError(bgCtx, scanID, err.Error()); dbErr != nil {
 				s.logger.Error().Err(dbErr).Str("scan_id", scanID.String()).Msg("failed to record scan error")
 			}
+			s.auditLog(bgCtx, db.AuditActionScanFailed, "scans", &scanID, "", "",
+				map[string]interface{}{"error": err.Error()})
 			return
 		}
 
@@ -186,6 +214,31 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 		if err := s.db.UpdateScanStatus(bgCtx, scanID, db.ScanStatusCompleted); err != nil {
 			s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to set scan status to completed")
 		}
+
+		// Upsert api_spec and link it to this scan if we have a spec hash.
+		if result.SpecHash != "" {
+			specURL := sql.NullString{}
+			if req.SpecURL != "" {
+				specURL = sql.NullString{String: req.SpecURL, Valid: true}
+			}
+			spec := &db.APISpec{
+				SpecHash: result.SpecHash,
+				SpecURL:  specURL,
+				BaseURL:  sql.NullString{String: req.Target, Valid: true},
+			}
+			if err := s.db.UpsertAPISpec(bgCtx, spec); err != nil {
+				s.logger.Warn().Err(err).Str("scan_id", scanID.String()).Msg("failed to upsert api_spec")
+			} else {
+				if err := s.db.LinkScanAPISpec(bgCtx, scanID, spec.ID); err != nil {
+					s.logger.Warn().Err(err).Str("scan_id", scanID.String()).Msg("failed to link api_spec to scan")
+				}
+				s.auditLog(bgCtx, db.AuditActionSpecParsed, "api_specs", &spec.ID, "", "",
+					map[string]interface{}{"spec_hash": result.SpecHash})
+			}
+		}
+
+		s.auditLog(bgCtx, db.AuditActionScanCompleted, "scans", &scanID, "", "",
+			map[string]interface{}{"total_findings": summary.TotalFindings})
 	}()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -405,6 +458,9 @@ func (s *Scans) Report(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.auditLog(r.Context(), db.AuditActionReportGenerated, "scans", &id,
+		r.RemoteAddr, r.UserAgent(), map[string]interface{}{"format": format})
+
 	contentType := reportContentType(format)
 	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(http.StatusOK)
@@ -428,6 +484,8 @@ func (s *Scans) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.auditLog(r.Context(), db.AuditActionScanDeleted, "scans", &id,
+		r.RemoteAddr, r.UserAgent(), nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 

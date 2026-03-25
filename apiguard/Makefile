@@ -1,4 +1,4 @@
-.PHONY: dev test test-coverage test-fp bench build lint fmt migrate scan-example clean docs release
+.PHONY: dev test test-coverage test-fp bench build lint fmt migrate migrate-down db-reset seed logs scan-example clean docs release
 
 # Start full local stack with hot reload
 dev:
@@ -45,6 +45,29 @@ fmt:
 # Run pending PostgreSQL migrations
 migrate:
 	go run ./cmd/migrate up
+
+# Roll back the last applied migration
+migrate-down:
+	docker compose -f docker-compose.dev.yml run --rm migrate \
+		-path=/migrations \
+		-database=postgres://apiguard:devpassword@postgres:5432/apiguard?sslmode=disable \
+		down 1
+
+# Drop and recreate the dev database, then re-run all migrations
+db-reset:
+	docker compose -f docker-compose.dev.yml exec postgres \
+		psql -U apiguard -c "DROP DATABASE IF EXISTS apiguard;" postgres
+	docker compose -f docker-compose.dev.yml exec postgres \
+		psql -U apiguard -c "CREATE DATABASE apiguard;" postgres
+	$(MAKE) migrate
+
+# Run the seed script to populate dev data
+seed:
+	go run ./cmd/seed
+
+# Tail live API logs from the dev stack
+logs:
+	docker compose -f docker-compose.dev.yml logs -f apiguard-api
 
 # Run APIGuard against VAmPI example target
 scan-example:

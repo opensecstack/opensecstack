@@ -8,7 +8,7 @@
 Authorization: Bearer <token>
 ```
 
-Tokens are obtained via `POST /api/v1/auth/token` and carry a finite expiry. All timestamps are ISO 8601 / RFC 3339 in UTC.
+Tokens are obtained via `POST /api/v1/auth/token` and carry a finite expiry. All timestamps are ISO 8601 / RFC 3339 in UTC. The `GET /openapi.json` and `GET /docs` endpoints are public and do not require authentication.
 
 ---
 
@@ -22,9 +22,11 @@ Tokens are obtained via `POST /api/v1/auth/token` and carry a finite expiry. All
 6. [Artifacts](#artifacts)
 7. [Audit Log](#audit-log)
 8. [Control Templates](#control-templates)
-9. [Error Responses](#error-responses)
-10. [Pagination](#pagination)
-11. [Rate Limiting](#rate-limiting)
+9. [API Key Management](#api-key-management)
+10. [API Schema](#api-schema)
+11. [Error Responses](#error-responses)
+12. [Pagination](#pagination)
+13. [Rate Limiting](#rate-limiting)
 
 ---
 
@@ -768,6 +770,158 @@ Retrieve the reference library of all 10 NIS2 Article 21(2) control templates. T
 ```
 
 Returns all 10 templates in measure_ref order (a through j). This endpoint does not paginate.
+
+---
+
+## API Key Management
+
+API keys are the credentials used to obtain short-lived JWTs via `POST /api/v1/auth/token`. All three endpoints require a valid Bearer JWT.
+
+### GET /api/v1/api-keys
+
+List all active API keys for the authenticated account. The plaintext key value is never returned; only metadata is included.
+
+**Auth required:** Yes
+
+**Response — 200 OK**
+
+```json
+[
+  {
+    "id": "018e5a1b-7c3d-7000-a1b2-c3d4e5f60040",
+    "label": "ci-pipeline-prod",
+    "scope": "read_write",
+    "is_active": true,
+    "created_by": "j.smith@acme-energy.example.com",
+    "created_at": "2026-01-20T09:00:00Z",
+    "last_used_at": "2026-03-24T22:15:00Z"
+  }
+]
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | UUID | Unique identifier for the API key |
+| `label` | string \| null | Human-readable label assigned at creation |
+| `scope` | string | One of: `read`, `read_write` |
+| `is_active` | boolean | `true` if the key has not been revoked |
+| `created_by` | string \| null | Actor who created the key |
+| `created_at` | ISO 8601 timestamp | Creation time |
+| `last_used_at` | ISO 8601 timestamp \| null | Time the key was last used to obtain a token; `null` if never used |
+
+---
+
+### POST /api/v1/api-keys
+
+Create a new API key. The raw key value is returned **once** in the response and is never stored or retrievable again. Store it securely immediately after creation.
+
+**Auth required:** Yes
+
+**Request body**
+
+```json
+{
+  "label": "ci-pipeline-prod",
+  "scope": "read_write"
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `label` | string | No | Human-readable label to identify the key's purpose |
+| `scope` | string | No | One of: `read`, `read_write`. Defaults to `read_write` |
+
+**Response — 201 Created**
+
+```json
+{
+  "id": "018e5a1b-7c3d-7000-a1b2-c3d4e5f60040",
+  "label": "ci-pipeline-prod",
+  "scope": "read_write",
+  "is_active": true,
+  "created_by": "j.smith@acme-energy.example.com",
+  "created_at": "2026-01-20T09:00:00Z",
+  "last_used_at": null,
+  "key": "nis2_a3f1c2e4b5d6...",
+  "warning": "This is the only time the plaintext key will be shown. Store it securely."
+}
+```
+
+The response extends the standard key metadata object with two additional fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `key` | string | The plaintext API key. Begins with the prefix `nis2_`. **Shown once only — not recoverable.** |
+| `warning` | string | Reminder that the plaintext key will not be shown again |
+
+**Status codes**
+
+| Code | Condition |
+|---|---|
+| 201 | API key created |
+| 400 | `scope` is not one of the accepted values |
+
+---
+
+### DELETE /api/v1/api-keys/{key_id}
+
+Revoke an API key. The key's `is_active` flag is set to `false` and it can no longer be used to obtain a JWT. This operation is recorded in the audit log with risk class `WARNING`.
+
+**Auth required:** Yes
+
+**Path parameters**
+
+| Parameter | Description |
+|---|---|
+| `key_id` | UUID of the API key to revoke |
+
+**Response — 204 No Content**
+
+Empty body.
+
+**Status codes**
+
+| Code | Condition |
+|---|---|
+| 204 | API key revoked |
+| 404 | No API key exists with the given key_id |
+
+---
+
+## API Schema
+
+### GET /openapi.json
+
+Returns the full OpenAPI 3.0.3 specification for the NIS2 Compass API as a JSON document. This endpoint is used by `GET /docs` to populate the Swagger UI.
+
+**Auth required:** No
+
+**Response — 200 OK**
+
+Returns an `application/json` body containing the OpenAPI 3.0.3 object, including all path definitions, component schemas, and security scheme declarations.
+
+```json
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "NIS2 Compass API",
+    "version": "1.0.0"
+  },
+  "paths": { "...": {} }
+}
+```
+
+---
+
+### GET /docs
+
+Serves the interactive Swagger UI. The UI loads the specification from `GET /openapi.json` and allows direct in-browser exploration and testing of all API endpoints.
+
+**Auth required:** No
+
+**Response — 200 OK**
+
+Returns an `text/html` page embedding Swagger UI (via the `swagger-ui-dist` CDN bundle). Open this URL in a browser to explore and test the API interactively.
 
 ---
 

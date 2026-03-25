@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard'
 import Scans from './pages/Scans'
 import ScanDetail from './pages/ScanDetail'
 import Findings from './pages/Findings'
+import AuditLog from './pages/AuditLog'
 import Login from './pages/Login'
 import './App.css'
 
@@ -24,6 +25,9 @@ function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
         <NavLink to="/findings" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
           Findings
         </NavLink>
+        <NavLink to="/audit" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+          Audit Log
+        </NavLink>
         <button className="nav-item nav-logout" onClick={onLogout}>
           Sign out
         </button>
@@ -34,6 +38,7 @@ function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
           <Route path="/scans" element={<Scans />} />
           <Route path="/scans/:id" element={<ScanDetail />} />
           <Route path="/findings" element={<Findings />} />
+          <Route path="/audit" element={<AuditLog />} />
         </Routes>
       </main>
     </div>

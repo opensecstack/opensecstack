@@ -1,7 +1,7 @@
 import hashlib
 import os
 import uuid as uuid_lib
-from flask import Blueprint, request, jsonify, g, current_app
+from flask import Blueprint, request, jsonify, g, current_app, send_file
 from ..extensions import db
 from ..models import Assessment, Control, Artifact
 from ..auth import require_auth
@@ -128,6 +128,39 @@ def get_artifact(artifact_id):
     if artifact is None:
         return jsonify({'error': 'Artifact not found', 'code': 'NOT_FOUND'}), 404
     return jsonify(artifact.to_dict()), 200
+
+
+# ------------------------------------------------------------------ #
+# GET /api/v1/artifacts/<id>/download                                  #
+# ------------------------------------------------------------------ #
+
+@artifacts_bp.get('/artifacts/<uuid:artifact_id>/download')
+@require_auth
+def download_artifact(artifact_id):
+    artifact = db.session.get(Artifact, artifact_id)
+    if artifact is None:
+        return jsonify({'error': 'Artifact not found', 'code': 'NOT_FOUND'}), 404
+
+    if not artifact.file_path or not os.path.isfile(artifact.file_path):
+        return jsonify({'error': 'File no longer available', 'code': 'FILE_NOT_FOUND'}), 410
+
+    write_audit(
+        db.session,
+        action='artifact_downloaded',
+        actor=g.actor,
+        resource_type='artifact',
+        resource_id=artifact.id,
+        risk_class='INFO',
+        metadata={'filename': artifact.filename, 'type': artifact.type, 'hash': artifact.hash},
+    )
+    db.session.commit()
+
+    return send_file(
+        artifact.file_path,
+        mimetype=artifact.mime_type,
+        as_attachment=True,
+        download_name=artifact.filename,
+    )
 
 
 # ------------------------------------------------------------------ #

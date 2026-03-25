@@ -1,5 +1,13 @@
+import io
 from datetime import datetime, timezone, date
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, send_file
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.platypus import (
+    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable,
+)
 from ..extensions import db
 from ..models import Assessment, Control, ControlTemplate, Organisation
 from ..auth import require_auth
@@ -228,3 +236,329 @@ def delete_assessment(assessment_id):
     db.session.delete(assessment)
     db.session.commit()
     return '', 204
+
+
+# ------------------------------------------------------------------ #
+# PDF generation helper                                                #
+# ------------------------------------------------------------------ #
+
+# Colours for each control status (R, G, B) as reportlab Color objects
+_STATUS_COLOURS = {
+    'compliant':           colors.HexColor('#1a7a4a'),   # green
+    'partially_compliant': colors.HexColor('#c87c00'),   # amber
+    'non_compliant':       colors.HexColor('#c0392b'),   # red
+    'not_assessed':        colors.HexColor('#7f8c8d'),   # grey
+    'not_applicable':      colors.HexColor('#7f8c8d'),   # grey
+}
+
+_STATUS_LABELS = {
+    'compliant':           'Compliant',
+    'partially_compliant': 'Partial',
+    'non_compliant':       'Non-Compliant',
+    'not_assessed':        'Not Assessed',
+    'not_applicable':      'N/A',
+}
+
+_NIST_CATEGORIES = ['identify', 'protect', 'detect', 'respond', 'recover']
+
+
+def _generate_pdf(assessment, org, controls, templates):
+    """
+    Build a NIS2 assessment PDF and return it as a BytesIO buffer.
+
+    Parameters
+    ----------
+    assessment : Assessment model instance
+    org        : Organisation model instance
+    controls   : list of Control model instances (ordered by measure_ref)
+    templates  : list of ControlTemplate model instances
+    """
+    buf = io.BytesIO()
+
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        leftMargin=20 * mm,
+        rightMargin=20 * mm,
+        topMargin=20 * mm,
+        bottomMargin=20 * mm,
+    )
+
+    styles = getSampleStyleSheet()
+    W = A4[0] - 40 * mm   # usable page width
+
+    # ---- custom styles --------------------------------------------------
+    title_style = ParagraphStyle(
+        'NIS2Title',
+        parent=styles['Title'],
+        fontSize=22,
+        spaceAfter=4,
+        textColor=colors.HexColor('#1a2a4a'),
+    )
+    h1_style = ParagraphStyle(
+        'NIS2H1',
+        parent=styles['Heading1'],
+        fontSize=14,
+        spaceBefore=10,
+        spaceAfter=4,
+        textColor=colors.HexColor('#1a2a4a'),
+    )
+    h2_style = ParagraphStyle(
+        'NIS2H2',
+        parent=styles['Heading2'],
+        fontSize=11,
+        spaceBefore=6,
+        spaceAfter=2,
+        textColor=colors.HexColor('#2c3e50'),
+    )
+    body_style = styles['BodyText']
+    small_style = ParagraphStyle(
+        'NIS2Small',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=colors.HexColor('#555555'),
+    )
+    footer_style = ParagraphStyle(
+        'NIS2Footer',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=colors.HexColor('#888888'),
+        alignment=1,   # centre
+    )
+    cell_style = ParagraphStyle(
+        'NIS2Cell',
+        parent=styles['Normal'],
+        fontSize=8,
+        leading=10,
+        wordWrap='CJK',
+    )
+
+    story = []
+    generated_at = datetime.now(timezone.utc)
+
+    # ==================================================================
+    # COVER PAGE
+    # ==================================================================
+    story.append(Spacer(1, 20 * mm))
+    story.append(Paragraph('NIS2 Compliance Assessment Report', title_style))
+    story.append(HRFlowable(width=W, thickness=2, color=colors.HexColor('#1a2a4a')))
+    story.append(Spacer(1, 6 * mm))
+
+    cover_data = [
+        ['Organisation:', org.name],
+        ['Industry:', org.industry],
+        ['Country:', org.country],
+        ['Entity type:', org.entity_type.replace('_', ' ').title()],
+        ['Assessment title:', assessment.title],
+        ['Framework:', assessment.framework_version],
+        ['Status:', assessment.status.replace('_', ' ').title()],
+        ['Assessor:', assessment.assessor or '—'],
+        ['Due date:', assessment.due_date.isoformat() if assessment.due_date else '—'],
+        ['Report generated:', generated_at.strftime('%Y-%m-%d %H:%M UTC')],
+    ]
+    cover_table = Table(cover_data, colWidths=[45 * mm, W - 45 * mm])
+    cover_table.setStyle(TableStyle([
+        ('FONTNAME',    (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME',    (1, 0), (1, -1), 'Helvetica'),
+        ('FONTSIZE',    (0, 0), (-1, -1), 10),
+        ('VALIGN',      (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING',  (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.HexColor('#f5f7fa'), colors.white]),
+    ]))
+    story.append(cover_table)
+
+    # ==================================================================
+    # EXECUTIVE SUMMARY
+    # ==================================================================
+    story.append(Spacer(1, 8 * mm))
+    story.append(Paragraph('Executive Summary', h1_style))
+    story.append(HRFlowable(width=W, thickness=1, color=colors.HexColor('#cccccc')))
+    story.append(Spacer(1, 3 * mm))
+
+    total_controls = len(controls)
+    completed_statuses = {'compliant', 'partially_compliant', 'non_compliant', 'not_applicable'}
+    assessed_count = sum(1 for c in controls if c.status in completed_statuses)
+    compliant_count = sum(1 for c in controls if c.status == 'compliant')
+    completion_pct = round(assessed_count / total_controls * 100) if total_controls else 0
+
+    # NIST category breakdown
+    nist_counts = {cat: 0 for cat in _NIST_CATEGORIES}
+    nist_compliant = {cat: 0 for cat in _NIST_CATEGORIES}
+    for c in controls:
+        cat = c.nist_category
+        if cat in nist_counts:
+            nist_counts[cat] += 1
+            if c.status == 'compliant':
+                nist_compliant[cat] += 1
+
+    summary_text = (
+        f'This report covers <b>{total_controls}</b> NIS2 Article 21(2) controls '
+        f'for <b>{org.name}</b>. '
+        f'<b>{assessed_count}</b> of {total_controls} controls have been assessed '
+        f'(<b>{completion_pct}%</b> completion). '
+        f'<b>{compliant_count}</b> control(s) are fully compliant.'
+    )
+    story.append(Paragraph(summary_text, body_style))
+    story.append(Spacer(1, 4 * mm))
+
+    story.append(Paragraph('NIST CSF Category Breakdown', h2_style))
+    nist_header = ['NIST Category', 'Total Controls', 'Compliant', 'Compliance Rate']
+    nist_rows = [nist_header]
+    for cat in _NIST_CATEGORIES:
+        total_in_cat = nist_counts[cat]
+        comp_in_cat = nist_compliant[cat]
+        rate = f'{round(comp_in_cat / total_in_cat * 100)}%' if total_in_cat else '—'
+        nist_rows.append([cat.title(), str(total_in_cat), str(comp_in_cat), rate])
+
+    nist_col_w = [W * 0.35, W * 0.20, W * 0.20, W * 0.25]
+    nist_table = Table(nist_rows, colWidths=nist_col_w)
+    nist_table.setStyle(TableStyle([
+        ('BACKGROUND',   (0, 0), (-1, 0),  colors.HexColor('#1a2a4a')),
+        ('TEXTCOLOR',    (0, 0), (-1, 0),  colors.white),
+        ('FONTNAME',     (0, 0), (-1, 0),  'Helvetica-Bold'),
+        ('FONTNAME',     (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE',     (0, 0), (-1, -1), 9),
+        ('ALIGN',        (1, 0), (-1, -1), 'CENTER'),
+        ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING',   (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING',(0, 0), (-1, -1), 4),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#f0f4f8'), colors.white]),
+        ('GRID',         (0, 0), (-1, -1), 0.5, colors.HexColor('#cccccc')),
+    ]))
+    story.append(nist_table)
+
+    # ==================================================================
+    # CONTROLS TABLE
+    # ==================================================================
+    story.append(Spacer(1, 8 * mm))
+    story.append(Paragraph('NIS2 Article 21(2) Controls Detail', h1_style))
+    story.append(HRFlowable(width=W, thickness=1, color=colors.HexColor('#cccccc')))
+    story.append(Spacer(1, 3 * mm))
+
+    # Build template lookup for descriptions
+    tmpl_map = {t.measure_ref: t for t in templates}
+
+    ctrl_header = ['Ref', 'Article', 'NIST', 'Control Title', 'Status', 'Evidence', 'Notes']
+    ctrl_col_w = [
+        8  * mm,   # Ref
+        18 * mm,   # Article
+        16 * mm,   # NIST
+        W - 8 - 18 - 16 - 28 - 14 - 30 * mm,  # Title (remaining)
+        28 * mm,   # Status
+        14 * mm,   # Evidence
+        30 * mm,   # Notes
+    ]
+    ctrl_rows = [ctrl_header]
+    # Track row indices where each status appears so we can colour them
+    status_row_map = []   # list of (row_index, status)
+
+    for idx, ctrl in enumerate(sorted(controls, key=lambda c: c.measure_ref)):
+        evidence_count = len(ctrl.evidence) if isinstance(ctrl.evidence, dict) else 0
+        notes_text = (ctrl.notes or '').strip()
+        if len(notes_text) > 80:
+            notes_text = notes_text[:77] + '…'
+
+        status_label = _STATUS_LABELS.get(ctrl.status, ctrl.status)
+
+        ctrl_rows.append([
+            Paragraph(ctrl.measure_ref.upper(), cell_style),
+            Paragraph(ctrl.article_ref, cell_style),
+            Paragraph(ctrl.nist_category.title(), cell_style),
+            Paragraph(ctrl.title, cell_style),
+            Paragraph(f'<b>{status_label}</b>', cell_style),
+            Paragraph(str(evidence_count), cell_style),
+            Paragraph(notes_text, cell_style),
+        ])
+        status_row_map.append((idx + 1, ctrl.status))  # +1 for header row
+
+    ctrl_table = Table(ctrl_rows, colWidths=ctrl_col_w, repeatRows=1)
+
+    # Base style
+    ctrl_style_cmds = [
+        ('BACKGROUND',    (0, 0), (-1, 0),  colors.HexColor('#1a2a4a')),
+        ('TEXTCOLOR',     (0, 0), (-1, 0),  colors.white),
+        ('FONTNAME',      (0, 0), (-1, 0),  'Helvetica-Bold'),
+        ('FONTSIZE',      (0, 0), (-1, -1), 8),
+        ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING',    (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 3),
+        ('GRID',          (0, 0), (-1, -1), 0.5, colors.HexColor('#cccccc')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#f0f4f8'), colors.white]),
+    ]
+
+    # Colour-code the Status column (col index 4) per row
+    for row_idx, status in status_row_map:
+        status_colour = _STATUS_COLOURS.get(status, colors.HexColor('#7f8c8d'))
+        ctrl_style_cmds.append(
+            ('TEXTCOLOR', (4, row_idx), (4, row_idx), status_colour)
+        )
+
+    ctrl_table.setStyle(TableStyle(ctrl_style_cmds))
+    story.append(ctrl_table)
+
+    # ==================================================================
+    # FOOTER
+    # ==================================================================
+    story.append(Spacer(1, 8 * mm))
+    story.append(HRFlowable(width=W, thickness=0.5, color=colors.HexColor('#cccccc')))
+    story.append(Spacer(1, 2 * mm))
+    footer_text = (
+        f'Generated by NIS2 Compass  |  '
+        f'{generated_at.strftime("%Y-%m-%d %H:%M:%S UTC")}'
+    )
+    story.append(Paragraph(footer_text, footer_style))
+
+    doc.build(story)
+    buf.seek(0)
+    return buf
+
+
+# ------------------------------------------------------------------ #
+# POST /api/v1/assessments/<id>/report                                 #
+# ------------------------------------------------------------------ #
+
+@assessments_bp.post('/assessments/<uuid:assessment_id>/report')
+@require_auth
+def generate_report(assessment_id):
+    assessment = db.session.get(Assessment, assessment_id)
+    if assessment is None:
+        return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404
+
+    org = db.session.get(Organisation, assessment.org_id)
+    if org is None:
+        return jsonify({'error': 'Organisation not found', 'code': 'NOT_FOUND'}), 404
+
+    controls = (
+        db.session.query(Control)
+        .filter(Control.assessment_id == assessment_id)
+        .order_by(Control.measure_ref)
+        .all()
+    )
+    templates = (
+        db.session.query(ControlTemplate)
+        .order_by(ControlTemplate.measure_ref)
+        .all()
+    )
+
+    pdf_buf = _generate_pdf(assessment, org, controls, templates)
+
+    write_audit(
+        db.session,
+        action='report_generated',
+        actor=g.actor,
+        resource_type='assessment',
+        resource_id=assessment.id,
+        risk_class='INFO',
+        metadata={'format': 'pdf'},
+    )
+    db.session.commit()
+
+    return send_file(
+        pdf_buf,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'nis2-assessment-{assessment_id}.pdf',
+    )

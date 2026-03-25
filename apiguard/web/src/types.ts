@@ -44,3 +44,23 @@ export interface Evidence {
   response: string
   detail?: Record<string, unknown>
 }
+
+export interface AuditEntry {
+  id: string
+  actor_id: string
+  actor_type: string
+  action: string
+  resource_type: string
+  resource_id?: string | null
+  ip_address?: { String: string; Valid: boolean } | null
+  user_agent?: { String: string; Valid: boolean } | null
+  prev_hash?: string | null
+  chain_hash: string
+  created_at: string
+}
+
+export interface AuditLogResponse {
+  entries: AuditEntry[]
+  total: number
+  chain_valid?: boolean
+}

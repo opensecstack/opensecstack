@@ -75,3 +75,53 @@ jobs:
           go test ./tests/integration/...
       - name: Run false positive tests
         run: go test ./tests/fp/...
+
+  test-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+      - name: Lint
+        working-directory: web
+        run: npm run lint
+      - name: Build
+        working-directory: web
+        run: npm run build
+
+  docker-build:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [lint, test-rust, test-go, test-web]
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push backend image
+        run: |
+          docker build \
+            -t ghcr.io/${{ github.repository }}/apiguard:${{ github.sha }} \
+            -t ghcr.io/${{ github.repository }}/apiguard:latest \
+            .
+          docker push ghcr.io/${{ github.repository }}/apiguard:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository }}/apiguard:latest
+      - name: Build and push web image
+        run: |
+          docker build \
+            -t ghcr.io/${{ github.repository }}/apiguard-web:${{ github.sha }} \
+            -t ghcr.io/${{ github.repository }}/apiguard-web:latest \
+            ./web/
+          docker push ghcr.io/${{ github.repository }}/apiguard-web:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository }}/apiguard-web:latest

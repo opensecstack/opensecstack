@@ -11,6 +11,8 @@ export default function Scans() {
   const [error, setError] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ target: '', spec_url: '' })
+  const [specMode, setSpecMode] = useState<'url' | 'upload'>('url')
+  const [specFile, setSpecFile] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   const load = () => {
@@ -24,12 +26,23 @@ export default function Scans() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.target || !form.spec_url) return
+    if (!form.target) return
+    if (specMode === 'url' && !form.spec_url) return
+    if (specMode === 'upload' && !specFile) return
     setSubmitting(true)
     try {
-      await api.scans.create({ target: form.target, spec_url: form.spec_url })
+      let scanPayload: { target: string; spec_url?: string; spec_path?: string }
+      if (specMode === 'upload') {
+        const { spec_path } = await api.specs.upload(specFile!)
+        scanPayload = { target: form.target, spec_path }
+      } else {
+        scanPayload = { target: form.target, spec_url: form.spec_url }
+      }
+      await api.scans.create(scanPayload)
       setShowForm(false)
       setForm({ target: '', spec_url: '' })
+      setSpecFile(null)
+      setSpecMode('url')
       load()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to create scan')
@@ -63,12 +76,32 @@ export default function Scans() {
             />
           </div>
           <div className="form-row">
-            <label>OpenAPI Spec URL</label>
-            <input
-              type="url" placeholder="https://api.example.com/openapi.json"
-              value={form.spec_url} onChange={e => setForm({ ...form, spec_url: e.target.value })}
-              required
-            />
+            <label>OpenAPI Spec</label>
+            <div className="toggle-group">
+              <button
+                type="button"
+                className={`toggle-btn ${specMode === 'url' ? 'active' : ''}`}
+                onClick={() => setSpecMode('url')}
+              >URL</button>
+              <button
+                type="button"
+                className={`toggle-btn ${specMode === 'upload' ? 'active' : ''}`}
+                onClick={() => setSpecMode('upload')}
+              >Upload file</button>
+            </div>
+            {specMode === 'url' ? (
+              <input
+                type="url" placeholder="https://api.example.com/openapi.json"
+                value={form.spec_url} onChange={e => setForm({ ...form, spec_url: e.target.value })}
+                required
+              />
+            ) : (
+              <input
+                type="file" accept=".yaml,.yml,.json"
+                onChange={e => setSpecFile(e.target.files?.[0] ?? null)}
+                required
+              />
+            )}
           </div>
           <button type="submit" className="btn-primary" disabled={submitting}>
             {submitting ? 'Starting...' : 'Start Scan'}

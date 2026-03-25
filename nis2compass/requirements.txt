@@ -8,3 +8,4 @@ Werkzeug==3.0.4
 gunicorn==22.0.0
 python-dotenv==1.0.1
 flask-cors==4.0.1
+reportlab>=4.0

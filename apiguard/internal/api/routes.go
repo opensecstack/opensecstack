@@ -25,8 +25,9 @@ func RegisterRoutes(
 		r.Get("/version", health.Version)
 
 		// Auth: obtain a JWT from a pre-shared API key.
-		r.Get("/auth/token", auth.Ping)     // GET  → instructions / meta
-		r.Post("/auth/token", auth.Token)   // POST → exchange api_key → JWT
+		r.Get("/auth/token", auth.Ping)          // GET  → instructions / meta
+		r.Post("/auth/token", auth.Token)        // POST → exchange api_key → JWT
+		r.Post("/auth/refresh", auth.RefreshToken) // POST → exchange refresh_token → new tokens
 		r.Get("/openapi.json", handlers.OpenAPI)
 
 		// ── Protected endpoints (Bearer JWT required) ────────────────────────

@@ -1,4 +1,4 @@
-import type { Scan, Finding } from './types'
+import type { Scan, Finding, FindingStatus, AuditEntry } from './types'
 
 const BASE = '/api/v1'
 
@@ -62,4 +62,53 @@ export const api = {
       request<Finding>(`/findings/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   },
   health: () => request<{ status: string; version: string }>('/health'),
+  audit: {
+    list: async (params?: { page?: number; per_page?: number; actor_id?: string; action?: string; resource_type?: string }) => {
+      const q = new URLSearchParams()
+      if (params?.page) q.set('page', String(params.page))
+      if (params?.per_page) q.set('per_page', String(params.per_page))
+      if (params?.actor_id) q.set('actor_id', params.actor_id)
+      if (params?.action) q.set('action', params.action)
+      if (params?.resource_type) q.set('resource_type', params.resource_type)
+      const token = localStorage.getItem('apiguard_token')
+      const res = await fetch(`${BASE}/audit?${q}`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      })
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem('apiguard_token')
+          window.location.reload()
+        }
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error ?? res.statusText)
+      }
+      const total = parseInt(res.headers.get('X-Total-Count') ?? '0', 10)
+      const entries: AuditEntry[] = await res.json()
+      return { entries, total }
+    },
+  },
+  specs: {
+    upload: async (file: File): Promise<{ spec_path: string; spec_hash: string; size: number }> => {
+      const token = localStorage.getItem('apiguard_token')
+      const form = new FormData()
+      form.append('spec', file)
+      const res = await fetch(`${BASE}/specs/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      })
+      if (!res.ok) {
+        if (res.status === 401) {
+          localStorage.removeItem('apiguard_token')
+          window.location.reload()
+        }
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error ?? res.statusText)
+      }
+      return res.json()
+    },
+  },
 }

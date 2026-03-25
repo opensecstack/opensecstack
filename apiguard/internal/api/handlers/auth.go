@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -134,4 +136,130 @@ func (a *Auth) Ping(w http.ResponseWriter, r *http.Request) {
 		"token_type": "HS256 JWT",
 		"algorithms": []string{"HS256"},
 	})
+}
+
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+type refreshResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int64  `json:"expires_in"`
+}
+
+// RefreshToken handles POST /api/v1/auth/refresh.
+// It accepts a valid refresh token and returns a new access token and refresh token.
+func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	if a.cfg.Auth.JWTSecret == "" {
+		writeError(w, http.StatusServiceUnavailable, "authentication not configured: jwt_secret is missing")
+		return
+	}
+
+	var req refreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.RefreshToken == "" {
+		writeError(w, http.StatusUnauthorized, "refresh_token is required")
+		return
+	}
+
+	if err := validateRefreshToken(req.RefreshToken, a.cfg.Auth.JWTSecret); err != nil {
+		a.logger.Warn().Err(err).Str("remote_addr", r.RemoteAddr).Msg("invalid refresh token presented")
+		writeError(w, http.StatusUnauthorized, "invalid or expired refresh token")
+		return
+	}
+
+	expiry := a.cfg.Auth.TokenExpiry
+	if expiry <= 0 {
+		expiry = 24 * time.Hour
+	}
+
+	accessToken, err := issueJWT(a.cfg.Auth.JWTSecret, "api-client", expiry)
+	if err != nil {
+		a.logger.Error().Err(err).Msg("failed to issue access token")
+		writeError(w, http.StatusInternalServerError, "failed to issue token")
+		return
+	}
+
+	newRefreshToken, err := issueJWT(a.cfg.Auth.JWTSecret, "api-client-refresh", 7*24*time.Hour)
+	if err != nil {
+		a.logger.Error().Err(err).Msg("failed to issue refresh token")
+		writeError(w, http.StatusInternalServerError, "failed to issue token")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, refreshResponse{
+		AccessToken:  accessToken,
+		RefreshToken: newRefreshToken,
+		TokenType:    "Bearer",
+		ExpiresIn:    int64(expiry.Seconds()),
+	})
+}
+
+// validateRefreshToken verifies the HS256 signature and expiry of a refresh token.
+func validateRefreshToken(token, secret string) error {
+	segments := strings.SplitN(token, ".", 3)
+	if len(segments) != 3 {
+		return fmt.Errorf("token must have 3 parts, got %d", len(segments))
+	}
+
+	headerB64, payloadB64, signatureB64 := segments[0], segments[1], segments[2]
+
+	// Verify HMAC-SHA256 signature.
+	signingInput := headerB64 + "." + payloadB64
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(signingInput))
+	expectedSig := mac.Sum(nil)
+
+	actualSig, err := jwtBase64Decode(signatureB64)
+	if err != nil {
+		return fmt.Errorf("invalid signature encoding: %w", err)
+	}
+
+	if !hmac.Equal(expectedSig, actualSig) {
+		return fmt.Errorf("signature verification failed")
+	}
+
+	// Decode and parse payload claims.
+	payloadBytes, err := jwtBase64Decode(payloadB64)
+	if err != nil {
+		return fmt.Errorf("invalid payload encoding: %w", err)
+	}
+
+	var claims struct {
+		Sub string `json:"sub"`
+		Exp int64  `json:"exp"`
+		Iat int64  `json:"iat"`
+	}
+	if err := json.Unmarshal(payloadBytes, &claims); err != nil {
+		return fmt.Errorf("invalid payload JSON: %w", err)
+	}
+
+	if claims.Exp == 0 {
+		return fmt.Errorf("missing exp claim")
+	}
+	if time.Now().Unix() > claims.Exp {
+		return fmt.Errorf("token has expired")
+	}
+	if claims.Sub == "" {
+		return fmt.Errorf("missing sub claim")
+	}
+
+	return nil
+}
+
+// jwtBase64Decode decodes a base64url-encoded string (without padding).
+func jwtBase64Decode(s string) ([]byte, error) {
+	switch len(s) % 4 {
+	case 2:
+		s += "=="
+	case 3:
+		s += "="
+	}
+	return base64.URLEncoding.DecodeString(s)
 }

@@ -1,0 +1,100 @@
+version: "3.8"
+
+# NIS2 Compass — Production Docker Compose
+# Required env vars (set in .env or shell):
+#   POSTGRES_PASSWORD   — PostgreSQL superuser password
+#   NIS2_DB_PASSWORD    — Application DB user password
+#   REDIS_PASSWORD      — Redis password
+#   NIS2_SECRET_KEY     — Flask/app secret key
+#   NIS2_JWT_SECRET     — JWT signing secret (min 32 chars)
+
+services:
+  nis2compass-api:
+    image: ghcr.io/opensecstack/nis2compass:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8090:8090"
+    environment:
+      - NIS2_DB_URL=postgresql+psycopg2://nis2compass:${NIS2_DB_PASSWORD:?NIS2_DB_PASSWORD must be set}@postgres:5432/nis2compass
+      - NIS2_REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      - NIS2_SECRET_KEY=${NIS2_SECRET_KEY:?NIS2_SECRET_KEY must be set}
+      - NIS2_JWT_SECRET=${NIS2_JWT_SECRET:?NIS2_JWT_SECRET must be set}
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  migrate:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - .:/app:ro
+    command: >
+      sh -c "pip install -q alembic psycopg2-binary sqlalchemy &&
+             NIS2_DB_HOST=postgres
+             NIS2_DB_PORT=5432
+             NIS2_DB_USER=nis2compass
+             NIS2_DB_PASSWORD=${NIS2_DB_PASSWORD}
+             NIS2_DB_NAME=nis2compass
+             alembic upgrade head"
+    environment:
+      - NIS2_DB_HOST=postgres
+      - NIS2_DB_PORT=5432
+      - NIS2_DB_USER=nis2compass
+      - NIS2_DB_PASSWORD=${NIS2_DB_PASSWORD:?NIS2_DB_PASSWORD must be set}
+      - NIS2_DB_NAME=nis2compass
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: nis2compass
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+
+networks:
+  frontend:
+  backend:

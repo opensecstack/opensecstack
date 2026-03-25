@@ -1,3 +1,4 @@
+import hashlib
 from flask import Blueprint, request, jsonify, current_app
 from ..auth import validate_api_key, issue_jwt
 
@@ -18,7 +19,7 @@ def token():
         return jsonify({'error': 'Invalid API key', 'code': 'UNAUTHORIZED'}), 401
 
     # Use a stable identity — in the future this can be looked up from a keys table
-    identity = f'api_key:{api_key[:8]}...'
+    identity = 'api_key:' + hashlib.sha256(api_key.encode()).hexdigest()[:16]
     jwt_token, expires_at = issue_jwt(identity, scope=scope)
 
     return jsonify({

@@ -183,7 +183,7 @@ func setDefaults() {
 
 	// CORS defaults: wildcard allows all origins (suitable for development).
 	// Override with APIGUARD_CORS_ORIGINS=https://app.example.com,https://other.example.com
-	viper.SetDefault("cors.origins", []string{"*"})
+	viper.SetDefault("cors.origins", []string{})
 
 	// CITADEL defaults: empty = forwarding disabled.
 	// Set APIGUARD_CITADEL_URL=http://citadel-api:8099 to enable.

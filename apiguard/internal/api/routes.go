@@ -24,6 +24,7 @@ func RegisterRoutes(
 	// These apply in addition to the global rate limiter set up in setupMiddleware.
 	authLimiter := middleware.NewRateLimiter(20)   // 20 req/min per IP on auth endpoints
 	scanLimiter := middleware.NewRateLimiter(60)   // 60 req/min per IP on scan creation
+	reportLimiter := middleware.NewRateLimiter(10) // 10 req/min per IP on report generation
 
 	r.Route("/api/v1", func(r chi.Router) {
 		// ── Public endpoints (no JWT required) ──────────────────────────────
@@ -50,7 +51,7 @@ func RegisterRoutes(
 			r.Get("/scans", scans.List)
 			r.Get("/scans/{id}", scans.Get)
 			r.Get("/scans/{id}/findings", scans.Findings)
-			r.Get("/scans/{id}/report", scans.Report)
+			r.With(reportLimiter.Middleware).Get("/scans/{id}/report", scans.Report)
 			r.Delete("/scans/{id}", scans.Delete)
 
 			// Findings.

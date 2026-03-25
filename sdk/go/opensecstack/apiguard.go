@@ -285,26 +285,28 @@ func (c *APIGuardClient) GetFindings(ctx context.Context, scanID string) ([]Find
 	params.Set("page", "1")
 	params.Set("per_page", strconv.Itoa(1000))
 
-	var envelope findingsResponse
-	if err := c.getJSON(ctx, "scans/"+scanID+"/findings", params, &envelope); err != nil {
-		// The endpoint might return a plain array — attempt fallback decode.
-		var findings []Finding
-		// Re-issue request for fallback; errors here are surfaced as-is.
-		resp, err2 := c.do(ctx, http.MethodGet,
-			fmt.Sprintf("scans/%s/findings?page=1&per_page=1000", scanID), nil, nil)
-		if err2 != nil {
-			return nil, fmt.Errorf("GetFindings %s: %w", scanID, err2)
-		}
-		raw, err2 := checkResponse(resp)
-		if err2 != nil {
-			return nil, fmt.Errorf("GetFindings %s: %w", scanID, err2)
-		}
-		if jsonErr := json.Unmarshal(raw, &findings); jsonErr != nil {
-			return nil, fmt.Errorf("GetFindings %s: %w", scanID, jsonErr)
-		}
-		return findings, nil
+	fullPath := fmt.Sprintf("scans/%s/findings?%s", scanID, params.Encode())
+	resp, err := c.do(ctx, http.MethodGet, fullPath, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("GetFindings %s: %w", scanID, err)
 	}
-	return envelope.Data, nil
+	raw, err := checkResponse(resp)
+	if err != nil {
+		return nil, fmt.Errorf("GetFindings %s: %w", scanID, err)
+	}
+
+	// Try envelope format {"data": [...]} first.
+	var envelope findingsResponse
+	if jsonErr := json.Unmarshal(raw, &envelope); jsonErr == nil && envelope.Data != nil {
+		return envelope.Data, nil
+	}
+
+	// Fall back to plain array.
+	var findings []Finding
+	if jsonErr := json.Unmarshal(raw, &findings); jsonErr != nil {
+		return nil, fmt.Errorf("GetFindings %s: unexpected response format: %w", scanID, jsonErr)
+	}
+	return findings, nil
 }
 
 // GetAuditLog retrieves the most recent audit log entries (up to limit).

@@ -7,12 +7,19 @@ from . import extensions
 _log = logging.getLogger(__name__)
 
 
-def _get_client_ip() -> str:
-    """Return the real client IP, respecting X-Forwarded-For from trusted proxies."""
-    xff = request.headers.get('X-Forwarded-For')
-    if xff:
-        return xff.split(',')[0].strip()
-    return request.remote_addr or '0.0.0.0'
+def _get_client_ip(trusted_proxies: set) -> str:
+    """Return the real client IP.
+
+    X-Forwarded-For is only trusted when the immediate connection comes from
+    a configured trusted proxy.  Without a proxy allowlist the header is
+    trivially spoofable and must be ignored.
+    """
+    remote = request.remote_addr or '0.0.0.0'
+    if trusted_proxies and remote in trusted_proxies:
+        xff = request.headers.get('X-Forwarded-For')
+        if xff:
+            return xff.split(',')[0].strip()
+    return remote
 
 
 def _check_rate_limit(ip: str, limit: int, window: int = 60) -> tuple[bool, int]:
@@ -75,7 +82,12 @@ def apply_middleware(app) -> None:
         # Skip rate limiting for health check
         if request.path == '/health':
             return None
-        ip = _get_client_ip()
+        trusted = set(
+            p.strip()
+            for p in app.config.get('TRUSTED_PROXIES', '').split(',')
+            if p.strip()
+        )
+        ip = _get_client_ip(trusted)
         limit = app.config.get('RATE_LIMIT', 100)
         allowed, retry_after = _check_rate_limit(ip, limit)
         if not allowed:

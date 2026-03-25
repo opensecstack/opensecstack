@@ -68,7 +68,7 @@ class APIGuardClient:
             raise AuthenticationError("Invalid JSON in auth/token response")
         token = data.get("access_token") or data.get("token")
         if not token:
-            raise APIError(resp.status_code, "No access_token in auth response")
+            raise AuthenticationError("No access_token in auth/token response")
         self._jwt = token
         self._session.headers["Authorization"] = f"Bearer {self._jwt}"
 

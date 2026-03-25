@@ -56,6 +56,11 @@ class Config:
     # ------------------------------------------------------------------ #
     RATE_LIMIT = int(os.getenv('NIS2_RATE_LIMIT', '100'))  # requests / minute / IP
 
+    # Comma-separated list of trusted upstream proxy IPs.
+    # X-Forwarded-For is only honoured when the connection comes from one of
+    # these addresses.  Leave empty to use the direct connection IP only.
+    TRUSTED_PROXIES = os.getenv('NIS2_TRUSTED_PROXIES', '')
+
     # ------------------------------------------------------------------ #
     # File uploads                                                         #
     # ------------------------------------------------------------------ #

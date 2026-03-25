@@ -164,10 +164,11 @@ def get_artifact(artifact_id):
     if artifact is None:
         return jsonify({'error': 'Artifact not found', 'code': 'NOT_FOUND'}), 404
     assessment = db.session.get(Assessment, artifact.assessment_id)
-    if assessment:
-        err = _check_org_access(assessment.org_id)
-        if err:
-            return err
+    if assessment is None:
+        return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
     return jsonify(artifact.to_dict()), 200
 
 
@@ -182,10 +183,11 @@ def download_artifact(artifact_id):
     if artifact is None:
         return jsonify({'error': 'Artifact not found', 'code': 'NOT_FOUND'}), 404
     assessment = db.session.get(Assessment, artifact.assessment_id)
-    if assessment:
-        err = _check_org_access(assessment.org_id)
-        if err:
-            return err
+    if assessment is None:
+        return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
 
     if not artifact.file_path or not os.path.isfile(artifact.file_path):
         return jsonify({'error': 'File no longer available', 'code': 'FILE_NOT_FOUND'}), 410
@@ -221,10 +223,11 @@ def delete_artifact(artifact_id):
     if artifact is None:
         return jsonify({'error': 'Artifact not found', 'code': 'NOT_FOUND'}), 404
     assessment = db.session.get(Assessment, artifact.assessment_id)
-    if assessment:
-        err = _check_org_access(assessment.org_id)
-        if err:
-            return err
+    if assessment is None:
+        return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
 
     file_path = artifact.file_path
     write_audit(

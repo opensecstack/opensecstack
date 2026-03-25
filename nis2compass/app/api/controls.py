@@ -4,6 +4,7 @@ from ..extensions import db
 from ..models import Assessment, Control
 from ..auth import require_auth, require_scope
 from ..audit import write_audit
+from .assessments import _check_org_access
 
 controls_bp = Blueprint('controls', __name__)
 
@@ -22,6 +23,9 @@ def list_controls(assessment_id):
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
         return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
 
     query = db.session.query(Control).filter(Control.assessment_id == assessment_id)
 
@@ -48,6 +52,13 @@ def get_control(assessment_id, measure_ref):
     if measure_ref not in VALID_MEASURE_REFS:
         return jsonify({'error': f'measure_ref must be a single letter a-j', 'code': 'INVALID_INPUT'}), 400
 
+    assessment = db.session.get(Assessment, assessment_id)
+    if assessment is None:
+        return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
+
     control = (
         db.session.query(Control)
         .filter(Control.assessment_id == assessment_id, Control.measure_ref == measure_ref)
@@ -72,6 +83,9 @@ def update_control(assessment_id, measure_ref):
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
         return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
     if assessment.status == 'archived':
         return jsonify({'error': 'Archived assessments are read-only', 'code': 'INVALID_INPUT'}), 400
 

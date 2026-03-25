@@ -93,7 +93,20 @@ func (c *APIGuardClient) authenticate(ctx context.Context) error {
 
 // do executes an HTTP request with the JWT Bearer token, re-authenticating
 // once on HTTP 401.
+//
+// The body is buffered into memory so that it can be replayed intact if the
+// first attempt returns 401 and a token refresh is required.
 func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Reader, extraHeaders map[string]string) (*http.Response, error) {
+	// Buffer body for replay on token-refresh retry.
+	var bodyBuf []byte
+	if body != nil {
+		var err error
+		bodyBuf, err = io.ReadAll(body)
+		if err != nil {
+			return nil, fmt.Errorf("reading request body: %w", err)
+		}
+	}
+
 	c.mu.Lock()
 	if c.jwt == "" {
 		if err := c.authenticate(ctx); err != nil {
@@ -104,7 +117,14 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 	jwt := c.jwt
 	c.mu.Unlock()
 
-	resp, err := c.doWithJWT(ctx, method, path, body, jwt, extraHeaders)
+	newReader := func() io.Reader {
+		if bodyBuf != nil {
+			return bytes.NewReader(bodyBuf)
+		}
+		return nil
+	}
+
+	resp, err := c.doWithJWT(ctx, method, path, newReader(), jwt, extraHeaders)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +139,7 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 		}
 		jwt = c.jwt
 		c.mu.Unlock()
-		resp, err = c.doWithJWT(ctx, method, path, body, jwt, extraHeaders)
+		resp, err = c.doWithJWT(ctx, method, path, newReader(), jwt, extraHeaders)
 		if err != nil {
 			return nil, err
 		}

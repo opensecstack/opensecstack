@@ -6,6 +6,7 @@ from ..extensions import db
 from ..models import Assessment, Control, Artifact
 from ..auth import require_auth, require_scope
 from ..audit import write_audit
+from .assessments import _check_org_access
 
 artifacts_bp = Blueprint('artifacts', __name__)
 
@@ -61,6 +62,9 @@ def list_artifacts(assessment_id):
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
         return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
 
     query = db.session.query(Artifact).filter(Artifact.assessment_id == assessment_id)
     if control_id := request.args.get('control_id'):
@@ -86,6 +90,9 @@ def upload_artifact(assessment_id):
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
         return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
     if assessment.status == 'archived':
         return jsonify({'error': 'Archived assessments are read-only', 'code': 'INVALID_INPUT'}), 400
 
@@ -156,6 +163,11 @@ def get_artifact(artifact_id):
     artifact = db.session.get(Artifact, artifact_id)
     if artifact is None:
         return jsonify({'error': 'Artifact not found', 'code': 'NOT_FOUND'}), 404
+    assessment = db.session.get(Assessment, artifact.assessment_id)
+    if assessment:
+        err = _check_org_access(assessment.org_id)
+        if err:
+            return err
     return jsonify(artifact.to_dict()), 200
 
 
@@ -169,6 +181,11 @@ def download_artifact(artifact_id):
     artifact = db.session.get(Artifact, artifact_id)
     if artifact is None:
         return jsonify({'error': 'Artifact not found', 'code': 'NOT_FOUND'}), 404
+    assessment = db.session.get(Assessment, artifact.assessment_id)
+    if assessment:
+        err = _check_org_access(assessment.org_id)
+        if err:
+            return err
 
     if not artifact.file_path or not os.path.isfile(artifact.file_path):
         return jsonify({'error': 'File no longer available', 'code': 'FILE_NOT_FOUND'}), 410
@@ -203,6 +220,11 @@ def delete_artifact(artifact_id):
     artifact = db.session.get(Artifact, artifact_id)
     if artifact is None:
         return jsonify({'error': 'Artifact not found', 'code': 'NOT_FOUND'}), 404
+    assessment = db.session.get(Assessment, artifact.assessment_id)
+    if assessment:
+        err = _check_org_access(assessment.org_id)
+        if err:
+            return err
 
     file_path = artifact.file_path
     write_audit(

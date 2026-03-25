@@ -134,11 +134,19 @@ def update_organisation(org_id):
     before = org.to_dict()
 
     if 'name' in data:
-        org.name = data['name'].strip()
+        name = data['name'].strip()
+        if not name:
+            return jsonify({'error': 'name must not be empty', 'code': 'INVALID_INPUT'}), 400
+        org.name = name
     if 'industry' in data:
-        org.industry = data['industry'].strip()
+        industry = data['industry'].strip()
+        if not industry:
+            return jsonify({'error': 'industry must not be empty', 'code': 'INVALID_INPUT'}), 400
+        org.industry = industry
     if 'country' in data:
         c = data['country'].strip().upper()
+        if not c:
+            return jsonify({'error': 'country must not be empty', 'code': 'INVALID_INPUT'}), 400
         if len(c) != 2:
             return jsonify({'error': 'country must be 2 letters', 'code': 'INVALID_INPUT'}), 400
         org.country = c

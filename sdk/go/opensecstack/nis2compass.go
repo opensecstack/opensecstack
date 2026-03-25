@@ -212,8 +212,9 @@ func (c *NIS2CompassClient) patchJSON(ctx context.Context, path string, reqBody 
 // Organisations
 // ----------------------------------------------------------------------------
 
-// GetOrganisations returns all organisations. All pages are fetched automatically
-// and the full list is returned to the caller.
+// GetOrganisations returns the first page of organisations (up to 100 items).
+// Callers that need to retrieve more than 100 organisations should use the
+// pagination parameters directly via the underlying API.
 func (c *NIS2CompassClient) GetOrganisations(ctx context.Context) ([]Organisation, error) {
 	params := url.Values{}
 	params.Set("page", "1")

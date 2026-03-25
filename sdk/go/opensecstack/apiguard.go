@@ -129,7 +129,7 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 		return nil, err
 	}
 
-	if resp.Status == "401 Unauthorized" || resp.StatusCode == http.StatusUnauthorized {
+	if resp.StatusCode == http.StatusUnauthorized {
 		resp.Body.Close()
 		// Token may have expired — re-authenticate once.
 		c.mu.Lock()
@@ -293,14 +293,14 @@ func (c *APIGuardClient) GetFindings(ctx context.Context, scanID string) ([]Find
 		resp, err2 := c.do(ctx, http.MethodGet,
 			fmt.Sprintf("scans/%s/findings?page=1&per_page=1000", scanID), nil, nil)
 		if err2 != nil {
-			return nil, fmt.Errorf("GetFindings %s: %w", scanID, err)
+			return nil, fmt.Errorf("GetFindings %s: %w", scanID, err2)
 		}
 		raw, err2 := checkResponse(resp)
 		if err2 != nil {
 			return nil, fmt.Errorf("GetFindings %s: %w", scanID, err2)
 		}
 		if jsonErr := json.Unmarshal(raw, &findings); jsonErr != nil {
-			return nil, fmt.Errorf("GetFindings %s: %w", scanID, err)
+			return nil, fmt.Errorf("GetFindings %s: %w", scanID, jsonErr)
 		}
 		return findings, nil
 	}

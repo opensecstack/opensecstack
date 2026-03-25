@@ -107,6 +107,7 @@ func (s *Server) Start() error {
 		if err := srv.Shutdown(shutCtx); err != nil {
 			return fmt.Errorf("graceful shutdown: %w", err)
 		}
+		s.db.Close()
 		s.logger.Info().Msg("server stopped cleanly")
 		return nil
 	}

@@ -246,24 +246,25 @@ class NIS2CompassClient:
         The directory containing *output_path* must already exist.
         """
         # Ensure we have a valid token before the long-running streamed request.
-        if "Authorization" not in self._session.headers:
-            self._authenticate()
+        with self._auth_lock:
+            if "Authorization" not in self._session.headers:
+                self._authenticate()
 
         report_timeout = max(self._timeout, 120)
 
-        def _stream_get() -> requests.Response:
-            return self._session.get(
+        def _stream_report() -> requests.Response:
+            return self._session.post(
                 self._url(f"assessments/{assessment_id}/report"),
-                params={"format": "pdf"},
                 timeout=report_timeout,
                 stream=True,
             )
 
-        resp = _stream_get()
+        resp = _stream_report()
         if resp.status_code == 401:
             # Token expired — re-authenticate and retry once.
-            self._authenticate()
-            resp = _stream_get()
+            with self._auth_lock:
+                self._authenticate()
+            resp = _stream_report()
 
         self._raise_for_status(resp)
         output_path = os.path.expanduser(output_path)

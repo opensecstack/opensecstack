@@ -34,6 +34,10 @@ pub enum TestCategory {
     AuthTokenExpired,
     #[serde(rename = "auth_token_replay")]
     AuthTokenReplay,
+    #[serde(rename = "auth_invalid_token")]
+    AuthInvalidToken,
+    #[serde(rename = "auth_unprotected_write")]
+    AuthUnprotectedWrite,
     #[serde(rename = "bola_id_enum")]
     BolaIdEnum,
     #[serde(rename = "bola_cross_user")]
@@ -403,7 +407,7 @@ fn generate_auth(
                 module_id: "a2_auth".to_string(),
                 endpoint_path: ep.path.clone(),
                 endpoint_method: method.to_string(),
-                category: TestCategory::AuthRemoval, // reuse — logically "bad auth"
+                category: TestCategory::AuthInvalidToken,
                 requests: vec![TestRequest {
                     method: method.to_string(),
                     path: full_url.clone(),
@@ -428,7 +432,7 @@ fn generate_auth(
                 module_id: "a2_auth".to_string(),
                 endpoint_path: ep.path.clone(),
                 endpoint_method: method.to_string(),
-                category: TestCategory::AuthRemoval,
+                category: TestCategory::AuthUnprotectedWrite,
                 requests: vec![TestRequest {
                     method: method.to_string(),
                     path: full_url,

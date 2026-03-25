@@ -113,7 +113,7 @@ func (g *Generator) generateBolaTests(endpoint *IREndpoint) []TestCase {
 		ModuleID:       "a1_bola",
 		EndpointPath:   endpoint.Path,
 		EndpointMethod: endpoint.Method,
-		Category:       "bola_sequential_id",
+		Category:       "bola_id_enum",
 		Requests: []TestRequest{
 			{
 				Method:      endpoint.Method,
@@ -205,7 +205,7 @@ func (g *Generator) generateAuthTests(endpoint *IREndpoint) []TestCase {
 			ModuleID:       "a2_auth",
 			EndpointPath:   endpoint.Path,
 			EndpointMethod: endpoint.Method,
-			Category:       "auth_expired_token",
+			Category:       "auth_token_expired",
 			Requests: []TestRequest{
 				{
 					Method:      endpoint.Method,
@@ -253,7 +253,7 @@ func (g *Generator) generateAuthTests(endpoint *IREndpoint) []TestCase {
 				ModuleID:       "a2_auth",
 				EndpointPath:   endpoint.Path,
 				EndpointMethod: endpoint.Method,
-				Category:       "auth_unprotected_state_change",
+				Category:       "auth_unprotected_write",
 				Requests: []TestRequest{
 					{
 						Method:      endpoint.Method,
@@ -304,7 +304,7 @@ func (g *Generator) generateMassAssignmentTests(endpoint *IREndpoint) []TestCase
 		ModuleID:       "a3_mass_assignment",
 		EndpointPath:   endpoint.Path,
 		EndpointMethod: endpoint.Method,
-		Category:       "mass_assignment_extra_fields",
+		Category:       "mass_assign_extra_fields",
 		Requests: []TestRequest{
 			{
 				Method:      endpoint.Method,
@@ -335,7 +335,7 @@ func (g *Generator) generateMassAssignmentTests(endpoint *IREndpoint) []TestCase
 		ModuleID:       "a3_mass_assignment",
 		EndpointPath:   endpoint.Path,
 		EndpointMethod: endpoint.Method,
-		Category:       "mass_assignment_readonly_fields",
+		Category:       "mass_assign_readonly",
 		Requests: []TestRequest{
 			{
 				Method:      endpoint.Method,

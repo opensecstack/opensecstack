@@ -46,6 +46,7 @@ type ScanRequest struct {
 	SpecPath      string
 	Target        string
 	AllowInternal bool
+	TLSSkipVerify bool
 	Modules       []string
 	Auth          AuthConfig
 }
@@ -334,7 +335,7 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 
 	// Store pinned transport for use by scan modules (prevents DNS rebinding).
 	if parsedURL, err := url.Parse(req.Target); err == nil && len(validatedIPs) > 0 {
-		s.transport = CreatePinnedTransport(parsedURL.Hostname(), validatedIPs, false)
+		s.transport = CreatePinnedTransport(parsedURL.Hostname(), validatedIPs, req.TLSSkipVerify)
 	}
 
 	// Validate and sanitize the spec file path (open-then-stat to avoid TOCTOU).

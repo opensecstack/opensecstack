@@ -58,6 +58,14 @@ func (m *AuthModule) Run(ctx context.Context, exec HTTPExecutor, suite TestSuite
 			if f != nil {
 				findings = append(findings, *f)
 			}
+		case "auth_token_replay":
+			f, err := m.executeTokenReplay(ctx, exec, tc, target, auth)
+			if err != nil {
+				continue
+			}
+			if f != nil {
+				findings = append(findings, *f)
+			}
 		case "auth_unprotected_write":
 			f, err := m.executeUnprotectedWrite(ctx, exec, tc, target)
 			if err != nil {
@@ -147,6 +155,59 @@ func (m *AuthModule) executeExpiredToken(ctx context.Context, exec HTTPExecutor,
 				},
 			},
 			Remediation: "Validate token expiration (exp claim) on every request. Reject tokens with expired timestamps.",
+			Status:      domain.FindingStatusOpen,
+		}, nil
+	}
+
+	return nil, nil
+}
+
+// executeTokenReplay sends the same valid token twice to check whether the server
+// detects and rejects replayed tokens. A 2xx on the second request is informational —
+// most stateless JWT APIs are expected to accept replays, so this is a LOW finding.
+func (m *AuthModule) executeTokenReplay(ctx context.Context, exec HTTPExecutor, tc TestCase, target string, auth *AuthConfig) (*domain.Finding, error) {
+	if auth == nil || auth.Token == "" {
+		return nil, nil
+	}
+
+	url := buildURL(target, tc.Path, "1")
+	endpoint := tc.Method + " " + tc.Path
+
+	// First request — establish baseline.
+	resp1, err := doRequest(ctx, exec, tc.Method, url, tc.Headers, tc.Body, auth)
+	if err != nil {
+		return nil, fmt.Errorf("token replay first request failed: %w", err)
+	}
+
+	// Second request with the same token.
+	resp2, err := doRequest(ctx, exec, tc.Method, url, tc.Headers, tc.Body, auth)
+	if err != nil {
+		return nil, fmt.Errorf("token replay second request failed: %w", err)
+	}
+
+	// Only flag when both requests succeed; indicates no replay detection.
+	if resp1.StatusCode >= 200 && resp1.StatusCode < 300 &&
+		resp2.StatusCode >= 200 && resp2.StatusCode < 300 {
+		return &domain.Finding{
+			OWASPId:        "API2:2023",
+			ModuleID:       "a2_auth",
+			Title:          "Token Replay Not Detected on " + endpoint,
+			Description:    fmt.Sprintf("The endpoint %s accepted the same authentication token on two successive requests (HTTP %d, HTTP %d). The server does not implement replay-detection or token binding.", endpoint, resp1.StatusCode, resp2.StatusCode),
+			Severity:       domain.SeverityLow,
+			CVSSScore:      3.1,
+			CVSSVector:     "CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:L/I:N/A:N",
+			EndpointPath:   tc.Path,
+			EndpointMethod: tc.Method,
+			Evidence: domain.Evidence{
+				Request:  fmt.Sprintf("%s %s (same token, sent twice)", tc.Method, url),
+				Response: fmt.Sprintf("First: HTTP %d, Second: HTTP %d", resp1.StatusCode, resp2.StatusCode),
+				Detail: map[string]interface{}{
+					"auth_type":     auth.Type,
+					"first_status":  resp1.StatusCode,
+					"second_status": resp2.StatusCode,
+				},
+			},
+			Remediation: "Consider implementing short-lived tokens, token binding, or nonce-based replay detection for high-security endpoints.",
 			Status:      domain.FindingStatusOpen,
 		}, nil
 	}

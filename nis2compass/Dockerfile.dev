@@ -1,0 +1,27 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    NIS2_PORT=8090 \
+    NIS2_ENV=development \
+    NIS2_DEBUG=true \
+    NIS2_UPLOAD_DIR=/app/uploads \
+    FLASK_APP=wsgi.py \
+    FLASK_ENV=development
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc libpq-dev libpq5 curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Source is mounted as a volume in docker-compose.dev.yml — not copied here.
+# The CMD below starts Flask's built-in reloader.
+RUN mkdir -p /app/uploads
+
+EXPOSE 8090
+
+CMD ["python", "wsgi.py"]

@@ -1,0 +1,101 @@
+import hashlib
+import json
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import text
+
+
+def _compute_chain_hash(
+    entry_id: str,
+    action: str,
+    actor: str,
+    resource_type: str,
+    resource_id: str | None,
+    prev_hash: str | None,
+    timestamp: str,
+) -> str:
+    """
+    SHA-256 chain anchor.
+    Formula: SHA-256(id || action || actor || resource_type || resource_id || prev_hash || timestamp)
+    NULL values are represented as the literal string "NULL".
+    """
+    rid = resource_id if resource_id else 'NULL'
+    ph = prev_hash if prev_hash else 'NULL'
+    raw = f'{entry_id}{action}{actor}{resource_type}{rid}{ph}{timestamp}'
+    return hashlib.sha256(raw.encode('utf-8')).hexdigest()
+
+
+def _compute_object_fingerprint(obj: dict | None) -> str | None:
+    """SHA-256 of the canonical JSON serialisation of the object."""
+    if obj is None:
+        return None
+    canonical = json.dumps(obj, sort_keys=True, default=str, ensure_ascii=False)
+    return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
+
+
+def write_audit(
+    db_session,
+    action: str,
+    actor: str,
+    resource_type: str,
+    resource_id=None,
+    risk_class: str = 'INFO',
+    metadata: dict | None = None,
+    obj: dict | None = None,
+) -> None:
+    """
+    Append one entry to audit_log with a valid CITADEL chain hash.
+
+    This function MUST be called inside an active SQLAlchemy session
+    (i.e. within a request context where db.session is open).
+
+    The caller is responsible for committing the session after all
+    business-logic changes plus the audit entry have been added.
+
+    Uses a PostgreSQL advisory lock (pg_try_advisory_xact_lock) to
+    serialise concurrent chain-hash writes within the same transaction.
+    """
+    from .models import AuditLog
+
+    # Acquire advisory lock so concurrent requests don't race on prev_hash.
+    # Lock ID is arbitrary but fixed — all writers contend on the same key.
+    AUDIT_LOCK_ID = 1_234_567_890
+    db_session.execute(text(f'SELECT pg_advisory_xact_lock({AUDIT_LOCK_ID})'))
+
+    # Fetch the most recent chain_hash (within this transaction's snapshot).
+    last = (
+        db_session.query(AuditLog.chain_hash)
+        .order_by(AuditLog.timestamp.desc())
+        .first()
+    )
+    prev_hash = last[0] if last else None
+
+    entry_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+    ts = now.isoformat()
+
+    chain_hash = _compute_chain_hash(
+        str(entry_id),
+        action,
+        actor,
+        resource_type,
+        str(resource_id) if resource_id else None,
+        prev_hash,
+        ts,
+    )
+
+    entry = AuditLog(
+        id=entry_id,
+        action=action,
+        actor=actor,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        risk_class=risk_class,
+        metadata_=metadata or {},
+        object_fingerprint=_compute_object_fingerprint(obj),
+        prev_hash=prev_hash,
+        chain_hash=chain_hash,
+        timestamp=now,
+    )
+    db_session.add(entry)

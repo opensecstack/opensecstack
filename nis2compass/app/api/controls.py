@@ -1,0 +1,141 @@
+from datetime import datetime, timezone
+from flask import Blueprint, request, jsonify, g
+from app.extensions import db
+from app.models import Assessment, Control
+from app.auth import require_auth
+from app.audit import write_audit
+
+controls_bp = Blueprint('controls', __name__)
+
+VALID_STATUSES = {'not_assessed', 'compliant', 'partially_compliant', 'non_compliant', 'not_applicable'}
+VALID_MEASURE_REFS = set('abcdefghij')
+
+
+# ------------------------------------------------------------------ #
+# GET /api/v1/assessments/<id>/controls                                #
+# ------------------------------------------------------------------ #
+
+@controls_bp.get('/assessments/<uuid:assessment_id>/controls')
+@require_auth
+def list_controls(assessment_id):
+    assessment = db.session.get(Assessment, assessment_id)
+    if assessment is None:
+        return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404
+
+    query = db.session.query(Control).filter(Control.assessment_id == assessment_id)
+
+    if status := request.args.get('status'):
+        query = query.filter(Control.status == status)
+    if nist := request.args.get('nist_category'):
+        query = query.filter(Control.nist_category == nist)
+    if measure := request.args.get('measure_ref'):
+        query = query.filter(Control.measure_ref == measure)
+
+    controls = query.order_by(Control.measure_ref).all()
+    response = jsonify([c.to_dict() for c in controls])
+    response.headers['X-Total-Count'] = str(len(controls))
+    return response, 200
+
+
+# ------------------------------------------------------------------ #
+# GET /api/v1/assessments/<id>/controls/<measure_ref>                  #
+# ------------------------------------------------------------------ #
+
+@controls_bp.get('/assessments/<uuid:assessment_id>/controls/<string:measure_ref>')
+@require_auth
+def get_control(assessment_id, measure_ref):
+    if measure_ref not in VALID_MEASURE_REFS:
+        return jsonify({'error': f'measure_ref must be a single letter a-j', 'code': 'INVALID_INPUT'}), 400
+
+    control = (
+        db.session.query(Control)
+        .filter(Control.assessment_id == assessment_id, Control.measure_ref == measure_ref)
+        .first()
+    )
+    if control is None:
+        return jsonify({'error': 'Control not found', 'code': 'NOT_FOUND'}), 404
+    return jsonify(control.to_dict()), 200
+
+
+# ------------------------------------------------------------------ #
+# PATCH /api/v1/assessments/<id>/controls/<measure_ref>                #
+# ------------------------------------------------------------------ #
+
+@controls_bp.patch('/assessments/<uuid:assessment_id>/controls/<string:measure_ref>')
+@require_auth
+def update_control(assessment_id, measure_ref):
+    if measure_ref not in VALID_MEASURE_REFS:
+        return jsonify({'error': 'measure_ref must be a single letter a-j', 'code': 'INVALID_INPUT'}), 400
+
+    assessment = db.session.get(Assessment, assessment_id)
+    if assessment is None:
+        return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404
+    if assessment.status == 'archived':
+        return jsonify({'error': 'Archived assessments are read-only', 'code': 'INVALID_INPUT'}), 400
+
+    control = (
+        db.session.query(Control)
+        .filter(Control.assessment_id == assessment_id, Control.measure_ref == measure_ref)
+        .first()
+    )
+    if control is None:
+        return jsonify({'error': 'Control not found', 'code': 'NOT_FOUND'}), 404
+
+    data = request.get_json(silent=True) or {}
+    before = control.to_dict()
+
+    if 'status' in data:
+        if data['status'] not in VALID_STATUSES:
+            return jsonify({'error': f'status must be one of: {", ".join(sorted(VALID_STATUSES))}', 'code': 'INVALID_INPUT'}), 400
+        control.status = data['status']
+        control.assessed_by = g.actor
+        control.assessed_at = datetime.now(timezone.utc)
+
+    if 'evidence' in data:
+        if not isinstance(data['evidence'], dict):
+            return jsonify({'error': 'evidence must be a JSON object', 'code': 'INVALID_INPUT'}), 400
+        control.evidence = data['evidence']
+
+    if 'gap_description' in data:
+        control.gap_description = data['gap_description']
+    if 'remediation_plan' in data:
+        control.remediation_plan = data['remediation_plan']
+    if 'remediation_due' in data:
+        try:
+            from datetime import date
+            control.remediation_due = date.fromisoformat(data['remediation_due']) if data['remediation_due'] else None
+        except ValueError:
+            return jsonify({'error': 'remediation_due must be YYYY-MM-DD', 'code': 'INVALID_INPUT'}), 400
+    if 'risk_score' in data:
+        score = data['risk_score']
+        if score is not None:
+            try:
+                score = float(score)
+            except (TypeError, ValueError):
+                return jsonify({'error': 'risk_score must be a number', 'code': 'INVALID_INPUT'}), 400
+            if not (0.0 <= score <= 10.0):
+                return jsonify({'error': 'risk_score must be between 0.0 and 10.0', 'code': 'INVALID_INPUT'}), 400
+        control.risk_score = score
+    if 'notes' in data:
+        control.notes = data['notes']
+
+    # Determine risk_class for audit entry
+    after = control.to_dict()
+    risk_class = 'INFO'
+    if after.get('status') in ('non_compliant', 'partially_compliant'):
+        risk_class = 'WARNING'
+    if after.get('risk_score') is not None and after['risk_score'] >= 7.0:
+        risk_class = 'CRITICAL'
+
+    action = 'control_status_changed' if 'status' in data else 'control_evidence_updated'
+    write_audit(
+        db.session,
+        action=action,
+        actor=g.actor,
+        resource_type='control',
+        resource_id=control.id,
+        risk_class=risk_class,
+        metadata={'measure_ref': measure_ref, 'before': before, 'after': after},
+    )
+    db.session.commit()
+    return jsonify(control.to_dict()), 200

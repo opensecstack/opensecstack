@@ -9,6 +9,7 @@ the session and refreshed automatically on HTTP 401.
 from __future__ import annotations
 
 import os
+import threading
 from typing import Optional
 
 import requests
@@ -42,6 +43,7 @@ class NIS2CompassClient:
                 "Content-Type": "application/json",
             }
         )
+        self._auth_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -65,7 +67,10 @@ class NIS2CompassClient:
             except Exception:
                 detail = resp.text
             raise APIError(resp.status_code, detail)
-        data = resp.json()
+        try:
+            data = resp.json()
+        except Exception:
+            raise AuthenticationError("Invalid JSON in auth/token response")
         token = data.get("token") or data.get("access_token")
         if not token:
             raise AuthenticationError("No token received from auth/token endpoint")
@@ -83,12 +88,14 @@ class NIS2CompassClient:
 
     def _request(self, method: str, path: str, **kwargs) -> requests.Response:
         """Execute a request, authenticating (and retrying once on 401)."""
-        if "Authorization" not in self._session.headers:
-            self._authenticate()
+        with self._auth_lock:
+            if "Authorization" not in self._session.headers:
+                self._authenticate()
         resp = getattr(self._session, method)(self._url(path), timeout=self._timeout, **kwargs)
         if resp.status_code == 401:
             # Token expired — re-authenticate and retry once.
-            self._authenticate()
+            with self._auth_lock:
+                self._authenticate()
             resp = getattr(self._session, method)(self._url(path), timeout=self._timeout, **kwargs)
         self._raise_for_status(resp)
         return resp

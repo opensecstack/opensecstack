@@ -24,7 +24,7 @@ def _hash_key(plaintext: str) -> str:
 @api_keys_bp.get('/api-keys')
 @require_auth
 def list_api_keys():
-    keys = db.session.query(ApiKey).order_by(ApiKey.created_at.desc()).all()
+    keys = db.session.query(ApiKey).filter(ApiKey.created_by == g.actor).order_by(ApiKey.created_at.desc()).all()
     return jsonify([k.to_dict() for k in keys]), 200
 
 
@@ -85,6 +85,8 @@ def revoke_api_key(key_id):
     api_key = db.session.get(ApiKey, key_id)
     if api_key is None:
         return jsonify({'error': 'API key not found', 'code': 'NOT_FOUND'}), 404
+    if api_key.created_by != g.actor:
+        return jsonify({'error': 'Access denied', 'code': 'FORBIDDEN'}), 403
 
     api_key.is_active = False
     write_audit(

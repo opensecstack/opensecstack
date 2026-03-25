@@ -37,6 +37,9 @@ func (a *Audit) List(w http.ResponseWriter, r *http.Request) {
 	if perPage < 1 {
 		perPage = 50
 	}
+	if perPage > 100 {
+		perPage = 100
+	}
 
 	filters := db.AuditLogFilters{}
 	if v := q.Get("actor_id"); v != "" {

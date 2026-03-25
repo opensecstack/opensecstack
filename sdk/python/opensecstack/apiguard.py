@@ -12,6 +12,7 @@ re-authenticates transparently when the token expires (HTTP 401).
 from __future__ import annotations
 
 import os
+import threading
 from typing import Optional
 
 import requests
@@ -41,6 +42,7 @@ class APIGuardClient:
         self._session = requests.Session()
         self._session.headers.update({"Accept": "application/json"})
         self._jwt: Optional[str] = None
+        self._auth_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -60,7 +62,10 @@ class APIGuardClient:
             raise AuthenticationError("Invalid API key — cannot obtain JWT")
         if resp.status_code >= 400:
             raise APIError(resp.status_code, resp.text)
-        data = resp.json()
+        try:
+            data = resp.json()
+        except Exception:
+            raise AuthenticationError("Invalid JSON in auth/token response")
         token = data.get("access_token") or data.get("token")
         if not token:
             raise APIError(resp.status_code, "No access_token in auth response")
@@ -84,14 +89,16 @@ class APIGuardClient:
         Make an authenticated request, acquiring a JWT first if needed.
         Retries once on 401 (token refresh).
         """
-        if self._jwt is None:
-            self._authenticate()
+        with self._auth_lock:
+            if self._jwt is None:
+                self._authenticate()
         resp = self._session.request(
             method, self._url(path), timeout=self._timeout, **kwargs
         )
         if resp.status_code == 401:
             # Token may have expired — try to re-authenticate once.
-            self._authenticate()
+            with self._auth_lock:
+                self._authenticate()
             resp = self._session.request(
                 method, self._url(path), timeout=self._timeout, **kwargs
             )
@@ -120,11 +127,12 @@ class APIGuardClient:
         """
         spec_path = os.path.expanduser(spec_path)
         with open(spec_path, "rb") as fh:
-            resp = self._request(
-                "POST",
-                "specs/upload",
-                files={"spec": (os.path.basename(spec_path), fh)},
-            )
+            content = fh.read()
+        resp = self._request(
+            "POST",
+            "specs/upload",
+            files={"spec": (os.path.basename(spec_path), content)},
+        )
         return resp.json()
 
     # ------------------------------------------------------------------

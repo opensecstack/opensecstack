@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/opensecstack/apiguard/internal/citadel"
 )
 
 // AppendAuditLog inserts a new audit log entry with CITADEL chain-hash integrity.
@@ -16,7 +18,10 @@ import (
 // single serializable transaction protected by a PostgreSQL advisory lock
 // (pg_advisory_xact_lock). This prevents two concurrent goroutines from racing
 // to become the "previous" entry and breaking the chain.
-func (d *DB) AppendAuditLog(ctx context.Context, entry *AuditLog) error {
+//
+// When citadelClient is non-nil and configured with a base URL, the completed
+// entry is also forwarded to CITADEL asynchronously (fire-and-forget).
+func (d *DB) AppendAuditLog(ctx context.Context, entry *AuditLog, citadelClient *citadel.Client) error {
 	tx, err := d.Pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("beginning audit log transaction: %w", err)
@@ -111,6 +116,26 @@ func (d *DB) AppendAuditLog(ctx context.Context, entry *AuditLog) error {
 	entry.PrevHash = prevHash
 	entry.ChainHash = chainHash
 	entry.CreatedAt = now
+
+	// Forward to CITADEL asynchronously — best-effort, never blocks the caller.
+	if citadelClient != nil {
+		metadata := map[string]interface{}{
+			"resource_type": entry.ResourceType,
+			"actor_type":    string(entry.ActorType),
+			"chain_hash":    chainHash,
+			"platform":      "apiguard",
+		}
+		citadelClient.LogEvent(
+			string(entry.Action),
+			entry.ActorID,
+			"APIGUARD",
+			"EXECUTED",
+			"apiguard",
+			resourceIDStr,
+			metadata,
+		)
+	}
+
 	return nil
 }
 

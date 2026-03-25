@@ -20,23 +20,33 @@ func RegisterRoutes(
 	apiKeys *handlers.APIKeys,
 	cfg *config.Config,
 ) {
+	// Per-route rate limiters — stricter limits on sensitive or expensive endpoints.
+	// These apply in addition to the global rate limiter set up in setupMiddleware.
+	authLimiter := middleware.NewRateLimiter(20)   // 20 req/min per IP on auth endpoints
+	scanLimiter := middleware.NewRateLimiter(60)   // 60 req/min per IP on scan creation
+
 	r.Route("/api/v1", func(r chi.Router) {
 		// ── Public endpoints (no JWT required) ──────────────────────────────
 		r.Get("/health", health.Health)
 		r.Get("/version", health.Version)
 
 		// Auth: obtain a JWT from a pre-shared API key.
-		r.Get("/auth/token", auth.Ping)          // GET  → instructions / meta
-		r.Post("/auth/token", auth.Token)        // POST → exchange api_key → JWT
-		r.Post("/auth/refresh", auth.RefreshToken) // POST → exchange refresh_token → new tokens
+		// Apply a strict per-IP rate limiter to prevent brute-force attacks.
+		r.Group(func(r chi.Router) {
+			r.Use(authLimiter.Middleware)
+			r.Get("/auth/token", auth.Ping)           // GET  → instructions / meta
+			r.Post("/auth/token", auth.Token)         // POST → exchange api_key → JWT
+			r.Post("/auth/refresh", auth.RefreshToken) // POST → exchange refresh_token → new tokens
+		})
+
 		r.Get("/openapi.json", handlers.OpenAPI)
 
 		// ── Protected endpoints (Bearer JWT required) ────────────────────────
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.JWTAuth(cfg.Auth.JWTSecret))
 
-			// Scans.
-			r.Post("/scans", scans.Create)
+			// Scans — scan creation is expensive; apply a dedicated rate limiter.
+			r.With(scanLimiter.Middleware).Post("/scans", scans.Create)
 			r.Get("/scans", scans.List)
 			r.Get("/scans/{id}", scans.Get)
 			r.Get("/scans/{id}/findings", scans.Findings)

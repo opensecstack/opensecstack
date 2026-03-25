@@ -16,14 +16,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/opensecstack/apiguard/internal/citadel"
 	"github.com/opensecstack/apiguard/internal/db"
 	"github.com/opensecstack/apiguard/internal/domain"
 	"github.com/opensecstack/apiguard/internal/reporter"
 	"github.com/opensecstack/apiguard/internal/scanner"
 )
 
-// auditLog appends a CITADEL audit log entry. Errors are logged as warnings
-// but never returned to callers — audit failures must not break normal operations.
+// auditLog appends an audit log entry locally and forwards it to CITADEL.
+// Errors are logged as warnings but never returned to callers — audit failures
+// must not break normal operations.
 func (s *Scans) auditLog(ctx context.Context, action db.AuditAction, resourceType string, resourceID *uuid.UUID, ip, ua string, meta map[string]interface{}) {
 	metaJSON, _ := json.Marshal(meta)
 	entry := &db.AuditLog{
@@ -40,7 +42,7 @@ func (s *Scans) auditLog(ctx context.Context, action db.AuditAction, resourceTyp
 	if ua != "" {
 		entry.UserAgent = sql.NullString{String: ua, Valid: true}
 	}
-	if err := s.db.AppendAuditLog(ctx, entry); err != nil {
+	if err := s.db.AppendAuditLog(ctx, entry, s.citadel); err != nil {
 		s.logger.Warn().Err(err).Str("action", string(action)).Msg("audit log write failed")
 	}
 }
@@ -50,6 +52,7 @@ type Scans struct {
 	logger  zerolog.Logger
 	db      *db.DB
 	scanner *scanner.Scanner
+	citadel *citadel.Client
 }
 
 // NewScans creates a new Scans handler.
@@ -58,6 +61,16 @@ func NewScans(logger zerolog.Logger, database *db.DB, sc *scanner.Scanner) *Scan
 		logger:  logger.With().Str("handler", "scans").Logger(),
 		db:      database,
 		scanner: sc,
+	}
+}
+
+// NewScansWithCitadel creates a new Scans handler with a CITADEL forwarding client.
+func NewScansWithCitadel(logger zerolog.Logger, database *db.DB, sc *scanner.Scanner, cc *citadel.Client) *Scans {
+	return &Scans{
+		logger:  logger.With().Str("handler", "scans").Logger(),
+		db:      database,
+		scanner: sc,
+		citadel: cc,
 	}
 }
 
@@ -469,6 +482,10 @@ func (s *Scans) Report(w http.ResponseWriter, r *http.Request) {
 
 	contentType := reportContentType(format)
 	w.Header().Set("Content-Type", contentType)
+	if format == "pdf" {
+		filename := fmt.Sprintf("apiguard-report-%s.pdf", id.String())
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
 }
@@ -502,6 +519,8 @@ func reportContentType(format string) string {
 		return "application/sarif+json"
 	case "html":
 		return "text/html; charset=utf-8"
+	case "pdf":
+		return "application/pdf"
 	default:
 		return "application/json"
 	}

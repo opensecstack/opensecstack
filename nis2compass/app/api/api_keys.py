@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
 from ..extensions import db
 from ..models import ApiKey
-from ..auth import require_auth
+from ..auth import require_auth, require_scope
 from ..audit import write_audit
 
 api_keys_bp = Blueprint('api_keys', __name__)
@@ -34,6 +34,7 @@ def list_api_keys():
 
 @api_keys_bp.post('/api-keys')
 @require_auth
+@require_scope('read_write')
 def create_api_key():
     data = request.get_json(silent=True) or {}
     label = (data.get('label') or '').strip() or None
@@ -79,6 +80,7 @@ def create_api_key():
 
 @api_keys_bp.delete('/api-keys/<uuid:key_id>')
 @require_auth
+@require_scope('read_write')
 def revoke_api_key(key_id):
     api_key = db.session.get(ApiKey, key_id)
     if api_key is None:

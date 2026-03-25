@@ -21,6 +21,7 @@ class Organisation(db.Model):
     )
     registration_number = db.Column(db.String(100), nullable=True)
     contact_email = db.Column(db.String(255), nullable=True)
+    created_by = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text('NOW()'))
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text('NOW()'))
 
@@ -36,6 +37,7 @@ class Organisation(db.Model):
             'entity_type': self.entity_type,
             'registration_number': self.registration_number,
             'contact_email': self.contact_email,
+            'created_by': self.created_by,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }

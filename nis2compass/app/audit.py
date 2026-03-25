@@ -34,6 +34,49 @@ def _compute_object_fingerprint(obj: dict | None) -> str | None:
     return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
 
 
+def _forward_to_citadel(log_entry: dict) -> None:
+    """Forward an audit entry to CITADEL HTTP API. Fire-and-forget — never raises."""
+    try:
+        from flask import current_app
+        citadel_url = current_app.config.get('CITADEL_API_URL')
+    except RuntimeError:
+        return  # No app context (e.g. during testing without full stack)
+    if not citadel_url:
+        return
+    try:
+        import requests  # lazy import — only used if CITADEL is configured
+        payload = {
+            'action_type': log_entry.get('action'),
+            'actor_user_id': log_entry.get('actor', 'unknown'),
+            'actor_role': 'NIS2_COMPASS',
+            'result_status': 'EXECUTED',
+            'system_module': 'nis2compass',
+            'resource_id': str(log_entry.get('resource_id', '')),
+            'data_hash': log_entry.get('chain_hash'),
+            'metadata': {
+                'resource_type': log_entry.get('resource_type'),
+                'risk_class': log_entry.get('risk_class', 'INFO'),
+                'platform': 'nis2compass',
+            }
+        }
+        try:
+            from flask import current_app as _app
+            api_key = _app.config.get('CITADEL_API_KEY')
+        except RuntimeError:
+            api_key = None
+        headers = {'Content-Type': 'application/json'}
+        if api_key:
+            headers['Authorization'] = f'Bearer {api_key}'
+        requests.post(
+            f'{citadel_url.rstrip("/")}/v1/log',
+            json=payload,
+            headers=headers,
+            timeout=2.0,
+        )
+    except Exception:
+        pass  # CITADEL forwarding is best-effort
+
+
 def write_audit(
     db_session,
     action: str,
@@ -110,3 +153,14 @@ def write_audit(
             dispatch(entry.to_dict(), webhook_url, webhook_secret)
     except RuntimeError:
         pass  # No app context (e.g. during testing without full stack)
+
+    # Forward to CITADEL (fire-and-forget — never raises)
+    entry_data = {
+        'action': action,
+        'actor': actor,
+        'resource_type': resource_type,
+        'resource_id': resource_id,
+        'risk_class': risk_class,
+        'chain_hash': chain_hash,
+    }
+    _forward_to_citadel(entry_data)

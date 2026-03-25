@@ -19,6 +19,7 @@ import (
 
 	"github.com/opensecstack/apiguard/internal/api/handlers"
 	"github.com/opensecstack/apiguard/internal/api/middleware"
+	"github.com/opensecstack/apiguard/internal/citadel"
 	"github.com/opensecstack/apiguard/internal/config"
 	"github.com/opensecstack/apiguard/internal/db"
 	"github.com/opensecstack/apiguard/internal/scanner"
@@ -32,6 +33,7 @@ type Server struct {
 	config         *config.Config
 	db             *db.DB
 	scanner        *scanner.Scanner
+	citadel        *citadel.Client
 	shutdownCtx    context.Context
 	shutdownCancel context.CancelFunc
 }
@@ -44,6 +46,10 @@ func NewServer(cfg *config.Config, database *db.DB, sc *scanner.Scanner) *Server
 		Str("component", "api").
 		Logger()
 
+	// Initialise the CITADEL client. When APIGUARD_CITADEL_URL is unset the
+	// client is a no-op — all LogEvent calls return immediately.
+	cc := citadel.New(cfg.Citadel.APIURL, cfg.Citadel.APIKey)
+
 	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
 	s := &Server{
 		router:         chi.NewRouter(),
@@ -52,6 +58,7 @@ func NewServer(cfg *config.Config, database *db.DB, sc *scanner.Scanner) *Server
 		config:         cfg,
 		db:             database,
 		scanner:        sc,
+		citadel:        cc,
 		shutdownCtx:    shutdownCtx,
 		shutdownCancel: shutdownCancel,
 	}
@@ -121,14 +128,14 @@ func (s *Server) setupMiddleware() {
 		rateLimit = 120
 	}
 	s.router.Use(RateLimiter(s.shutdownCtx, rateLimit)) // requests per minute per IP
-	s.router.Use(CORSMiddleware(nil))                    // No cross-origin allowed by default (same-origin only)
+	s.router.Use(middleware.CORS(s.config.CORS.Origins)) // CORS must run before JWT auth
 }
 
 func (s *Server) registerRoutes() {
 	h := handlers.NewHealth(s.logger)
 	a := handlers.NewAuthWithDB(s.logger, s.config, s.db)
-	sc := handlers.NewScans(s.logger, s.db, s.scanner)
-	f := handlers.NewFindings(s.logger, s.db)
+	sc := handlers.NewScansWithCitadel(s.logger, s.db, s.scanner, s.citadel)
+	f := handlers.NewFindingsWithCitadel(s.logger, s.db, s.citadel)
 	sp := handlers.NewSpecs(s.logger, "")
 	au := handlers.NewAudit(s.logger, s.db)
 	ak := handlers.NewAPIKeys(s.logger, s.db)

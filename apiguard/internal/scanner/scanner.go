@@ -23,6 +23,7 @@ import (
 
 	"github.com/opensecstack/apiguard/internal/auth"
 	"github.com/opensecstack/apiguard/internal/config"
+	"github.com/opensecstack/apiguard/internal/customrules"
 	"github.com/opensecstack/apiguard/internal/domain"
 	"github.com/opensecstack/apiguard/internal/modules"
 	"github.com/opensecstack/apiguard/internal/testgen"
@@ -454,6 +455,30 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 	}
 
 	registry := modules.NewRegistry()
+
+	// Load and register custom rules if a directory has been configured.
+	if dir := s.config.CustomRulesDir; dir != "" {
+		rules, loadErr := customrules.LoadRulesFromDir(dir)
+		if loadErr != nil {
+			// Log the error but do not abort the scan — built-in modules still run.
+			s.logger.Warn().Err(loadErr).Str("custom_rules_dir", dir).Msg("errors loading custom rules")
+		}
+		if len(rules) > 0 {
+			validationErrs := customrules.Validate(rules)
+			for _, ve := range validationErrs {
+				s.logger.Warn().Err(ve).Msg("custom rule validation warning")
+			}
+			for _, rule := range rules {
+				if !rule.Enabled {
+					s.logger.Debug().Str("rule_id", rule.ID).Msg("skipping disabled custom rule")
+					continue
+				}
+				registry.Register(customrules.NewModule(rule))
+				s.logger.Info().Str("rule_id", rule.ID).Str("name", rule.Name).Msg("custom rule registered")
+			}
+		}
+	}
+
 	var allFindings []domain.Finding
 
 	moduleTimeout := 60 * time.Second

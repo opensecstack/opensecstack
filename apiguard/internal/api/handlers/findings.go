@@ -9,10 +9,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/opensecstack/apiguard/internal/citadel"
 	"github.com/opensecstack/apiguard/internal/db"
 )
 
-// auditLog appends a CITADEL audit log entry. Errors are logged as warnings.
+// auditLog appends an audit log entry locally and forwards it to CITADEL.
+// Errors are logged as warnings but never returned to callers.
 func (f *Findings) auditLog(ctx context.Context, action db.AuditAction, resourceType string, resourceID *uuid.UUID, ip, ua string, meta map[string]interface{}) {
 	metaJSON, _ := json.Marshal(meta)
 	entry := &db.AuditLog{
@@ -29,15 +31,16 @@ func (f *Findings) auditLog(ctx context.Context, action db.AuditAction, resource
 	if ua != "" {
 		entry.UserAgent = sql.NullString{String: ua, Valid: true}
 	}
-	if err := f.db.AppendAuditLog(ctx, entry); err != nil {
+	if err := f.db.AppendAuditLog(ctx, entry, f.citadel); err != nil {
 		f.logger.Warn().Err(err).Str("action", string(action)).Msg("audit log write failed")
 	}
 }
 
 // Findings handles finding-related API endpoints.
 type Findings struct {
-	logger zerolog.Logger
-	db     *db.DB
+	logger  zerolog.Logger
+	db      *db.DB
+	citadel *citadel.Client
 }
 
 // NewFindings creates a new Findings handler.
@@ -45,6 +48,15 @@ func NewFindings(logger zerolog.Logger, database *db.DB) *Findings {
 	return &Findings{
 		logger: logger.With().Str("handler", "findings").Logger(),
 		db:     database,
+	}
+}
+
+// NewFindingsWithCitadel creates a new Findings handler with a CITADEL forwarding client.
+func NewFindingsWithCitadel(logger zerolog.Logger, database *db.DB, cc *citadel.Client) *Findings {
+	return &Findings{
+		logger:  logger.With().Str("handler", "findings").Logger(),
+		db:      database,
+		citadel: cc,
 	}
 }
 

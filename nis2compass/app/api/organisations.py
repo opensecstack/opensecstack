@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, g
 from sqlalchemy.exc import IntegrityError
 from ..extensions import db
 from ..models import Organisation
-from ..auth import require_auth
+from ..auth import require_auth, require_scope
 from ..audit import write_audit
 
 organisations_bp = Blueprint('organisations', __name__)
@@ -27,7 +27,12 @@ def list_organisations():
     page = max(1, request.args.get('page', 1, type=int))
     per_page = min(100, max(1, request.args.get('per_page', 20, type=int)))
 
-    query = db.session.query(Organisation).order_by(Organisation.created_at.desc())
+    # Only return organisations owned by the current actor
+    query = (
+        db.session.query(Organisation)
+        .filter(Organisation.created_by == g.actor)
+        .order_by(Organisation.created_at.desc())
+    )
     items, total = _paginate(query, page, per_page)
 
     response = jsonify([o.to_dict() for o in items])
@@ -41,6 +46,7 @@ def list_organisations():
 
 @organisations_bp.post('/organisations')
 @require_auth
+@require_scope('read_write')
 def create_organisation():
     data = request.get_json(silent=True) or {}
 
@@ -71,6 +77,7 @@ def create_organisation():
         entity_type=entity_type,
         registration_number=data.get('registration_number'),
         contact_email=data.get('contact_email'),
+        created_by=g.actor,
     )
     db.session.add(org)
 
@@ -104,6 +111,8 @@ def get_organisation(org_id):
     org = db.session.get(Organisation, org_id)
     if org is None:
         return jsonify({'error': 'Organisation not found', 'code': 'NOT_FOUND'}), 404
+    if org.created_by is not None and org.created_by != g.actor:
+        return jsonify({'error': 'Access denied', 'code': 'FORBIDDEN'}), 403
     return jsonify(org.to_dict()), 200
 
 
@@ -113,10 +122,13 @@ def get_organisation(org_id):
 
 @organisations_bp.patch('/organisations/<uuid:org_id>')
 @require_auth
+@require_scope('read_write')
 def update_organisation(org_id):
     org = db.session.get(Organisation, org_id)
     if org is None:
         return jsonify({'error': 'Organisation not found', 'code': 'NOT_FOUND'}), 404
+    if org.created_by is not None and org.created_by != g.actor:
+        return jsonify({'error': 'Access denied', 'code': 'FORBIDDEN'}), 403
 
     data = request.get_json(silent=True) or {}
     before = org.to_dict()
@@ -162,10 +174,13 @@ def update_organisation(org_id):
 
 @organisations_bp.delete('/organisations/<uuid:org_id>')
 @require_auth
+@require_scope('read_write')
 def delete_organisation(org_id):
     org = db.session.get(Organisation, org_id)
     if org is None:
         return jsonify({'error': 'Organisation not found', 'code': 'NOT_FOUND'}), 404
+    if org.created_by is not None and org.created_by != g.actor:
+        return jsonify({'error': 'Access denied', 'code': 'FORBIDDEN'}), 403
 
     write_audit(
         db.session,

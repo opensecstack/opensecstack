@@ -4,12 +4,30 @@ import uuid as uuid_lib
 from flask import Blueprint, request, jsonify, g, current_app, send_file
 from ..extensions import db
 from ..models import Assessment, Control, Artifact
-from ..auth import require_auth
+from ..auth import require_auth, require_scope
 from ..audit import write_audit
 
 artifacts_bp = Blueprint('artifacts', __name__)
 
 VALID_TYPES = {'policy', 'procedure', 'evidence', 'report', 'screenshot', 'log', 'certificate', 'contract'}
+
+ALLOWED_MIME_TYPES = {
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/plain',
+    'text/csv',
+    'image/png',
+    'image/jpeg',
+    'image/gif',
+    'application/zip',
+    'application/x-zip-compressed',
+    'application/json',
+    'application/xml',
+    'text/xml',
+}
 
 
 def _save_file(file_storage, assessment_id: str) -> tuple[str, str, int, str]:
@@ -63,6 +81,7 @@ def list_artifacts(assessment_id):
 
 @artifacts_bp.post('/assessments/<uuid:assessment_id>/artifacts')
 @require_auth
+@require_scope('read_write')
 def upload_artifact(assessment_id):
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
@@ -76,6 +95,16 @@ def upload_artifact(assessment_id):
     file = request.files['file']
     if not file.filename:
         return jsonify({'error': 'No file selected', 'code': 'INVALID_INPUT'}), 400
+
+    # MIME type validation — use the content_type supplied by the client (no
+    # system-level libmagic dependency required).
+    content_type = (file.content_type or '').split(';')[0].strip().lower()
+    if content_type not in ALLOWED_MIME_TYPES:
+        return jsonify({
+            'error': 'Unsupported file type',
+            'code': 'UNSUPPORTED_MEDIA_TYPE',
+            'allowed_types': sorted(ALLOWED_MIME_TYPES),
+        }), 415
 
     art_type = request.form.get('type', '').strip()
     if art_type not in VALID_TYPES:
@@ -169,6 +198,7 @@ def download_artifact(artifact_id):
 
 @artifacts_bp.delete('/artifacts/<uuid:artifact_id>')
 @require_auth
+@require_scope('read_write')
 def delete_artifact(artifact_id):
     artifact = db.session.get(Artifact, artifact_id)
     if artifact is None:

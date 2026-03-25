@@ -17,6 +17,10 @@ services:
       - APIGUARD_DB_URL=postgres://apiguard:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/apiguard?sslmode=disable
       - APIGUARD_JWT_SECRET=${APIGUARD_JWT_SECRET:?APIGUARD_JWT_SECRET must be set}
       - APIGUARD_REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      # CITADEL audit forwarding — citadel-api is defined in .citadel/docker-compose.yml;
+      # start .citadel/docker-compose.yml separately or merge for full integration.
+      - APIGUARD_CITADEL_URL=http://citadel-api:8099
+      - APIGUARD_CITADEL_API_KEY=${CITADEL_API_KEY:-}
     networks:
       - frontend
       - backend
@@ -53,6 +57,10 @@ services:
       - NIS2_REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/1
       - NIS2_SECRET_KEY=${NIS2_SECRET_KEY:?NIS2_SECRET_KEY must be set}
       - NIS2_JWT_SECRET=${NIS2_JWT_SECRET:?NIS2_JWT_SECRET must be set}
+      # CITADEL audit forwarding — citadel-api is defined in .citadel/docker-compose.yml;
+      # start .citadel/docker-compose.yml separately or merge for full integration.
+      - CITADEL_API_URL=http://citadel-api:8099
+      - CITADEL_API_KEY=${CITADEL_API_KEY:-}
     networks:
       - frontend
       - backend

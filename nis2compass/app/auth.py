@@ -10,11 +10,14 @@ def _constant_eq(a: str, b: str) -> bool:
     return hmac.compare_digest(a.encode(), b.encode())
 
 
-def validate_api_key(api_key: str) -> bool:
+def validate_api_key(api_key: str) -> tuple[bool, str]:
     """
     Check the provided key against DB api_keys table.
     Falls back to NIS2_API_KEYS env var list for bootstrapping
     (used when no DB keys exist yet, e.g. first run).
+
+    Returns a (valid: bool, scope: str) tuple.
+    Env-var bootstrap keys always get 'read_write' scope.
     """
     import hashlib
 
@@ -24,7 +27,6 @@ def validate_api_key(api_key: str) -> bool:
     try:
         from .models import ApiKey
         from .extensions import db
-        from sqlalchemy import text as sa_text
 
         record = (
             db.session.query(ApiKey)
@@ -35,11 +37,11 @@ def validate_api_key(api_key: str) -> bool:
             # Update last_used_at without triggering audit
             record.last_used_at = datetime.now(timezone.utc)
             db.session.commit()
-            return True
+            return True, record.scope
 
         # If DB has any active keys, don't fall through to env-var
         if db.session.query(ApiKey).filter(ApiKey.is_active == True).count() > 0:
-            return False
+            return False, 'read_write'
     except Exception:
         # DB unavailable — fall through to env-var check
         pass
@@ -47,12 +49,12 @@ def validate_api_key(api_key: str) -> bool:
     # Bootstrap fallback: env-var keys (constant-time comparison)
     for valid_key in current_app.config.get('API_KEYS', []):
         if _constant_eq(api_key, valid_key):
-            return True
+            return True, 'read_write'
 
-    return False
+    return False, 'read_write'
 
 
-def issue_jwt(identity: str) -> tuple[str, datetime]:
+def issue_jwt(identity: str, scope: str = 'read_write') -> tuple[str, datetime]:
     """Sign and return a JWT for the given identity plus its expiry datetime."""
     secret = current_app.config['JWT_SECRET']
     ttl = current_app.config['JWT_TTL']
@@ -61,6 +63,7 @@ def issue_jwt(identity: str) -> tuple[str, datetime]:
         'sub': identity,
         'iat': datetime.now(timezone.utc),
         'exp': expires_at,
+        'scope': scope,
     }
     token = jwt.encode(payload, secret, algorithm='HS256')
     return token, expires_at
@@ -89,5 +92,43 @@ def require_auth(f):
         if payload is None:
             return jsonify({'error': 'Token is invalid or expired', 'code': 'UNAUTHORIZED'}), 401
         g.actor = payload.get('sub', 'unknown')
+        # Default to 'read_write' for tokens issued before scope was tracked
+        g.token_scope = payload.get('scope', 'read_write')
         return f(*args, **kwargs)
     return decorated
+
+
+def require_scope(scope: str):
+    """Decorator factory that enforces a minimum scope on a route.
+
+    Must be applied *after* @require_auth (i.e. listed below it), so that
+    g.token_scope is already set when this check runs.
+
+    Usage::
+
+        @bp.post('/resource')
+        @require_auth
+        @require_scope('read_write')
+        def create_resource():
+            ...
+
+    Supported scopes (in ascending privilege order):
+      'read'       – read-only operations
+      'read_write' – full read/write access
+    """
+    _SCOPE_RANK = {'read': 0, 'read_write': 1}
+
+    def decorator(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            token_scope = getattr(g, 'token_scope', 'read_write')
+            required_rank = _SCOPE_RANK.get(scope, 1)
+            token_rank = _SCOPE_RANK.get(token_scope, 0)
+            if token_rank < required_rank:
+                return jsonify({
+                    'error': 'Insufficient scope for this operation',
+                    'code': 'FORBIDDEN',
+                }), 403
+            return f(*args, **kwargs)
+        return decorated
+    return decorator

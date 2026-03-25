@@ -2,7 +2,7 @@ from datetime import datetime, timezone, date
 from flask import Blueprint, request, jsonify, g
 from ..extensions import db
 from ..models import Assessment, Control
-from ..auth import require_auth
+from ..auth import require_auth, require_scope
 from ..audit import write_audit
 
 controls_bp = Blueprint('controls', __name__)
@@ -64,6 +64,7 @@ def get_control(assessment_id, measure_ref):
 
 @controls_bp.patch('/assessments/<uuid:assessment_id>/controls/<string:measure_ref>')
 @require_auth
+@require_scope('read_write')
 def update_control(assessment_id, measure_ref):
     if measure_ref not in VALID_MEASURE_REFS:
         return jsonify({'error': 'measure_ref must be a single letter a-j', 'code': 'INVALID_INPUT'}), 400

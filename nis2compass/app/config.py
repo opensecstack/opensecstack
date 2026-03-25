@@ -61,3 +61,9 @@ class Config:
     # ------------------------------------------------------------------ #
     MAX_CONTENT_LENGTH = int(os.getenv('NIS2_MAX_UPLOAD_BYTES', str(20 * 1024 * 1024)))
     UPLOAD_DIR = os.getenv('NIS2_UPLOAD_DIR', '/app/uploads')
+
+    # ------------------------------------------------------------------ #
+    # CITADEL audit forwarding (optional)                                  #
+    # ------------------------------------------------------------------ #
+    CITADEL_API_URL = os.environ.get('CITADEL_API_URL', '')
+    CITADEL_API_KEY = os.environ.get('CITADEL_API_KEY', '')

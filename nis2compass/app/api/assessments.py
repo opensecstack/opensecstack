@@ -8,12 +8,29 @@ from reportlab.lib.units import mm
 from reportlab.platypus import (
     SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable,
 )
+from sqlalchemy.exc import IntegrityError
 from ..extensions import db
 from ..models import Assessment, Control, ControlTemplate, Organisation
-from ..auth import require_auth
+from ..auth import require_auth, require_scope
 from ..audit import write_audit
 
 assessments_bp = Blueprint('assessments', __name__)
+
+
+def _check_org_access(org_id):
+    """Return a 403 response if the current actor does not own the org, else None.
+
+    Orgs with created_by=NULL are treated as accessible by any authenticated
+    user (backward compatibility for rows created before ownership was tracked).
+    """
+    org = db.session.get(Organisation, org_id)
+    if org is None:
+        # Let the calling route return the 404 itself
+        return None
+    if org.created_by is not None and org.created_by != g.actor:
+        return jsonify({'error': 'Access denied', 'code': 'FORBIDDEN'}), 403
+    return None
+
 
 VALID_TRANSITIONS = {
     'draft':        ['in_progress'],
@@ -38,11 +55,28 @@ NIST_MAP = {
 
 
 def _create_controls_from_templates(assessment_id, db_session):
-    """Populate 10 control rows from control_templates (or fallback NIST_MAP)."""
+    """Populate 10 control rows from control_templates (or fallback NIST_MAP).
+
+    Skips any measure_ref that already has a control for this assessment so
+    the function is safe to call even if some rows were already inserted.
+    Returns True on success, False if a duplicate-control IntegrityError
+    occurs and the caller should return 409.
+    """
     templates = db_session.query(ControlTemplate).order_by(ControlTemplate.measure_ref).all()
     template_map = {t.measure_ref: t for t in templates}
 
+    # Build set of measure_refs that already exist for this assessment
+    existing_refs = {
+        row.measure_ref
+        for row in db_session.query(Control.measure_ref)
+        .filter(Control.assessment_id == assessment_id)
+        .all()
+    }
+
     for ref in 'abcdefghij':
+        if ref in existing_refs:
+            continue  # already present — skip to avoid violating the UNIQUE constraint
+
         t = template_map.get(ref)
         if t:
             nist_cat = t.nist_category
@@ -62,6 +96,8 @@ def _create_controls_from_templates(assessment_id, db_session):
         )
         db_session.add(control)
 
+    return True
+
 
 # ------------------------------------------------------------------ #
 # GET /api/v1/organisations/<org_id>/assessments                       #
@@ -70,6 +106,10 @@ def _create_controls_from_templates(assessment_id, db_session):
 @assessments_bp.get('/organisations/<uuid:org_id>/assessments')
 @require_auth
 def list_assessments(org_id):
+    err = _check_org_access(org_id)
+    if err:
+        return err
+
     org = db.session.get(Organisation, org_id)
     if org is None:
         return jsonify({'error': 'Organisation not found', 'code': 'NOT_FOUND'}), 404
@@ -97,7 +137,12 @@ def list_assessments(org_id):
 
 @assessments_bp.post('/organisations/<uuid:org_id>/assessments')
 @require_auth
+@require_scope('read_write')
 def create_assessment(org_id):
+    err = _check_org_access(org_id)
+    if err:
+        return err
+
     org = db.session.get(Organisation, org_id)
     if org is None:
         return jsonify({'error': 'Organisation not found', 'code': 'NOT_FOUND'}), 404
@@ -125,19 +170,26 @@ def create_assessment(org_id):
     db.session.add(assessment)
     db.session.flush()  # get id before creating controls
 
-    _create_controls_from_templates(assessment.id, db.session)
+    try:
+        _create_controls_from_templates(assessment.id, db.session)
+        write_audit(
+            db.session,
+            action='assessment_created',
+            actor=g.actor,
+            resource_type='assessment',
+            resource_id=assessment.id,
+            risk_class='INFO',
+            metadata={'title': assessment.title, 'org_id': str(org_id)},
+            obj=assessment.to_dict(),
+        )
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({
+            'error': 'Duplicate controls detected for this assessment',
+            'code': 'CONFLICT',
+        }), 409
 
-    write_audit(
-        db.session,
-        action='assessment_created',
-        actor=g.actor,
-        resource_type='assessment',
-        resource_id=assessment.id,
-        risk_class='INFO',
-        metadata={'title': assessment.title, 'org_id': str(org_id)},
-        obj=assessment.to_dict(),
-    )
-    db.session.commit()
     return jsonify(assessment.to_dict(include_stats=True)), 201
 
 
@@ -151,6 +203,9 @@ def get_assessment(assessment_id):
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
         return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
     return jsonify(assessment.to_dict(include_stats=True)), 200
 
 
@@ -160,10 +215,14 @@ def get_assessment(assessment_id):
 
 @assessments_bp.patch('/assessments/<uuid:assessment_id>')
 @require_auth
+@require_scope('read_write')
 def update_assessment(assessment_id):
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
         return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
 
     if assessment.status == 'archived':
         return jsonify({'error': 'Archived assessments are read-only', 'code': 'INVALID_INPUT'}), 400
@@ -218,10 +277,14 @@ def update_assessment(assessment_id):
 
 @assessments_bp.delete('/assessments/<uuid:assessment_id>')
 @require_auth
+@require_scope('read_write')
 def delete_assessment(assessment_id):
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
         return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
 
     write_audit(
         db.session,
@@ -522,10 +585,14 @@ def _generate_pdf(assessment, org, controls, templates):
 
 @assessments_bp.post('/assessments/<uuid:assessment_id>/report')
 @require_auth
+@require_scope('read_write')
 def generate_report(assessment_id):
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
         return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
 
     org = db.session.get(Organisation, assessment.org_id)
     if org is None:

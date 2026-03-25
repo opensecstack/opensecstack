@@ -17,6 +17,8 @@ type Config struct {
 	Auth      AuthConfig      `mapstructure:"auth"`
 	Report    ReportConfig    `mapstructure:"report"`
 	Dashboard DashboardConfig `mapstructure:"dashboard"`
+	CORS      CORSConfig      `mapstructure:"cors"`
+	Citadel   CitadelConfig   `mapstructure:"citadel"`
 }
 
 // DatabaseConfig holds PostgreSQL connection settings.
@@ -41,6 +43,10 @@ type ScannerConfig struct {
 	MaxSpecSize   int           `mapstructure:"max_spec_size"` // MB
 	RateLimit     int           `mapstructure:"rate_limit"`
 	TLSSkipVerify bool          `mapstructure:"tls_skip_verify"`
+	// CustomRulesDir is the path to a directory of *.yaml custom rule files.
+	// Set via the APIGUARD_CUSTOM_RULES_DIR environment variable or
+	// scanner.custom_rules_dir in apiguard.yaml. Empty means no custom rules.
+	CustomRulesDir string `mapstructure:"custom_rules_dir"`
 }
 
 // AuthConfig holds authentication settings.
@@ -74,6 +80,21 @@ type DashboardConfig struct {
 	StaticDir string `mapstructure:"static_dir"`
 }
 
+// CORSConfig holds Cross-Origin Resource Sharing settings.
+type CORSConfig struct {
+	// Origins is the list of allowed origins for CORS requests.
+	// Set via APIGUARD_CORS_ORIGINS (comma-separated). Default "*" allows all origins.
+	Origins []string `mapstructure:"origins"`
+}
+
+// CitadelConfig holds CITADEL audit-forwarding settings.
+type CitadelConfig struct {
+	// APIURL is read from APIGUARD_CITADEL_URL. When empty, forwarding is disabled.
+	APIURL string `mapstructure:"api_url" json:"-"`
+	// APIKey is read from APIGUARD_CITADEL_API_KEY and sent as a Bearer token.
+	APIKey string `mapstructure:"api_key" json:"-"`
+}
+
 // Load reads configuration from viper with defaults applied.
 func Load() *Config {
 	setDefaults()
@@ -93,11 +114,12 @@ func Load() *Config {
 			DB:       viper.GetInt("redis.db"),
 		},
 		Scanner: ScannerConfig{
-			Timeout:       viper.GetDuration("scanner.timeout"),
-			Concurrency:   viper.GetInt("scanner.concurrency"),
-			MaxSpecSize:   viper.GetInt("scanner.max_spec_size"),
-			RateLimit:     viper.GetInt("scanner.rate_limit"),
-			TLSSkipVerify: viper.GetBool("scanner.tls_skip_verify"),
+			Timeout:        viper.GetDuration("scanner.timeout"),
+			Concurrency:    viper.GetInt("scanner.concurrency"),
+			MaxSpecSize:    viper.GetInt("scanner.max_spec_size"),
+			RateLimit:      viper.GetInt("scanner.rate_limit"),
+			TLSSkipVerify:  viper.GetBool("scanner.tls_skip_verify"),
+			CustomRulesDir: viper.GetString("scanner.custom_rules_dir"),
 		},
 		Auth: AuthConfig{
 			JWTSecret:     viper.GetString("auth.jwt_secret"),
@@ -112,6 +134,13 @@ func Load() *Config {
 		Dashboard: DashboardConfig{
 			Enabled:   viper.GetBool("dashboard.enabled"),
 			StaticDir: viper.GetString("dashboard.static_dir"),
+		},
+		CORS: CORSConfig{
+			Origins: viper.GetStringSlice("cors.origins"),
+		},
+		Citadel: CitadelConfig{
+			APIURL: viper.GetString("citadel.api_url"),
+			APIKey: viper.GetString("citadel.api_key"),
 		},
 	}
 
@@ -138,6 +167,7 @@ func setDefaults() {
 	viper.SetDefault("scanner.max_spec_size", 10) // 10 MB
 	viper.SetDefault("scanner.rate_limit", 0)
 	viper.SetDefault("scanner.tls_skip_verify", false)
+	viper.SetDefault("scanner.custom_rules_dir", "") // empty = no custom rules loaded
 
 	// Auth defaults.
 	viper.SetDefault("auth.token_expiry", 24*time.Hour)
@@ -150,4 +180,16 @@ func setDefaults() {
 	// Dashboard defaults.
 	viper.SetDefault("dashboard.enabled", true)
 	viper.SetDefault("dashboard.static_dir", "./web/dist")
+
+	// CORS defaults: wildcard allows all origins (suitable for development).
+	// Override with APIGUARD_CORS_ORIGINS=https://app.example.com,https://other.example.com
+	viper.SetDefault("cors.origins", []string{"*"})
+
+	// CITADEL defaults: empty = forwarding disabled.
+	// Set APIGUARD_CITADEL_URL=http://citadel-api:8099 to enable.
+	viper.SetDefault("citadel.api_url", "")
+	viper.SetDefault("citadel.api_key", "")
+
+	viper.SetEnvPrefix("APIGUARD")
+	viper.AutomaticEnv()
 }

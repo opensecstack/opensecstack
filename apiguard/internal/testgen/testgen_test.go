@@ -103,7 +103,7 @@ func TestGenerateBolaTests(t *testing.T) {
 			if tc.EndpointPath != "/api/users/{user_id}" {
 				t.Errorf("unexpected BOLA endpoint: %s", tc.EndpointPath)
 			}
-			if tc.Category != "bola_sequential_id" && tc.Category != "bola_cross_user" {
+			if tc.Category != "bola_id_enum" && tc.Category != "bola_cross_user" {
 				t.Errorf("unexpected BOLA category: %s", tc.Category)
 			}
 			if len(tc.Requests) < 2 {
@@ -173,17 +173,17 @@ func TestGenerateAuthRemovalTests(t *testing.T) {
 			if tc.Requests[0].Auth != "none" {
 				t.Error("auth_removal test should have Auth=none")
 			}
-		case "auth_expired_token":
+		case "auth_token_expired":
 			expiredTokenCount++
 			if tc.Requests[0].Auth != "expired" {
-				t.Error("auth_expired_token test should have Auth=expired")
+				t.Error("auth_token_expired test should have Auth=expired")
 			}
 		case "auth_invalid_token":
 			invalidTokenCount++
 			if tc.Requests[0].Auth != "invalid" {
 				t.Error("auth_invalid_token test should have Auth=invalid")
 			}
-		case "auth_unprotected_state_change":
+		case "auth_unprotected_write":
 			unprotectedCount++
 		}
 	}
@@ -224,12 +224,12 @@ func TestGenerateMassAssignmentTests(t *testing.T) {
 			t.Errorf("unexpected module: %s", tc.ModuleID)
 		}
 		switch tc.Category {
-		case "mass_assignment_extra_fields":
+		case "mass_assign_extra_fields":
 			extraFieldsCount++
 			if tc.Requests[0].Body == nil {
 				t.Error("extra_fields test should have a body")
 			}
-		case "mass_assignment_readonly_fields":
+		case "mass_assign_readonly":
 			readonlyCount++
 			if tc.Requests[0].Body == nil {
 				t.Error("readonly_fields test should have a body")

@@ -683,6 +683,7 @@ dependencies = [
 name = "testgen"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "parser",
  "serde",
  "serde_json",

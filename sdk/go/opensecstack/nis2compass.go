@@ -93,7 +93,20 @@ func (c *NIS2CompassClient) authenticate(ctx context.Context) error {
 
 // do builds and executes an authenticated HTTP request, re-authenticating
 // once on HTTP 401.
+//
+// The body is buffered into memory so that it can be replayed intact if the
+// first attempt returns 401 and a token refresh is required.
 func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io.Reader, extraHeaders map[string]string) (*http.Response, error) {
+	// Buffer body for replay on token-refresh retry.
+	var bodyBuf []byte
+	if body != nil {
+		var err error
+		bodyBuf, err = io.ReadAll(body)
+		if err != nil {
+			return nil, fmt.Errorf("reading request body: %w", err)
+		}
+	}
+
 	c.mu.Lock()
 	if c.jwt == "" {
 		if err := c.authenticate(ctx); err != nil {
@@ -105,7 +118,11 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 	c.mu.Unlock()
 
 	doReq := func(tok string) (*http.Response, error) {
-		req, err := http.NewRequestWithContext(ctx, method, c.apiURL(path), body)
+		var r io.Reader
+		if bodyBuf != nil {
+			r = bytes.NewReader(bodyBuf)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, c.apiURL(path), r)
 		if err != nil {
 			return nil, fmt.Errorf("building request: %w", err)
 		}
@@ -130,7 +147,6 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 		}
 		jwt = c.jwt
 		c.mu.Unlock()
-		// body was already consumed; callers must supply a fresh reader for retries
 		resp, err = doReq(jwt)
 		if err != nil {
 			return nil, err

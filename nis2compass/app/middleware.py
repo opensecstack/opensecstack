@@ -62,6 +62,12 @@ def apply_middleware(app) -> None:
 
     # CORS — restrict to configured origins in production
     allowed_origins = app.config.get('CORS_ORIGINS', '*' if app.debug else [])
+    if not allowed_origins and not app.debug:
+        _log.warning(
+            'CORS_ORIGINS is empty — cross-origin requests from the web frontend '
+            'will be blocked. Set NIS2_CORS_ORIGINS to a comma-separated list of '
+            'allowed origins (e.g. https://nis2.example.com).'
+        )
     CORS(app, origins=allowed_origins, supports_credentials=False)
 
     @app.before_request

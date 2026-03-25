@@ -14,16 +14,16 @@ Open Source API Security Testing Framework | OWASP API Top 10 | Go + Rust + Reac
 
 | ID  | Vulnerability                              | Status |
 |-----|--------------------------------------------|--------|
-| A1  | Broken Object Level Authorization (BOLA)   | Planned |
-| A2  | Broken Authentication                      | Planned |
-| A3  | Broken Object Property Level Authorization | Planned |
-| A4  | Unrestricted Resource Consumption          | Planned |
-| A5  | Broken Function Level Authorization        | Planned |
-| A6  | Unrestricted Access to Sensitive Flows     | Planned |
-| A7  | Server Side Request Forgery (SSRF)         | Planned |
-| A8  | Security Misconfiguration                  | Planned |
-| A9  | Improper Inventory Management              | Planned |
-| A10 | Unsafe Consumption of APIs                 | Planned |
+| A1  | Broken Object Level Authorization (BOLA)   | ✅ Implemented |
+| A2  | Broken Authentication                      | ✅ Implemented |
+| A3  | Broken Object Property Level Authorization | ✅ Implemented |
+| A4  | Unrestricted Resource Consumption          | ✅ Implemented |
+| A5  | Broken Function Level Authorization        | ✅ Implemented |
+| A6  | Unrestricted Access to Sensitive Flows     | ✅ Implemented |
+| A7  | Server Side Request Forgery (SSRF)         | ✅ Implemented |
+| A8  | Security Misconfiguration                  | ✅ Implemented |
+| A9  | Improper Inventory Management              | ✅ Implemented |
+| A10 | Unsafe Consumption of APIs                 | ✅ Implemented |
 
 ## Quick Start
 

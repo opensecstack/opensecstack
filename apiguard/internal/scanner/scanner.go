@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -393,6 +394,13 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 	}
 	s.logger.Info().Int("test_cases", len(suite.TestCases)).Msg("test cases generated")
 
+	// Capture the spec hash from the test suite; fall back to computing it from the raw spec bytes.
+	specHash := suite.SpecHash
+	if specHash == "" {
+		sum := sha256.Sum256(specData)
+		specHash = fmt.Sprintf("%x", sum)
+	}
+
 	// Step 4: Execute scan modules against the test suite.
 
 	// Build the HTTP executor using the pinned transport (prevents DNS rebinding).
@@ -448,6 +456,13 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 	registry := modules.NewRegistry()
 	var allFindings []domain.Finding
 
+	moduleTimeout := 60 * time.Second
+	if n := len(registry.All()); n > 0 {
+		if t := s.config.Timeout / time.Duration(n); t > moduleTimeout {
+			moduleTimeout = t
+		}
+	}
+
 	for _, mod := range registry.All() {
 		if len(enabledModules) > 0 && !enabledModules[mod.ID()] {
 			continue
@@ -455,7 +470,9 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 
 		s.logger.Info().Str("module", mod.ID()).Msg("running module")
 
-		modFindings, modErr := mod.Run(ctx, httpExec, modSuite, req.Target, authConfig)
+		modCtx, modCancel := context.WithTimeout(ctx, moduleTimeout)
+		modFindings, modErr := mod.Run(modCtx, httpExec, modSuite, req.Target, authConfig)
+		modCancel()
 		if modErr != nil {
 			s.logger.Error().Err(modErr).Str("module", mod.ID()).Msg("module execution failed")
 			continue
@@ -494,6 +511,7 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 		ID:          scanID,
 		Status:      domain.ScanStatusCompleted,
 		Target:      req.Target,
+		SpecHash:    specHash,
 		Findings:    allFindings,
 		Summary:     summary,
 		StartedAt:   startedAt,

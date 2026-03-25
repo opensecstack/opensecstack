@@ -26,12 +26,14 @@ import (
 
 // Server is the APIGuard HTTP server.
 type Server struct {
-	router  chi.Router
-	logger  zerolog.Logger
-	port    int
-	config  *config.Config
-	db      *db.DB
-	scanner *scanner.Scanner
+	router         chi.Router
+	logger         zerolog.Logger
+	port           int
+	config         *config.Config
+	db             *db.DB
+	scanner        *scanner.Scanner
+	shutdownCtx    context.Context
+	shutdownCancel context.CancelFunc
 }
 
 // NewServer creates a new API server with routes registered.
@@ -42,13 +44,16 @@ func NewServer(cfg *config.Config, database *db.DB, sc *scanner.Scanner) *Server
 		Str("component", "api").
 		Logger()
 
+	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
 	s := &Server{
-		router:  chi.NewRouter(),
-		logger:  logger,
-		port:    cfg.Port,
-		config:  cfg,
-		db:      database,
-		scanner: sc,
+		router:         chi.NewRouter(),
+		logger:         logger,
+		port:           cfg.Port,
+		config:         cfg,
+		db:             database,
+		scanner:        sc,
+		shutdownCtx:    shutdownCtx,
+		shutdownCancel: shutdownCancel,
 	}
 
 	s.setupMiddleware()
@@ -88,6 +93,7 @@ func (s *Server) Start() error {
 		return err
 	case <-ctx.Done():
 		stop() // release signal resources promptly
+		s.shutdownCancel()
 		s.logger.Info().Msg("shutdown signal received — draining connections")
 		shutCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -110,7 +116,11 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.RequestLogger(s.logger))
 	s.router.Use(chimw.Recoverer)
 	s.router.Use(chimw.Timeout(60 * time.Second))
-	s.router.Use(RateLimiter(context.Background(), 120)) // 120 requests per minute per IP
+	rateLimit := s.config.Scanner.RateLimit
+	if rateLimit <= 0 {
+		rateLimit = 120
+	}
+	s.router.Use(RateLimiter(s.shutdownCtx, rateLimit)) // requests per minute per IP
 	s.router.Use(CORSMiddleware(nil))                    // No cross-origin allowed by default (same-origin only)
 }
 
@@ -120,8 +130,9 @@ func (s *Server) registerRoutes() {
 	sc := handlers.NewScans(s.logger, s.db, s.scanner)
 	f := handlers.NewFindings(s.logger, s.db)
 	sp := handlers.NewSpecs(s.logger, "")
+	au := handlers.NewAudit(s.logger, s.db)
 
-	RegisterRoutes(s.router, h, a, sc, f, sp, s.config)
+	RegisterRoutes(s.router, h, a, sc, f, sp, au, s.config)
 }
 
 // RateLimiter returns a middleware that limits requests per IP using a sliding window.

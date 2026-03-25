@@ -16,6 +16,7 @@ func RegisterRoutes(
 	scans *handlers.Scans,
 	findings *handlers.Findings,
 	specs *handlers.Specs,
+	audit *handlers.Audit,
 	cfg *config.Config,
 ) {
 	r.Route("/api/v1", func(r chi.Router) {
@@ -26,6 +27,7 @@ func RegisterRoutes(
 		// Auth: obtain a JWT from a pre-shared API key.
 		r.Get("/auth/token", auth.Ping)     // GET  → instructions / meta
 		r.Post("/auth/token", auth.Token)   // POST → exchange api_key → JWT
+		r.Get("/openapi.json", handlers.OpenAPI)
 
 		// ── Protected endpoints (Bearer JWT required) ────────────────────────
 		r.Group(func(r chi.Router) {
@@ -46,6 +48,9 @@ func RegisterRoutes(
 
 			// Specs: upload an OpenAPI spec file to the server.
 			r.Post("/specs/upload", specs.Upload)
+
+			// Audit log.
+			r.Get("/audit", audit.List)
 		})
 	})
 }

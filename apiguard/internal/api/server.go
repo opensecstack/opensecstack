@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -37,6 +39,7 @@ type Server struct {
 	reportLimiter  *middleware.RateLimiter
 	shutdownCtx    context.Context
 	shutdownCancel context.CancelFunc
+	scansHandler   *handlers.Scans // kept for WaitScans() on shutdown
 }
 
 // NewServer creates a new API server with routes registered.
@@ -108,6 +111,21 @@ func (s *Server) Start() error {
 		if err := srv.Shutdown(shutCtx); err != nil {
 			return fmt.Errorf("graceful shutdown: %w", err)
 		}
+		// A-H2: wait for in-flight scan goroutines to complete (or time out).
+		if s.scansHandler != nil {
+			scanWaitCtx, scanWaitCancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer scanWaitCancel()
+			scansDone := make(chan struct{})
+			go func() {
+				s.scansHandler.WaitScans()
+				close(scansDone)
+			}()
+			select {
+			case <-scansDone:
+			case <-scanWaitCtx.Done():
+				s.logger.Warn().Msg("timed out waiting for in-flight scans to complete")
+			}
+		}
 		drainCtx, drainCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer drainCancel()
 		s.citadel.Drain(drainCtx)
@@ -145,6 +163,7 @@ func (s *Server) registerRoutes() {
 	h := handlers.NewHealth(s.logger)
 	a := handlers.NewAuthWithDB(s.logger, s.config, s.db)
 	sc := handlers.NewScansWithCitadel(s.logger, s.db, s.scanner, s.citadel, s.shutdownCtx, s.config)
+	s.scansHandler = sc // store for WaitScans() on shutdown
 	f := handlers.NewFindingsWithCitadel(s.logger, s.db, s.citadel, s.config)
 	sp := handlers.NewSpecs(s.logger, "")
 	au := handlers.NewAudit(s.logger, s.db)
@@ -155,5 +174,24 @@ func (s *Server) registerRoutes() {
 	s.scanLimiter = middleware.NewRateLimiter(60)   // 60 req/min per IP on scan creation
 	s.reportLimiter = middleware.NewRateLimiter(10) // 10 req/min per IP on report generation
 
-	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, s.config, s.authLimiter, s.scanLimiter, s.reportLimiter)
+	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, s.config, s.authLimiter, s.scanLimiter, s.reportLimiter, parseTrustedProxyNets(s.config))
+}
+
+// parseTrustedProxyNets converts config CIDR strings to net.IPNet slices for
+// use in middleware that needs to identify trusted upstream proxies.
+func parseTrustedProxyNets(cfg *config.Config) []*net.IPNet {
+	if cfg == nil {
+		return nil
+	}
+	var nets []*net.IPNet
+	for _, cidr := range cfg.RateLimit.TrustedProxies {
+		if !strings.Contains(cidr, "/") {
+			cidr = cidr + "/32"
+		}
+		_, ipNet, err := net.ParseCIDR(cidr)
+		if err == nil {
+			nets = append(nets, ipNet)
+		}
+	}
+	return nets
 }

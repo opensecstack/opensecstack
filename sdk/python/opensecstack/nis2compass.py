@@ -8,14 +8,18 @@ the session and refreshed automatically on HTTP 401.
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
+import uuid
 from typing import Optional
 
 import requests
 
 from .exceptions import APIError, AuthenticationError, NotFoundError, RateLimitError
+
+logger = logging.getLogger(__name__)
 
 
 class NIS2CompassClient:
@@ -55,6 +59,7 @@ class NIS2CompassClient:
 
     def _authenticate(self) -> None:
         """Exchange the API key for a JWT and store it in the session."""
+        logger.debug("Authenticating with NIS2 Compass API at %s", self._base)
         resp = self._session.post(
             self._url("auth/token"),
             json={"api_key": self._api_key},
@@ -76,6 +81,7 @@ class NIS2CompassClient:
         if not token:
             raise AuthenticationError("No token received from auth/token endpoint")
         self._session.headers["Authorization"] = f"Bearer {token}"
+        logger.debug("Authentication successful; JWT acquired")
 
     def _raise_for_status(self, resp: requests.Response) -> None:
         if resp.status_code == 429:
@@ -83,7 +89,12 @@ class NIS2CompassClient:
                 detail = resp.json()
             except Exception:
                 detail = resp.text
-            raise RateLimitError(detail)
+            retry_after = None
+            try:
+                retry_after = int(resp.headers.get('Retry-After', ''))
+            except (ValueError, TypeError):
+                pass
+            raise RateLimitError(detail, retry_after=retry_after)
         if resp.status_code == 404:
             raise NotFoundError(resp.text)
         if resp.status_code >= 400:
@@ -98,19 +109,37 @@ class NIS2CompassClient:
 
         On 5xx responses, retries up to 2 times with exponential backoff
         (1 s then 2 s).  Raises ``RateLimitError`` on 429.
+
+        A unique ``X-Request-ID`` header is added to every outgoing request to
+        aid server-side log correlation.
         """
         with self._auth_lock:
             if "Authorization" not in self._session.headers:
                 self._authenticate()
 
+        # Attach a per-request ID for tracing; merge with any caller-supplied headers.
+        req_id = str(uuid.uuid4())
+        extra_headers = kwargs.pop("headers", None) or {}
+        extra_headers.setdefault("X-Request-ID", req_id)
+        kwargs["headers"] = extra_headers
+
         _retry_delays = [1, 2]
 
         def _do_once() -> requests.Response:
+            # Capture the current auth header before making the request so we
+            # can detect whether another thread already refreshed it on 401.
+            old_auth = self._session.headers.get("Authorization")
             resp = getattr(self._session, method)(self._url(path), timeout=self._timeout, **kwargs)
             if resp.status_code == 401:
-                # Token expired — re-authenticate and retry once.
+                # Token expired — re-authenticate and retry once, using
+                # double-checked locking to avoid redundant refreshes.
+                logger.debug("Received 401 on %s %s; attempting token refresh", method.upper(), path)
                 with self._auth_lock:
-                    self._authenticate()
+                    if self._session.headers.get("Authorization") != old_auth:
+                        # Another thread already refreshed the token; just retry.
+                        logger.debug("Token already refreshed by another thread; retrying request")
+                    else:
+                        self._authenticate()
                 resp = getattr(self._session, method)(self._url(path), timeout=self._timeout, **kwargs)
             return resp
 
@@ -120,9 +149,18 @@ class NIS2CompassClient:
         for delay in _retry_delays:
             if resp.status_code < 500:
                 break
+            logger.warning(
+                "Received HTTP %s on %s %s; retrying in %ss",
+                resp.status_code, method.upper(), path, delay,
+            )
             time.sleep(delay)
             resp = _do_once()
 
+        if resp.status_code >= 400:
+            logger.warning(
+                "%s %s returned HTTP %s (X-Request-ID: %s)",
+                method.upper(), path, resp.status_code, req_id,
+            )
         self._raise_for_status(resp)
         return resp
 
@@ -500,13 +538,9 @@ class NIS2CompassClient:
         """
         file_path = os.path.expanduser(file_path)
         with open(file_path, "rb") as fh:
-            content = fh.read()
-
-        # Build the multipart form without the Content-Type JSON header.
-        # Remove the session-level Content-Type so requests sets multipart boundary.
-        saved_ct = self._session.headers.pop("Content-Type", None)
-        try:
-            files = {"file": (os.path.basename(file_path), content)}
+            # Pass the open file handle directly to avoid reading the entire
+            # file into memory — requests will stream it as multipart form data.
+            files = {"file": (os.path.basename(file_path), fh)}
             data: dict = {"type": artifact_type}
             if control_id is not None:
                 data["control_id"] = control_id
@@ -517,10 +551,8 @@ class NIS2CompassClient:
                 f"assessments/{assessment_id}/artifacts",
                 files=files,
                 data=data,
+                headers={"Content-Type": None},
             )
-        finally:
-            if saved_ct is not None:
-                self._session.headers["Content-Type"] = saved_ct
 
         return resp.json()
 
@@ -621,6 +653,7 @@ class NIS2CompassClient:
         resp = _stream_report()
         if resp.status_code == 401:
             # Token expired — re-authenticate and retry once.
+            logger.debug("Received 401 on report generation for %s; refreshing token", assessment_id)
             with self._auth_lock:
                 self._authenticate()
             resp = _stream_report()
@@ -635,13 +668,21 @@ class NIS2CompassClient:
     # Audit log
     # ------------------------------------------------------------------
 
-    def get_audit_log(self, limit: int = 50) -> list[dict]:
+    def get_audit_log(self, limit: int = 50, page: int = 1) -> list[dict]:
         """
-        Return the *limit* most-recent audit log entries (default 50).
+        Return audit log entries (default 50, up to 100 per page).
+
+        The API caps ``per_page`` at 100 items per request.  Use ``page`` to
+        retrieve subsequent pages of results when more than 100 entries exist.
+
+        Parameters
+        ----------
+        limit: Number of entries to return per page (capped at 100 by the API).
+        page:  1-based page number (default: 1).
 
         Entries are ordered newest-first.
         """
-        resp = self._get("audit", params={"per_page": min(limit, 100)})
+        resp = self._get("audit", params={"per_page": min(limit, 100), "page": page})
         return resp.json()
 
     def get_audit_entry(self, entry_id: str) -> dict:

@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone, date
 from flask import Blueprint, request, jsonify, g
 from ..extensions import db
@@ -120,6 +121,8 @@ def update_control(assessment_id, measure_ref):
     if 'evidence' in data:
         if not isinstance(data['evidence'], dict):
             return jsonify({'error': 'evidence must be a JSON object', 'code': 'INVALID_INPUT'}), 400
+        if len(json.dumps(data['evidence'])) > 65536:
+            return jsonify({'error': 'evidence exceeds maximum size of 65536 bytes', 'code': 'INVALID_INPUT'}), 400
         control.evidence = data['evidence']
 
     if 'gap_description' in data:
@@ -152,6 +155,8 @@ def update_control(assessment_id, measure_ref):
         control.notes = data['notes']
 
     if 'remediation_owner' in data:
+        if data['remediation_owner'] is not None and len(data['remediation_owner']) > 255:
+            return jsonify({'error': 'remediation_owner must not exceed 255 characters', 'code': 'INVALID_INPUT'}), 400
         control.remediation_owner = data['remediation_owner']
 
     if 'remediation_status' in data:

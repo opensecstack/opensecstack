@@ -132,7 +132,7 @@ func TestAuthToken_EmptyAPIKeysList(t *testing.T) {
 	}
 }
 
-func TestAuthPing_Returns200WithConfiguredField(t *testing.T) {
+func TestAuthPing_Returns200WithHintField(t *testing.T) {
 	logger := zerolog.Nop()
 	cfg := testConfig("supersecret", "valid-key-1")
 	h := NewAuth(logger, cfg)
@@ -151,12 +151,16 @@ func TestAuthPing_Returns200WithConfiguredField(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if _, ok := result["configured"]; !ok {
-		t.Fatal("response missing 'configured' key")
+	if _, ok := result["hint"]; !ok {
+		t.Fatal("response missing 'hint' key")
+	}
+	// A-M5: 'configured' field must no longer be present to avoid leaking server state.
+	if _, ok := result["configured"]; ok {
+		t.Fatal("response must not contain 'configured' key (leaks server state)")
 	}
 }
 
-func TestAuthPing_ConfiguredTrue(t *testing.T) {
+func TestAuthPing_HasAlgorithmsField(t *testing.T) {
 	logger := zerolog.Nop()
 	cfg := testConfig("supersecret", "valid-key-1")
 	h := NewAuth(logger, cfg)
@@ -170,16 +174,16 @@ func TestAuthPing_ConfiguredTrue(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	configured, ok := result["configured"].(bool)
+	algs, ok := result["algorithms"]
 	if !ok {
-		t.Fatal("'configured' field is not a bool")
+		t.Fatal("response missing 'algorithms' key")
 	}
-	if !configured {
-		t.Fatal("expected configured to be true when secret and keys are set")
+	if algs == nil {
+		t.Fatal("'algorithms' field is nil")
 	}
 }
 
-func TestAuthPing_ConfiguredFalse_NoSecret(t *testing.T) {
+func TestAuthPing_NoConfiguredFieldRegardlessOfSetup(t *testing.T) {
 	logger := zerolog.Nop()
 	cfg := testConfig("") // no secret, no keys
 	h := NewAuth(logger, cfg)
@@ -193,11 +197,8 @@ func TestAuthPing_ConfiguredFalse_NoSecret(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	configured, ok := result["configured"].(bool)
-	if !ok {
-		t.Fatal("'configured' field is not a bool")
-	}
-	if configured {
-		t.Fatal("expected configured to be false when secret is empty")
+	// A-M5: 'configured' must never be present regardless of server state.
+	if _, ok := result["configured"]; ok {
+		t.Fatal("response must not contain 'configured' key (leaks server state)")
 	}
 }

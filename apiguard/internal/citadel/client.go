@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -110,6 +111,9 @@ func (c *Client) logEvent(
 		return fmt.Errorf("citadel: POST /v1/log: %w", err)
 	}
 	defer resp.Body.Close()
+	// A-L4: consume the body before closing so the underlying TCP connection
+	// can be reused by the http.Client's connection pool.
+	defer func() { _, _ = io.Copy(io.Discard, resp.Body) }()
 
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("citadel: POST /v1/log returned status %d", resp.StatusCode)

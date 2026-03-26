@@ -94,7 +94,7 @@ func TestJWTAuth_ValidToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	JWTAuth(secret)(next).ServeHTTP(rr, r)
+	JWTAuth(secret, nil)(next).ServeHTTP(rr, r)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
@@ -109,7 +109,7 @@ func TestJWTAuth_ValidToken(t *testing.T) {
 
 func TestJWTAuth_NoAuthorizationHeader(t *testing.T) {
 	rr := httptest.NewRecorder()
-	JWTAuth("secret")(okHandler).ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+	JWTAuth("secret", nil)(okHandler).ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", rr.Code)
 	}
@@ -118,7 +118,7 @@ func TestJWTAuth_NoAuthorizationHeader(t *testing.T) {
 func TestJWTAuth_NotBearerScheme(t *testing.T) {
 	rr := httptest.NewRecorder()
 	r := newRequest("NotBearer sometoken")
-	JWTAuth("secret")(okHandler).ServeHTTP(rr, r)
+	JWTAuth("secret", nil)(okHandler).ServeHTTP(rr, r)
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", rr.Code)
 	}
@@ -127,7 +127,7 @@ func TestJWTAuth_NotBearerScheme(t *testing.T) {
 func TestJWTAuth_EmptyBearerToken(t *testing.T) {
 	rr := httptest.NewRecorder()
 	r := newRequest("Bearer ")
-	JWTAuth("secret")(okHandler).ServeHTTP(rr, r)
+	JWTAuth("secret", nil)(okHandler).ServeHTTP(rr, r)
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", rr.Code)
 	}
@@ -139,7 +139,7 @@ func TestJWTAuth_EmptySecret(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	r := newRequest("Bearer " + token)
-	JWTAuth("")(okHandler).ServeHTTP(rr, r)
+	JWTAuth("", nil)(okHandler).ServeHTTP(rr, r)
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 when secret is empty, got %d", rr.Code)
 	}
@@ -152,7 +152,7 @@ func TestJWTAuth_ExpiredToken(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	r := newRequest("Bearer " + token)
-	JWTAuth(secret)(okHandler).ServeHTTP(rr, r)
+	JWTAuth(secret, nil)(okHandler).ServeHTTP(rr, r)
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 for expired token, got %d", rr.Code)
 	}
@@ -164,7 +164,7 @@ func TestJWTAuth_WrongSecret(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	r := newRequest("Bearer " + token)
-	JWTAuth("wrong-secret")(okHandler).ServeHTTP(rr, r)
+	JWTAuth("wrong-secret", nil)(okHandler).ServeHTTP(rr, r)
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 for wrong secret, got %d", rr.Code)
 	}
@@ -178,7 +178,7 @@ func TestJWTAuth_MissingSubClaim(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	r := newRequest("Bearer " + token)
-	JWTAuth(secret)(okHandler).ServeHTTP(rr, r)
+	JWTAuth(secret, nil)(okHandler).ServeHTTP(rr, r)
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 for missing sub, got %d", rr.Code)
 	}

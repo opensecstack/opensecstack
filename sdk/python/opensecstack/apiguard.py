@@ -15,6 +15,7 @@ import logging
 import os
 import threading
 import time
+import uuid
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -84,7 +85,12 @@ class APIGuardClient:
                 detail = resp.json()
             except Exception:
                 detail = resp.text
-            raise RateLimitError(detail)
+            retry_after = None
+            try:
+                retry_after = int(resp.headers.get('Retry-After', ''))
+            except (ValueError, TypeError):
+                pass
+            raise RateLimitError(detail, retry_after=retry_after)
         if resp.status_code == 404:
             raise NotFoundError(resp.text)
         if resp.status_code >= 400:
@@ -100,10 +106,19 @@ class APIGuardClient:
         Retries once on 401 (token refresh).
         On 5xx responses, retries up to 2 times with exponential backoff
         (1 s then 2 s).  Raises ``RateLimitError`` on 429.
+
+        A unique ``X-Request-ID`` header is added to every outgoing request to
+        aid server-side log correlation.
         """
         with self._auth_lock:
             if self._jwt is None:
                 self._authenticate()
+
+        # Attach a per-request ID for tracing; merge with any caller-supplied headers.
+        req_id = str(uuid.uuid4())
+        extra_headers = kwargs.pop("headers", None) or {}
+        extra_headers.setdefault("X-Request-ID", req_id)
+        kwargs["headers"] = extra_headers
 
         _retry_delays = [1, 2]
 
@@ -126,9 +141,18 @@ class APIGuardClient:
         for delay in _retry_delays:
             if resp.status_code < 500:
                 break
+            logger.warning(
+                "%s %s returned HTTP %s (X-Request-ID: %s); retrying in %ss",
+                method.upper(), path, resp.status_code, req_id, delay,
+            )
             time.sleep(delay)
             resp = _do_once()
 
+        if resp.status_code >= 400:
+            logger.warning(
+                "%s %s returned HTTP %s (X-Request-ID: %s)",
+                method.upper(), path, resp.status_code, req_id,
+            )
         self._raise_for_status(resp)
         return resp
 
@@ -189,12 +213,13 @@ class APIGuardClient:
         """
         spec_path = os.path.expanduser(spec_path)
         with open(spec_path, "rb") as fh:
-            content = fh.read()
-        resp = self._request(
-            "POST",
-            "specs/upload",
-            files={"spec": (os.path.basename(spec_path), content)},
-        )
+            # Pass the open file handle directly to stream the upload without
+            # buffering the entire file in memory.
+            resp = self._request(
+                "POST",
+                "specs/upload",
+                files={"spec": (os.path.basename(spec_path), fh)},
+            )
         return resp.json()
 
     # ------------------------------------------------------------------
@@ -318,6 +343,17 @@ class APIGuardClient:
                  ``html``, ``pdf``.
         """
         resp = self._get(f"scans/{scan_id}/report", params={"format": format})
+        expected_types = {
+            'json': 'application/json',
+            'sarif': 'application/json',
+            'html': 'text/html',
+            'pdf': 'application/pdf',
+            'text': 'text/plain',
+        }
+        ct = resp.headers.get('Content-Type', '')
+        expected = expected_types.get(format, '')
+        if expected and not ct.lower().startswith(expected):
+            raise APIError(resp.status_code, f"Unexpected Content-Type: {ct!r}, expected {expected!r}")
         return resp.content
 
     def list_findings(
@@ -346,7 +382,7 @@ class APIGuardClient:
         self,
         finding_id: str,
         status: str,
-        note: str = "",
+        note: Optional[str] = None,
     ) -> dict:
         """
         Triage a finding by updating its status.
@@ -356,10 +392,12 @@ class APIGuardClient:
         finding_id: UUID of the finding to update.
         status:     One of ``open``, ``confirmed``, ``false_positive``,
                     ``accepted``, ``fixed``.
-        note:       Optional free-text triage note.
+        note:       Optional free-text triage note.  Pass an empty string
+                    ``""`` to explicitly clear an existing note; omit (or
+                    pass ``None``) to leave any existing note unchanged.
         """
         body: dict = {"status": status}
-        if note:
+        if note is not None:
             body["note"] = note
         return self._patch(f"findings/{finding_id}", json=body).json()
 

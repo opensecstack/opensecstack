@@ -3,7 +3,7 @@ import os
 import threading
 import time
 from datetime import datetime, timezone, date
-from flask import Blueprint, current_app, request, jsonify, g, send_file
+from flask import Blueprint, abort, current_app, request, jsonify, g, send_file
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -19,12 +19,66 @@ from ..audit import write_audit
 
 assessments_bp = Blueprint('assessments', __name__)
 
-# L2: in-memory per-user rate limit for PDF report generation.
-# Stores a list of timestamps (float, seconds since epoch) per actor.
+# Per-user rate limit for PDF report generation.
 _REPORT_RATE_LIMIT_WINDOW = 60   # seconds
 _REPORT_RATE_LIMIT_MAX    = 3    # requests per window
+
+# In-memory fallback (per-process only; used when Redis is unavailable).
 _report_rate_limit: dict[str, list[float]] = {}
 _report_rate_limit_lock = threading.Lock()
+
+
+def _check_report_rate_limit(actor: str) -> bool:
+    """Return True if the request is allowed, False if rate-limited.
+
+    Uses a Redis sliding-window sorted set when Redis is available so the
+    limit is enforced consistently across multiple worker processes.  Falls
+    back to an in-memory per-process dict when Redis is unavailable (with a
+    startup warning logged elsewhere by extensions.init_extensions).
+    """
+    import time as _time
+    from .. import extensions as _ext
+
+    rc = _ext.redis_client
+    if rc is not None:
+        # Redis sliding-window: key = report_rl:<actor>
+        now = _time.time()
+        key = f'report_rl:{actor}'
+        window_start = now - _REPORT_RATE_LIMIT_WINDOW
+        try:
+            pipe = rc.pipeline()
+            # Remove timestamps outside the window
+            pipe.zremrangebyscore(key, 0, window_start)
+            # Count requests in the current window
+            pipe.zcard(key)
+            # Record this request
+            pipe.zadd(key, {str(now): now})
+            # Expire the key after the window so idle keys are cleaned up
+            pipe.expire(key, _REPORT_RATE_LIMIT_WINDOW * 2)
+            results = pipe.execute()
+            count = results[1]  # count *before* adding the current request
+            if count >= _REPORT_RATE_LIMIT_MAX:
+                # Remove the entry we just added since the request is denied
+                rc.zrem(key, str(now))
+                return False
+            return True
+        except Exception as exc:
+            current_app.logger.warning(
+                'report rate limit: Redis error, falling back to in-memory: %s', exc
+            )
+            # Fall through to in-memory fallback
+
+    # In-memory fallback (not shared across workers)
+    with _report_rate_limit_lock:
+        now = _time.time()
+        window_start = now - _REPORT_RATE_LIMIT_WINDOW
+        timestamps = [t for t in _report_rate_limit.get(actor, []) if t > window_start]
+        if len(timestamps) >= _REPORT_RATE_LIMIT_MAX:
+            _report_rate_limit[actor] = timestamps
+            return False
+        timestamps.append(now)
+        _report_rate_limit[actor] = timestamps
+        return True
 
 
 def _check_org_access(org_id):
@@ -39,8 +93,7 @@ def _check_org_access(org_id):
     """
     org = db.session.get(Organisation, org_id)
     if org is None:
-        # Let the calling route return the 404 itself
-        return None
+        abort(404, description='Organisation not found')
 
     if org.created_by is None:
         # Atomically claim the ownerless org — only the first caller wins.
@@ -198,12 +251,16 @@ def create_assessment(org_id):
         except ValueError:
             return jsonify({'error': 'due_date must be YYYY-MM-DD', 'code': 'INVALID_INPUT'}), 400
 
+    assessor = data.get('assessor')
+    if assessor is not None and len(assessor) > 255:
+        return jsonify({'error': 'assessor must not exceed 255 characters', 'code': 'INVALID_INPUT'}), 400
+
     assessment = Assessment(
         org_id=org_id,
         title=title,
         framework_version=data.get('framework_version', 'NIS2-2022/0383'),
         scope=data.get('scope'),
-        assessor=data.get('assessor'),
+        assessor=assessor,
         due_date=due_date,
         created_by=g.actor,
     )
@@ -295,6 +352,8 @@ def update_assessment(assessment_id):
         if assessment.scope and len(assessment.scope) > 2000:
             return jsonify({'error': 'scope must not exceed 2000 characters', 'code': 'INVALID_INPUT'}), 400
     if 'assessor' in data:
+        if data['assessor'] is not None and len(data['assessor']) > 255:
+            return jsonify({'error': 'assessor must not exceed 255 characters', 'code': 'INVALID_INPUT'}), 400
         assessment.assessor = data['assessor']
     if 'due_date' in data:
         try:
@@ -660,17 +719,10 @@ def _generate_pdf(assessment, org, controls, templates):
 @require_auth
 @require_scope('read_write')
 def generate_report(assessment_id):
-    # L2: enforce per-user rate limit of 3 PDF requests per minute
-    with _report_rate_limit_lock:
-        _now = time.time()
-        _window_start = _now - _REPORT_RATE_LIMIT_WINDOW
-        _timestamps = _report_rate_limit.get(g.actor, [])
-        _timestamps = [t for t in _timestamps if t > _window_start]
-        if len(_timestamps) >= _REPORT_RATE_LIMIT_MAX:
-            _report_rate_limit[g.actor] = _timestamps
-            return jsonify({'error': 'Rate limit exceeded', 'code': 'RATE_LIMIT_EXCEEDED'}), 429
-        _timestamps.append(_now)
-        _report_rate_limit[g.actor] = _timestamps
+    # Enforce per-user rate limit of 3 PDF requests per minute.
+    # Uses Redis when available (shared across workers); in-memory fallback otherwise.
+    if not _check_report_rate_limit(g.actor):
+        return jsonify({'error': 'Rate limit exceeded', 'code': 'RATE_LIMITED'}), 429
 
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:

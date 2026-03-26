@@ -1,9 +1,13 @@
+import re
 from flask import Blueprint, request, jsonify, g
 from sqlalchemy.exc import IntegrityError
 from ..extensions import db
 from ..models import Organisation
 from ..auth import require_auth, require_scope
 from ..audit import write_audit
+from .assessments import _check_org_access
+
+_EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 
 organisations_bp = Blueprint('organisations', __name__)
 
@@ -47,10 +51,11 @@ def list_organisations():
     page = max(1, request.args.get('page', 1, type=int))
     per_page = min(100, max(1, request.args.get('per_page', 20, type=int)))
 
-    # Only return organisations owned by the current actor
+    # Return organisations owned by the current actor plus ownerless orgs
+    # (created_by IS NULL) that can be claimed via the CAS mechanism.
     query = (
         db.session.query(Organisation)
-        .filter(Organisation.created_by == g.actor)
+        .filter(db.or_(Organisation.created_by == g.actor, Organisation.created_by == None))
         .order_by(Organisation.created_at.desc())
     )
     items, total = _paginate(query, page, per_page)
@@ -93,14 +98,25 @@ def create_organisation():
     if entity_type not in VALID_ENTITY_TYPES:
         return jsonify({'error': f'entity_type must be one of: {", ".join(sorted(VALID_ENTITY_TYPES))}', 'code': 'INVALID_INPUT'}), 400
 
+    contact_email = data.get('contact_email')
+    if contact_email is not None:
+        if len(contact_email) > 254:
+            return jsonify({'error': 'contact_email must not exceed 254 characters', 'code': 'INVALID_INPUT'}), 400
+        if not _EMAIL_RE.match(contact_email):
+            return jsonify({'error': 'contact_email is not a valid email address', 'code': 'INVALID_INPUT'}), 400
+
+    registration_number = data.get('registration_number')
+    if registration_number is not None and len(registration_number) > 100:
+        return jsonify({'error': 'registration_number must not exceed 100 characters', 'code': 'INVALID_INPUT'}), 400
+
     org = Organisation(
         name=name,
         industry=industry,
         country=country,
         size=size,
         entity_type=entity_type,
-        registration_number=data.get('registration_number'),
-        contact_email=data.get('contact_email'),
+        registration_number=registration_number,
+        contact_email=contact_email,
         created_by=g.actor,
     )
     db.session.add(org)
@@ -132,11 +148,10 @@ def create_organisation():
 @organisations_bp.get('/organisations/<uuid:org_id>')
 @require_auth
 def get_organisation(org_id):
+    err = _check_org_access(org_id)
+    if err:
+        return err
     org = db.session.get(Organisation, org_id)
-    if org is None:
-        return jsonify({'error': 'Organisation not found', 'code': 'NOT_FOUND'}), 404
-    if org.created_by is not None and org.created_by != g.actor:
-        return jsonify({'error': 'Access denied', 'code': 'FORBIDDEN'}), 403
     return jsonify(org.to_dict()), 200
 
 
@@ -148,11 +163,10 @@ def get_organisation(org_id):
 @require_auth
 @require_scope('read_write')
 def update_organisation(org_id):
+    err = _check_org_access(org_id)
+    if err:
+        return err
     org = db.session.get(Organisation, org_id)
-    if org is None:
-        return jsonify({'error': 'Organisation not found', 'code': 'NOT_FOUND'}), 404
-    if org.created_by is not None and org.created_by != g.actor:
-        return jsonify({'error': 'Access denied', 'code': 'FORBIDDEN'}), 403
 
     data = request.get_json(silent=True) or {}
     before = org.to_dict()
@@ -187,9 +201,18 @@ def update_organisation(org_id):
             return jsonify({'error': f'entity_type must be one of: {", ".join(sorted(VALID_ENTITY_TYPES))}', 'code': 'INVALID_INPUT'}), 400
         org.entity_type = data['entity_type']
     if 'registration_number' in data:
-        org.registration_number = data['registration_number']
+        reg_num = data['registration_number']
+        if reg_num is not None and len(reg_num) > 100:
+            return jsonify({'error': 'registration_number must not exceed 100 characters', 'code': 'INVALID_INPUT'}), 400
+        org.registration_number = reg_num
     if 'contact_email' in data:
-        org.contact_email = data['contact_email']
+        email = data['contact_email']
+        if email is not None:
+            if len(email) > 254:
+                return jsonify({'error': 'contact_email must not exceed 254 characters', 'code': 'INVALID_INPUT'}), 400
+            if not _EMAIL_RE.match(email):
+                return jsonify({'error': 'contact_email is not a valid email address', 'code': 'INVALID_INPUT'}), 400
+        org.contact_email = email
 
     write_audit(
         db.session,
@@ -212,11 +235,10 @@ def update_organisation(org_id):
 @require_auth
 @require_scope('read_write')
 def delete_organisation(org_id):
+    err = _check_org_access(org_id)
+    if err:
+        return err
     org = db.session.get(Organisation, org_id)
-    if org is None:
-        return jsonify({'error': 'Organisation not found', 'code': 'NOT_FOUND'}), 404
-    if org.created_by is not None and org.created_by != g.actor:
-        return jsonify({'error': 'Access denied', 'code': 'FORBIDDEN'}), 403
 
     write_audit(
         db.session,

@@ -176,9 +176,7 @@ func jwtBase64(data []byte) string {
 // Ping handles GET /api/v1/auth/token.
 // Returns usage instructions for the token endpoint.
 func (a *Auth) Ping(w http.ResponseWriter, r *http.Request) {
-	configured := a.cfg.Auth.JWTSecret != "" && len(a.cfg.Auth.APIKeys) > 0
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"configured": configured,
 		"hint":       "POST /api/v1/auth/token with {\"api_key\":\"<your-key>\"} to obtain a Bearer token",
 		"token_type": "HS256 JWT",
 		"algorithms": []string{"HS256"},
@@ -252,7 +250,11 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newRefreshToken, err := issueJWT(a.cfg.Auth.JWTSecret, claims.Sub, "apiguard", "apiguard", 7*24*time.Hour)
+	// A-H5: refresh tokens have no server-side invalidation mechanism; limit
+	// the exposure window to 24 hours so a leaked token cannot be misused
+	// indefinitely. TODO: implement a refresh-token allowlist/revocation store
+	// to fully invalidate issued refresh tokens.
+	newRefreshToken, err := issueJWT(a.cfg.Auth.JWTSecret, claims.Sub, "apiguard", "apiguard", 24*time.Hour)
 	if err != nil {
 		a.logger.Error().Err(err).Msg("failed to issue refresh token")
 		writeError(w, http.StatusInternalServerError, "failed to issue token")

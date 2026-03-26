@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -65,16 +66,26 @@ func actorFromContext(ctx context.Context) string {
 }
 
 // List handles GET /api/v1/api-keys.
-// Returns a JSON array of all active API keys (key_hash is never returned).
+// Returns a paginated JSON response of all active API keys (key_hash is never returned).
+// Supports page and per_page query parameters (default: page=1, per_page=20, max per_page=100).
 func (h *APIKeys) List(w http.ResponseWriter, r *http.Request) {
-	keys, err := h.db.ListAPIKeys(r.Context())
+	page, perPage := parsePagination(r, 1, 20, 100)
+	offset := (page - 1) * perPage
+
+	keys, total, err := h.db.ListAPIKeysPaginated(r.Context(), perPage, offset)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("listing api keys")
 		writeError(w, http.StatusInternalServerError, "failed to list api keys")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, keys)
+	w.Header().Set("X-Total-Count", strconv.Itoa(total))
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data":     keys,
+		"total":    total,
+		"page":     page,
+		"per_page": perPage,
+	})
 }
 
 // createAPIKeyRequest is the expected body for POST /api/v1/api-keys.
@@ -132,8 +143,14 @@ func (h *APIKeys) Revoke(w http.ResponseWriter, r *http.Request) {
 	revokedBy := actorFromContext(r.Context())
 
 	if err := h.db.RevokeAPIKey(r.Context(), id, revokedBy); err != nil {
-		h.logger.Error().Err(err).Str("id", idStr).Msg("revoking api key")
-		writeError(w, http.StatusNotFound, "api key not found or already revoked")
+		// RevokeAPIKey returns a sentinel "not found or already revoked" message
+		// when RowsAffected() == 0. Any other error is an unexpected DB failure.
+		if isNotFound(err) {
+			writeError(w, http.StatusNotFound, "api key not found or already revoked")
+		} else {
+			h.logger.Error().Err(err).Str("id", idStr).Msg("revoking api key")
+			writeError(w, http.StatusInternalServerError, "failed to revoke api key")
+		}
 		return
 	}
 

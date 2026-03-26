@@ -11,8 +11,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -70,6 +73,7 @@ type Scans struct {
 	cfg            *config.Config
 	shutdownCtx    context.Context // cancelled when the server is shutting down
 	trustedProxies []*net.IPNet    // parsed from cfg.RateLimit.TrustedProxies
+	scanWg         sync.WaitGroup  // tracks in-flight scan goroutines for graceful shutdown
 }
 
 // NewScans creates a new Scans handler.
@@ -97,6 +101,13 @@ func NewScansWithCitadel(logger zerolog.Logger, database *db.DB, sc *scanner.Sca
 		shutdownCtx:    shutdownCtx,
 		trustedProxies: parseTrustedProxies(cfg),
 	}
+}
+
+// WaitScans blocks until all in-flight scan goroutines have finished. It
+// should be called during server shutdown after the HTTP server has stopped
+// accepting new requests, so that no new goroutines are started.
+func (s *Scans) WaitScans() {
+	s.scanWg.Wait()
 }
 
 // parseTrustedProxies converts config CIDR strings to net.IPNet values.
@@ -133,7 +144,8 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024) // 1 MB
 	var req createScanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		s.logger.Error().Err(err).Msg("JSON decode error")
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
@@ -144,6 +156,22 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 	if req.Target == "" {
 		writeError(w, http.StatusUnprocessableEntity, "target is required")
 		return
+	}
+
+	// A-C2: Validate target URL against SSRF before starting the scan.
+	if err := validateSpecURL(req.Target); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid target: "+err.Error())
+		return
+	}
+
+	// A-H3: Validate spec_path to prevent arbitrary filesystem reads.
+	if req.SpecPath != "" {
+		allowedDir := os.TempDir()
+		clean := filepath.Clean(req.SpecPath)
+		if !strings.HasPrefix(clean, allowedDir+string(filepath.Separator)) {
+			writeError(w, http.StatusBadRequest, "invalid spec_path")
+			return
+		}
 	}
 
 	// C4: Validate spec_url against SSRF before storing or fetching.
@@ -190,15 +218,21 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 
 	// Launch scan in background using a context derived from the server shutdown
 	// context so the goroutine is cancelled on SIGTERM rather than leaking.
+	s.scanWg.Add(1)
 	go func() {
+		defer s.scanWg.Done()
 		bgCtx := s.shutdownCtx
 
-		// M3: track whether the scan reached a terminal status so the deferred
+		// A-H2: track whether the scan reached a terminal status so the deferred
 		// cleanup can mark it failed if an unexpected exit occurs.
+		// Use context.Background() with a short timeout so the cleanup can still
+		// run even if the server shutdown context has already been cancelled.
 		completed := false
 		defer func() {
 			if !completed {
-				if dbErr := s.db.UpdateScanStatus(bgCtx, scanID, db.ScanStatusFailed); dbErr != nil {
+				cleanCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				if dbErr := s.db.UpdateScanStatus(cleanCtx, scanID, db.ScanStatusFailed); dbErr != nil {
 					s.logger.Error().Err(dbErr).Str("scan_id", scanID.String()).Msg("failed to set scan status to failed in deferred cleanup")
 				}
 			}
@@ -353,6 +387,17 @@ func (s *Scans) List(w http.ResponseWriter, r *http.Request) {
 	offset := (page - 1) * perPage
 	statusFilter := r.URL.Query().Get("status")
 
+	// A-M3: Validate status filter against known scan status values.
+	if statusFilter != "" {
+		switch db.ScanStatus(statusFilter) {
+		case db.ScanStatusPending, db.ScanStatusRunning, db.ScanStatusCompleted, db.ScanStatusFailed, db.ScanStatusCancelled:
+			// valid
+		default:
+			writeError(w, http.StatusBadRequest, "invalid status value")
+			return
+		}
+	}
+
 	scans, total, err := s.db.ListScans(r.Context(), perPage, offset, statusFilter)
 	if err != nil {
 		s.logger.Error().Err(err).Msg("failed to list scans")
@@ -459,17 +504,29 @@ func (s *Scans) Report(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch all findings for the scan (no pagination — report contains all).
-	dbFindings, _, err := s.db.ListFindingsByScan(r.Context(), id, 1000, 0)
-	if err != nil {
-		s.logger.Error().Err(err).Str("scan_id", id.String()).Msg("failed to get findings for report")
-		writeError(w, http.StatusInternalServerError, "failed to get findings")
-		return
+	// Fetch all findings for the scan in pages to avoid the 1000-row cap.
+	var allFindings []db.Finding
+	{
+		const pageSize = 500
+		offset := 0
+		for {
+			batch, _, err := s.db.ListFindingsByScan(r.Context(), id, pageSize, offset)
+			if err != nil {
+				s.logger.Error().Err(err).Str("scan_id", id.String()).Msg("failed to get findings for report")
+				writeError(w, http.StatusInternalServerError, "failed to get findings")
+				return
+			}
+			allFindings = append(allFindings, batch...)
+			if len(batch) < pageSize {
+				break
+			}
+			offset += pageSize
+		}
 	}
 
 	// Map DB findings to domain findings.
-	domainFindings := make([]domain.Finding, 0, len(dbFindings))
-	for _, f := range dbFindings {
+	domainFindings := make([]domain.Finding, 0, len(allFindings))
+	for _, f := range allFindings {
 		df := domain.Finding{
 			ID:             f.ID.String(),
 			ScanID:         f.ScanID.String(),
@@ -673,6 +730,47 @@ func init() {
 	}
 }
 
+// ssrfSafeClient is a package-level *http.Client used for downloading remote
+// OpenAPI specs. It prevents TOCTOU SSRF by re-validating the resolved IP
+// inside DialContext (after OS hostname resolution, before connection) and
+// blocks redirects entirely so an attacker cannot redirect to an internal
+// address after the initial URL has passed validation.
+var ssrfSafeClient = func() *http.Client {
+	baseDialer := &net.Dialer{}
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, fmt.Errorf("ssrf-safe dial: invalid address %q: %w", addr, err)
+			}
+			addrs, err := net.DefaultResolver.LookupHost(ctx, host)
+			if err != nil {
+				return nil, fmt.Errorf("ssrf-safe dial: resolve %q: %w", host, err)
+			}
+			for _, a := range addrs {
+				ip := net.ParseIP(a)
+				if ip != nil {
+					for _, block := range privateIPNets {
+						if block.Contains(ip) {
+							return nil, fmt.Errorf("ssrf-safe dial: resolved IP %s is in a private/reserved range", a)
+						}
+					}
+				}
+			}
+			if len(addrs) == 0 {
+				return nil, fmt.Errorf("ssrf-safe dial: no addresses resolved for %q", host)
+			}
+			return baseDialer.DialContext(ctx, network, net.JoinHostPort(addrs[0], port))
+		},
+	}
+	return &http.Client{
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}()
+
 // validateSpecURL checks that rawURL uses http/https and does not resolve to a
 // private or loopback IP address, preventing SSRF attacks.
 func validateSpecURL(rawURL string) error {
@@ -716,7 +814,7 @@ func downloadSpecToTemp(ctx context.Context, specURL string, maxSpecSize int) (s
 		return "", fmt.Errorf("building request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := ssrfSafeClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("fetching spec: %w", err)
 	}

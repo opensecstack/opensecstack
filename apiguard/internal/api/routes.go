@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/opensecstack/apiguard/internal/api/handlers"
@@ -11,6 +13,7 @@ import (
 // RegisterRoutes sets up all API routes on the given router.
 // authLimiter, scanLimiter, and reportLimiter must be created by the caller
 // (stored on the Server) so their Stop() methods can be called on shutdown.
+// trustedProxies is forwarded to JWTAuth so auth failures log the real client IP.
 func RegisterRoutes(
 	r chi.Router,
 	health *handlers.Health,
@@ -24,6 +27,7 @@ func RegisterRoutes(
 	authLimiter *middleware.RateLimiter,
 	scanLimiter *middleware.RateLimiter,
 	reportLimiter *middleware.RateLimiter,
+	trustedProxies []*net.IPNet,
 ) {
 
 	r.Route("/api/v1", func(r chi.Router) {
@@ -35,8 +39,8 @@ func RegisterRoutes(
 		// Apply a strict per-IP rate limiter to prevent brute-force attacks.
 		r.Group(func(r chi.Router) {
 			r.Use(authLimiter.Middleware)
-			r.Get("/auth/token", auth.Ping)           // GET  → instructions / meta
-			r.Post("/auth/token", auth.Token)         // POST → exchange api_key → JWT
+			r.Get("/auth/token", auth.Ping)            // GET  → instructions / meta
+			r.Post("/auth/token", auth.Token)          // POST → exchange api_key → JWT
 			r.Post("/auth/refresh", auth.RefreshToken) // POST → exchange refresh_token → new tokens
 		})
 
@@ -44,7 +48,7 @@ func RegisterRoutes(
 
 		// ── Protected endpoints (Bearer JWT required) ────────────────────────
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.JWTAuth(cfg.Auth.JWTSecret))
+			r.Use(middleware.JWTAuth(cfg.Auth.JWTSecret, trustedProxies))
 
 			// Scans — scan creation is expensive; apply a dedicated rate limiter.
 			r.With(scanLimiter.Middleware).Post("/scans", scans.Create)

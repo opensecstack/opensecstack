@@ -109,6 +109,13 @@ func (a *Audit) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A-M6: return the same wrapped response shape as other list endpoints.
+	// Keep X-Total-Count for backwards compatibility.
 	w.Header().Set("X-Total-Count", strconv.Itoa(total))
-	writeJSON(w, http.StatusOK, entries)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data":     entries,
+		"total":    total,
+		"page":     page,
+		"per_page": perPage,
+	})
 }

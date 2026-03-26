@@ -2,11 +2,64 @@ import hashlib
 import os
 import uuid as uuid_lib
 from flask import Blueprint, request, jsonify, g, current_app, send_file
+from werkzeug.utils import secure_filename
 from ..extensions import db
 from ..models import Assessment, Control, Artifact
 from ..auth import require_auth, require_scope
 from ..audit import write_audit
 from .assessments import _check_org_access
+
+# Magic-byte signatures used to verify the declared MIME type against the
+# actual file content.  Each entry maps a set of leading bytes (as a bytes
+# literal) to the MIME type it represents.  Only the MIME types listed in
+# ALLOWED_MIME_TYPES that have reliable signatures are covered here; types
+# without a distinctive header (plain text, CSV, JSON, XML) are skipped.
+_MAGIC_SIGNATURES: list[tuple[bytes, str]] = [
+    (b'%PDF',                                         'application/pdf'),
+    (b'\xd0\xcf\x11\xe0',                            'application/msword'),           # OLE2 (also .xls)
+    (b'PK\x03\x04',                                  'application/zip'),              # OOXML (.docx/.xlsx) and .zip
+    (b'\x89PNG\r\n\x1a\n',                           'image/png'),
+    (b'\xff\xd8\xff',                                'image/jpeg'),
+    (b'GIF87a',                                      'image/gif'),
+    (b'GIF89a',                                      'image/gif'),
+]
+
+# MIME types that do not have a reliable magic-byte signature and whose
+# declared type we therefore accept without content inspection.
+_SKIP_MAGIC_CHECK: frozenset = frozenset({
+    'text/plain',
+    'text/csv',
+    'application/json',
+    'application/xml',
+    'text/xml',
+})
+
+# OOXML and OLE2 both start with a PK or OLE2 header.  Map the declared MIME
+# type to the acceptable magic bytes so we can validate without the full
+# libmagic database.
+_OOXML_MIMES: frozenset = frozenset({
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/x-zip-compressed',
+})
+
+
+def _detect_mime_from_bytes(header: bytes) -> set[str]:
+    """Return the set of MIME types compatible with the given file header."""
+    matches: set[str] = set()
+    for signature, mime in _MAGIC_SIGNATURES:
+        if header[:len(signature)] == signature:
+            matches.add(mime)
+    # PK header covers all OOXML and zip variants
+    if header[:4] == b'PK\x03\x04':
+        matches.update(_OOXML_MIMES)
+        matches.add('application/zip')
+        matches.add('application/x-zip-compressed')
+    # OLE2 header covers both .doc and .xls
+    if header[:4] == b'\xd0\xcf\x11\xe0':
+        matches.add('application/msword')
+        matches.add('application/vnd.ms-excel')
+    return matches
 
 artifacts_bp = Blueprint('artifacts', __name__)
 
@@ -36,8 +89,9 @@ def _save_file(file_storage, assessment_id: str) -> tuple[str, str, int, str]:
     upload_dir = os.path.join(current_app.config['UPLOAD_DIR'], assessment_id)
     os.makedirs(upload_dir, exist_ok=True)
 
-    # Use a UUID-prefixed filename to avoid collisions
-    safe_name = f'{uuid_lib.uuid4().hex}_{file_storage.filename}'
+    # Use a UUID-prefixed filename to avoid collisions; sanitise the
+    # caller-supplied filename to prevent path-traversal or shell injection.
+    safe_name = f'{uuid_lib.uuid4().hex}_{secure_filename(file_storage.filename or "upload")}'
     file_path = os.path.join(upload_dir, safe_name)
 
     sha256 = hashlib.sha256()
@@ -113,8 +167,8 @@ def upload_artifact(assessment_id):
     if not file.filename:
         return jsonify({'error': 'No file selected', 'code': 'INVALID_INPUT'}), 400
 
-    # MIME type validation — use the content_type supplied by the client (no
-    # system-level libmagic dependency required).
+    # MIME type validation — check the Content-Type header first, then verify
+    # that the actual file content matches via magic-byte inspection.
     content_type = (file.content_type or '').split(';')[0].strip().lower()
     if content_type not in ALLOWED_MIME_TYPES:
         return jsonify({
@@ -122,6 +176,19 @@ def upload_artifact(assessment_id):
             'code': 'UNSUPPORTED_MEDIA_TYPE',
             'allowed_types': sorted(ALLOWED_MIME_TYPES),
         }), 415
+
+    # Magic-byte check: read the first 512 bytes, then seek back to the start.
+    # Skip the check for text-based types that have no distinctive header.
+    if content_type not in _SKIP_MAGIC_CHECK:
+        file.stream.seek(0)
+        header_bytes = file.stream.read(512)
+        file.stream.seek(0)
+        compatible_mimes = _detect_mime_from_bytes(header_bytes)
+        if compatible_mimes and content_type not in compatible_mimes:
+            return jsonify({
+                'error': 'File content does not match declared MIME type',
+                'code': 'UNSUPPORTED_MEDIA_TYPE',
+            }), 415
 
     art_type = request.form.get('type', '').strip()
     if art_type not in VALID_TYPES:
@@ -143,7 +210,7 @@ def upload_artifact(assessment_id):
         assessment_id=assessment_id,
         control_id=control_id,
         type=art_type,
-        filename=file.filename,
+        filename=secure_filename(file.filename or 'upload'),
         file_path=file_path,
         hash=file_hash,
         size_bytes=size_bytes,
@@ -226,7 +293,7 @@ def download_artifact(artifact_id):
         real_path,
         mimetype=artifact.mime_type,
         as_attachment=True,
-        download_name=artifact.filename,
+        download_name=secure_filename(artifact.filename or 'download'),
     )
 
 

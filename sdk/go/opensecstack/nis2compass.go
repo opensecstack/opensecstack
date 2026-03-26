@@ -131,6 +131,7 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 		}
 		req.Header.Set("Authorization", "Bearer "+tok)
 		req.Header.Set("Accept", "application/json")
+		req.Header.Set("X-Request-ID", newRequestID())
 		for k, v := range extraHeaders {
 			req.Header.Set(k, v)
 		}
@@ -165,6 +166,11 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 	}
 
 	// Retry up to 2 times on 5xx with exponential backoff.
+	// Capture the current JWT under the mutex before the loop to avoid a data race.
+	c.mu.Lock()
+	tok := c.jwt
+	c.mu.Unlock()
+
 	retryDelays := []time.Duration{1 * time.Second, 2 * time.Second}
 	for _, delay := range retryDelays {
 		if resp.StatusCode < 500 {
@@ -176,7 +182,7 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 			return nil, ctx.Err()
 		case <-time.After(delay):
 		}
-		resp, err = doOnce(c.jwt)
+		resp, err = doOnce(tok)
 		if err != nil {
 			return nil, err
 		}
@@ -251,13 +257,23 @@ func (c *NIS2CompassClient) deleteJSON(ctx context.Context, path string) error {
 // Organisations
 // ----------------------------------------------------------------------------
 
-// GetOrganisations returns the first page of organisations (up to 100 items).
-// Callers that need to retrieve more than 100 organisations should use the
-// pagination parameters directly via the underlying API.
-func (c *NIS2CompassClient) GetOrganisations(ctx context.Context) ([]Organisation, error) {
+// GetOrganisations returns a paginated list of organisations.
+//
+// opts controls pagination. Pass a zero-value GetOrganisationsOptions{} to
+// use defaults (page 1, per_page 100). PerPage is clamped to 100 when zero.
+func (c *NIS2CompassClient) GetOrganisations(ctx context.Context, opts GetOrganisationsOptions) ([]Organisation, error) {
+	page := opts.Page
+	if page <= 0 {
+		page = 1
+	}
+	perPage := opts.PerPage
+	if perPage <= 0 {
+		perPage = 100
+	}
+
 	params := url.Values{}
-	params.Set("page", "1")
-	params.Set("per_page", "100")
+	params.Set("page", strconv.Itoa(page))
+	params.Set("per_page", strconv.Itoa(perPage))
 
 	var orgs []Organisation
 	if err := c.getJSON(ctx, "organisations", params, &orgs); err != nil {
@@ -467,11 +483,6 @@ func (c *NIS2CompassClient) UploadArtifact(ctx context.Context, assessmentID, fi
 	}
 	defer f.Close()
 
-	content, err := io.ReadAll(f)
-	if err != nil {
-		return nil, fmt.Errorf("UploadArtifact: reading file: %w", err)
-	}
-
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 
@@ -479,7 +490,8 @@ func (c *NIS2CompassClient) UploadArtifact(ctx context.Context, assessmentID, fi
 	if err != nil {
 		return nil, fmt.Errorf("UploadArtifact: creating form file: %w", err)
 	}
-	if _, err := fw.Write(content); err != nil {
+	// Stream the file content into the multipart part without buffering it all in memory.
+	if _, err := io.Copy(fw, f); err != nil {
 		return nil, fmt.Errorf("UploadArtifact: writing file content: %w", err)
 	}
 

@@ -125,7 +125,7 @@ def write_audit(
     # Fetch the most recent chain_hash (within this transaction's snapshot).
     last = (
         db_session.query(AuditLog.chain_hash)
-        .order_by(AuditLog.timestamp.desc())
+        .order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
         .first()
     )
     prev_hash = last[0] if last else None

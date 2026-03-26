@@ -19,16 +19,20 @@ import hashlib
 import hmac
 import json
 import logging
-import threading
 import time
 import urllib.request
 import urllib.error
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
 _MAX_ATTEMPTS = 3
 _BACKOFF_BASE = 1.0  # seconds
+
+# Bounded thread pool for webhook delivery — prevents unbounded thread growth
+# under high load compared to spawning a new thread per event.
+_webhook_executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix='webhook')
 
 
 def _sign_payload(secret: str, payload_bytes: bytes) -> str:
@@ -97,10 +101,4 @@ def dispatch(audit_entry_dict: dict, url: str, secret: str) -> None:
         'delivered_at': datetime.now(timezone.utc).isoformat(),
         'data': audit_entry_dict,
     }
-    t = threading.Thread(
-        target=_deliver_with_retry,
-        args=(url, secret, event),
-        daemon=True,
-        name=f'webhook-{audit_entry_dict.get("id", "unknown")[:8]}',
-    )
-    t.start()
+    _webhook_executor.submit(_deliver_with_retry, url, secret, event)

@@ -107,8 +107,14 @@ func (f *Findings) List(w http.ResponseWriter, r *http.Request) {
 		filters.Severity = &s
 	}
 	if st := q.Get("status"); st != "" {
-		s := db.FindingStatus(st)
-		filters.Status = &s
+		switch db.FindingStatus(st) {
+		case db.FindingStatusOpen, db.FindingStatusConfirmed, db.FindingStatusFalsePositive, db.FindingStatusAccepted, db.FindingStatusFixed:
+			s := db.FindingStatus(st)
+			filters.Status = &s
+		default:
+			writeError(w, http.StatusBadRequest, "invalid status value")
+			return
+		}
 	}
 	if owaspID := q.Get("owasp_id"); owaspID != "" {
 		filters.OwaspID = &owaspID
@@ -173,7 +179,8 @@ func (f *Findings) Update(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024) // 1 MB
 	var req updateFindingRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		f.logger.Error().Err(err).Msg("JSON decode error")
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 

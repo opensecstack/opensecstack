@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -34,7 +35,10 @@ func ClaimsFromContext(ctx context.Context) (*Claims, bool) {
 }
 
 // JWTAuth returns a middleware that validates JWT tokens in the Authorization header.
-func JWTAuth(secret string) func(next http.Handler) http.Handler {
+// trustedProxies is used to correctly resolve the real client IP for log entries
+// (X-Forwarded-For is honoured only when the direct peer is a trusted proxy).
+// Pass nil to always use r.RemoteAddr.
+func JWTAuth(secret string, trustedProxies []*net.IPNet) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// If no secret is configured, reject all requests to protected endpoints.
@@ -65,7 +69,10 @@ func JWTAuth(secret string) func(next http.Handler) http.Handler {
 			// Validate JWT token signature and claims.
 			claims, err := validateJWT(token, secret)
 			if err != nil {
-				log.Warn().Err(err).Str("remote_addr", r.RemoteAddr).Msg("JWT validation failed")
+				// A-M1: use the real client IP (honoring trusted proxies) rather
+				// than the raw r.RemoteAddr which may be a proxy address.
+				clientIP := ClientIPFromRequest(r, trustedProxies)
+				log.Warn().Err(err).Str("client_ip", clientIP).Msg("JWT validation failed")
 				unauthorized(w, "invalid or expired token")
 				return
 			}

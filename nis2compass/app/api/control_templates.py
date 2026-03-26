@@ -19,5 +19,5 @@ def list_control_templates():
     total = query.count()
     templates = query.offset((page - 1) * per_page).limit(per_page).all()
     response = jsonify([t.to_dict() for t in templates])
-    response.headers['X-Total-Count'] = total
+    response.headers['X-Total-Count'] = str(total)
     return response, 200

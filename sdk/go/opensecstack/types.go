@@ -2,7 +2,10 @@
 // opensecstack platform APIs (APIGuard, NIS2 Compass).
 package opensecstack
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // ScanStatus enumerates the lifecycle states of an APIGuard scan.
 type ScanStatus string
@@ -91,7 +94,7 @@ type AuditEntry struct {
 	ResourceID   string          `json:"resource_id"`
 	IPAddress    string          `json:"ip_address"`
 	UserAgent    string          `json:"user_agent"`
-	Metadata     interface{}     `json:"metadata"`
+	Metadata     json.RawMessage `json:"metadata"`
 	PrevHash     *string         `json:"prev_hash"`
 	ChainHash    string          `json:"chain_hash"`
 	CreatedAt    time.Time       `json:"created_at"`
@@ -179,7 +182,7 @@ type Control struct {
 	Description        string                 `json:"description,omitempty"`
 	NistCategory       string                 `json:"nist_category"`
 	Status             string                 `json:"status"`
-	Evidence           map[string]interface{} `json:"evidence,omitempty"`
+	Evidence           json.RawMessage        `json:"evidence,omitempty"`
 	RiskScore          *float64               `json:"risk_score,omitempty"`
 	Notes              string                 `json:"notes,omitempty"`
 	GapDescription     string                 `json:"gap_description,omitempty"`
@@ -239,8 +242,8 @@ type PatchControlRequest struct {
 	RemediationStatus string                 `json:"remediation_status,omitempty"`
 	ExternalTicketURL string                 `json:"external_ticket_url,omitempty"`
 	RemediationNotes  string                 `json:"remediation_notes,omitempty"`
-	Evidence          map[string]interface{} `json:"evidence,omitempty"`
-	RiskScore         *float64               `json:"risk_score,omitempty"`
+	Evidence          json.RawMessage `json:"evidence,omitempty"`
+	RiskScore         *float64        `json:"risk_score,omitempty"`
 }
 
 // PatchOrganisationRequest is the body sent to PATCH /api/v1/organisations/{id}.
@@ -273,11 +276,21 @@ type NIS2AuditEntry struct {
 	ResourceType      string      `json:"resource_type"`
 	ResourceID        string      `json:"resource_id,omitempty"`
 	RiskClass         string      `json:"risk_class"`
-	Metadata          interface{} `json:"metadata,omitempty"`
-	ObjectFingerprint string      `json:"object_fingerprint,omitempty"`
+	Metadata          json.RawMessage `json:"metadata,omitempty"`
+	ObjectFingerprint string          `json:"object_fingerprint,omitempty"`
 	ChainHash         string      `json:"chain_hash"`
 	PrevHash          string      `json:"prev_hash,omitempty"`
 	Timestamp         time.Time   `json:"timestamp"`
+}
+
+// GetOrganisationsOptions holds pagination parameters for GetOrganisations.
+// Pass a zero-value GetOrganisationsOptions{} to use server defaults
+// (page 1, per_page 100).
+type GetOrganisationsOptions struct {
+	// Page is the 1-based page number (default: 1).
+	Page int
+	// PerPage is the number of results per page, max 100 (default: 100).
+	PerPage int
 }
 
 // GetAssessmentsOptions holds optional filter and pagination parameters for
@@ -297,9 +310,18 @@ type GetAssessmentsOptions struct {
 // Callers can test for this specific error type using errors.As:
 //
 //	var rle *RateLimitError
-//	if errors.As(err, &rle) { /* back off and retry */ }
+//	if errors.As(err, &rle) {
+//	    if rle.RetryAfter > 0 {
+//	        time.Sleep(time.Duration(rle.RetryAfter) * time.Second)
+//	    }
+//	    // retry
+//	}
 type RateLimitError struct {
 	Message string
+	// RetryAfter is the number of seconds to wait before retrying, parsed
+	// from the Retry-After response header. Zero when the header is absent
+	// or cannot be parsed as an integer.
+	RetryAfter int
 }
 
 func (e *RateLimitError) Error() string { return e.Message }

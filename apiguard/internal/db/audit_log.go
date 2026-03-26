@@ -30,15 +30,19 @@ func (d *DB) AppendAuditLog(ctx context.Context, entry *AuditLog, citadelClient 
 
 	// Serialise all audit_log writes through a single advisory lock so that
 	// the fetch-then-insert is atomic with respect to other appenders.
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('apiguard_audit_chain'))`); err != nil {
+	// Use a stable hardcoded int64 key instead of hashtext() to avoid the
+	// 32-bit collision space of hashtext and to guarantee a fixed lock identity.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(1234567891::bigint)`); err != nil {
 		return fmt.Errorf("acquiring audit chain lock: %w", err)
 	}
 
 	// Fetch the most recent chain_hash to anchor this entry.
+	// Order by id DESC (auto-increment sequence) as the authoritative ordering
+	// key — created_at is set in Go and can collide under high concurrency.
 	var prevHash *string
 	var lastHash string
 	if err := tx.QueryRow(ctx,
-		`SELECT chain_hash FROM audit_log ORDER BY created_at DESC, id DESC LIMIT 1`,
+		`SELECT chain_hash FROM audit_log ORDER BY id DESC LIMIT 1`,
 	).Scan(&lastHash); err == nil {
 		prevHash = &lastHash
 	}
@@ -201,7 +205,7 @@ func (d *DB) ListAuditLog(ctx context.Context, filters AuditLogFilters, page, pe
 		       ip_address, user_agent, before_state, after_state, metadata,
 		       prev_hash, chain_hash, created_at
 		FROM audit_log %s
-		ORDER BY created_at DESC, id DESC
+		ORDER BY id DESC
 		LIMIT $%d OFFSET $%d
 	`, whereClause, i, i+1), dataArgs...)
 	if err != nil {

@@ -1,3 +1,4 @@
+import uuid as uuid_lib
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify, g
 from ..extensions import db
@@ -23,6 +24,10 @@ def list_audit():
     if resource_type := request.args.get('resource_type'):
         query = query.filter(AuditLog.resource_type == resource_type)
     if resource_id := request.args.get('resource_id'):
+        try:
+            uuid_lib.UUID(resource_id)
+        except (ValueError, AttributeError):
+            return jsonify({'error': 'invalid resource_id format', 'code': 'INVALID_INPUT'}), 400
         query = query.filter(AuditLog.resource_id == resource_id)
     if risk_class := request.args.get('risk_class'):
         query = query.filter(AuditLog.risk_class == risk_class)

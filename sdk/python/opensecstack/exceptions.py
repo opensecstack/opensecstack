@@ -4,7 +4,7 @@ opensecstack SDK — exception hierarchy.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 
 class OpenSecStackError(Exception):
@@ -38,7 +38,17 @@ class NotFoundError(OpenSecStackError):
 
 
 class RateLimitError(APIError):
-    """Raised when the server returns HTTP 429 Too Many Requests."""
+    """
+    Raised when the server returns HTTP 429 Too Many Requests.
 
-    def __init__(self, detail: Any = "rate limited") -> None:
+    Attributes
+    ----------
+    retry_after: Optional[int]
+        Number of seconds to wait before retrying, parsed from the
+        ``Retry-After`` response header.  ``None`` when the header is absent
+        or cannot be parsed as an integer.
+    """
+
+    def __init__(self, detail: Any = "rate limited", retry_after: Optional[int] = None) -> None:
         super().__init__(429, detail)
+        self.retry_after = retry_after

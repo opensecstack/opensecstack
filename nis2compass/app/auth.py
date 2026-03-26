@@ -38,6 +38,9 @@ def validate_api_key(api_key: str) -> tuple[bool, str]:
             # Reject expired keys
             if record.expires_at is not None and record.expires_at <= datetime.now(timezone.utc):
                 return False, 'read_write'
+            # Mark last_used_at dirty; the route's normal transaction commit
+            # will persist this — no explicit commit here to avoid mid-request
+            # transaction boundaries.
             record.last_used_at = datetime.now(timezone.utc)
             write_audit(
                 db.session,
@@ -48,15 +51,16 @@ def validate_api_key(api_key: str) -> tuple[bool, str]:
                 risk_class='INFO',
                 metadata={'label': record.label, 'scope': record.scope},
             )
-            db.session.commit()
             return True, record.scope
 
         # If DB has any active keys, don't fall through to env-var
         if db.session.query(ApiKey).filter(ApiKey.is_active == True).count() > 0:
             return False, 'read_write'
-    except Exception:
+    except Exception as exc:
         # DB unavailable — fall through to env-var check
-        pass
+        current_app.logger.error(
+            'API key DB lookup failed, falling back to env-var keys: %s', exc
+        )
 
     # Bootstrap fallback: env-var keys (constant-time comparison)
     for valid_key in current_app.config.get('API_KEYS', []):
@@ -88,7 +92,8 @@ def decode_jwt(token: str) -> dict | None:
         return jwt.decode(token, secret, algorithms=['HS256'])
     except jwt.ExpiredSignatureError:
         return None
-    except jwt.InvalidTokenError:
+    except jwt.InvalidTokenError as e:
+        current_app.logger.warning('JWT validation failed: %s', type(e).__name__)
         return None
 
 
@@ -135,7 +140,7 @@ def require_scope(scope: str):
         def decorated(*args, **kwargs):
             token_scope = getattr(g, 'token_scope', 'read_write')
             required_rank = _SCOPE_RANK.get(scope, 1)
-            token_rank = _SCOPE_RANK.get(token_scope, 0)
+            token_rank = _SCOPE_RANK.get(token_scope, -1)
             if token_rank < required_rank:
                 return jsonify({
                     'error': 'Insufficient scope for this operation',

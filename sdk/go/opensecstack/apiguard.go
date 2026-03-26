@@ -3,6 +3,8 @@ package opensecstack
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -159,6 +161,11 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 	}
 
 	// Retry up to 2 times on 5xx with exponential backoff.
+	// Capture the current JWT under the mutex before the loop to avoid a data race.
+	c.mu.Lock()
+	tok := c.jwt
+	c.mu.Unlock()
+
 	retryDelays := []time.Duration{1 * time.Second, 2 * time.Second}
 	for _, delay := range retryDelays {
 		if resp.StatusCode < 500 {
@@ -170,13 +177,22 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 			return nil, ctx.Err()
 		case <-time.After(delay):
 		}
-		resp, err = doOnce(c.jwt)
+		resp, err = doOnce(tok)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	return resp, nil
+}
+
+// newRequestID generates a random hex request ID for X-Request-ID headers.
+func newRequestID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "unknown"
+	}
+	return hex.EncodeToString(b)
 }
 
 func (c *APIGuardClient) doWithJWT(ctx context.Context, method, path string, body io.Reader, jwt string, extraHeaders map[string]string) (*http.Response, error) {
@@ -186,6 +202,7 @@ func (c *APIGuardClient) doWithJWT(ctx context.Context, method, path string, bod
 	}
 	req.Header.Set("Authorization", "Bearer "+jwt)
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Request-ID", newRequestID())
 	for k, v := range extraHeaders {
 		req.Header.Set(k, v)
 	}
@@ -203,7 +220,11 @@ func checkResponse(resp *http.Response) ([]byte, error) {
 		return nil, fmt.Errorf("reading response body: %w", err)
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, &RateLimitError{Message: fmt.Sprintf("rate limited (HTTP 429): %s", string(raw))}
+		ra, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
+		return nil, &RateLimitError{
+			Message:    fmt.Sprintf("rate limited (HTTP 429): %s", string(raw)),
+			RetryAfter: ra,
+		}
 	}
 	if resp.StatusCode >= 400 {
 		var ae apiError
@@ -452,18 +473,14 @@ func (c *APIGuardClient) UploadSpec(ctx context.Context, filePath string) (*Uplo
 	}
 	defer f.Close()
 
-	content, err := io.ReadAll(f)
-	if err != nil {
-		return nil, fmt.Errorf("UploadSpec: reading file: %w", err)
-	}
-
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	fw, err := mw.CreateFormFile("spec", filepath.Base(filePath))
 	if err != nil {
 		return nil, fmt.Errorf("UploadSpec: creating form file: %w", err)
 	}
-	if _, err := fw.Write(content); err != nil {
+	// Stream the file content into the multipart part without buffering it all in memory.
+	if _, err := io.Copy(fw, f); err != nil {
 		return nil, fmt.Errorf("UploadSpec: writing file content: %w", err)
 	}
 	if err := mw.Close(); err != nil {
@@ -497,13 +514,22 @@ func (c *APIGuardClient) PatchFinding(ctx context.Context, id string, req PatchF
 	return &finding, nil
 }
 
-// GetAuditLog retrieves the most recent audit log entries (up to limit).
-func (c *APIGuardClient) GetAuditLog(ctx context.Context, limit int) ([]AuditEntry, error) {
+// GetAuditLog retrieves audit log entries with pagination support.
+// limit is capped at 100 client-side when it exceeds 100.
+// page is the 1-based page number; defaults to 1 when <= 0.
+func (c *APIGuardClient) GetAuditLog(ctx context.Context, limit, page int) ([]AuditEntry, error) {
 	if limit <= 0 {
 		limit = 50
 	}
+	if limit > 100 {
+		limit = 100
+	}
+	if page <= 0 {
+		page = 1
+	}
 	params := url.Values{}
 	params.Set("per_page", strconv.Itoa(limit))
+	params.Set("page", strconv.Itoa(page))
 
 	var entries []AuditEntry
 	if err := c.getJSON(ctx, "audit", params, &entries); err != nil {

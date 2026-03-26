@@ -66,6 +66,49 @@ func (d *DB) CreateAPIKey(ctx context.Context, label, createdBy string) (*APIKey
 	return key, plaintext, nil
 }
 
+// ListAPIKeysPaginated returns active API keys with pagination. key_hash is never included.
+// Returns the page of keys, the total count of active keys, and any error.
+func (d *DB) ListAPIKeysPaginated(ctx context.Context, limit, offset int) ([]APIKey, int, error) {
+	var total int
+	if err := d.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM api_keys WHERE is_active = TRUE`).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("counting api keys: %w", err)
+	}
+
+	rows, err := d.Pool.Query(ctx, `
+		SELECT id, label, created_by, is_active, last_used_at, created_at, revoked_at, revoked_by
+		FROM api_keys
+		WHERE is_active = TRUE
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
+	`, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("querying api keys: %w", err)
+	}
+	defer rows.Close()
+
+	var keys []APIKey
+	for rows.Next() {
+		var k APIKey
+		if err := rows.Scan(
+			&k.ID,
+			&k.Label,
+			&k.CreatedBy,
+			&k.IsActive,
+			&k.LastUsedAt,
+			&k.CreatedAt,
+			&k.RevokedAt,
+			&k.RevokedBy,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scanning api key row: %w", err)
+		}
+		keys = append(keys, k)
+	}
+	if keys == nil {
+		keys = []APIKey{}
+	}
+	return keys, total, rows.Err()
+}
+
 // ListAPIKeys returns all active API keys. key_hash is never included.
 func (d *DB) ListAPIKeys(ctx context.Context) ([]APIKey, error) {
 	rows, err := d.Pool.Query(ctx, `

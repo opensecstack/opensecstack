@@ -17,6 +17,7 @@ type RateLimiter struct {
 	window         time.Duration // window duration
 	trustedProxies []*net.IPNet  // upstream proxy IPs whose XFF header is trusted
 	done           chan struct{}  // closed by Stop() to signal the cleanup goroutine to exit
+	stopOnce       sync.Once     // ensures Stop() is idempotent
 }
 
 type rlVisitor struct {
@@ -81,8 +82,9 @@ func NewRateLimiterWithProxies(requestsPerMinute int, trustedProxyCIDRs []string
 
 // Stop signals the background cleanup goroutine to exit. It should be called
 // when the RateLimiter is no longer needed to prevent goroutine leaks.
+// Stop is idempotent — it is safe to call multiple times.
 func (rl *RateLimiter) Stop() {
-	close(rl.done)
+	rl.stopOnce.Do(func() { close(rl.done) })
 }
 
 // Middleware returns an http.Handler middleware that enforces the rate limit.

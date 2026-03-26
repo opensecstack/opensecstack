@@ -11,10 +11,13 @@ re-authenticates transparently when the token expires (HTTP 401).
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 import requests
 
@@ -290,6 +293,14 @@ class APIGuardClient:
         # The API returns {"data": [...], "total": N, ...}
         if isinstance(payload, dict) and "data" in payload:
             return payload["data"]
+        actual_keys = list(payload.keys()) if isinstance(payload, dict) else type(payload).__name__
+        logger.warning(
+            "get_findings: unexpected response envelope for scan %s — "
+            "expected a dict with key 'data', but got keys %r. "
+            "Returning raw payload.",
+            scan_id,
+            actual_keys,
+        )
         return payload  # defensive: return as-is if shape differs
 
     def get_report(self, scan_id: str, format: str = "json") -> bytes:

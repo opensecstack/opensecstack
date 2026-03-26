@@ -267,7 +267,15 @@ _SPEC = {
             "get": {"tags": ["Audit Log"], "summary": "Get single audit entry", "responses": {"200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/AuditEntry"}}}}, "404": {"description": "Not found"}}}
         },
         "/control-templates": {
-            "get": {"tags": ["Control Templates"], "summary": "List all 10 NIS2 Article 21(2) control templates", "responses": {"200": {"content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/ControlTemplate"}}}}}}}
+            "get": {
+                "tags": ["Control Templates"],
+                "summary": "List NIS2 Article 21(2) control templates",
+                "parameters": [
+                    {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
+                    {"name": "per_page", "in": "query", "schema": {"type": "integer", "default": 20, "maximum": 100}}
+                ],
+                "responses": {"200": {"headers": {"X-Total-Count": {"schema": {"type": "integer"}, "description": "Total number of control templates"}}, "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/ControlTemplate"}}}}}}
+            }
         }
     }
 }

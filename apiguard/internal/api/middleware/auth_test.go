@@ -15,6 +15,7 @@ import (
 
 // makeJWT builds a valid HS256 JWT for use in tests.
 // Pass exp=0 to omit the exp claim (for missing-exp tests).
+// iss and aud are set to "apiguard" to match the expected values.
 func makeJWT(secret, sub string, exp, iat int64) string {
 	header := map[string]string{"alg": "HS256", "typ": "JWT"}
 	headerBytes, _ := json.Marshal(header)
@@ -23,6 +24,8 @@ func makeJWT(secret, sub string, exp, iat int64) string {
 	payload := map[string]interface{}{
 		"sub": sub,
 		"iat": iat,
+		"iss": "apiguard",
+		"aud": "apiguard",
 	}
 	if exp != 0 {
 		payload["exp"] = exp
@@ -48,6 +51,8 @@ func makeJWTWithAlg(secret, sub, alg string, exp, iat int64) string {
 		"sub": sub,
 		"iat": iat,
 		"exp": exp,
+		"iss": "apiguard",
+		"aud": "apiguard",
 	}
 	payloadBytes, _ := json.Marshal(payload)
 	payloadB64 := base64.RawURLEncoding.EncodeToString(payloadBytes)
@@ -262,6 +267,8 @@ func TestValidateJWT_NotYetValid(t *testing.T) {
 		"iat": now,
 		"exp": now + 3600,
 		"nbf": now + 300, // 300 seconds in the future — past the 60s skew tolerance
+		"iss": "apiguard",
+		"aud": "apiguard",
 	}
 	payloadBytes, _ := json.Marshal(payload)
 	payloadB64 := base64.RawURLEncoding.EncodeToString(payloadBytes)

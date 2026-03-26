@@ -23,6 +23,8 @@ type Claims struct {
 	Exp int64  `json:"exp"`
 	Iat int64  `json:"iat"`
 	Nbf int64  `json:"nbf,omitempty"`
+	Iss string `json:"iss"`
+	Aud string `json:"aud"`
 }
 
 // ClaimsFromContext retrieves the JWT claims from the request context.
@@ -151,6 +153,12 @@ func validateJWT(token, secret string) (*Claims, error) {
 
 	if claims.Sub == "" {
 		return nil, fmt.Errorf("missing sub claim")
+	}
+	if claims.Iss != "apiguard" {
+		return nil, fmt.Errorf("invalid iss claim: %q", claims.Iss)
+	}
+	if claims.Aud != "apiguard" {
+		return nil, fmt.Errorf("invalid aud claim: %q", claims.Aud)
 	}
 
 	return &claims, nil

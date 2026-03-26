@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -15,6 +16,7 @@ type Client struct {
 	baseURL string
 	apiKey  string
 	http    *http.Client
+	wg      sync.WaitGroup
 }
 
 // New creates a CITADEL client. When baseURL is empty the client is a no-op.
@@ -36,11 +38,30 @@ func (c *Client) LogEvent(
 	if c == nil || c.baseURL == "" {
 		return
 	}
+	c.wg.Add(1)
 	go func() {
+		defer c.wg.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = c.logEvent(ctx, actionType, actorUserID, actorRole, resultStatus, systemModule, resourceID, metadata)
 	}()
+}
+
+// Drain waits for all in-flight LogEvent goroutines to finish, or until ctx is
+// cancelled. It is safe to call on a nil Client.
+func (c *Client) Drain(ctx context.Context) {
+	if c == nil {
+		return
+	}
+	done := make(chan struct{})
+	go func() {
+		c.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
 }
 
 func (c *Client) logEvent(

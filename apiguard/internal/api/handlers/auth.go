@@ -102,7 +102,7 @@ func (a *Auth) Token(w http.ResponseWriter, r *http.Request) {
 	keyHashBytes := sha256.Sum256([]byte(req.APIKey))
 	subject := "api-client:" + hex.EncodeToString(keyHashBytes[:])
 
-	token, err := issueJWT(a.cfg.Auth.JWTSecret, subject, expiry)
+	token, err := issueJWT(a.cfg.Auth.JWTSecret, subject, "apiguard", "apiguard", expiry)
 	if err != nil {
 		a.logger.Error().Err(err).Msg("failed to issue JWT")
 		writeError(w, http.StatusInternalServerError, "failed to issue token")
@@ -144,8 +144,8 @@ func (a *Auth) validAPIKey(key string) bool {
 	return false
 }
 
-// issueJWT creates a signed HS256 JWT with sub, iat, and exp claims.
-func issueJWT(secret, subject string, expiry time.Duration) (string, error) {
+// issueJWT creates a signed HS256 JWT with sub, iat, exp, iss, and aud claims.
+func issueJWT(secret, subject, issuer, audience string, expiry time.Duration) (string, error) {
 	header := jwtBase64([]byte(`{"alg":"HS256","typ":"JWT"}`))
 
 	now := time.Now()
@@ -153,6 +153,8 @@ func issueJWT(secret, subject string, expiry time.Duration) (string, error) {
 		"sub": subject,
 		"iat": now.Unix(),
 		"exp": now.Add(expiry).Unix(),
+		"iss": issuer,
+		"aud": audience,
 	})
 	if err != nil {
 		return "", err
@@ -243,14 +245,14 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		expiry = 24 * time.Hour
 	}
 
-	accessToken, err := issueJWT(a.cfg.Auth.JWTSecret, claims.Sub, expiry)
+	accessToken, err := issueJWT(a.cfg.Auth.JWTSecret, claims.Sub, "apiguard", "apiguard", expiry)
 	if err != nil {
 		a.logger.Error().Err(err).Msg("failed to issue access token")
 		writeError(w, http.StatusInternalServerError, "failed to issue token")
 		return
 	}
 
-	newRefreshToken, err := issueJWT(a.cfg.Auth.JWTSecret, claims.Sub, 7*24*time.Hour)
+	newRefreshToken, err := issueJWT(a.cfg.Auth.JWTSecret, claims.Sub, "apiguard", "apiguard", 7*24*time.Hour)
 	if err != nil {
 		a.logger.Error().Err(err).Msg("failed to issue refresh token")
 		writeError(w, http.StatusInternalServerError, "failed to issue token")
@@ -310,6 +312,12 @@ func validateRefreshToken(token, secret string) (*jwtClaims, error) {
 	if claims.Sub == "" {
 		return nil, fmt.Errorf("missing sub claim")
 	}
+	if claims.Iss != "apiguard" {
+		return nil, fmt.Errorf("invalid iss claim: %q", claims.Iss)
+	}
+	if claims.Aud != "apiguard" {
+		return nil, fmt.Errorf("invalid aud claim: %q", claims.Aud)
+	}
 
 	return &claims, nil
 }
@@ -319,6 +327,8 @@ type jwtClaims struct {
 	Sub string `json:"sub"`
 	Exp int64  `json:"exp"`
 	Iat int64  `json:"iat"`
+	Iss string `json:"iss"`
+	Aud string `json:"aud"`
 }
 
 // jwtBase64Decode decodes a base64url-encoded string (without padding).

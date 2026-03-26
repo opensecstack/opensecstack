@@ -108,6 +108,9 @@ func (s *Server) Start() error {
 		if err := srv.Shutdown(shutCtx); err != nil {
 			return fmt.Errorf("graceful shutdown: %w", err)
 		}
+		drainCtx, drainCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer drainCancel()
+		s.citadel.Drain(drainCtx)
 		s.globalLimiter.Stop()
 		s.authLimiter.Stop()
 		s.scanLimiter.Stop()

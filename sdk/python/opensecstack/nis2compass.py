@@ -324,6 +324,34 @@ class NIS2CompassClient:
         """
         self._delete(f"assessments/{assessment_id}")
 
+    def list_assessments(
+        self,
+        org_id: str,
+        *,
+        status: Optional[str] = None,
+        page: int = 1,
+        per_page: int = 20,
+    ) -> list[dict]:
+        """
+        Return a list of assessments for an organisation.
+
+        Issues ``GET /organisations/{org_id}/assessments`` with optional
+        server-side filtering and pagination.
+
+        Parameters
+        ----------
+        org_id:   UUID of the parent organisation.
+        status:   Optional filter by assessment lifecycle status.  One of
+                  ``draft``, ``in_progress``, ``under_review``,
+                  ``completed``, ``archived``.
+        page:     1-based page number (default: 1).
+        per_page: Items per page, max 100 (default: 20).
+        """
+        params: dict = {"page": page, "per_page": per_page}
+        if status is not None:
+            params["status"] = status
+        return self._get(f"organisations/{org_id}/assessments", params=params).json()
+
     # ------------------------------------------------------------------
     # Controls
     # ------------------------------------------------------------------

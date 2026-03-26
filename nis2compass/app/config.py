@@ -1,4 +1,6 @@
+import ipaddress
 import os
+import urllib.parse
 
 
 class Config:
@@ -46,6 +48,34 @@ class Config:
     DEBUG = os.getenv('NIS2_DEBUG', 'false').lower() == 'true'
     WEBHOOK_URL = os.getenv('NIS2_WEBHOOK_URL', '')           # POST target; empty = disabled
     WEBHOOK_SECRET = os.getenv('NIS2_WEBHOOK_SECRET', '')     # HMAC-SHA256 signing secret
+
+    # H4: validate WEBHOOK_URL at startup — reject non-http(s), localhost, and
+    # private-range addresses to prevent Server-Side Request Forgery (SSRF).
+    if WEBHOOK_URL:
+        _parsed = urllib.parse.urlparse(WEBHOOK_URL)
+        if _parsed.scheme not in ('http', 'https'):
+            raise ValueError(
+                f'NIS2_WEBHOOK_URL has an invalid scheme {_parsed.scheme!r}; '
+                'only http and https are permitted.'
+            )
+        _hostname = _parsed.hostname or ''
+        _BLOCKED_HOSTNAMES = {'localhost', '127.0.0.1', '::1'}
+        if _hostname in _BLOCKED_HOSTNAMES:
+            raise ValueError(
+                f'NIS2_WEBHOOK_URL hostname {_hostname!r} is not allowed (loopback).'
+            )
+        try:
+            _addr = ipaddress.ip_address(_hostname)
+            if _addr.is_private or _addr.is_loopback or _addr.is_link_local:
+                raise ValueError(
+                    f'NIS2_WEBHOOK_URL resolves to a private/loopback address '
+                    f'{_hostname!r}, which is not permitted.'
+                )
+        except ValueError as _exc:
+            # Re-raise if it came from our own check above (contains 'NIS2_WEBHOOK_URL')
+            if 'NIS2_WEBHOOK_URL' in str(_exc):
+                raise
+            # Otherwise _hostname is a DNS name, not a bare IP — that is acceptable.
     ENV = os.getenv('NIS2_ENV', 'production')
     CORS_ORIGINS = os.getenv('NIS2_CORS_ORIGINS', '*').split(',') if os.getenv('NIS2_CORS_ORIGINS') else (
         ['*'] if os.getenv('NIS2_ENV', 'production') == 'development' else []

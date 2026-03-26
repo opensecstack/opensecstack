@@ -264,17 +264,45 @@ type PatchFindingRequest struct {
 
 // NIS2AuditEntry is a single entry in the NIS2 Compass immutable audit log.
 // The chain_hash and prev_hash fields provide a WORM integrity chain.
+// Metadata holds arbitrary JSON context recorded at the time of the event.
+// ObjectFingerprint is the SHA-256 of the resource snapshot (may be empty).
 type NIS2AuditEntry struct {
-	ID           string    `json:"id"`
-	Action       string    `json:"action"`
-	Actor        string    `json:"actor"`
-	ResourceType string    `json:"resource_type"`
-	ResourceID   string    `json:"resource_id,omitempty"`
-	RiskClass    string    `json:"risk_class"`
-	ChainHash    string    `json:"chain_hash"`
-	PrevHash     string    `json:"prev_hash,omitempty"`
-	Timestamp    time.Time `json:"timestamp"`
+	ID                string      `json:"id"`
+	Action            string      `json:"action"`
+	Actor             string      `json:"actor"`
+	ResourceType      string      `json:"resource_type"`
+	ResourceID        string      `json:"resource_id,omitempty"`
+	RiskClass         string      `json:"risk_class"`
+	Metadata          interface{} `json:"metadata,omitempty"`
+	ObjectFingerprint string      `json:"object_fingerprint,omitempty"`
+	ChainHash         string      `json:"chain_hash"`
+	PrevHash          string      `json:"prev_hash,omitempty"`
+	Timestamp         time.Time   `json:"timestamp"`
 }
+
+// GetAssessmentsOptions holds optional filter and pagination parameters for
+// GetAssessments. Pass a zero-value GetAssessmentsOptions{} to use server
+// defaults (page 1, per_page 100, no status filter).
+type GetAssessmentsOptions struct {
+	// Status filters by assessment status (e.g. "draft", "in_progress",
+	// "under_review", "completed", "archived"). Leave empty to return all.
+	Status string
+	// Page is the 1-based page number (default: 1).
+	Page int
+	// PerPage is the number of results per page, max 100 (default: 100).
+	PerPage int
+}
+
+// RateLimitError is returned when the server responds with HTTP 429.
+// Callers can test for this specific error type using errors.As:
+//
+//	var rle *RateLimitError
+//	if errors.As(err, &rle) { /* back off and retry */ }
+type RateLimitError struct {
+	Message string
+}
+
+func (e *RateLimitError) Error() string { return e.Message }
 
 // Artifact represents a file attachment linked to a NIS2 assessment.
 type Artifact struct {

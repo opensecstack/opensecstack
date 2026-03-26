@@ -120,7 +120,22 @@ func (d *DB) ListScans(ctx context.Context, limit, offset int, statusFilter stri
 }
 
 // UpdateScanStatus updates a scan's status and related timestamps.
+// If the scan is already in a terminal state (completed, failed, or cancelled),
+// the update is silently skipped to prevent status regression.
 func (d *DB) UpdateScanStatus(ctx context.Context, id uuid.UUID, status ScanStatus) error {
+	var current ScanStatus
+	err := d.Pool.QueryRow(ctx, `SELECT status FROM scans WHERE id = $1`, id).Scan(&current)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return fmt.Errorf("scan not found: %s", id)
+		}
+		return fmt.Errorf("checking scan status: %w", err)
+	}
+	// Do not overwrite a terminal state.
+	if current == ScanStatusCompleted || current == ScanStatusFailed || current == ScanStatusCancelled {
+		return nil
+	}
+
 	var query string
 	var args []interface{}
 

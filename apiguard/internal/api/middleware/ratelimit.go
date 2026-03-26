@@ -15,6 +15,7 @@ type RateLimiter struct {
 	rate           int           // maximum requests allowed per window
 	window         time.Duration // window duration
 	trustedProxies []*net.IPNet  // upstream proxy IPs whose XFF header is trusted
+	done           chan struct{}  // closed by Stop() to signal the cleanup goroutine to exit
 }
 
 type rlVisitor struct {
@@ -50,25 +51,37 @@ func NewRateLimiterWithProxies(requestsPerMinute int, trustedProxyCIDRs []string
 		rate:           requestsPerMinute,
 		window:         time.Minute,
 		trustedProxies: nets,
+		done:           make(chan struct{}),
 	}
 
 	// Background goroutine cleans up expired visitor entries every 5 minutes.
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
-		for range ticker.C {
-			rl.mu.Lock()
-			now := time.Now()
-			for ip, v := range rl.visitors {
-				if now.After(v.resetAt) {
-					delete(rl.visitors, ip)
+		for {
+			select {
+			case <-ticker.C:
+				rl.mu.Lock()
+				now := time.Now()
+				for ip, v := range rl.visitors {
+					if now.After(v.resetAt) {
+						delete(rl.visitors, ip)
+					}
 				}
+				rl.mu.Unlock()
+			case <-rl.done:
+				return
 			}
-			rl.mu.Unlock()
 		}
 	}()
 
 	return rl
+}
+
+// Stop signals the background cleanup goroutine to exit. It should be called
+// when the RateLimiter is no longer needed to prevent goroutine leaks.
+func (rl *RateLimiter) Stop() {
+	close(rl.done)
 }
 
 // Middleware returns an http.Handler middleware that enforces the rate limit.
@@ -108,6 +121,40 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 		rl.mu.Unlock()
 		next.ServeHTTP(w, r)
 	})
+}
+
+// ClientIPFromRequest extracts the real client IP using the same trusted-proxy
+// logic as the RateLimiter. X-Forwarded-For is only honoured when the direct
+// peer (r.RemoteAddr) is one of the provided trustedProxies. Pass nil to always
+// use RemoteAddr.
+func ClientIPFromRequest(r *http.Request, trustedProxies []*net.IPNet) string {
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		remoteHost = r.RemoteAddr
+	}
+
+	if len(trustedProxies) > 0 {
+		remoteIP := net.ParseIP(remoteHost)
+		if remoteIP != nil {
+			for _, ipNet := range trustedProxies {
+				if ipNet.Contains(remoteIP) {
+					if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+						ip := xff
+						if idx := indexByte(xff, ','); idx >= 0 {
+							ip = xff[:idx]
+						}
+						ip = trimSpace(ip)
+						if ip != "" {
+							return ip
+						}
+					}
+					break
+				}
+			}
+		}
+	}
+
+	return remoteHost
 }
 
 // clientIP extracts the real client IP. X-Forwarded-For is only trusted when

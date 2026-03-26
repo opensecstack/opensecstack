@@ -123,6 +123,10 @@ def upload_artifact(assessment_id):
         if control is None or str(control.assessment_id) != str(assessment_id):
             return jsonify({'error': 'Control not found in this assessment', 'code': 'NOT_FOUND'}), 404
 
+    description = request.form.get('description')
+    if description is not None and len(description) > 1000:
+        return jsonify({'error': 'description must not exceed 1000 characters', 'code': 'INVALID_INPUT'}), 400
+
     file_path, file_hash, size_bytes, mime_type = _save_file(file, str(assessment_id))
 
     artifact = Artifact(
@@ -134,7 +138,7 @@ def upload_artifact(assessment_id):
         hash=file_hash,
         size_bytes=size_bytes,
         mime_type=mime_type,
-        description=request.form.get('description'),
+        description=description,
         created_by=g.actor,
     )
     db.session.add(artifact)

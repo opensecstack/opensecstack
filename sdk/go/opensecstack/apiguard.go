@@ -200,7 +200,7 @@ func checkResponse(resp *http.Response) ([]byte, error) {
 		return nil, fmt.Errorf("reading response body: %w", err)
 	}
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("rate limited (HTTP 429): %s", string(raw))
+		return nil, &RateLimitError{Message: fmt.Sprintf("rate limited (HTTP 429): %s", string(raw))}
 	}
 	if resp.StatusCode >= 400 {
 		var ae apiError

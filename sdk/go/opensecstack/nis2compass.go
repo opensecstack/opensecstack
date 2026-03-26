@@ -307,11 +307,27 @@ func (c *NIS2CompassClient) DeleteOrganisation(ctx context.Context, id string) e
 // Assessments
 // ----------------------------------------------------------------------------
 
-// GetAssessments returns all assessments belonging to the given organisation UUID.
-func (c *NIS2CompassClient) GetAssessments(ctx context.Context, orgID string) ([]Assessment, error) {
+// GetAssessments returns assessments belonging to the given organisation UUID.
+//
+// opts controls pagination and optional server-side filtering by status.
+// Pass a zero-value GetAssessmentsOptions{} to use server defaults
+// (page 1, per_page 100, no status filter).
+func (c *NIS2CompassClient) GetAssessments(ctx context.Context, orgID string, opts GetAssessmentsOptions) ([]Assessment, error) {
+	page := opts.Page
+	if page <= 0 {
+		page = 1
+	}
+	perPage := opts.PerPage
+	if perPage <= 0 {
+		perPage = 100
+	}
+
 	params := url.Values{}
-	params.Set("page", "1")
-	params.Set("per_page", "100")
+	params.Set("page", strconv.Itoa(page))
+	params.Set("per_page", strconv.Itoa(perPage))
+	if opts.Status != "" {
+		params.Set("status", opts.Status)
+	}
 
 	var assessments []Assessment
 	if err := c.getJSON(ctx, "organisations/"+orgID+"/assessments", params, &assessments); err != nil {

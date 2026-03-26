@@ -20,6 +20,7 @@ import (
 
 	"github.com/opensecstack/apiguard/internal/api/middleware"
 	"github.com/opensecstack/apiguard/internal/citadel"
+	"github.com/opensecstack/apiguard/internal/config"
 	"github.com/opensecstack/apiguard/internal/db"
 	"github.com/opensecstack/apiguard/internal/domain"
 	"github.com/opensecstack/apiguard/internal/reporter"
@@ -62,11 +63,13 @@ func (s *Scans) auditLog(ctx context.Context, action db.AuditAction, resourceTyp
 
 // Scans handles scan-related API endpoints.
 type Scans struct {
-	logger      zerolog.Logger
-	db          *db.DB
-	scanner     *scanner.Scanner
-	citadel     *citadel.Client
-	shutdownCtx context.Context // cancelled when the server is shutting down
+	logger         zerolog.Logger
+	db             *db.DB
+	scanner        *scanner.Scanner
+	citadel        *citadel.Client
+	cfg            *config.Config
+	shutdownCtx    context.Context // cancelled when the server is shutting down
+	trustedProxies []*net.IPNet    // parsed from cfg.RateLimit.TrustedProxies
 }
 
 // NewScans creates a new Scans handler.
@@ -84,14 +87,34 @@ func NewScans(logger zerolog.Logger, database *db.DB, sc *scanner.Scanner, shutd
 // NewScansWithCitadel creates a new Scans handler with a CITADEL forwarding client.
 // shutdownCtx should be the server's shutdown context; scan goroutines are parented
 // to it so they are cancelled when the server receives SIGTERM.
-func NewScansWithCitadel(logger zerolog.Logger, database *db.DB, sc *scanner.Scanner, cc *citadel.Client, shutdownCtx context.Context) *Scans {
+func NewScansWithCitadel(logger zerolog.Logger, database *db.DB, sc *scanner.Scanner, cc *citadel.Client, shutdownCtx context.Context, cfg *config.Config) *Scans {
 	return &Scans{
-		logger:      logger.With().Str("handler", "scans").Logger(),
-		db:          database,
-		scanner:     sc,
-		citadel:     cc,
-		shutdownCtx: shutdownCtx,
+		logger:         logger.With().Str("handler", "scans").Logger(),
+		db:             database,
+		scanner:        sc,
+		citadel:        cc,
+		cfg:            cfg,
+		shutdownCtx:    shutdownCtx,
+		trustedProxies: parseTrustedProxies(cfg),
 	}
+}
+
+// parseTrustedProxies converts config CIDR strings to net.IPNet values.
+func parseTrustedProxies(cfg *config.Config) []*net.IPNet {
+	if cfg == nil {
+		return nil
+	}
+	var nets []*net.IPNet
+	for _, cidr := range cfg.RateLimit.TrustedProxies {
+		if !strings.Contains(cidr, "/") {
+			cidr = cidr + "/32"
+		}
+		_, ipNet, err := net.ParseCIDR(cidr)
+		if err == nil {
+			nets = append(nets, ipNet)
+		}
+	}
+	return nets
 }
 
 // createScanRequest is the JSON body for POST /api/v1/scans.
@@ -151,7 +174,7 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 
 	scanID := scan.ID
 	s.auditLog(r.Context(), db.AuditActionScanCreated, "scans", &scanID,
-		r.RemoteAddr, r.UserAgent(), map[string]interface{}{"target": req.Target})
+		middleware.ClientIPFromRequest(r, s.trustedProxies), r.UserAgent(), map[string]interface{}{"target": req.Target})
 
 	// Build scanner request.
 	scanReq := scanner.ScanRequest{
@@ -185,7 +208,11 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 		// file so the scanner's validateSpecPath can open it as a local file.
 		var tempSpecFile string
 		if req.SpecURL != "" && req.SpecPath == "" {
-			path, dlErr := downloadSpecToTemp(bgCtx, req.SpecURL)
+			maxSpecSize := 10 // 10 MB default
+			if s.cfg != nil && s.cfg.Scanner.MaxSpecSize > 0 {
+				maxSpecSize = s.cfg.Scanner.MaxSpecSize
+			}
+			path, dlErr := downloadSpecToTemp(bgCtx, req.SpecURL, maxSpecSize)
 			if dlErr != nil {
 				s.logger.Error().Err(dlErr).Str("scan_id", scanID.String()).Str("spec_url", req.SpecURL).Msg("failed to download spec")
 				if dbErr := s.db.UpdateScanError(bgCtx, scanID, fmt.Sprintf("failed to download spec: %v", dlErr)); dbErr != nil {
@@ -510,7 +537,7 @@ func (s *Scans) Report(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.auditLog(r.Context(), db.AuditActionReportGenerated, "scans", &id,
-		r.RemoteAddr, r.UserAgent(), map[string]interface{}{"format": format})
+		middleware.ClientIPFromRequest(r, s.trustedProxies), r.UserAgent(), map[string]interface{}{"format": format})
 
 	contentType := reportContentType(format)
 	w.Header().Set("Content-Type", contentType)
@@ -540,7 +567,7 @@ func (s *Scans) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.auditLog(r.Context(), db.AuditActionScanDeleted, "scans", &id,
-		r.RemoteAddr, r.UserAgent(), nil)
+		middleware.ClientIPFromRequest(r, s.trustedProxies), r.UserAgent(), nil)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -682,7 +709,8 @@ func validateSpecURL(rawURL string) error {
 // downloadSpecToTemp fetches a remote OpenAPI spec URL and writes it to a
 // temporary file, returning the file path. The caller is responsible for
 // removing the file when done (e.g. with defer os.Remove(path)).
-func downloadSpecToTemp(ctx context.Context, specURL string) (string, error) {
+// maxSpecSize is the maximum allowed file size in megabytes.
+func downloadSpecToTemp(ctx context.Context, specURL string, maxSpecSize int) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, specURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("building request: %w", err)
@@ -698,21 +726,27 @@ func downloadSpecToTemp(ctx context.Context, specURL string) (string, error) {
 		return "", fmt.Errorf("spec URL returned HTTP %d", resp.StatusCode)
 	}
 
-	// L2: reject HTML responses — they indicate a login page or error, not a spec.
-	if ct := resp.Header.Get("Content-Type"); strings.HasPrefix(ct, "text/html") {
+	// L1: reject HTML responses — they indicate a login page or error, not a spec.
+	if ct := resp.Header.Get("Content-Type"); strings.HasPrefix(strings.ToLower(ct), "text/html") {
 		return "", fmt.Errorf("spec URL returned HTML content, expected YAML or JSON")
 	}
 
-	const maxSpecBytes = 20 * 1024 * 1024 // 20 MB hard cap
 	f, err := os.CreateTemp("", "apiguard-spec-*.json")
 	if err != nil {
 		return "", fmt.Errorf("creating temp file: %w", err)
 	}
 
-	if _, err := io.Copy(f, io.LimitReader(resp.Body, maxSpecBytes)); err != nil {
+	maxBytes := int64(maxSpecSize) * 1024 * 1024
+	n, err := io.Copy(f, io.LimitReader(resp.Body, maxBytes))
+	if err != nil {
 		_ = f.Close()
 		_ = os.Remove(f.Name())
 		return "", fmt.Errorf("writing spec to temp file: %w", err)
+	}
+	if n >= maxBytes {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return "", fmt.Errorf("spec file exceeds maximum size of %d bytes", maxBytes)
 	}
 
 	if err := f.Close(); err != nil {

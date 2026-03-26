@@ -113,8 +113,12 @@ def update_control(assessment_id, measure_ref):
         control.evidence = data['evidence']
 
     if 'gap_description' in data:
+        if data['gap_description'] is not None and len(data['gap_description']) > 5000:
+            return jsonify({'error': 'gap_description must not exceed 5000 characters', 'code': 'INVALID_INPUT'}), 400
         control.gap_description = data['gap_description']
     if 'remediation_plan' in data:
+        if data['remediation_plan'] is not None and len(data['remediation_plan']) > 5000:
+            return jsonify({'error': 'remediation_plan must not exceed 5000 characters', 'code': 'INVALID_INPUT'}), 400
         control.remediation_plan = data['remediation_plan']
     if 'remediation_due' in data:
         try:
@@ -133,6 +137,8 @@ def update_control(assessment_id, measure_ref):
                 return jsonify({'error': 'risk_score must be between 0.0 and 10.0', 'code': 'INVALID_INPUT'}), 400
         control.risk_score = score
     if 'notes' in data:
+        if data['notes'] is not None and len(data['notes']) > 5000:
+            return jsonify({'error': 'notes must not exceed 5000 characters', 'code': 'INVALID_INPUT'}), 400
         control.notes = data['notes']
 
     if 'remediation_owner' in data:
@@ -153,6 +159,8 @@ def update_control(assessment_id, measure_ref):
         control.external_ticket_url = url
 
     if 'remediation_notes' in data:
+        if data['remediation_notes'] is not None and len(data['remediation_notes']) > 5000:
+            return jsonify({'error': 'remediation_notes must not exceed 5000 characters', 'code': 'INVALID_INPUT'}), 400
         control.remediation_notes = data['remediation_notes']
 
     # Determine risk_class for audit entry

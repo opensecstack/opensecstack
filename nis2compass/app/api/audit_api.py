@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from ..extensions import db
 from ..models import AuditLog
 from ..auth import require_auth
@@ -13,7 +13,10 @@ def list_audit():
     page = max(1, request.args.get('page', 1, type=int))
     per_page = min(100, max(1, request.args.get('per_page', 20, type=int)))
 
-    query = db.session.query(AuditLog)
+    # C1: restrict to entries where the caller is the actor — audit entries are
+    # written with the actor who made the change, so showing only your own
+    # entries is correct and sufficient.
+    query = db.session.query(AuditLog).filter(AuditLog.actor == g.actor)
 
     if actor := request.args.get('actor'):
         query = query.filter(AuditLog.actor == actor)
@@ -46,5 +49,8 @@ def list_audit():
 def get_audit_entry(entry_id):
     entry = db.session.get(AuditLog, entry_id)
     if entry is None:
+        return jsonify({'error': 'Audit entry not found', 'code': 'NOT_FOUND'}), 404
+    # C2: do not leak existence of entries belonging to other actors
+    if entry.actor != g.actor:
         return jsonify({'error': 'Audit entry not found', 'code': 'NOT_FOUND'}), 404
     return jsonify(entry.to_dict()), 200

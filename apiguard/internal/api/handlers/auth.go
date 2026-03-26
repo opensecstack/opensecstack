@@ -8,28 +8,32 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
 
+	"github.com/opensecstack/apiguard/internal/api/middleware"
 	"github.com/opensecstack/apiguard/internal/config"
 	"github.com/opensecstack/apiguard/internal/db"
 )
 
 // Auth handles authentication endpoints.
 type Auth struct {
-	logger zerolog.Logger
-	cfg    *config.Config
-	db     *db.DB
+	logger         zerolog.Logger
+	cfg            *config.Config
+	db             *db.DB
+	trustedProxies []*net.IPNet // parsed from cfg.RateLimit.TrustedProxies
 }
 
 // NewAuth creates a new Auth handler.
 func NewAuth(logger zerolog.Logger, cfg *config.Config) *Auth {
 	return &Auth{
-		logger: logger.With().Str("handler", "auth").Logger(),
-		cfg:    cfg,
+		logger:         logger.With().Str("handler", "auth").Logger(),
+		cfg:            cfg,
+		trustedProxies: parseTrustedProxies(cfg),
 	}
 }
 
@@ -37,9 +41,10 @@ func NewAuth(logger zerolog.Logger, cfg *config.Config) *Auth {
 // in the database, falling back to the static config keys when DB is unavailable.
 func NewAuthWithDB(logger zerolog.Logger, cfg *config.Config, database *db.DB) *Auth {
 	return &Auth{
-		logger: logger.With().Str("handler", "auth").Logger(),
-		cfg:    cfg,
-		db:     database,
+		logger:         logger.With().Str("handler", "auth").Logger(),
+		cfg:            cfg,
+		db:             database,
+		trustedProxies: parseTrustedProxies(cfg),
 	}
 }
 
@@ -82,7 +87,7 @@ func (a *Auth) Token(w http.ResponseWriter, r *http.Request) {
 
 	// Validate the API key against the configured set.
 	if !a.validAPIKey(req.APIKey) {
-		a.logger.Warn().Str("remote_addr", r.RemoteAddr).Msg("invalid API key presented")
+		a.logger.Warn().Str("remote_addr", middleware.ClientIPFromRequest(r, a.trustedProxies)).Msg("invalid API key presented")
 		writeError(w, http.StatusUnauthorized, "invalid api_key")
 		return
 	}
@@ -211,7 +216,7 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 
 	claims, err := validateRefreshToken(req.RefreshToken, a.cfg.Auth.JWTSecret)
 	if err != nil {
-		a.logger.Warn().Err(err).Str("remote_addr", r.RemoteAddr).Msg("invalid refresh token presented")
+		a.logger.Warn().Err(err).Str("remote_addr", middleware.ClientIPFromRequest(r, a.trustedProxies)).Msg("invalid refresh token presented")
 		writeError(w, http.StatusUnauthorized, "invalid or expired refresh token")
 		return
 	}
@@ -227,7 +232,7 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !found {
-			a.logger.Warn().Str("remote_addr", r.RemoteAddr).Msg("refresh rejected: API key no longer active")
+			a.logger.Warn().Str("remote_addr", middleware.ClientIPFromRequest(r, a.trustedProxies)).Msg("refresh rejected: API key no longer active")
 			writeError(w, http.StatusUnauthorized, "API key has been revoked")
 			return
 		}
@@ -245,7 +250,7 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newRefreshToken, err := issueJWT(a.cfg.Auth.JWTSecret, "api-client-refresh", 7*24*time.Hour)
+	newRefreshToken, err := issueJWT(a.cfg.Auth.JWTSecret, claims.Sub, 7*24*time.Hour)
 	if err != nil {
 		a.logger.Error().Err(err).Msg("failed to issue refresh token")
 		writeError(w, http.StatusInternalServerError, "failed to issue token")

@@ -179,7 +179,6 @@ class Artifact(db.Model):
             'control_id': str(self.control_id) if self.control_id else None,
             'type': self.type,
             'filename': self.filename,
-            'file_path': self.file_path,
             'hash': self.hash,
             'size_bytes': self.size_bytes,
             'mime_type': self.mime_type,

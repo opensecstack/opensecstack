@@ -2,14 +2,11 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
@@ -128,93 +125,21 @@ func (s *Server) setupMiddleware() {
 	if rateLimit <= 0 {
 		rateLimit = 120
 	}
-	s.router.Use(RateLimiter(s.shutdownCtx, rateLimit)) // requests per minute per IP
+	globalLimiter := middleware.NewRateLimiterWithProxies(rateLimit, s.config.RateLimit.TrustedProxies)
+	s.router.Use(globalLimiter.Middleware) // requests per minute per IP
 	s.router.Use(middleware.CORS(s.config.CORS.Origins)) // CORS must run before JWT auth
 }
 
 func (s *Server) registerRoutes() {
 	h := handlers.NewHealth(s.logger)
 	a := handlers.NewAuthWithDB(s.logger, s.config, s.db)
-	sc := handlers.NewScansWithCitadel(s.logger, s.db, s.scanner, s.citadel, s.shutdownCtx)
-	f := handlers.NewFindingsWithCitadel(s.logger, s.db, s.citadel)
+	sc := handlers.NewScansWithCitadel(s.logger, s.db, s.scanner, s.citadel, s.shutdownCtx, s.config)
+	f := handlers.NewFindingsWithCitadel(s.logger, s.db, s.citadel, s.config)
 	sp := handlers.NewSpecs(s.logger, "")
 	au := handlers.NewAudit(s.logger, s.db)
 	ak := handlers.NewAPIKeys(s.logger, s.db, s.citadel)
 
 	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, s.config)
-}
-
-// RateLimiter returns a middleware that limits requests per IP using a sliding window.
-func RateLimiter(ctx context.Context, requestsPerMinute int) func(http.Handler) http.Handler {
-	const maxVisitors = 100000
-
-	type visitor struct {
-		count   int
-		resetAt time.Time
-	}
-	var mu sync.Mutex
-	visitors := make(map[string]*visitor)
-
-	// Cleanup old entries every 5 minutes.
-	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				mu.Lock()
-				now := time.Now()
-				for ip, v := range visitors {
-					if now.After(v.resetAt) {
-						delete(visitors, ip)
-					}
-				}
-				mu.Unlock()
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Use RemoteAddr only (chimw.RealIP already normalizes it)
-			// Strip port to avoid per-connection buckets
-			ip := r.RemoteAddr
-			if host, _, err := net.SplitHostPort(ip); err == nil {
-				ip = host
-			}
-
-			mu.Lock()
-			v, exists := visitors[ip]
-			now := time.Now()
-			if !exists || now.After(v.resetAt) {
-				if !exists && len(visitors) >= maxVisitors {
-					mu.Unlock()
-					w.Header().Set("Retry-After", "60")
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusTooManyRequests)
-					json.NewEncoder(w).Encode(map[string]string{"error": "too_many_clients", "message": "Too many clients. Try again later."})
-					return
-				}
-				visitors[ip] = &visitor{count: 1, resetAt: now.Add(time.Minute)}
-				mu.Unlock()
-				next.ServeHTTP(w, r)
-				return
-			}
-			v.count++
-			if v.count > requestsPerMinute {
-				mu.Unlock()
-				w.Header().Set("Retry-After", "60")
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusTooManyRequests)
-				json.NewEncoder(w).Encode(map[string]string{"error": "rate_limit_exceeded", "message": "Too many requests. Try again later."})
-				return
-			}
-			mu.Unlock()
-			next.ServeHTTP(w, r)
-		})
-	}
 }
 
 // CORSMiddleware returns a middleware that sets CORS headers for allowed origins.

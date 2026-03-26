@@ -5,6 +5,10 @@ from datetime import datetime, timezone
 
 from sqlalchemy import text
 
+# Advisory lock ID for serialising audit chain writes. Must not conflict with
+# any other pg_advisory_lock usage in this application.
+_AUDIT_CHAIN_LOCK_ID = 1_234_567_890
+
 
 def _compute_chain_hash(
     entry_id: str,
@@ -19,10 +23,15 @@ def _compute_chain_hash(
     SHA-256 chain anchor.
     Formula: SHA-256(id || action || actor || resource_type || resource_id || prev_hash || timestamp)
     NULL values are represented as the literal string "NULL".
+
+    NOTE: Prior to adding field delimiters, chain hashes were computed by
+    simple concatenation without any separator between fields. Existing chains
+    stored in the database were computed under that old (no-delimiter) scheme
+    and will not verify against this updated formula.
     """
     rid = resource_id if resource_id else 'NULL'
     ph = prev_hash if prev_hash else 'NULL'
-    raw = f'{entry_id}{action}{actor}{resource_type}{rid}{ph}{timestamp}'
+    raw = f'{entry_id}||{action}||{actor}||{resource_type}||{rid}||{ph}||{timestamp}'
     return hashlib.sha256(raw.encode('utf-8')).hexdigest()
 
 
@@ -74,8 +83,8 @@ def _forward_to_citadel(log_entry: dict) -> None:
             headers=headers,
             timeout=2.0,
         )
-    except Exception:
-        pass  # CITADEL forwarding is best-effort
+    except Exception as exc:
+        current_app.logger.warning('CITADEL forwarding failed: %s', exc)
 
 
 def write_audit(
@@ -103,9 +112,8 @@ def write_audit(
     from .models import AuditLog
 
     # Acquire advisory lock so concurrent requests don't race on prev_hash.
-    # Lock ID is arbitrary but fixed — all writers contend on the same key.
-    AUDIT_LOCK_ID = 1_234_567_890
-    db_session.execute(text(f'SELECT pg_advisory_xact_lock({AUDIT_LOCK_ID})'))
+    # Lock ID is defined at module level as _AUDIT_CHAIN_LOCK_ID.
+    db_session.execute(text(f'SELECT pg_advisory_xact_lock({_AUDIT_CHAIN_LOCK_ID})'))
 
     # Fetch the most recent chain_hash (within this transaction's snapshot).
     last = (

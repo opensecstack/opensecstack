@@ -1,4 +1,5 @@
 import io
+import time
 from datetime import datetime, timezone, date
 from flask import Blueprint, request, jsonify, g, send_file
 from reportlab.lib import colors
@@ -15,6 +16,12 @@ from ..auth import require_auth, require_scope
 from ..audit import write_audit
 
 assessments_bp = Blueprint('assessments', __name__)
+
+# L2: in-memory per-user rate limit for PDF report generation.
+# Stores a list of timestamps (float, seconds since epoch) per actor.
+_REPORT_RATE_LIMIT_WINDOW = 60   # seconds
+_REPORT_RATE_LIMIT_MAX    = 3    # requests per window
+_report_rate_limit: dict[str, list[float]] = {}
 
 
 def _check_org_access(org_id):
@@ -589,6 +596,17 @@ def _generate_pdf(assessment, org, controls, templates):
 @require_auth
 @require_scope('read_write')
 def generate_report(assessment_id):
+    # L2: enforce per-user rate limit of 3 PDF requests per minute
+    _now = time.time()
+    _window_start = _now - _REPORT_RATE_LIMIT_WINDOW
+    _timestamps = _report_rate_limit.get(g.actor, [])
+    _timestamps = [t for t in _timestamps if t > _window_start]
+    if len(_timestamps) >= _REPORT_RATE_LIMIT_MAX:
+        _report_rate_limit[g.actor] = _timestamps
+        return jsonify({'error': 'Rate limit exceeded', 'code': 'RATE_LIMIT_EXCEEDED'}), 429
+    _timestamps.append(_now)
+    _report_rate_limit[g.actor] = _timestamps
+
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
         return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404

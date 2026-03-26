@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"net"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/opensecstack/apiguard/internal/api/middleware"
 	"github.com/opensecstack/apiguard/internal/citadel"
+	"github.com/opensecstack/apiguard/internal/config"
 	"github.com/opensecstack/apiguard/internal/db"
 )
 
@@ -49,9 +51,10 @@ func (f *Findings) auditLog(ctx context.Context, action db.AuditAction, resource
 
 // Findings handles finding-related API endpoints.
 type Findings struct {
-	logger  zerolog.Logger
-	db      *db.DB
-	citadel *citadel.Client
+	logger         zerolog.Logger
+	db             *db.DB
+	citadel        *citadel.Client
+	trustedProxies []*net.IPNet // parsed from cfg.RateLimit.TrustedProxies
 }
 
 // NewFindings creates a new Findings handler.
@@ -63,11 +66,12 @@ func NewFindings(logger zerolog.Logger, database *db.DB) *Findings {
 }
 
 // NewFindingsWithCitadel creates a new Findings handler with a CITADEL forwarding client.
-func NewFindingsWithCitadel(logger zerolog.Logger, database *db.DB, cc *citadel.Client) *Findings {
+func NewFindingsWithCitadel(logger zerolog.Logger, database *db.DB, cc *citadel.Client, cfg *config.Config) *Findings {
 	return &Findings{
-		logger:  logger.With().Str("handler", "findings").Logger(),
-		db:      database,
-		citadel: cc,
+		logger:         logger.With().Str("handler", "findings").Logger(),
+		db:             database,
+		citadel:        cc,
+		trustedProxies: parseTrustedProxies(cfg),
 	}
 }
 
@@ -202,7 +206,7 @@ func (f *Findings) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	f.auditLog(r.Context(), db.AuditActionFindingStatusChanged, "findings", &id,
-		r.RemoteAddr, r.UserAgent(), map[string]interface{}{"status": req.Status, "note": req.Note})
+		middleware.ClientIPFromRequest(r, f.trustedProxies), r.UserAgent(), map[string]interface{}{"status": req.Status, "note": req.Note})
 
 	// Return the updated finding.
 	finding, err := f.db.GetFinding(r.Context(), id)

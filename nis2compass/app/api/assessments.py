@@ -265,7 +265,7 @@ def update_assessment(assessment_id):
         return err
 
     if assessment.status == 'archived':
-        return jsonify({'error': 'Archived assessments are read-only', 'code': 'INVALID_INPUT'}), 409
+        return jsonify({'error': 'Archived assessments are read-only', 'code': 'INVALID_STATE'}), 409
 
     data = request.get_json(silent=True) or {}
     before = assessment.to_dict()

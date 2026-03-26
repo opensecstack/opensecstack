@@ -93,6 +93,7 @@ type createAPIKeyResponse struct {
 // Body: {"label": "..."}
 // Returns 201 with the APIKey object, the plaintext key, and a warning.
 func (h *APIKeys) Create(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024)
 	var req createAPIKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")

@@ -30,6 +30,9 @@ type APIGuardClient struct {
 	// HTTPClient is the underlying HTTP client. A default client with a
 	// 30-second timeout is used when nil.
 	HTTPClient *http.Client
+	// ReportTimeout is the maximum time to wait for GetReport to complete.
+	// When zero, it defaults to 120 seconds (matching the Python SDK).
+	ReportTimeout time.Duration
 
 	mu  sync.Mutex
 	jwt string // cached Bearer token; empty means unauthenticated
@@ -404,7 +407,17 @@ func (c *APIGuardClient) GetFindings(ctx context.Context, scanID string, opts Ge
 // GetReport fetches the scan report in the requested format and returns the raw bytes.
 // format must be one of "json" (default), "sarif", "html", "pdf".
 // Issues GET /api/v1/scans/{id}/report?format={format}.
+//
+// The request uses a dedicated timeout from ReportTimeout (default 120s) rather
+// than the general HTTPClient timeout, because report generation can be slow.
 func (c *APIGuardClient) GetReport(ctx context.Context, scanID, format string) ([]byte, error) {
+	timeout := c.ReportTimeout
+	if timeout == 0 {
+		timeout = 120 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	if format == "" {
 		format = "json"
 	}

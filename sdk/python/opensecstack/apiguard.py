@@ -123,21 +123,30 @@ class APIGuardClient:
         _retry_delays = [1, 2]
 
         def _do_once() -> requests.Response:
+            # Capture the current auth header before making the request so we
+            # can detect whether another thread already refreshed it on 401.
+            old_auth = self._session.headers.get("Authorization")
             resp = self._session.request(
                 method, self._url(path), timeout=self._timeout, **kwargs
             )
             if resp.status_code == 401:
-                # Token may have expired — try to re-authenticate once.
+                # Token may have expired — re-authenticate using double-checked
+                # locking to avoid redundant refreshes from concurrent threads.
+                logger.debug("Received 401 on %s %s; attempting token refresh", method.upper(), path)
                 with self._auth_lock:
-                    try:
-                        self._authenticate()
-                    except AuthenticationError:
-                        logger.warning(
-                            "%s %s — re-authentication failed after 401; "
-                            "API key may be invalid or revoked",
-                            method.upper(), path,
-                        )
-                        raise
+                    if self._session.headers.get("Authorization") != old_auth:
+                        # Another thread already refreshed the token; just retry.
+                        logger.debug("Token already refreshed by another thread; retrying request")
+                    else:
+                        try:
+                            self._authenticate()
+                        except AuthenticationError:
+                            logger.warning(
+                                "%s %s — re-authentication failed after 401; "
+                                "API key may be invalid or revoked",
+                                method.upper(), path,
+                            )
+                            raise
                 resp = self._session.request(
                     method, self._url(path), timeout=self._timeout, **kwargs
                 )

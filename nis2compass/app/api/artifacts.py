@@ -145,7 +145,7 @@ def upload_artifact(assessment_id):
         header_bytes = file.stream.read(512)
         file.stream.seek(0)
         detected = magic.from_buffer(header_bytes, mime=True)
-        if detected not in ALLOWED_MIME_TYPES or detected != content_type:
+        if detected not in ALLOWED_MIME_TYPES:
             return jsonify({
                 'error': 'File content does not match declared MIME type',
                 'code': 'UNSUPPORTED_MEDIA_TYPE',

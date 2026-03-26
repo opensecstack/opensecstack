@@ -24,6 +24,12 @@ def create_app(config_class=Config):
             'Generate one with: openssl rand -hex 32'
         )
 
+    if not app.debug and '*' in app.config.get('CORS_ORIGINS', []):
+        raise RuntimeError(
+            "CORS_ORIGINS='*' is not permitted in production. "
+            "Set NIS2_CORS_ORIGINS to a specific allowed origin list."
+        )
+
     init_extensions(app)
     apply_middleware(app)
 

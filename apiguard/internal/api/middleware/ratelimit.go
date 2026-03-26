@@ -31,14 +31,13 @@ func NewRateLimiter(requestsPerMinute int) *RateLimiter {
 	return NewRateLimiterWithProxies(requestsPerMinute, nil)
 }
 
-// NewRateLimiterWithProxies creates a RateLimiter that only trusts the
-// X-Forwarded-For header when the direct peer (r.RemoteAddr) is one of the
-// listed trusted proxy CIDRs. Pass nil or an empty slice to always use
-// RemoteAddr directly (safe default).
-func NewRateLimiterWithProxies(requestsPerMinute int, trustedProxyCIDRs []string) *RateLimiter {
+// ParseTrustedProxyCIDRs parses a list of CIDR strings (or plain IPs, which are
+// treated as /32) into a slice of *net.IPNet values. Entries that fail to parse
+// are silently skipped. This is the canonical implementation shared by the rate
+// limiter, request logger, and handler packages.
+func ParseTrustedProxyCIDRs(cidrs []string) []*net.IPNet {
 	var nets []*net.IPNet
-	for _, cidr := range trustedProxyCIDRs {
-		// Accept plain IPs as well as CIDR blocks.
+	for _, cidr := range cidrs {
 		if !containsSlash(cidr) {
 			cidr = cidr + "/32"
 		}
@@ -47,6 +46,15 @@ func NewRateLimiterWithProxies(requestsPerMinute int, trustedProxyCIDRs []string
 			nets = append(nets, ipNet)
 		}
 	}
+	return nets
+}
+
+// NewRateLimiterWithProxies creates a RateLimiter that only trusts the
+// X-Forwarded-For header when the direct peer (r.RemoteAddr) is one of the
+// listed trusted proxy CIDRs. Pass nil or an empty slice to always use
+// RemoteAddr directly (safe default).
+func NewRateLimiterWithProxies(requestsPerMinute int, trustedProxyCIDRs []string) *RateLimiter {
+	nets := ParseTrustedProxyCIDRs(trustedProxyCIDRs)
 
 	rl := &RateLimiter{
 		visitors:       make(map[string]*rlVisitor),

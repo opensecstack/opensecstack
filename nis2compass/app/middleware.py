@@ -1,10 +1,47 @@
 import logging
 import time
+import uuid as _uuid_mod
 from flask import request, jsonify
 from flask_cors import CORS
 from . import extensions
 
 _log = logging.getLogger(__name__)
+
+# Lua script for atomic sliding-window rate-limit check-and-add.
+# Eliminates the TOCTOU race where two concurrent requests both observe
+# count < limit and both get admitted.
+# KEYS[1] = Redis key
+# ARGV[1] = now in milliseconds (used as score)
+# ARGV[2] = window size in milliseconds
+# ARGV[3] = limit (max requests per window)
+# ARGV[4] = unique request identifier (member in the sorted set)
+# Returns: {1, new_count} if allowed; {0, current_count} if denied.
+LUA_RATE_LIMIT = """
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local req_id = ARGV[4]
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now - window)
+local count = redis.call('ZCARD', key)
+if count >= limit then
+    return {0, count}
+end
+redis.call('ZADD', key, now, req_id)
+redis.call('EXPIRE', key, math.ceil(window / 1000))
+return {1, count + 1}
+"""
+
+# Registered once per Redis connection; reset to None when Redis reconnects.
+_rate_limit_script = None
+
+
+def _get_rate_limit_script(rc):
+    """Return the registered Lua script, registering it on first call."""
+    global _rate_limit_script
+    if _rate_limit_script is None:
+        _rate_limit_script = rc.register_script(LUA_RATE_LIMIT)
+    return _rate_limit_script
 
 
 def _get_client_ip(trusted_proxies: set) -> str:
@@ -24,48 +61,46 @@ def _get_client_ip(trusted_proxies: set) -> str:
 
 def _check_rate_limit(ip: str, limit: int, window: int = 60) -> tuple[bool, int]:
     """
-    Sliding-window rate limiter using Redis.
+    Sliding-window rate limiter using Redis with an atomic Lua script.
 
     Returns (allowed: bool, retry_after: int).
     Key pattern: rate:{ip}
-    Uses a sorted set where score = timestamp of each request.
+    Uses a sorted set where score = timestamp (ms) of each request.
+    The Lua script performs the check-and-add atomically to prevent TOCTOU
+    races under concurrent load.
     """
     rc = extensions.redis_client
     if rc is None:
         _log.warning('rate_limit: Redis unavailable — rate limiting disabled')
         return True, 0
 
-    now = time.time()
+    # Use milliseconds as the score so the window arithmetic inside Lua is
+    # consistent with the EXPIRE call (which takes seconds).
+    now_ms = time.time() * 1000
+    window_ms = window * 1000
     key = f'rate:{ip}'
+    req_id = str(_uuid_mod.uuid4())
 
     try:
-        # First pipeline: remove expired entries and check current count
-        pipe = rc.pipeline()
-        pipe.zremrangebyscore(key, 0, now - window)
-        pipe.zcard(key)
-        results = pipe.execute()
-        count = results[1]
+        script = _get_rate_limit_script(rc)
+        result = script(keys=[key], args=[now_ms, window_ms, limit, req_id])
+        allowed = int(result[0]) == 1
     except Exception as exc:
         _log.warning('rate_limit: Redis error, failing open: %s', exc)
         return True, 0
 
-    if count >= limit:
-        oldest_score = rc.zrange(key, 0, 0, withscores=True)
-        if oldest_score:
-            retry_after = int(window - (now - oldest_score[0][1])) + 1
-        else:
+    if not allowed:
+        # Estimate retry_after from the oldest entry still in the window.
+        try:
+            oldest_score = rc.zrange(key, 0, 0, withscores=True)
+            if oldest_score:
+                oldest_ms = oldest_score[0][1]
+                retry_after = int((oldest_ms + window_ms - now_ms) / 1000) + 1
+            else:
+                retry_after = window
+        except Exception:
             retry_after = window
         return False, retry_after
-
-    try:
-        # Second pipeline: record this request only if it is allowed
-        pipe = rc.pipeline()
-        pipe.zadd(key, {str(now): now})
-        # Expire the key after the window to clean up idle IPs
-        pipe.expire(key, window * 2)
-        pipe.execute()
-    except Exception as exc:
-        _log.warning('rate_limit: Redis error on ZADD, failing open: %s', exc)
 
     return True, 0
 

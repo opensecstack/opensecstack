@@ -111,21 +111,12 @@ func (s *Scans) WaitScans() {
 }
 
 // parseTrustedProxies converts config CIDR strings to net.IPNet values.
+// It delegates to the canonical implementation in the middleware package.
 func parseTrustedProxies(cfg *config.Config) []*net.IPNet {
 	if cfg == nil {
 		return nil
 	}
-	var nets []*net.IPNet
-	for _, cidr := range cfg.RateLimit.TrustedProxies {
-		if !strings.Contains(cidr, "/") {
-			cidr = cidr + "/32"
-		}
-		_, ipNet, err := net.ParseCIDR(cidr)
-		if err == nil {
-			nets = append(nets, ipNet)
-		}
-	}
-	return nets
+	return middleware.ParseTrustedProxyCIDRs(cfg.RateLimit.TrustedProxies)
 }
 
 // createScanRequest is the JSON body for POST /api/v1/scans.
@@ -454,12 +445,28 @@ func (s *Scans) Findings(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	filters := db.FindingFilters{ScanID: &id}
 	if sev := q.Get("severity"); sev != "" {
-		s := db.FindingSeverity(sev)
-		filters.Severity = &s
+		switch db.FindingSeverity(sev) {
+		case db.FindingSeverityCritical,
+			db.FindingSeverityHigh,
+			db.FindingSeverityMedium,
+			db.FindingSeverityLow,
+			db.FindingSeverityInfo:
+			s := db.FindingSeverity(sev)
+			filters.Severity = &s
+		default:
+			writeError(w, http.StatusBadRequest, "invalid severity value")
+			return
+		}
 	}
 	if st := q.Get("status"); st != "" {
-		s := db.FindingStatus(st)
-		filters.Status = &s
+		switch db.FindingStatus(st) {
+		case db.FindingStatusOpen, db.FindingStatusConfirmed, db.FindingStatusFalsePositive, db.FindingStatusAccepted, db.FindingStatusFixed:
+			s := db.FindingStatus(st)
+			filters.Status = &s
+		default:
+			writeError(w, http.StatusBadRequest, "invalid status value")
+			return
+		}
 	}
 
 	findings, total, err := s.db.ListFindings(r.Context(), filters, perPage, offset)
@@ -775,6 +782,7 @@ var ssrfSafeClient = func() *http.Client {
 		},
 	}
 	return &http.Client{
+		Timeout:   30 * time.Second,
 		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -873,7 +881,7 @@ func downloadSpecToTemp(ctx context.Context, specURL string, maxSpecSize int) (s
 		_ = os.Remove(f.Name())
 		return "", fmt.Errorf("writing spec to temp file: %w", err)
 	}
-	if n >= maxBytes {
+	if n == maxBytes {
 		_ = f.Close()
 		_ = os.Remove(f.Name())
 		return "", fmt.Errorf("spec file exceeds maximum size of %d bytes", maxBytes)

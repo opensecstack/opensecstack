@@ -33,10 +33,12 @@ def list_audit():
         query = query.filter(AuditLog.risk_class == risk_class)
     if after := request.args.get('after'):
         try:
-            after_dt = datetime.fromisoformat(after.replace('Z', '+00:00'))
+            # Python 3.11+ handles Z natively; for 3.10 use the replace trick as fallback
+            after_str = after.replace('Z', '+00:00')
+            after_dt = datetime.fromisoformat(after_str).astimezone(timezone.utc)
             query = query.filter(AuditLog.timestamp > after_dt)
         except ValueError:
-            return jsonify({'error': 'after must be an ISO 8601 timestamp', 'code': 'INVALID_INPUT'}), 400
+            return jsonify({'error': 'invalid after timestamp format', 'code': 'INVALID_INPUT'}), 400
 
     query = query.order_by(AuditLog.timestamp.desc())
     total = query.count()

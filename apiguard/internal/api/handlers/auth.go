@@ -135,6 +135,18 @@ func (a *Auth) validAPIKey(key string) bool {
 		}
 	}
 
+	// NOTE: Static API keys configured in auth.api_keys remain valid regardless of
+	// DB key state. Operators who have migrated to DB-managed keys should remove
+	// static keys from config to ensure revocation is enforced. Static keys are
+	// intended for bootstrapping only.
+	if a.db != nil {
+		if len(key) >= 8 {
+			a.logger.Debug().Str("key_prefix", key[:8]+"...").Msg("key not found in DB, checking static config keys")
+		} else {
+			a.logger.Debug().Msg("key not found in DB, checking static config keys")
+		}
+	}
+
 	// --- Static config key fallback ---
 	for _, k := range a.cfg.Auth.APIKeys {
 		if hmac.Equal([]byte(k), []byte(key)) {

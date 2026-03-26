@@ -58,12 +58,19 @@ def validate_api_key(api_key: str) -> tuple[bool, str]:
             'API key not found in DB; checking bootstrap env-var keys'
         )
     except Exception as exc:
-        # DB unavailable — fall through to env-var check
+        # DB unavailable — revocation state cannot be verified.
         current_app.logger.error(
-            'API key DB lookup failed, falling back to env-var keys: %s', exc
+            'DB unavailable during API key validation — revocation state unverifiable, '
+            'falling back to bootstrap env-var keys: %s', exc
         )
+        # In production, fail closed: do not allow access when we cannot
+        # confirm that the key has not been revoked.
+        if current_app.config.get('NIS2_ENV') == 'production':
+            return False, None
 
-    # Bootstrap fallback: env-var keys (constant-time comparison)
+    # Bootstrap fallback: env-var keys (constant-time comparison).
+    # Only reached in non-production environments when the DB is unavailable,
+    # or in any environment when no DB record matched (normal first-run path).
     for valid_key in current_app.config.get('API_KEYS', []):
         if _constant_eq(api_key, valid_key):
             return True, 'read_write'

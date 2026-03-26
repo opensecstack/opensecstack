@@ -38,6 +38,12 @@ type auditEntry struct {
 var (
 	auditQueue   chan *auditEntry
 	auditQueueMu sync.Mutex // guards initialisation check only
+
+	// auditWg tracks entries that have been enqueued but not yet processed by
+	// the worker. Add(1) is called before sending to auditQueue; Done() is
+	// called by the worker after processing each entry. FlushAuditLog calls
+	// Wait() to block until all previously enqueued entries are processed.
+	auditWg sync.WaitGroup
 )
 
 // StartAuditWorker initialises the package-level audit queue and launches a
@@ -74,6 +80,7 @@ func StartAuditWorker(pool *pgxpool.Pool) (stop func()) {
 				if err := writeEntryToDB(context.Background(), pool, e); err != nil {
 					log.Printf("audit worker: write failed: %v", err)
 				}
+				auditWg.Done()
 			}
 			batch = batch[:0]
 		}
@@ -108,28 +115,24 @@ func StartAuditWorker(pool *pgxpool.Pool) (stop func()) {
 	return func() { close(quit) }
 }
 
-// FlushAuditLog blocks until either all entries currently in the queue have
-// been written to the database or ctx is cancelled. It is intended for graceful
-// shutdown sequences.
+// FlushAuditLog blocks until all entries enqueued before the call have been
+// processed by the worker, or until ctx is cancelled. It is intended for
+// graceful shutdown sequences.
 //
-// FlushAuditLog does not stop the worker — it simply waits for the queue to
-// drain. Call the stop function returned by StartAuditWorker afterwards if you
-// want to shut down the goroutine entirely.
+// FlushAuditLog does not stop the worker — it simply waits for previously
+// enqueued work to drain. Call the stop function returned by StartAuditWorker
+// afterwards if you want to shut down the goroutine entirely.
 func FlushAuditLog(ctx context.Context) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			auditQueueMu.Lock()
-			q := auditQueue
-			auditQueueMu.Unlock()
-			if q == nil || len(q) == 0 {
-				return nil
-			}
-			// Yield briefly so the worker can drain.
-			time.Sleep(auditFlushInterval)
-		}
+	done := make(chan struct{})
+	go func() {
+		auditWg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
@@ -155,11 +158,14 @@ func (d *DB) AppendAuditLog(_ context.Context, entry *AuditLog, citadelClient *c
 	}
 
 	e := &auditEntry{entry: entry, citadel: citadelClient}
+	auditWg.Add(1)
 	select {
 	case q <- e:
 		// Successfully queued.
 	default:
 		// Queue full — log a warning and drop rather than blocking the caller.
+		// Decrement the WaitGroup counter since this entry will not be processed.
+		auditWg.Done()
 		log.Printf("audit log queue full (capacity %d): dropping entry action=%s actor=%s",
 			auditQueueCapacity, entry.Action, entry.ActorID)
 	}

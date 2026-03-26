@@ -2,6 +2,7 @@ import io
 import os
 import threading
 import time
+import uuid as _uuid_mod
 from datetime import datetime, timezone, date
 from flask import Blueprint, abort, current_app, request, jsonify, g, send_file
 from reportlab.lib import colors
@@ -19,6 +20,8 @@ from ..audit import write_audit
 
 assessments_bp = Blueprint('assessments', __name__)
 
+_VALID_FRAMEWORK_VERSIONS = frozenset({'NIS2-2022/0383'})
+
 # Per-user rate limit for PDF report generation.
 _REPORT_RATE_LIMIT_WINDOW = 60   # seconds
 _REPORT_RATE_LIMIT_MAX    = 3    # requests per window
@@ -31,37 +34,31 @@ _report_rate_limit_lock = threading.Lock()
 def _check_report_rate_limit(actor: str) -> bool:
     """Return True if the request is allowed, False if rate-limited.
 
-    Uses a Redis sliding-window sorted set when Redis is available so the
-    limit is enforced consistently across multiple worker processes.  Falls
-    back to an in-memory per-process dict when Redis is unavailable (with a
-    startup warning logged elsewhere by extensions.init_extensions).
+    Uses a Redis sliding-window sorted set with an atomic Lua script when
+    Redis is available so the limit is enforced consistently across multiple
+    worker processes without TOCTOU races.  Falls back to an in-memory
+    per-process dict when Redis is unavailable (with a startup warning logged
+    elsewhere by extensions.init_extensions).
     """
-    import time as _time
     from .. import extensions as _ext
+    from ..middleware import LUA_RATE_LIMIT
 
     rc = _ext.redis_client
     if rc is not None:
         # Redis sliding-window: key = report_rl:<actor>
-        now = _time.time()
+        # Use milliseconds as the score for consistency with the Lua window
+        # arithmetic and the EXPIRE call (which takes seconds).
+        now_ms = time.time() * 1000
+        window_ms = _REPORT_RATE_LIMIT_WINDOW * 1000
         key = f'report_rl:{actor}'
-        window_start = now - _REPORT_RATE_LIMIT_WINDOW
+        req_id = str(_uuid_mod.uuid4())
         try:
-            pipe = rc.pipeline()
-            # Remove timestamps outside the window
-            pipe.zremrangebyscore(key, 0, window_start)
-            # Count requests in the current window
-            pipe.zcard(key)
-            # Record this request
-            pipe.zadd(key, {str(now): now})
-            # Expire the key after the window so idle keys are cleaned up
-            pipe.expire(key, _REPORT_RATE_LIMIT_WINDOW * 2)
-            results = pipe.execute()
-            count = results[1]  # count *before* adding the current request
-            if count >= _REPORT_RATE_LIMIT_MAX:
-                # Remove the entry we just added since the request is denied
-                rc.zrem(key, str(now))
-                return False
-            return True
+            script = rc.register_script(LUA_RATE_LIMIT)
+            result = script(
+                keys=[key],
+                args=[now_ms, window_ms, _REPORT_RATE_LIMIT_MAX, req_id],
+            )
+            return int(result[0]) == 1
         except Exception as exc:
             current_app.logger.warning(
                 'report rate limit: Redis error, falling back to in-memory: %s', exc
@@ -70,7 +67,7 @@ def _check_report_rate_limit(actor: str) -> bool:
 
     # In-memory fallback (not shared across workers)
     with _report_rate_limit_lock:
-        now = _time.time()
+        now = time.time()
         window_start = now - _REPORT_RATE_LIMIT_WINDOW
         timestamps = [t for t in _report_rate_limit.get(actor, []) if t > window_start]
         if len(timestamps) >= _REPORT_RATE_LIMIT_MAX:
@@ -260,10 +257,14 @@ def create_assessment(org_id):
     if assessor is not None and len(assessor) > 255:
         return jsonify({'error': 'assessor must not exceed 255 characters', 'code': 'INVALID_INPUT'}), 400
 
+    framework_version = data.get('framework_version', 'NIS2-2022/0383')
+    if framework_version not in _VALID_FRAMEWORK_VERSIONS:
+        return jsonify({'error': f'unsupported framework_version: {framework_version}', 'code': 'INVALID_INPUT'}), 400
+
     assessment = Assessment(
         org_id=org_id,
         title=title,
-        framework_version=data.get('framework_version', 'NIS2-2022/0383'),
+        framework_version=framework_version,
         scope=data.get('scope'),
         assessor=assessor,
         due_date=due_date,
@@ -347,19 +348,22 @@ def update_assessment(assessment_id):
             assessment.completed_at = datetime.now(timezone.utc)
 
     if 'title' in data:
-        assessment.title = data['title'].strip()
-        if not assessment.title:
-            return jsonify({'error': 'title must not be empty', 'code': 'INVALID_INPUT'}), 400
-        if len(assessment.title) > 255:
-            return jsonify({'error': 'title must not exceed 255 characters', 'code': 'INVALID_INPUT'}), 400
+        title = data['title'].strip()
+        if not title:
+            return jsonify({'error': 'title cannot be empty', 'code': 'INVALID_INPUT'}), 400
+        if len(title) > 255:
+            return jsonify({'error': 'title exceeds 255 characters', 'code': 'INVALID_INPUT'}), 400
+        assessment.title = title
     if 'scope' in data:
-        assessment.scope = data['scope']
-        if assessment.scope and len(assessment.scope) > 2000:
+        scope = data['scope']
+        if scope and len(scope) > 2000:
             return jsonify({'error': 'scope must not exceed 2000 characters', 'code': 'INVALID_INPUT'}), 400
+        assessment.scope = scope
     if 'assessor' in data:
-        if data['assessor'] is not None and len(data['assessor']) > 255:
+        assessor = data['assessor']
+        if assessor is not None and len(assessor) > 255:
             return jsonify({'error': 'assessor must not exceed 255 characters', 'code': 'INVALID_INPUT'}), 400
-        assessment.assessor = data['assessor']
+        assessment.assessor = assessor
     if 'due_date' in data:
         try:
             assessment.due_date = date.fromisoformat(data['due_date']) if data['due_date'] else None
@@ -722,7 +726,7 @@ def _generate_pdf(assessment, org, controls, templates):
 
 @assessments_bp.post('/assessments/<uuid:assessment_id>/report')
 @require_auth
-@require_scope('read_write')
+@require_scope('read')
 def generate_report(assessment_id):
     # Enforce per-user rate limit of 3 PDF requests per minute.
     # Uses Redis when available (shared across workers); in-memory fallback otherwise.

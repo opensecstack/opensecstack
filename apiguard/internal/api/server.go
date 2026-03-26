@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -147,7 +145,7 @@ func (s *Server) Router() chi.Router {
 func (s *Server) setupMiddleware() {
 	s.router.Use(chimw.RequestID)
 	s.router.Use(chimw.RealIP)
-	s.router.Use(middleware.RequestLogger(s.logger, parseTrustedProxyNets(s.config)))
+	s.router.Use(middleware.RequestLogger(s.logger, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies)))
 	s.router.Use(chimw.Recoverer)
 	s.router.Use(chimw.Timeout(60 * time.Second))
 	rateLimit := s.config.Scanner.RateLimit
@@ -174,24 +172,5 @@ func (s *Server) registerRoutes() {
 	s.scanLimiter = middleware.NewRateLimiter(60)   // 60 req/min per IP on scan creation
 	s.reportLimiter = middleware.NewRateLimiter(10) // 10 req/min per IP on report generation
 
-	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, s.config, s.authLimiter, s.scanLimiter, s.reportLimiter, parseTrustedProxyNets(s.config))
-}
-
-// parseTrustedProxyNets converts config CIDR strings to net.IPNet slices for
-// use in middleware that needs to identify trusted upstream proxies.
-func parseTrustedProxyNets(cfg *config.Config) []*net.IPNet {
-	if cfg == nil {
-		return nil
-	}
-	var nets []*net.IPNet
-	for _, cidr := range cfg.RateLimit.TrustedProxies {
-		if !strings.Contains(cidr, "/") {
-			cidr = cidr + "/32"
-		}
-		_, ipNet, err := net.ParseCIDR(cidr)
-		if err == nil {
-			nets = append(nets, ipNet)
-		}
-	}
-	return nets
+	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, s.config, s.authLimiter, s.scanLimiter, s.reportLimiter, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies))
 }

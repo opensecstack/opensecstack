@@ -166,17 +166,16 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 	}
 
 	// Retry up to 2 times on 5xx with exponential backoff.
-	// Capture the current JWT under the mutex before the loop to avoid a data race.
-	c.mu.Lock()
-	tok := c.jwt
-	c.mu.Unlock()
-
 	retryDelays := []time.Duration{1 * time.Second, 2 * time.Second}
 	for _, delay := range retryDelays {
 		if resp.StatusCode < 500 {
 			break
 		}
 		resp.Body.Close()
+		// Re-capture token in case a 401 refresh updated it during a previous attempt.
+		c.mu.Lock()
+		tok := c.jwt
+		c.mu.Unlock()
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -496,7 +495,9 @@ func (c *NIS2CompassClient) UploadArtifact(ctx context.Context, assessmentID, fi
 	if err != nil {
 		return nil, fmt.Errorf("UploadArtifact: creating form file: %w", err)
 	}
-	// Stream the file content into the multipart part without buffering it all in memory.
+	// Write the file content into the multipart part.
+	// Note: the multipart body is buffered in memory before sending.
+	// For very large files consider using a streaming upload instead.
 	if _, err := io.Copy(fw, f); err != nil {
 		return nil, fmt.Errorf("UploadArtifact: writing file content: %w", err)
 	}

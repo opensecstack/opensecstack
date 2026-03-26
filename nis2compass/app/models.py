@@ -192,7 +192,7 @@ class AuditLog(db.Model):
     __tablename__ = 'audit_log'
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text('gen_random_uuid()'))
-    seq = db.Column(db.BigInteger, autoincrement=True, nullable=False)
+    seq = db.Column(db.BigInteger, nullable=False, server_default=db.text("nextval('audit_log_seq_seq')"))
     action = db.Column(db.String(100), nullable=False)
     actor = db.Column(db.String(255), nullable=False)
     resource_type = db.Column(db.String(100), nullable=False)

@@ -27,41 +27,9 @@ func NewAudit(logger zerolog.Logger, database *db.DB) *Audit {
 // List handles GET /api/v1/audit.
 // Query params: actor_id, action, resource_id, resource_type, page, per_page
 func (a *Audit) List(w http.ResponseWriter, r *http.Request) {
+	page, perPage := parsePagination(r, 1, 50, 100)
+
 	q := r.URL.Query()
-
-	page := 1
-	if v := q.Get("page"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "invalid page parameter",
-				"code":  "INVALID_INPUT",
-			})
-			return
-		}
-		if n > 0 {
-			page = n
-		}
-	}
-
-	perPage := 50
-	if v := q.Get("per_page"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "invalid per_page parameter",
-				"code":  "INVALID_INPUT",
-			})
-			return
-		}
-		if n > 0 {
-			perPage = n
-		}
-	}
-	if perPage > 100 {
-		perPage = 100
-	}
-
 	filters := db.AuditLogFilters{}
 	if v := q.Get("actor_id"); v != "" {
 		filters.ActorID = &v
@@ -84,10 +52,7 @@ func (a *Audit) List(w http.ResponseWriter, r *http.Request) {
 			action := db.AuditAction(v)
 			filters.Action = &action
 		default:
-			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "invalid action filter",
-				"code":  "INVALID_INPUT",
-			})
+			writeError(w, http.StatusBadRequest, "invalid action filter")
 			return
 		}
 	}
@@ -98,10 +63,7 @@ func (a *Audit) List(w http.ResponseWriter, r *http.Request) {
 	if v := q.Get("resource_id"); v != "" {
 		parsed, err := uuid.Parse(v)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "resource_id must be a valid UUID",
-				"code":  "INVALID_INPUT",
-			})
+			writeError(w, http.StatusBadRequest, "resource_id must be a valid UUID")
 			return
 		}
 		filters.ResourceID = &parsed

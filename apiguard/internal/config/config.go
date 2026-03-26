@@ -171,6 +171,9 @@ func (c *Config) WarnIfInsecure() {
 	if c.Scanner.TLSSkipVerify {
 		log.Println("WARNING: TLS certificate verification is disabled (TLS_SKIP_VERIFY=true) — do not use in production")
 	}
+	if c.Auth.JWTSecret == "" {
+		log.Println("WARNING: JWT secret is not configured — all authenticated requests will fail with 503")
+	}
 }
 
 func setDefaults() {

@@ -547,29 +547,23 @@ class NIS2CompassClient:
         description:    Optional free-text description.
         """
         file_path = os.path.expanduser(file_path)
-        data: dict = {"type": artifact_type}
+        form_data: dict = {"type": artifact_type}
         if control_id is not None:
-            data["control_id"] = control_id
+            form_data["control_id"] = control_id
         if description is not None:
-            data["description"] = description
+            form_data["description"] = description
         with open(file_path, "rb") as fh:
-            # Encode the multipart body explicitly so we can supply the exact
-            # Content-Type boundary string to _request.  This is more reliable
-            # than passing Content-Type: None and trusting requests to strip
-            # the session-level 'application/json' header before setting the
-            # multipart boundary.
-            _prep = requests.Request(
-                "POST",
-                "x://x",
+            # Pass the open file handle directly so the multipart body is
+            # sent while the file is still open, avoiding a use-after-close bug.
+            # Set Content-Type to None so requests can replace the session-level
+            # 'application/json' header with the correct multipart boundary.
+            resp = self._request(
+                "post",
+                f"assessments/{assessment_id}/artifacts",
                 files={"file": (os.path.basename(file_path), fh)},
-                data=data,
-            ).prepare()
-        resp = self._request(
-            "post",
-            f"assessments/{assessment_id}/artifacts",
-            data=_prep.body,
-            headers={"Content-Type": _prep.headers["Content-Type"]},
-        )
+                data=form_data,
+                headers={"Content-Type": None},
+            )
         return resp.json()
 
     def get_artifact(self, artifact_id: str) -> dict:
@@ -604,10 +598,12 @@ class NIS2CompassClient:
                 stream=True,
             )
 
+        old_auth = self._session.headers.get("Authorization")
         resp = _stream()
         if resp.status_code == 401:
             with self._auth_lock:
-                self._authenticate()
+                if self._session.headers.get("Authorization") == old_auth:
+                    self._authenticate()
             resp = _stream()
 
         self._raise_for_status(resp)

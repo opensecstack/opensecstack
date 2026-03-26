@@ -153,9 +153,10 @@ def create_assessment(org_id):
         return jsonify({'error': 'title is required', 'code': 'INVALID_INPUT'}), 400
 
     due_date = None
-    if data.get('due_date'):
+    _due_date_raw = data.get('due_date') or None
+    if _due_date_raw:
         try:
-            due_date = date.fromisoformat(data['due_date'])
+            due_date = date.fromisoformat(_due_date_raw)
         except ValueError:
             return jsonify({'error': 'due_date must be YYYY-MM-DD', 'code': 'INVALID_INPUT'}), 400
 
@@ -166,6 +167,7 @@ def create_assessment(org_id):
         scope=data.get('scope'),
         assessor=data.get('assessor'),
         due_date=due_date,
+        created_by=g.actor,
     )
     db.session.add(assessment)
     db.session.flush()  # get id before creating controls

@@ -58,9 +58,9 @@ func CORS(allowedOrigins []string) func(http.Handler) http.Handler {
 				if allowed {
 					w.WriteHeader(http.StatusNoContent)
 				} else {
-					// Origin not in allowed list: still return 204 but without
-					// CORS headers so the browser will block the preflight.
-					w.WriteHeader(http.StatusNoContent)
+					// Origin not in allowed list: return 403 so the browser
+					// receives an explicit rejection rather than an ambiguous 204.
+					w.WriteHeader(http.StatusForbidden)
 				}
 				return
 			}

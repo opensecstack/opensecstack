@@ -9,16 +9,17 @@ import (
 
 // Config holds the complete application configuration.
 type Config struct {
-	Port      int             `mapstructure:"port"`
-	LogLevel  string          `mapstructure:"log_level"`
-	DB        DatabaseConfig  `mapstructure:"db"`
-	Redis     RedisConfig     `mapstructure:"redis"`
-	Scanner   ScannerConfig   `mapstructure:"scanner"`
-	Auth      AuthConfig      `mapstructure:"auth"`
-	Report    ReportConfig    `mapstructure:"report"`
-	Dashboard DashboardConfig `mapstructure:"dashboard"`
-	CORS      CORSConfig      `mapstructure:"cors"`
-	Citadel   CitadelConfig   `mapstructure:"citadel"`
+	Port      int              `mapstructure:"port"`
+	LogLevel  string           `mapstructure:"log_level"`
+	DB        DatabaseConfig   `mapstructure:"db"`
+	Redis     RedisConfig      `mapstructure:"redis"`
+	Scanner   ScannerConfig    `mapstructure:"scanner"`
+	Auth      AuthConfig       `mapstructure:"auth"`
+	Report    ReportConfig     `mapstructure:"report"`
+	Dashboard DashboardConfig  `mapstructure:"dashboard"`
+	CORS      CORSConfig       `mapstructure:"cors"`
+	RateLimit RateLimitConfig  `mapstructure:"ratelimit"`
+	Citadel   CitadelConfig    `mapstructure:"citadel"`
 }
 
 // DatabaseConfig holds PostgreSQL connection settings.
@@ -87,6 +88,15 @@ type CORSConfig struct {
 	Origins []string `mapstructure:"origins"`
 }
 
+// RateLimitConfig holds rate-limiter settings.
+type RateLimitConfig struct {
+	// TrustedProxies is the list of upstream proxy IPs (or CIDR blocks) whose
+	// X-Forwarded-For header the rate limiter should trust. When empty,
+	// X-Forwarded-For is ignored and RemoteAddr is always used.
+	// Set via APIGUARD_RATELIMIT_TRUSTED_PROXIES (comma-separated).
+	TrustedProxies []string `mapstructure:"trusted_proxies"`
+}
+
 // CitadelConfig holds CITADEL audit-forwarding settings.
 type CitadelConfig struct {
 	// APIURL is read from APIGUARD_CITADEL_URL. When empty, forwarding is disabled.
@@ -138,6 +148,9 @@ func Load() *Config {
 		CORS: CORSConfig{
 			Origins: viper.GetStringSlice("cors.origins"),
 		},
+		RateLimit: RateLimitConfig{
+			TrustedProxies: viper.GetStringSlice("ratelimit.trusted_proxies"),
+		},
 		Citadel: CitadelConfig{
 			APIURL: viper.GetString("citadel.api_url"),
 			APIKey: viper.GetString("citadel.api_key"),
@@ -184,6 +197,10 @@ func setDefaults() {
 	// CORS defaults: wildcard allows all origins (suitable for development).
 	// Override with APIGUARD_CORS_ORIGINS=https://app.example.com,https://other.example.com
 	viper.SetDefault("cors.origins", []string{})
+
+	// Rate-limiter defaults: no trusted proxies — always use RemoteAddr.
+	// Set APIGUARD_RATELIMIT_TRUSTED_PROXIES=10.0.0.1,10.0.0.2 to trust specific upstream proxies.
+	viper.SetDefault("ratelimit.trusted_proxies", []string{})
 
 	// CITADEL defaults: empty = forwarding disabled.
 	// Set APIGUARD_CITADEL_URL=http://citadel-api:8099 to enable.

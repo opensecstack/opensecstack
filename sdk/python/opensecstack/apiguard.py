@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 from typing import Optional
 
 import requests
 
-from .exceptions import APIError, AuthenticationError, NotFoundError
+from .exceptions import APIError, AuthenticationError, NotFoundError, RateLimitError
 
 
 class APIGuardClient:
@@ -75,6 +76,12 @@ class APIGuardClient:
     def _raise_for_status(self, resp: requests.Response) -> None:
         if resp.status_code == 401:
             raise AuthenticationError("JWT expired or invalid — re-authenticate")
+        if resp.status_code == 429:
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = resp.text
+            raise RateLimitError(detail)
         if resp.status_code == 404:
             raise NotFoundError(resp.text)
         if resp.status_code >= 400:
@@ -88,20 +95,37 @@ class APIGuardClient:
         """
         Make an authenticated request, acquiring a JWT first if needed.
         Retries once on 401 (token refresh).
+        On 5xx responses, retries up to 2 times with exponential backoff
+        (1 s then 2 s).  Raises ``RateLimitError`` on 429.
         """
         with self._auth_lock:
             if self._jwt is None:
                 self._authenticate()
-        resp = self._session.request(
-            method, self._url(path), timeout=self._timeout, **kwargs
-        )
-        if resp.status_code == 401:
-            # Token may have expired — try to re-authenticate once.
-            with self._auth_lock:
-                self._authenticate()
+
+        _retry_delays = [1, 2]
+
+        def _do_once() -> requests.Response:
             resp = self._session.request(
                 method, self._url(path), timeout=self._timeout, **kwargs
             )
+            if resp.status_code == 401:
+                # Token may have expired — try to re-authenticate once.
+                with self._auth_lock:
+                    self._authenticate()
+                resp = self._session.request(
+                    method, self._url(path), timeout=self._timeout, **kwargs
+                )
+            return resp
+
+        resp = _do_once()
+
+        # Retry on 5xx with exponential backoff (max 2 retries).
+        for delay in _retry_delays:
+            if resp.status_code < 500:
+                break
+            time.sleep(delay)
+            resp = _do_once()
+
         self._raise_for_status(resp)
         return resp
 
@@ -218,6 +242,23 @@ class APIGuardClient:
         if isinstance(payload, dict) and "data" in payload:
             return payload["data"]
         return payload  # defensive: return as-is if shape differs
+
+    def get_report(self, scan_id: str, format: str = "json") -> bytes:
+        """
+        Fetch the scan report in the requested format.
+
+        Issues ``GET /api/v1/scans/{id}/report?format={format}`` and
+        returns the raw response bytes.  The caller is responsible for
+        writing the bytes to a file or forwarding them.
+
+        Parameters
+        ----------
+        scan_id: UUID of the completed scan.
+        format:  Report format — one of ``json`` (default), ``sarif``,
+                 ``html``, ``pdf``.
+        """
+        resp = self._get(f"scans/{scan_id}/report", params={"format": format})
+        return resp.content
 
     def patch_finding(
         self,

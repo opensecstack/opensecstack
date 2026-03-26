@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -50,7 +52,11 @@ func (s *Scans) auditLog(ctx context.Context, action db.AuditAction, resourceTyp
 		entry.UserAgent = sql.NullString{String: ua, Valid: true}
 	}
 	if err := s.db.AppendAuditLog(ctx, entry, s.citadel); err != nil {
-		s.logger.Warn().Err(err).Str("action", string(action)).Msg("audit log write failed")
+		ev := s.logger.Warn().Err(err).Str("action", string(action))
+		if resourceID != nil {
+			ev = ev.Str(resourceType+"_id", resourceID.String())
+		}
+		ev.Msg("audit log write failed")
 	}
 }
 
@@ -64,12 +70,14 @@ type Scans struct {
 }
 
 // NewScans creates a new Scans handler.
-func NewScans(logger zerolog.Logger, database *db.DB, sc *scanner.Scanner) *Scans {
+// shutdownCtx should be a context that is cancelled when the server shuts down;
+// pass context.Background() only in tests where lifetime tracking is not needed.
+func NewScans(logger zerolog.Logger, database *db.DB, sc *scanner.Scanner, shutdownCtx context.Context) *Scans {
 	return &Scans{
 		logger:      logger.With().Str("handler", "scans").Logger(),
 		db:          database,
 		scanner:     sc,
-		shutdownCtx: context.Background(),
+		shutdownCtx: shutdownCtx,
 	}
 }
 
@@ -99,6 +107,7 @@ type createScanRequest struct {
 
 // Create handles POST /api/v1/scans.
 func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024) // 1 MB
 	var req createScanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
@@ -112,6 +121,14 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 	if req.Target == "" {
 		writeError(w, http.StatusUnprocessableEntity, "target is required")
 		return
+	}
+
+	// C4: Validate spec_url against SSRF before storing or fetching.
+	if req.SpecURL != "" {
+		if err := validateSpecURL(req.SpecURL); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
 	}
 
 	scan := &db.Scan{
@@ -153,6 +170,17 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		bgCtx := s.shutdownCtx
 
+		// M3: track whether the scan reached a terminal status so the deferred
+		// cleanup can mark it failed if an unexpected exit occurs.
+		completed := false
+		defer func() {
+			if !completed {
+				if dbErr := s.db.UpdateScanStatus(bgCtx, scanID, db.ScanStatusFailed); dbErr != nil {
+					s.logger.Error().Err(dbErr).Str("scan_id", scanID.String()).Msg("failed to set scan status to failed in deferred cleanup")
+				}
+			}
+		}()
+
 		// If a spec URL was provided (and no local path), download it to a temp
 		// file so the scanner's validateSpecPath can open it as a local file.
 		var tempSpecFile string
@@ -165,6 +193,7 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 				}
 				return
 			}
+			// M4: remove the temp file inside the goroutine, after the scan completes.
 			tempSpecFile = path
 			defer os.Remove(tempSpecFile)
 			scanReq.SpecPath = tempSpecFile
@@ -243,6 +272,8 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 			s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to update scan summary")
 		}
 
+		// M3: mark as completed so the deferred handler does not set status to failed.
+		completed = true
 		if err := s.db.UpdateScanStatus(bgCtx, scanID, db.ScanStatusCompleted); err != nil {
 			s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to set scan status to completed")
 		}
@@ -484,7 +515,7 @@ func (s *Scans) Report(w http.ResponseWriter, r *http.Request) {
 	contentType := reportContentType(format)
 	w.Header().Set("Content-Type", contentType)
 	if format == "pdf" {
-		filename := fmt.Sprintf("apiguard-report-%s.txt", id.String())
+		filename := fmt.Sprintf("apiguard-report-%s.pdf", id.String())
 		w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
 	}
 	w.WriteHeader(http.StatusOK)
@@ -521,7 +552,7 @@ func reportContentType(format string) string {
 	case "html":
 		return "text/html; charset=utf-8"
 	case "pdf":
-		return "text/plain; charset=utf-8"
+		return "application/pdf"
 	default:
 		return "application/json"
 	}
@@ -594,6 +625,60 @@ func writeError(w http.ResponseWriter, code int, message string) {
 	})
 }
 
+// privateIPNets are the IP ranges that must not be reached via spec_url (SSRF prevention).
+var privateIPNets []*net.IPNet
+
+func init() {
+	blocks := []string{
+		"127.0.0.0/8",
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"169.254.0.0/16",
+		"::1/128",
+		"fc00::/7",
+	}
+	for _, b := range blocks {
+		_, cidr, err := net.ParseCIDR(b)
+		if err == nil {
+			privateIPNets = append(privateIPNets, cidr)
+		}
+	}
+}
+
+// validateSpecURL checks that rawURL uses http/https and does not resolve to a
+// private or loopback IP address, preventing SSRF attacks.
+func validateSpecURL(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid spec_url: %w", err)
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("spec_url scheme must be http or https, got %q", parsed.Scheme)
+	}
+	hostname := parsed.Hostname()
+	if hostname == "" {
+		return fmt.Errorf("spec_url has no hostname")
+	}
+	addrs, err := net.LookupHost(hostname)
+	if err != nil {
+		return fmt.Errorf("spec_url hostname resolution failed: %w", err)
+	}
+	for _, addr := range addrs {
+		ip := net.ParseIP(addr)
+		if ip == nil {
+			continue
+		}
+		for _, block := range privateIPNets {
+			if block.Contains(ip) {
+				return fmt.Errorf("spec_url resolves to a private/reserved IP address (%s), which is not allowed", addr)
+			}
+		}
+	}
+	return nil
+}
+
 // downloadSpecToTemp fetches a remote OpenAPI spec URL and writes it to a
 // temporary file, returning the file path. The caller is responsible for
 // removing the file when done (e.g. with defer os.Remove(path)).
@@ -611,6 +696,11 @@ func downloadSpecToTemp(ctx context.Context, specURL string) (string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("spec URL returned HTTP %d", resp.StatusCode)
+	}
+
+	// L2: reject HTML responses — they indicate a login page or error, not a spec.
+	if ct := resp.Header.Get("Content-Type"); strings.HasPrefix(ct, "text/html") {
+		return "", fmt.Errorf("spec URL returned HTML content, expected YAML or JSON")
 	}
 
 	const maxSpecBytes = 20 * 1024 * 1024 // 20 MB hard cap

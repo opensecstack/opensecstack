@@ -1,4 +1,5 @@
 import logging
+import os
 
 from flask_sqlalchemy import SQLAlchemy
 import redis as redis_lib
@@ -13,12 +14,13 @@ def init_extensions(app) -> None:
     db.init_app(app)
 
     global redis_client
+    _redis_timeout = float(os.getenv('NIS2_REDIS_TIMEOUT', '5'))
     try:
         client = redis_lib.from_url(
             app.config['REDIS_URL'],
             decode_responses=True,
-            socket_connect_timeout=5,
-            socket_timeout=5,
+            socket_connect_timeout=_redis_timeout,
+            socket_timeout=_redis_timeout,
         )
         client.ping()  # validate connectivity at startup
         redis_client = client

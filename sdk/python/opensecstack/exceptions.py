@@ -35,3 +35,10 @@ class AuthenticationError(OpenSecStackError):
 
 class NotFoundError(OpenSecStackError):
     """Raised when a requested resource does not exist (HTTP 404)."""
+
+
+class RateLimitError(APIError):
+    """Raised when the server returns HTTP 429 Too Many Requests."""
+
+    def __init__(self, detail: Any = "rate limited") -> None:
+        super().__init__(429, detail)

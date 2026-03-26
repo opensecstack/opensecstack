@@ -28,6 +28,7 @@ CREATE TABLE organisations (
     updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     created_by          VARCHAR(255)
 );
+CREATE UNIQUE INDEX idx_organisations_name     ON organisations(name);
 CREATE INDEX idx_organisations_country  ON organisations(country);
 CREATE INDEX idx_organisations_industry ON organisations(industry);
 

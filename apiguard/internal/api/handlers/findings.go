@@ -39,7 +39,11 @@ func (f *Findings) auditLog(ctx context.Context, action db.AuditAction, resource
 		entry.UserAgent = sql.NullString{String: ua, Valid: true}
 	}
 	if err := f.db.AppendAuditLog(ctx, entry, f.citadel); err != nil {
-		f.logger.Warn().Err(err).Str("action", string(action)).Msg("audit log write failed")
+		ev := f.logger.Warn().Err(err).Str("action", string(action))
+		if resourceID != nil {
+			ev = ev.Str(resourceType+"_id", resourceID.String())
+		}
+		ev.Msg("audit log write failed")
 	}
 }
 
@@ -84,6 +88,17 @@ func (f *Findings) List(w http.ResponseWriter, r *http.Request) {
 		filters.ScanID = &id
 	}
 	if sev := q.Get("severity"); sev != "" {
+		switch db.FindingSeverity(sev) {
+		case db.FindingSeverityCritical,
+			db.FindingSeverityHigh,
+			db.FindingSeverityMedium,
+			db.FindingSeverityLow,
+			db.FindingSeverityInfo:
+			// valid
+		default:
+			writeError(w, http.StatusBadRequest, "severity must be one of: critical, high, medium, low, info")
+			return
+		}
 		s := db.FindingSeverity(sev)
 		filters.Severity = &s
 	}
@@ -151,6 +166,7 @@ func (f *Findings) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024) // 1 MB
 	var req updateFindingRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())

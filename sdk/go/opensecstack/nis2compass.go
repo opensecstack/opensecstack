@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -134,24 +137,51 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 		return c.HTTPClient.Do(req)
 	}
 
-	resp, err := doReq(jwt)
+	doOnce := func(tok string) (*http.Response, error) {
+		r, err := doReq(tok)
+		if err != nil {
+			return nil, err
+		}
+		if r.StatusCode == http.StatusUnauthorized {
+			r.Body.Close()
+			c.mu.Lock()
+			if authErr := c.authenticate(ctx); authErr != nil {
+				c.mu.Unlock()
+				return nil, authErr
+			}
+			tok = c.jwt
+			c.mu.Unlock()
+			r, err = doReq(tok)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return r, nil
+	}
+
+	resp, err := doOnce(jwt)
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode == http.StatusUnauthorized {
-		resp.Body.Close()
-		c.mu.Lock()
-		if err := c.authenticate(ctx); err != nil {
-			c.mu.Unlock()
-			return nil, err
+
+	// Retry up to 2 times on 5xx with exponential backoff.
+	retryDelays := []time.Duration{1 * time.Second, 2 * time.Second}
+	for _, delay := range retryDelays {
+		if resp.StatusCode < 500 {
+			break
 		}
-		jwt = c.jwt
-		c.mu.Unlock()
-		resp, err = doReq(jwt)
+		resp.Body.Close()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+		}
+		resp, err = doOnce(c.jwt)
 		if err != nil {
 			return nil, err
 		}
 	}
+
 	return resp, nil
 }
 
@@ -375,6 +405,16 @@ func (c *NIS2CompassClient) ListControls(ctx context.Context, assessmentID strin
 	return controls, nil
 }
 
+// GetControl retrieves a single NIS2 control by its measure reference letter ('a'–'j').
+func (c *NIS2CompassClient) GetControl(ctx context.Context, assessmentID, measureRef string) (*Control, error) {
+	path := fmt.Sprintf("assessments/%s/controls/%s", assessmentID, measureRef)
+	var control Control
+	if err := c.getJSON(ctx, path, nil, &control); err != nil {
+		return nil, fmt.Errorf("GetControl assessment=%s measure=%s: %w", assessmentID, measureRef, err)
+	}
+	return &control, nil
+}
+
 // PatchControl updates the assessment findings for a single NIS2 control.
 // measureRef is the single-character measure reference ('a' through 'j').
 // Only fields present in req are modified.
@@ -385,6 +425,150 @@ func (c *NIS2CompassClient) PatchControl(ctx context.Context, assessmentID, meas
 		return nil, fmt.Errorf("PatchControl assessment=%s measure=%s: %w", assessmentID, measureRef, err)
 	}
 	return &control, nil
+}
+
+// ----------------------------------------------------------------------------
+// Artifacts
+// ----------------------------------------------------------------------------
+
+// ListArtifacts returns all artifacts attached to the given assessment UUID.
+func (c *NIS2CompassClient) ListArtifacts(ctx context.Context, assessmentID string) ([]Artifact, error) {
+	var artifacts []Artifact
+	if err := c.getJSON(ctx, "assessments/"+assessmentID+"/artifacts", nil, &artifacts); err != nil {
+		return nil, fmt.Errorf("ListArtifacts assessment=%s: %w", assessmentID, err)
+	}
+	return artifacts, nil
+}
+
+// UploadArtifact uploads a local file as an artifact linked to an assessment.
+// artifactType must be one of: policy, procedure, evidence, report,
+// screenshot, log, certificate, contract.
+// controlID and description are optional (pass "" to omit).
+func (c *NIS2CompassClient) UploadArtifact(ctx context.Context, assessmentID, filePath, artifactType, controlID, description string) (*Artifact, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("UploadArtifact: opening file: %w", err)
+	}
+	defer f.Close()
+
+	content, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("UploadArtifact: reading file: %w", err)
+	}
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+
+	fw, err := mw.CreateFormFile("file", filepath.Base(filePath))
+	if err != nil {
+		return nil, fmt.Errorf("UploadArtifact: creating form file: %w", err)
+	}
+	if _, err := fw.Write(content); err != nil {
+		return nil, fmt.Errorf("UploadArtifact: writing file content: %w", err)
+	}
+
+	if err := mw.WriteField("type", artifactType); err != nil {
+		return nil, fmt.Errorf("UploadArtifact: writing type field: %w", err)
+	}
+	if controlID != "" {
+		if err := mw.WriteField("control_id", controlID); err != nil {
+			return nil, fmt.Errorf("UploadArtifact: writing control_id field: %w", err)
+		}
+	}
+	if description != "" {
+		if err := mw.WriteField("description", description); err != nil {
+			return nil, fmt.Errorf("UploadArtifact: writing description field: %w", err)
+		}
+	}
+	if err := mw.Close(); err != nil {
+		return nil, fmt.Errorf("UploadArtifact: closing multipart writer: %w", err)
+	}
+
+	path := "assessments/" + assessmentID + "/artifacts"
+	resp, err := c.do(ctx, http.MethodPost, path, &buf,
+		map[string]string{"Content-Type": mw.FormDataContentType()})
+	if err != nil {
+		return nil, fmt.Errorf("UploadArtifact assessment=%s: %w", assessmentID, err)
+	}
+	raw, err := checkResponse(resp)
+	if err != nil {
+		return nil, fmt.Errorf("UploadArtifact assessment=%s: %w", assessmentID, err)
+	}
+	var artifact Artifact
+	if err := json.Unmarshal(raw, &artifact); err != nil {
+		return nil, fmt.Errorf("UploadArtifact assessment=%s: decoding response: %w", assessmentID, err)
+	}
+	return &artifact, nil
+}
+
+// GetArtifact retrieves artifact metadata by UUID.
+func (c *NIS2CompassClient) GetArtifact(ctx context.Context, artifactID string) (*Artifact, error) {
+	var artifact Artifact
+	if err := c.getJSON(ctx, "artifacts/"+artifactID, nil, &artifact); err != nil {
+		return nil, fmt.Errorf("GetArtifact %s: %w", artifactID, err)
+	}
+	return &artifact, nil
+}
+
+// DownloadArtifact downloads the file content of an artifact and writes it to destPath.
+func (c *NIS2CompassClient) DownloadArtifact(ctx context.Context, artifactID, destPath string) error {
+	resp, err := c.do(ctx, http.MethodGet, "artifacts/"+artifactID+"/download", nil, nil)
+	if err != nil {
+		return fmt.Errorf("DownloadArtifact %s: %w", artifactID, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		raw, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("DownloadArtifact %s: API error HTTP %d: %s", artifactID, resp.StatusCode, string(raw))
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("DownloadArtifact %s: reading response: %w", artifactID, err)
+	}
+	if err := os.WriteFile(destPath, data, 0600); err != nil {
+		return fmt.Errorf("DownloadArtifact %s: writing file: %w", artifactID, err)
+	}
+	return nil
+}
+
+// DeleteArtifact permanently deletes an artifact and its stored file.
+func (c *NIS2CompassClient) DeleteArtifact(ctx context.Context, artifactID string) error {
+	if err := c.deleteJSON(ctx, "artifacts/"+artifactID); err != nil {
+		return fmt.Errorf("DeleteArtifact %s: %w", artifactID, err)
+	}
+	return nil
+}
+
+// ----------------------------------------------------------------------------
+// API key management
+// ----------------------------------------------------------------------------
+
+// ListAPIKeys returns all API keys belonging to the current actor.
+func (c *NIS2CompassClient) ListAPIKeys(ctx context.Context) ([]APIKey, error) {
+	var keys []APIKey
+	if err := c.getJSON(ctx, "api-keys", nil, &keys); err != nil {
+		return nil, fmt.Errorf("ListAPIKeys: %w", err)
+	}
+	return keys, nil
+}
+
+// CreateAPIKey creates a new API key. The plaintext key is returned once in
+// the response Key field; it is never stored server-side.
+// Pass a zero-value CreateAPIKeyRequest{} to use server defaults.
+func (c *NIS2CompassClient) CreateAPIKey(ctx context.Context, req CreateAPIKeyRequest) (*APIKey, error) {
+	var key APIKey
+	if err := c.postJSON(ctx, "api-keys", req, &key); err != nil {
+		return nil, fmt.Errorf("CreateAPIKey: %w", err)
+	}
+	return &key, nil
+}
+
+// RevokeAPIKey deactivates an API key. The server returns HTTP 204 on success.
+func (c *NIS2CompassClient) RevokeAPIKey(ctx context.Context, keyID string) error {
+	if err := c.deleteJSON(ctx, "api-keys/"+keyID); err != nil {
+		return fmt.Errorf("RevokeAPIKey %s: %w", keyID, err)
+	}
+	return nil
 }
 
 // ----------------------------------------------------------------------------
@@ -433,4 +617,13 @@ func (c *NIS2CompassClient) GetAuditLog(ctx context.Context, limit int) ([]NIS2A
 		return nil, fmt.Errorf("GetAuditLog: %w", err)
 	}
 	return entries, nil
+}
+
+// GetAuditEntry retrieves a single NIS2 audit log entry by its UUID.
+func (c *NIS2CompassClient) GetAuditEntry(ctx context.Context, entryID string) (*NIS2AuditEntry, error) {
+	var entry NIS2AuditEntry
+	if err := c.getJSON(ctx, "audit/"+entryID, nil, &entry); err != nil {
+		return nil, fmt.Errorf("GetAuditEntry %s: %w", entryID, err)
+	}
+	return &entry, nil
 }

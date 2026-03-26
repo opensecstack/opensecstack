@@ -275,3 +275,44 @@ type NIS2AuditEntry struct {
 	PrevHash     string    `json:"prev_hash,omitempty"`
 	Timestamp    time.Time `json:"timestamp"`
 }
+
+// Artifact represents a file attachment linked to a NIS2 assessment.
+type Artifact struct {
+	ID           string     `json:"id"`
+	AssessmentID string     `json:"assessment_id"`
+	ControlID    string     `json:"control_id,omitempty"`
+	Type         string     `json:"type"`
+	Filename     string     `json:"filename"`
+	Hash         string     `json:"hash"`
+	SizeBytes    int64      `json:"size_bytes"`
+	MimeType     string     `json:"mime_type"`
+	Description  string     `json:"description,omitempty"`
+	CreatedBy    string     `json:"created_by,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+}
+
+// APIKey represents a NIS2 Compass API key record (plaintext is never stored).
+type APIKey struct {
+	ID        string    `json:"id"`
+	Label     string    `json:"label,omitempty"`
+	Scope     string    `json:"scope"`
+	IsActive  bool      `json:"is_active"`
+	CreatedBy string    `json:"created_by,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	// Key is only populated on the create response — never stored server-side.
+	Key     string `json:"key,omitempty"`
+	Warning string `json:"warning,omitempty"`
+}
+
+// CreateAPIKeyRequest is the body sent to POST /api/v1/api-keys.
+type CreateAPIKeyRequest struct {
+	Label string `json:"label,omitempty"`
+	Scope string `json:"scope,omitempty"`
+}
+
+// UploadSpecResponse is the JSON body returned by POST /api/v1/specs/upload.
+type UploadSpecResponse struct {
+	SpecPath string `json:"spec_path"`
+	SpecHash string `json:"spec_hash"`
+	Size     int64  `json:"size"`
+}

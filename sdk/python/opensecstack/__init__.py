@@ -25,6 +25,7 @@ from .exceptions import (
     APIError,
     AuthenticationError,
     NotFoundError,
+    RateLimitError,
 )
 
 __version__ = "0.1.0"
@@ -46,4 +47,5 @@ __all__ = [
     "APIError",
     "AuthenticationError",
     "NotFoundError",
+    "RateLimitError",
 ]

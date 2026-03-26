@@ -22,7 +22,7 @@ func New(baseURL, apiKey string) *Client {
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		apiKey:  apiKey,
-		http:    &http.Client{Timeout: 15 * time.Second},
+		http:    &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -37,7 +37,7 @@ func (c *Client) LogEvent(
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = c.logEvent(ctx, actionType, actorUserID, actorRole, resultStatus, systemModule, resourceID, metadata)
 	}()

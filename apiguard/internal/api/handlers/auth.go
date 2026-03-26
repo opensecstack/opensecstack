@@ -68,6 +68,7 @@ func (a *Auth) Token(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024) // 1 MB
 	var req tokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -91,7 +92,12 @@ func (a *Auth) Token(w http.ResponseWriter, r *http.Request) {
 		expiry = 24 * time.Hour
 	}
 
-	token, err := issueJWT(a.cfg.Auth.JWTSecret, "api-client", expiry)
+	// H2: embed the SHA-256 hash of the API key in the subject for traceability
+	// and to support key-revocation checks on token refresh (H3).
+	keyHashBytes := sha256.Sum256([]byte(req.APIKey))
+	subject := "api-client:" + hex.EncodeToString(keyHashBytes[:])
+
+	token, err := issueJWT(a.cfg.Auth.JWTSecret, subject, expiry)
 	if err != nil {
 		a.logger.Error().Err(err).Msg("failed to issue JWT")
 		writeError(w, http.StatusInternalServerError, "failed to issue token")
@@ -191,6 +197,7 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024) // 1 MB
 	var req refreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -202,10 +209,28 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := validateRefreshToken(req.RefreshToken, a.cfg.Auth.JWTSecret); err != nil {
+	claims, err := validateRefreshToken(req.RefreshToken, a.cfg.Auth.JWTSecret)
+	if err != nil {
 		a.logger.Warn().Err(err).Str("remote_addr", r.RemoteAddr).Msg("invalid refresh token presented")
 		writeError(w, http.StatusUnauthorized, "invalid or expired refresh token")
 		return
+	}
+
+	// H3: verify the API key referenced in the refresh token is still active.
+	if a.db != nil && strings.HasPrefix(claims.Sub, "api-client:") {
+		keyHash := strings.TrimPrefix(claims.Sub, "api-client:")
+		found, err := a.db.LookupAPIKeyByHash(r.Context(), keyHash)
+		if err != nil {
+			a.logger.Warn().Err(err).Msg("db api key lookup failed during token refresh")
+			// Do not fall through — refuse the refresh when we cannot verify.
+			writeError(w, http.StatusInternalServerError, "unable to verify API key status")
+			return
+		}
+		if !found {
+			a.logger.Warn().Str("remote_addr", r.RemoteAddr).Msg("refresh rejected: API key no longer active")
+			writeError(w, http.StatusUnauthorized, "API key has been revoked")
+			return
+		}
 	}
 
 	expiry := a.cfg.Auth.TokenExpiry
@@ -213,7 +238,7 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		expiry = 24 * time.Hour
 	}
 
-	accessToken, err := issueJWT(a.cfg.Auth.JWTSecret, "api-client", expiry)
+	accessToken, err := issueJWT(a.cfg.Auth.JWTSecret, claims.Sub, expiry)
 	if err != nil {
 		a.logger.Error().Err(err).Msg("failed to issue access token")
 		writeError(w, http.StatusInternalServerError, "failed to issue token")
@@ -235,11 +260,12 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// validateRefreshToken verifies the HS256 signature and expiry of a refresh token.
-func validateRefreshToken(token, secret string) error {
+// validateRefreshToken verifies the HS256 signature and expiry of a refresh
+// token. On success it returns the parsed claims so the caller can inspect Sub.
+func validateRefreshToken(token, secret string) (*jwtClaims, error) {
 	segments := strings.SplitN(token, ".", 3)
 	if len(segments) != 3 {
-		return fmt.Errorf("token must have 3 parts, got %d", len(segments))
+		return nil, fmt.Errorf("token must have 3 parts, got %d", len(segments))
 	}
 
 	headerB64, payloadB64, signatureB64 := segments[0], segments[1], segments[2]
@@ -252,39 +278,42 @@ func validateRefreshToken(token, secret string) error {
 
 	actualSig, err := jwtBase64Decode(signatureB64)
 	if err != nil {
-		return fmt.Errorf("invalid signature encoding: %w", err)
+		return nil, fmt.Errorf("invalid signature encoding: %w", err)
 	}
 
 	if !hmac.Equal(expectedSig, actualSig) {
-		return fmt.Errorf("signature verification failed")
+		return nil, fmt.Errorf("signature verification failed")
 	}
 
 	// Decode and parse payload claims.
 	payloadBytes, err := jwtBase64Decode(payloadB64)
 	if err != nil {
-		return fmt.Errorf("invalid payload encoding: %w", err)
+		return nil, fmt.Errorf("invalid payload encoding: %w", err)
 	}
 
-	var claims struct {
-		Sub string `json:"sub"`
-		Exp int64  `json:"exp"`
-		Iat int64  `json:"iat"`
-	}
+	var claims jwtClaims
 	if err := json.Unmarshal(payloadBytes, &claims); err != nil {
-		return fmt.Errorf("invalid payload JSON: %w", err)
+		return nil, fmt.Errorf("invalid payload JSON: %w", err)
 	}
 
 	if claims.Exp == 0 {
-		return fmt.Errorf("missing exp claim")
+		return nil, fmt.Errorf("missing exp claim")
 	}
 	if time.Now().Unix() > claims.Exp {
-		return fmt.Errorf("token has expired")
+		return nil, fmt.Errorf("token has expired")
 	}
 	if claims.Sub == "" {
-		return fmt.Errorf("missing sub claim")
+		return nil, fmt.Errorf("missing sub claim")
 	}
 
-	return nil
+	return &claims, nil
+}
+
+// jwtClaims holds the standard JWT payload fields used internally.
+type jwtClaims struct {
+	Sub string `json:"sub"`
+	Exp int64  `json:"exp"`
+	Iat int64  `json:"iat"`
 }
 
 // jwtBase64Decode decodes a base64url-encoded string (without padding).

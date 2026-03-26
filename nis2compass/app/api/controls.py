@@ -118,7 +118,8 @@ def update_control(assessment_id, measure_ref):
         control.remediation_plan = data['remediation_plan']
     if 'remediation_due' in data:
         try:
-            control.remediation_due = date.fromisoformat(data['remediation_due']) if data['remediation_due'] else None
+            _remediation_due_raw = data['remediation_due'] or None
+            control.remediation_due = date.fromisoformat(_remediation_due_raw) if _remediation_due_raw else None
         except ValueError:
             return jsonify({'error': 'remediation_due must be YYYY-MM-DD', 'code': 'INVALID_INPUT'}), 400
     if 'risk_score' in data:

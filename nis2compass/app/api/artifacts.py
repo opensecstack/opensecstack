@@ -192,6 +192,11 @@ def download_artifact(artifact_id):
     if not artifact.file_path or not os.path.isfile(artifact.file_path):
         return jsonify({'error': 'File no longer available', 'code': 'FILE_NOT_FOUND'}), 410
 
+    upload_dir = os.path.realpath(current_app.config['UPLOAD_DIR'])
+    real_path = os.path.realpath(artifact.file_path)
+    if not real_path.startswith(upload_dir + os.sep):
+        return jsonify({'error': 'Forbidden', 'code': 'FORBIDDEN'}), 403
+
     write_audit(
         db.session,
         action='artifact_downloaded',
@@ -204,7 +209,7 @@ def download_artifact(artifact_id):
     db.session.commit()
 
     return send_file(
-        artifact.file_path,
+        real_path,
         mimetype=artifact.mime_type,
         as_attachment=True,
         download_name=artifact.filename,

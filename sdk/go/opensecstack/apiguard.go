@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -124,22 +127,47 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 		return nil
 	}
 
-	resp, err := c.doWithJWT(ctx, method, path, newReader(), jwt, extraHeaders)
+	doOnce := func(tok string) (*http.Response, error) {
+		r, err := c.doWithJWT(ctx, method, path, newReader(), tok, extraHeaders)
+		if err != nil {
+			return nil, err
+		}
+		if r.StatusCode == http.StatusUnauthorized {
+			r.Body.Close()
+			// Token may have expired — re-authenticate once.
+			c.mu.Lock()
+			if authErr := c.authenticate(ctx); authErr != nil {
+				c.mu.Unlock()
+				return nil, authErr
+			}
+			tok = c.jwt
+			c.mu.Unlock()
+			r, err = c.doWithJWT(ctx, method, path, newReader(), tok, extraHeaders)
+			if err != nil {
+				return nil, err
+			}
+		}
+		return r, nil
+	}
+
+	resp, err := doOnce(jwt)
 	if err != nil {
 		return nil, err
 	}
 
-	if resp.StatusCode == http.StatusUnauthorized {
-		resp.Body.Close()
-		// Token may have expired — re-authenticate once.
-		c.mu.Lock()
-		if err := c.authenticate(ctx); err != nil {
-			c.mu.Unlock()
-			return nil, err
+	// Retry up to 2 times on 5xx with exponential backoff.
+	retryDelays := []time.Duration{1 * time.Second, 2 * time.Second}
+	for _, delay := range retryDelays {
+		if resp.StatusCode < 500 {
+			break
 		}
-		jwt = c.jwt
-		c.mu.Unlock()
-		resp, err = c.doWithJWT(ctx, method, path, newReader(), jwt, extraHeaders)
+		resp.Body.Close()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+		}
+		resp, err = doOnce(c.jwt)
 		if err != nil {
 			return nil, err
 		}
@@ -163,12 +191,16 @@ func (c *APIGuardClient) doWithJWT(ctx context.Context, method, path string, bod
 
 // checkResponse reads the response body and returns a decoded error when the
 // status code is >= 400. On success it returns the raw body for the caller to
-// decode.
+// decode.  HTTP 429 is reported with a "rate limited" prefix so callers can
+// detect and handle it distinctly.
 func checkResponse(resp *http.Response) ([]byte, error) {
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("reading response body: %w", err)
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, fmt.Errorf("rate limited (HTTP 429): %s", string(raw))
 	}
 	if resp.StatusCode >= 400 {
 		var ae apiError
@@ -295,12 +327,40 @@ func (c *APIGuardClient) GetScan(ctx context.Context, scanID string) (*Scan, err
 	return &scan, nil
 }
 
-// GetFindings returns all findings for a completed scan.
+// GetFindingsOptions holds optional filter and pagination parameters for GetFindings.
+type GetFindingsOptions struct {
+	// Page is the 1-based page number (default: 1).
+	Page int
+	// PerPage is the number of results per page, max 100 (default: 100).
+	PerPage int
+	// Status filters by finding status (e.g. "open", "confirmed").
+	Status string
+	// Severity filters by finding severity (e.g. "critical", "high").
+	Severity string
+}
+
+// GetFindings returns findings for a completed scan with optional filtering.
 // Results are fetched from GET /api/v1/scans/{id}/findings.
-func (c *APIGuardClient) GetFindings(ctx context.Context, scanID string) ([]Finding, error) {
+// Pass a zero-value GetFindingsOptions{} to use server defaults (page 1, per_page 100).
+func (c *APIGuardClient) GetFindings(ctx context.Context, scanID string, opts GetFindingsOptions) ([]Finding, error) {
+	page := opts.Page
+	if page <= 0 {
+		page = 1
+	}
+	perPage := opts.PerPage
+	if perPage <= 0 {
+		perPage = 100
+	}
+
 	params := url.Values{}
-	params.Set("page", "1")
-	params.Set("per_page", strconv.Itoa(1000))
+	params.Set("page", strconv.Itoa(page))
+	params.Set("per_page", strconv.Itoa(perPage))
+	if opts.Status != "" {
+		params.Set("status", opts.Status)
+	}
+	if opts.Severity != "" {
+		params.Set("severity", opts.Severity)
+	}
 
 	fullPath := fmt.Sprintf("scans/%s/findings?%s", scanID, params.Encode())
 	resp, err := c.do(ctx, http.MethodGet, fullPath, nil, nil)
@@ -324,6 +384,78 @@ func (c *APIGuardClient) GetFindings(ctx context.Context, scanID string) ([]Find
 		return nil, fmt.Errorf("GetFindings %s: unexpected response format: %w", scanID, jsonErr)
 	}
 	return findings, nil
+}
+
+// GetReport fetches the scan report in the requested format and returns the raw bytes.
+// format must be one of "json" (default), "sarif", "html", "pdf".
+// Issues GET /api/v1/scans/{id}/report?format={format}.
+func (c *APIGuardClient) GetReport(ctx context.Context, scanID, format string) ([]byte, error) {
+	if format == "" {
+		format = "json"
+	}
+	params := url.Values{}
+	params.Set("format", format)
+	fullPath := fmt.Sprintf("scans/%s/report?%s", scanID, params.Encode())
+	resp, err := c.do(ctx, http.MethodGet, fullPath, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("GetReport %s: %w", scanID, err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("GetReport %s: reading response: %w", scanID, err)
+	}
+	if resp.StatusCode >= 400 {
+		var ae apiError
+		if jsonErr := json.Unmarshal(data, &ae); jsonErr == nil && (ae.Error != "" || ae.Message != "") {
+			return nil, fmt.Errorf("GetReport %s: API error HTTP %d: %s — %s", scanID, resp.StatusCode, ae.Error, ae.Message)
+		}
+		return nil, fmt.Errorf("GetReport %s: API error HTTP %d: %s", scanID, resp.StatusCode, string(data))
+	}
+	return data, nil
+}
+
+// UploadSpec uploads a local OpenAPI spec file to the server via multipart/form-data.
+// Issues POST /api/v1/specs/upload and returns the stored path, hash, and size.
+func (c *APIGuardClient) UploadSpec(ctx context.Context, filePath string) (*UploadSpecResponse, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("UploadSpec: opening file: %w", err)
+	}
+	defer f.Close()
+
+	content, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("UploadSpec: reading file: %w", err)
+	}
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("spec", filepath.Base(filePath))
+	if err != nil {
+		return nil, fmt.Errorf("UploadSpec: creating form file: %w", err)
+	}
+	if _, err := fw.Write(content); err != nil {
+		return nil, fmt.Errorf("UploadSpec: writing file content: %w", err)
+	}
+	if err := mw.Close(); err != nil {
+		return nil, fmt.Errorf("UploadSpec: closing multipart writer: %w", err)
+	}
+
+	resp, err := c.do(ctx, http.MethodPost, "specs/upload", &buf,
+		map[string]string{"Content-Type": mw.FormDataContentType()})
+	if err != nil {
+		return nil, fmt.Errorf("UploadSpec: %w", err)
+	}
+	raw, err := checkResponse(resp)
+	if err != nil {
+		return nil, fmt.Errorf("UploadSpec: %w", err)
+	}
+	var result UploadSpecResponse
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("UploadSpec: decoding response: %w", err)
+	}
+	return &result, nil
 }
 
 // PatchFinding triages a single finding by updating its status and optional note.

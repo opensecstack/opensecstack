@@ -128,7 +128,7 @@ func (d *DB) AppendAuditLog(ctx context.Context, entry *AuditLog, citadelClient 
 		citadelClient.LogEvent(
 			string(entry.Action),
 			entry.ActorID,
-			"APIGUARD",
+			string(entry.ActorType),
 			"EXECUTED",
 			"apiguard",
 			resourceIDStr,

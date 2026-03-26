@@ -10,10 +10,11 @@ import (
 
 // RateLimiter holds the state for an in-memory sliding-window rate limiter.
 type RateLimiter struct {
-	mu       sync.Mutex
-	visitors map[string]*rlVisitor
-	rate     int           // maximum requests allowed per window
-	window   time.Duration // window duration
+	mu             sync.Mutex
+	visitors       map[string]*rlVisitor
+	rate           int           // maximum requests allowed per window
+	window         time.Duration // window duration
+	trustedProxies []*net.IPNet  // upstream proxy IPs whose XFF header is trusted
 }
 
 type rlVisitor struct {
@@ -24,10 +25,31 @@ type rlVisitor struct {
 // NewRateLimiter creates a RateLimiter that allows requestsPerMinute requests
 // per 60-second sliding window per client IP.
 func NewRateLimiter(requestsPerMinute int) *RateLimiter {
+	return NewRateLimiterWithProxies(requestsPerMinute, nil)
+}
+
+// NewRateLimiterWithProxies creates a RateLimiter that only trusts the
+// X-Forwarded-For header when the direct peer (r.RemoteAddr) is one of the
+// listed trusted proxy CIDRs. Pass nil or an empty slice to always use
+// RemoteAddr directly (safe default).
+func NewRateLimiterWithProxies(requestsPerMinute int, trustedProxyCIDRs []string) *RateLimiter {
+	var nets []*net.IPNet
+	for _, cidr := range trustedProxyCIDRs {
+		// Accept plain IPs as well as CIDR blocks.
+		if !containsSlash(cidr) {
+			cidr = cidr + "/32"
+		}
+		_, ipNet, err := net.ParseCIDR(cidr)
+		if err == nil {
+			nets = append(nets, ipNet)
+		}
+	}
+
 	rl := &RateLimiter{
-		visitors: make(map[string]*rlVisitor),
-		rate:     requestsPerMinute,
-		window:   time.Minute,
+		visitors:       make(map[string]*rlVisitor),
+		rate:           requestsPerMinute,
+		window:         time.Minute,
+		trustedProxies: nets,
 	}
 
 	// Background goroutine cleans up expired visitor entries every 5 minutes.
@@ -50,11 +72,12 @@ func NewRateLimiter(requestsPerMinute int) *RateLimiter {
 }
 
 // Middleware returns an http.Handler middleware that enforces the rate limit.
-// Clients are identified by their IP address (X-Forwarded-For / RemoteAddr).
+// Clients are identified by their IP address (X-Forwarded-For only when the
+// direct peer is a trusted proxy, otherwise RemoteAddr).
 // On limit exceeded it returns HTTP 429 with a JSON body and Retry-After header.
 func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := clientIP(r)
+		ip := rl.clientIP(r)
 
 		rl.mu.Lock()
 		v, exists := rl.visitors[ip]
@@ -87,34 +110,73 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-// clientIP extracts the client IP from X-Forwarded-For (first entry) or
-// RemoteAddr, stripping any port suffix.
-func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// X-Forwarded-For may contain a comma-separated list; use the first.
-		if idx := len(xff); idx > 0 {
-			for i, c := range xff {
-				if c == ',' {
-					idx = i
-					break
+// clientIP extracts the real client IP. X-Forwarded-For is only trusted when
+// the direct connection peer (r.RemoteAddr) is in the configured trusted proxy
+// list. When no trusted proxies are configured, RemoteAddr is always used.
+func (rl *RateLimiter) clientIP(r *http.Request) string {
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		remoteHost = r.RemoteAddr
+	}
+
+	// Only trust XFF if the direct peer is a known trusted proxy.
+	if len(rl.trustedProxies) > 0 {
+		remoteIP := net.ParseIP(remoteHost)
+		if remoteIP != nil && rl.isTrustedProxy(remoteIP) {
+			if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+				// X-Forwarded-For may be comma-separated; take the first (leftmost) entry.
+				ip := xff
+				if idx := indexByte(xff, ','); idx >= 0 {
+					ip = xff[:idx]
 				}
-			}
-			ip := xff[:idx]
-			// trim whitespace
-			for len(ip) > 0 && ip[0] == ' ' {
-				ip = ip[1:]
-			}
-			for len(ip) > 0 && ip[len(ip)-1] == ' ' {
-				ip = ip[:len(ip)-1]
-			}
-			if ip != "" {
-				return ip
+				ip = trimSpace(ip)
+				if ip != "" {
+					return ip
+				}
 			}
 		}
 	}
-	ip := r.RemoteAddr
-	if host, _, err := net.SplitHostPort(ip); err == nil {
-		return host
+
+	return remoteHost
+}
+
+// isTrustedProxy reports whether ip is within one of the configured proxy ranges.
+func (rl *RateLimiter) isTrustedProxy(ip net.IP) bool {
+	for _, net := range rl.trustedProxies {
+		if net.Contains(ip) {
+			return true
+		}
 	}
-	return ip
+	return false
+}
+
+// containsSlash reports whether s contains a '/' character (used to detect CIDRs).
+func containsSlash(s string) bool {
+	for _, c := range s {
+		if c == '/' {
+			return true
+		}
+	}
+	return false
+}
+
+// indexByte returns the index of the first occurrence of b in s, or -1.
+func indexByte(s string, b byte) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == b {
+			return i
+		}
+	}
+	return -1
+}
+
+// trimSpace removes leading and trailing ASCII spaces from s.
+func trimSpace(s string) string {
+	for len(s) > 0 && s[0] == ' ' {
+		s = s[1:]
+	}
+	for len(s) > 0 && s[len(s)-1] == ' ' {
+		s = s[:len(s)-1]
+	}
+	return s
 }

@@ -58,6 +58,7 @@ class Assessment(db.Model):
     assessor = db.Column(db.String(255), nullable=True)
     due_date = db.Column(db.Date, nullable=True)
     completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    created_by = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text('NOW()'))
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text('NOW()'))
 
@@ -75,6 +76,7 @@ class Assessment(db.Model):
             'assessor': self.assessor,
             'due_date': self.due_date.isoformat() if self.due_date else None,
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'created_by': self.created_by,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }

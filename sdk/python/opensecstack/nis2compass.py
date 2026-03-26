@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 from typing import Optional
 
 import requests
 
-from .exceptions import APIError, AuthenticationError, NotFoundError
+from .exceptions import APIError, AuthenticationError, NotFoundError, RateLimitError
 
 
 class NIS2CompassClient:
@@ -77,6 +78,12 @@ class NIS2CompassClient:
         self._session.headers["Authorization"] = f"Bearer {token}"
 
     def _raise_for_status(self, resp: requests.Response) -> None:
+        if resp.status_code == 429:
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = resp.text
+            raise RateLimitError(detail)
         if resp.status_code == 404:
             raise NotFoundError(resp.text)
         if resp.status_code >= 400:
@@ -87,16 +94,35 @@ class NIS2CompassClient:
             raise APIError(resp.status_code, detail)
 
     def _request(self, method: str, path: str, **kwargs) -> requests.Response:
-        """Execute a request, authenticating (and retrying once on 401)."""
+        """Execute a request, authenticating (and retrying once on 401).
+
+        On 5xx responses, retries up to 2 times with exponential backoff
+        (1 s then 2 s).  Raises ``RateLimitError`` on 429.
+        """
         with self._auth_lock:
             if "Authorization" not in self._session.headers:
                 self._authenticate()
-        resp = getattr(self._session, method)(self._url(path), timeout=self._timeout, **kwargs)
-        if resp.status_code == 401:
-            # Token expired — re-authenticate and retry once.
-            with self._auth_lock:
-                self._authenticate()
+
+        _retry_delays = [1, 2]
+
+        def _do_once() -> requests.Response:
             resp = getattr(self._session, method)(self._url(path), timeout=self._timeout, **kwargs)
+            if resp.status_code == 401:
+                # Token expired — re-authenticate and retry once.
+                with self._auth_lock:
+                    self._authenticate()
+                resp = getattr(self._session, method)(self._url(path), timeout=self._timeout, **kwargs)
+            return resp
+
+        resp = _do_once()
+
+        # Retry on 5xx with exponential backoff (max 2 retries).
+        for delay in _retry_delays:
+            if resp.status_code < 500:
+                break
+            time.sleep(delay)
+            resp = _do_once()
+
         self._raise_for_status(resp)
         return resp
 
@@ -125,6 +151,10 @@ class NIS2CompassClient:
         """
         resp = self._get("organisations", params={"page": page, "per_page": per_page})
         return resp.json()
+
+    def get_organisation(self, org_id: str) -> dict:
+        """Return a single organisation by UUID."""
+        return self._get(f"organisations/{org_id}").json()
 
     def create_organisation(
         self,
@@ -325,6 +355,17 @@ class NIS2CompassClient:
         resp = self._get(f"assessments/{assessment_id}/controls", params=params or None)
         return resp.json()
 
+    def get_control(self, assessment_id: str, measure_ref: str) -> dict:
+        """
+        Return a single control by its measure reference letter (``a``–``j``).
+
+        Parameters
+        ----------
+        assessment_id: UUID of the assessment.
+        measure_ref:   Single letter ``a``–``j`` (NIS2 Art.21 measure).
+        """
+        return self._get(f"assessments/{assessment_id}/controls/{measure_ref}").json()
+
     def patch_control(
         self,
         assessment_id: str,
@@ -393,6 +434,138 @@ class NIS2CompassClient:
         ).json()
 
     # ------------------------------------------------------------------
+    # Artifacts
+    # ------------------------------------------------------------------
+
+    def list_artifacts(self, assessment_id: str) -> list[dict]:
+        """
+        Return all artifacts attached to an assessment.
+
+        Parameters
+        ----------
+        assessment_id: UUID of the assessment.
+        """
+        return self._get(f"assessments/{assessment_id}/artifacts").json()
+
+    def upload_artifact(
+        self,
+        assessment_id: str,
+        file_path: str,
+        artifact_type: str,
+        control_id: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> dict:
+        """
+        Upload a file as an artifact attached to an assessment.
+
+        The ``file`` field is sent as multipart/form-data.
+
+        Parameters
+        ----------
+        assessment_id:  UUID of the assessment.
+        file_path:      Local path to the file to upload.
+        artifact_type:  One of ``policy``, ``procedure``, ``evidence``,
+                        ``report``, ``screenshot``, ``log``,
+                        ``certificate``, ``contract``.
+        control_id:     Optional UUID of a control to link the artifact to.
+        description:    Optional free-text description.
+        """
+        file_path = os.path.expanduser(file_path)
+        with open(file_path, "rb") as fh:
+            content = fh.read()
+
+        # Build the multipart form without the Content-Type JSON header.
+        # Remove the session-level Content-Type so requests sets multipart boundary.
+        saved_ct = self._session.headers.pop("Content-Type", None)
+        try:
+            files = {"file": (os.path.basename(file_path), content)}
+            data: dict = {"type": artifact_type}
+            if control_id is not None:
+                data["control_id"] = control_id
+            if description is not None:
+                data["description"] = description
+            resp = self._request(
+                "post",
+                f"assessments/{assessment_id}/artifacts",
+                files=files,
+                data=data,
+            )
+        finally:
+            if saved_ct is not None:
+                self._session.headers["Content-Type"] = saved_ct
+
+        return resp.json()
+
+    def get_artifact(self, artifact_id: str) -> dict:
+        """
+        Return artifact metadata by UUID.
+
+        Parameters
+        ----------
+        artifact_id: UUID of the artifact.
+        """
+        return self._get(f"artifacts/{artifact_id}").json()
+
+    def download_artifact(self, artifact_id: str, dest_path: str) -> None:
+        """
+        Download an artifact's file content and save it to *dest_path*.
+
+        Parameters
+        ----------
+        artifact_id: UUID of the artifact.
+        dest_path:   Local filesystem path where the file will be written.
+        """
+        dest_path = os.path.expanduser(dest_path)
+        resp = self._get(f"artifacts/{artifact_id}/download")
+        with open(dest_path, "wb") as fh:
+            fh.write(resp.content)
+
+    def delete_artifact(self, artifact_id: str) -> None:
+        """
+        Permanently delete an artifact and its stored file.
+
+        Parameters
+        ----------
+        artifact_id: UUID of the artifact.
+        """
+        self._delete(f"artifacts/{artifact_id}")
+
+    # ------------------------------------------------------------------
+    # API key management
+    # ------------------------------------------------------------------
+
+    def list_api_keys(self) -> list[dict]:
+        """Return all API keys belonging to the current actor."""
+        return self._get("api-keys").json()
+
+    def create_api_key(self, label: Optional[str] = None, scope: str = "read_write") -> dict:
+        """
+        Create a new API key.
+
+        The plaintext key is returned once in the response ``key`` field
+        and is never stored by the server.
+
+        Parameters
+        ----------
+        label: Optional human-readable label for the key.
+        scope: One of ``read``, ``read_write`` (default: ``read_write``).
+        """
+        body: dict = {"scope": scope}
+        if label is not None:
+            body["label"] = label
+        return self._post("api-keys", json=body).json()
+
+    def revoke_api_key(self, key_id: str) -> None:
+        """
+        Revoke (deactivate) an API key.
+
+        Parameters
+        ----------
+        key_id: UUID of the API key to revoke.
+        """
+        self._delete(f"api-keys/{key_id}")
+
+    # ------------------------------------------------------------------
     # Reports
     # ------------------------------------------------------------------
 
@@ -442,3 +615,13 @@ class NIS2CompassClient:
         """
         resp = self._get("audit", params={"per_page": min(limit, 100)})
         return resp.json()
+
+    def get_audit_entry(self, entry_id: str) -> dict:
+        """
+        Return a single audit log entry by UUID.
+
+        Parameters
+        ----------
+        entry_id: UUID of the audit log entry.
+        """
+        return self._get(f"audit/{entry_id}").json()

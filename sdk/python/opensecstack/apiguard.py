@@ -419,15 +419,13 @@ class APIGuardClient:
         # The API returns {"data": [...], "total": N, ...}
         if isinstance(payload, dict) and "data" in payload:
             return payload["data"]
-        actual_keys = list(payload.keys()) if isinstance(payload, dict) else type(payload).__name__
-        logger.warning(
-            "get_findings: unexpected response envelope for scan %s — "
-            "expected a dict with key 'data', but got keys %r. "
-            "Returning raw payload.",
-            scan_id,
-            actual_keys,
-        )
-        return payload  # defensive: return as-is if shape differs
+        elif isinstance(payload, list):
+            return payload  # plain list is also acceptable
+        else:
+            raise APIError(
+                200,
+                f"Unexpected response format from get_findings: got {type(payload).__name__}",
+            )
 
     def get_report(self, scan_id: str, format: str = "json") -> bytes:
         """

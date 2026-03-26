@@ -75,6 +75,22 @@ def _check_report_rate_limit(actor: str) -> bool:
             return False
         timestamps.append(now)
         _report_rate_limit[actor] = timestamps
+
+        # Remove the actor's entry when its window is empty to avoid unbounded
+        # growth for actors who are rate-limited and stop sending requests.
+        if not _report_rate_limit[actor]:
+            del _report_rate_limit[actor]
+
+        # Periodic full-sweep: if the dict has grown beyond 1000 actors, evict
+        # all entries whose most-recent timestamp has fallen outside the window.
+        if len(_report_rate_limit) > 1000:
+            stale_actors = [
+                k for k, v in _report_rate_limit.items()
+                if not v or v[-1] <= window_start
+            ]
+            for k in stale_actors:
+                del _report_rate_limit[k]
+
         return True
 
 

@@ -32,7 +32,13 @@ _BACKOFF_BASE = 1.0  # seconds
 
 # Bounded thread pool for webhook delivery — prevents unbounded thread growth
 # under high load compared to spawning a new thread per event.
-_webhook_executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix='webhook')
+_MAX_WORKERS = 10
+_webhook_executor = ThreadPoolExecutor(max_workers=_MAX_WORKERS, thread_name_prefix='webhook')
+
+# Module-level list tracking in-flight futures for backpressure checks.
+# Entries are appended on submit and pruned on the next submit call to avoid
+# unbounded growth (only done futures are removed, so the list stays small).
+_pending_futures: list = []
 
 
 def _sign_payload(secret: str, payload_bytes: bytes) -> str:
@@ -96,9 +102,28 @@ def dispatch(audit_entry_dict: dict, url: str, secret: str) -> None:
     if not url:
         return
 
+    # Prune completed futures to keep the list from growing indefinitely.
+    _pending_futures[:] = [f for f in _pending_futures if not f.done()]
+
+    # Backpressure: if too many deliveries are already in flight, drop this one
+    # rather than letting the executor queue grow without bound.  A single slow
+    # endpoint with 3 retries and up to 7 s of backoff can hold a thread for
+    # ~15 s; with max_workers=10 that means only ~10 concurrent slow endpoints
+    # before new deliveries would pile up invisibly.  We allow a modest buffer
+    # (2× the worker count) before dropping.
+    pending_count = len(_pending_futures)
+    if pending_count >= _MAX_WORKERS * 2:
+        logger.warning(
+            'Webhook thread pool near capacity (%d pending), dropping delivery to %s',
+            pending_count,
+            url,
+        )
+        return
+
     event = {
         'event': 'audit_log',
         'delivered_at': datetime.now(timezone.utc).isoformat(),
         'data': audit_entry_dict,
     }
-    _webhook_executor.submit(_deliver_with_retry, url, secret, event)
+    future = _webhook_executor.submit(_deliver_with_retry, url, secret, event)
+    _pending_futures.append(future)

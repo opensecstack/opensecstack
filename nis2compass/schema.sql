@@ -30,7 +30,10 @@ CREATE TABLE organisations (
     created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
--- migration 011: scoped to (name, created_by) so different actors may reuse the same organisation name
+-- Organisation names are unique per actor (per-tenant), not globally.
+-- Two different actors may create organisations with the same name; the
+-- constraint is on (name, created_by).  This is intentional per-tenant
+-- behaviour — added in migration 011.
 CREATE UNIQUE INDEX idx_organisations_name     ON organisations(name, created_by);
 CREATE INDEX idx_organisations_country  ON organisations(country);
 CREATE INDEX idx_organisations_industry ON organisations(industry);
@@ -61,7 +64,7 @@ CREATE TABLE controls (
     measure_ref          CHAR(1)        NOT NULL CHECK (measure_ref IN ('a','b','c','d','e','f','g','h','i','j')),
     nist_category        nist_category  NOT NULL,
     title                VARCHAR(255)   NOT NULL,
-    description          TEXT,
+    description          VARCHAR(1000),
     status               control_status NOT NULL DEFAULT 'not_assessed',
     evidence             JSONB          NOT NULL DEFAULT '{}',
     gap_description      TEXT,

@@ -689,6 +689,12 @@ class NIS2CompassClient:
             resp = _stream()
 
         self._raise_for_status(resp)
+        content_type = resp.headers.get("Content-Type", "")
+        if "application/pdf" not in content_type and "application/octet-stream" not in content_type:
+            raise APIError(
+                resp.status_code,
+                f"Unexpected Content-Type for report: {content_type!r}",
+            )
         try:
             with open(dest_path, "wb") as fh:
                 for chunk in resp.iter_content(chunk_size=65536):
@@ -780,6 +786,12 @@ class NIS2CompassClient:
             resp = _stream_report()
 
         self._raise_for_status(resp)
+        content_type = resp.headers.get("Content-Type", "")
+        if "application/pdf" not in content_type and "application/octet-stream" not in content_type:
+            raise APIError(
+                resp.status_code,
+                f"Unexpected Content-Type for report: {content_type!r}",
+            )
         output_path = os.path.expanduser(output_path)
         with open(output_path, "wb") as fh:
             for chunk in resp.iter_content(chunk_size=65536):

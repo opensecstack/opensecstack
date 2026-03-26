@@ -167,7 +167,7 @@ except ImportError:
         completed_at: Optional[str] = None
         created_at: Optional[str] = None
         updated_at: Optional[str] = None
-        stats: Optional[dict] = None
+        stats: Optional[dict[str, Any]] = None
 
     @dataclass
     class Control:
@@ -179,7 +179,7 @@ except ImportError:
         title: str
         status: str
         description: Optional[str] = None
-        evidence: dict = field(default_factory=dict)
+        evidence: dict[str, Any] = field(default_factory=dict)
         gap_description: Optional[str] = None
         remediation_plan: Optional[str] = None
         remediation_due: Optional[str] = None
@@ -197,7 +197,7 @@ except ImportError:
         status: str
         spec_url: Optional[str] = None
         spec_hash: Optional[str] = None
-        modules: list = field(default_factory=list)
+        modules: list[str] = field(default_factory=list)
         started_at: Optional[str] = None
         completed_at: Optional[str] = None
         created_at: Optional[str] = None
@@ -262,7 +262,7 @@ except ImportError:
         event_version: str = "2.0"
         prev_hash: Optional[str] = None
         chain_hash: Optional[str] = None
-        payload: dict = field(default_factory=dict)
+        payload: dict[str, Any] = field(default_factory=dict)
 
 
 __all__ = [

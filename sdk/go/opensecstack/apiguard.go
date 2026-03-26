@@ -549,24 +549,29 @@ func (c *APIGuardClient) UploadSpec(ctx context.Context, filePath string) (*Uplo
 	}
 	defer f.Close()
 
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	fw, err := mw.CreateFormFile("spec", filepath.Base(filePath))
-	if err != nil {
-		return nil, fmt.Errorf("UploadSpec: creating form file: %w", err)
-	}
-	// Write the file content into the multipart part.
-	// Note: the multipart body is buffered in memory before sending.
-	// For very large files consider using a streaming upload instead.
-	if _, err := io.Copy(fw, f); err != nil {
-		return nil, fmt.Errorf("UploadSpec: writing file content: %w", err)
-	}
-	if err := mw.Close(); err != nil {
-		return nil, fmt.Errorf("UploadSpec: closing multipart writer: %w", err)
-	}
+	pr, pw := io.Pipe()
+	mw := multipart.NewWriter(pw)
+	contentType := mw.FormDataContentType()
 
-	resp, err := c.do(ctx, http.MethodPost, "specs/upload", &buf,
-		map[string]string{"Content-Type": mw.FormDataContentType()})
+	go func() {
+		fw, err := mw.CreateFormFile("spec", filepath.Base(filePath))
+		if err != nil {
+			pw.CloseWithError(fmt.Errorf("UploadSpec: creating form file: %w", err))
+			return
+		}
+		if _, err := io.Copy(fw, f); err != nil {
+			pw.CloseWithError(fmt.Errorf("UploadSpec: writing file content: %w", err))
+			return
+		}
+		if err := mw.Close(); err != nil {
+			pw.CloseWithError(fmt.Errorf("UploadSpec: closing multipart writer: %w", err))
+			return
+		}
+		pw.Close()
+	}()
+
+	resp, err := c.do(ctx, http.MethodPost, "specs/upload", pr,
+		map[string]string{"Content-Type": contentType})
 	if err != nil {
 		return nil, fmt.Errorf("UploadSpec: %w", err)
 	}

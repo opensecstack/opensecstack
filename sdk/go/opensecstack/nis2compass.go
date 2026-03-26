@@ -596,40 +596,46 @@ func (c *NIS2CompassClient) UploadArtifact(ctx context.Context, assessmentID, fi
 	}
 	defer f.Close()
 
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
+	pr, pw := io.Pipe()
+	mw := multipart.NewWriter(pw)
+	contentType := mw.FormDataContentType()
 
-	fw, err := mw.CreateFormFile("file", filepath.Base(filePath))
-	if err != nil {
-		return nil, fmt.Errorf("UploadArtifact: creating form file: %w", err)
-	}
-	// Write the file content into the multipart part.
-	// Note: the multipart body is buffered in memory before sending.
-	// For very large files consider using a streaming upload instead.
-	if _, err := io.Copy(fw, f); err != nil {
-		return nil, fmt.Errorf("UploadArtifact: writing file content: %w", err)
-	}
-
-	if err := mw.WriteField("type", artifactType); err != nil {
-		return nil, fmt.Errorf("UploadArtifact: writing type field: %w", err)
-	}
-	if controlID != "" {
-		if err := mw.WriteField("control_id", controlID); err != nil {
-			return nil, fmt.Errorf("UploadArtifact: writing control_id field: %w", err)
+	go func() {
+		fw, err := mw.CreateFormFile("file", filepath.Base(filePath))
+		if err != nil {
+			pw.CloseWithError(fmt.Errorf("UploadArtifact: creating form file: %w", err))
+			return
 		}
-	}
-	if description != "" {
-		if err := mw.WriteField("description", description); err != nil {
-			return nil, fmt.Errorf("UploadArtifact: writing description field: %w", err)
+		if _, err := io.Copy(fw, f); err != nil {
+			pw.CloseWithError(fmt.Errorf("UploadArtifact: writing file content: %w", err))
+			return
 		}
-	}
-	if err := mw.Close(); err != nil {
-		return nil, fmt.Errorf("UploadArtifact: closing multipart writer: %w", err)
-	}
+		if err := mw.WriteField("type", artifactType); err != nil {
+			pw.CloseWithError(fmt.Errorf("UploadArtifact: writing type field: %w", err))
+			return
+		}
+		if controlID != "" {
+			if err := mw.WriteField("control_id", controlID); err != nil {
+				pw.CloseWithError(fmt.Errorf("UploadArtifact: writing control_id field: %w", err))
+				return
+			}
+		}
+		if description != "" {
+			if err := mw.WriteField("description", description); err != nil {
+				pw.CloseWithError(fmt.Errorf("UploadArtifact: writing description field: %w", err))
+				return
+			}
+		}
+		if err := mw.Close(); err != nil {
+			pw.CloseWithError(fmt.Errorf("UploadArtifact: closing multipart writer: %w", err))
+			return
+		}
+		pw.Close()
+	}()
 
 	path := "assessments/" + assessmentID + "/artifacts"
-	resp, err := c.do(ctx, http.MethodPost, path, &buf,
-		map[string]string{"Content-Type": mw.FormDataContentType()})
+	resp, err := c.do(ctx, http.MethodPost, path, pr,
+		map[string]string{"Content-Type": contentType})
 	if err != nil {
 		return nil, fmt.Errorf("UploadArtifact assessment=%s: %w", assessmentID, err)
 	}

@@ -125,6 +125,11 @@ def update_control(assessment_id, measure_ref):
             return jsonify({'error': 'evidence exceeds maximum size of 65536 bytes', 'code': 'INVALID_INPUT'}), 400
         control.evidence = data['evidence']
 
+    if 'description' in data:
+        if data['description'] is not None and len(data['description']) > 1000:
+            return jsonify({'error': 'description must not exceed 1000 characters', 'code': 'INVALID_INPUT'}), 400
+        control.description = data['description']
+
     if 'gap_description' in data:
         if data['gap_description'] is not None and len(data['gap_description']) > 5000:
             return jsonify({'error': 'gap_description must not exceed 5000 characters', 'code': 'INVALID_INPUT'}), 400

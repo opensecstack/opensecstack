@@ -250,7 +250,7 @@ def download_artifact(artifact_id):
 
     upload_dir = os.path.realpath(current_app.config['UPLOAD_DIR'])
     real_path = os.path.realpath(artifact.file_path)
-    if not real_path.startswith(upload_dir + os.sep):
+    if not real_path.startswith(upload_dir + os.sep) and real_path != upload_dir:
         return jsonify({'error': 'Forbidden', 'code': 'FORBIDDEN'}), 403
 
     write_audit(

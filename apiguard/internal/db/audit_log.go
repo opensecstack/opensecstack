@@ -4,13 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
 
 	"github.com/opensecstack/apiguard/internal/citadel"
 )
@@ -81,7 +81,7 @@ func StartAuditWorker(pool *pgxpool.Pool) (stop func()) {
 				for _, e := range batch {
 					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 					if err := writeEntryToDB(ctx, pool, e); err != nil {
-						log.Printf("audit worker: write failed: %v", err)
+						log.Warn().Err(err).Msg("audit log write failed (timeout or DB error), entry dropped")
 					}
 					cancel()
 					auditWg.Done()
@@ -175,8 +175,16 @@ func (d *DB) AppendAuditLog(_ context.Context, entry *AuditLog, citadelClient *c
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		if err := writeEntryToDB(ctx, d.Pool, e); err != nil {
-			log.Printf("audit log queue full (capacity %d) and synchronous fallback failed: dropping entry action=%s actor=%s: %v",
-				auditQueueCapacity, entry.Action, entry.ActorID, err)
+			log.Warn().Err(err).
+				Str("action", string(entry.Action)).
+				Str("actor_id", entry.ActorID).
+				Int("queue_capacity", auditQueueCapacity).
+				Msg("audit queue full and sync fallback failed, dropping entry")
+		} else {
+			log.Debug().
+				Str("action", string(entry.Action)).
+				Str("actor_id", entry.ActorID).
+				Msg("audit queue full, wrote entry synchronously")
 		}
 	}
 	return nil

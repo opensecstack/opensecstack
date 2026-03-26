@@ -6,10 +6,12 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // APIKey represents a row in the api_keys table.
@@ -137,8 +139,10 @@ func (d *DB) LookupAPIKeyByHash(ctx context.Context, keyHash string) (bool, erro
 		LIMIT 1
 	`, keyHash).Scan(&id)
 	if err != nil {
-		// pgx returns pgx.ErrNoRows when no row is found.
-		return false, nil
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil // key genuinely not found
+		}
+		return false, fmt.Errorf("looking up api key: %w", err) // real error
 	}
 
 	// Update last_used_at in the background — best effort, non-fatal.

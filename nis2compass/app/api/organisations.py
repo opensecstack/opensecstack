@@ -136,8 +136,12 @@ def create_organisation():
         db.session.commit()
     except IntegrityError as e:
         db.session.rollback()
+        # Organisation names are unique per actor (per-tenant), not globally.
+        # Two different actors may have organisations with the same name.
+        # The unique constraint is on (name, created_by) — see schema.sql
+        # idx_organisations_name.
         if hasattr(e, 'orig') and e.orig is not None and getattr(e.orig, 'pgcode', None) == '23505':
-            return jsonify({'error': 'An organisation with this name already exists', 'code': 'CONFLICT'}), 409
+            return jsonify({'error': 'An organisation with this name already exists for your account', 'code': 'CONFLICT'}), 409
         raise
 
     return jsonify(org.to_dict()), 201

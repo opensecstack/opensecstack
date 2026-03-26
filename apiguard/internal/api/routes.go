@@ -9,6 +9,8 @@ import (
 )
 
 // RegisterRoutes sets up all API routes on the given router.
+// authLimiter, scanLimiter, and reportLimiter must be created by the caller
+// (stored on the Server) so their Stop() methods can be called on shutdown.
 func RegisterRoutes(
 	r chi.Router,
 	health *handlers.Health,
@@ -19,12 +21,10 @@ func RegisterRoutes(
 	audit *handlers.Audit,
 	apiKeys *handlers.APIKeys,
 	cfg *config.Config,
+	authLimiter *middleware.RateLimiter,
+	scanLimiter *middleware.RateLimiter,
+	reportLimiter *middleware.RateLimiter,
 ) {
-	// Per-route rate limiters — stricter limits on sensitive or expensive endpoints.
-	// These apply in addition to the global rate limiter set up in setupMiddleware.
-	authLimiter := middleware.NewRateLimiter(20)   // 20 req/min per IP on auth endpoints
-	scanLimiter := middleware.NewRateLimiter(60)   // 60 req/min per IP on scan creation
-	reportLimiter := middleware.NewRateLimiter(10) // 10 req/min per IP on report generation
 
 	r.Route("/api/v1", func(r chi.Router) {
 		// ── Public endpoints (no JWT required) ──────────────────────────────

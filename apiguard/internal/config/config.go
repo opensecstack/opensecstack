@@ -84,7 +84,10 @@ type DashboardConfig struct {
 // CORSConfig holds Cross-Origin Resource Sharing settings.
 type CORSConfig struct {
 	// Origins is the list of allowed origins for CORS requests.
-	// Set via APIGUARD_CORS_ORIGINS (comma-separated). Default "*" allows all origins.
+	// Set via APIGUARD_CORS_ORIGINS (comma-separated).
+	// An empty list (the default) denies all cross-origin requests — explicit
+	// configuration is required. Use "*" to permit all origins (wildcard mode,
+	// suitable for development only).
 	Origins []string `mapstructure:"origins"`
 }
 
@@ -194,8 +197,9 @@ func setDefaults() {
 	viper.SetDefault("dashboard.enabled", true)
 	viper.SetDefault("dashboard.static_dir", "./web/dist")
 
-	// CORS defaults: wildcard allows all origins (suitable for development).
-	// Override with APIGUARD_CORS_ORIGINS=https://app.example.com,https://other.example.com
+	// CORS defaults: empty list = deny all cross-origin requests (safe default).
+	// Set APIGUARD_CORS_ORIGINS=https://app.example.com,https://other.example.com to allow
+	// specific origins, or APIGUARD_CORS_ORIGINS=* to permit all origins (development only).
 	viper.SetDefault("cors.origins", []string{})
 
 	// Rate-limiter defaults: no trusted proxies — always use RemoteAddr.

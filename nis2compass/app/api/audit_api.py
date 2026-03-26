@@ -18,8 +18,6 @@ def list_audit():
     # entries is correct and sufficient.
     query = db.session.query(AuditLog).filter(AuditLog.actor == g.actor)
 
-    if actor := request.args.get('actor'):
-        query = query.filter(AuditLog.actor == actor)
     if action := request.args.get('action'):
         query = query.filter(AuditLog.action == action)
     if resource_type := request.args.get('resource_type'):

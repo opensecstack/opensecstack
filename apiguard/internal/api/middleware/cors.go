@@ -6,21 +6,20 @@ import (
 
 // CORS returns a middleware that adds Cross-Origin Resource Sharing headers.
 //
-// If allowedOrigins is empty or contains only "*", every origin is permitted
-// (development / wildcard mode). Otherwise the Origin request header is checked
-// against the provided list; unmatched origins receive no CORS headers.
+// If allowedOrigins contains only "*", every origin is permitted (wildcard
+// mode). If allowedOrigins is empty, all cross-origin requests are denied —
+// explicit configuration is required. Otherwise the Origin request header is
+// checked against the provided list; unmatched origins receive no CORS headers.
 //
 // Preflight OPTIONS requests are answered with 204 No Content immediately,
 // before any authentication middleware runs.
 func CORS(allowedOrigins []string) func(http.Handler) http.Handler {
-	// Pre-compute wildcard mode.
-	wildcard := len(allowedOrigins) == 0
-	if !wildcard {
-		for _, o := range allowedOrigins {
-			if o == "*" {
-				wildcard = true
-				break
-			}
+	// Pre-compute wildcard mode. An empty list is NOT wildcard — it denies all.
+	wildcard := false
+	for _, o := range allowedOrigins {
+		if o == "*" {
+			wildcard = true
+			break
 		}
 	}
 

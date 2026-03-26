@@ -32,6 +32,9 @@ type Server struct {
 	scanner        *scanner.Scanner
 	citadel        *citadel.Client
 	globalLimiter  *middleware.RateLimiter
+	authLimiter    *middleware.RateLimiter
+	scanLimiter    *middleware.RateLimiter
+	reportLimiter  *middleware.RateLimiter
 	shutdownCtx    context.Context
 	shutdownCancel context.CancelFunc
 }
@@ -106,6 +109,9 @@ func (s *Server) Start() error {
 			return fmt.Errorf("graceful shutdown: %w", err)
 		}
 		s.globalLimiter.Stop()
+		s.authLimiter.Stop()
+		s.scanLimiter.Stop()
+		s.reportLimiter.Stop()
 		s.db.Close()
 		s.logger.Info().Msg("server stopped cleanly")
 		return nil
@@ -141,11 +147,19 @@ func (s *Server) registerRoutes() {
 	au := handlers.NewAudit(s.logger, s.db)
 	ak := handlers.NewAPIKeys(s.logger, s.db, s.citadel, s.config)
 
-	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, s.config)
+	// Create per-route limiters here so they can be stopped on shutdown.
+	s.authLimiter = middleware.NewRateLimiter(20)   // 20 req/min per IP on auth endpoints
+	s.scanLimiter = middleware.NewRateLimiter(60)   // 60 req/min per IP on scan creation
+	s.reportLimiter = middleware.NewRateLimiter(10) // 10 req/min per IP on report generation
+
+	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, s.config, s.authLimiter, s.scanLimiter, s.reportLimiter)
 }
 
 // CORSMiddleware returns a middleware that sets CORS headers for allowed origins.
 // If allowedOrigins is nil or empty, no CORS headers are set (same-origin only).
+//
+// Deprecated: use middleware.CORS instead, which is wired in setupMiddleware and
+// correctly treats an empty origins list as deny-all rather than wildcard.
 func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

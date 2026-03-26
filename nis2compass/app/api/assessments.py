@@ -3,7 +3,7 @@ import os
 import threading
 import time
 from datetime import datetime, timezone, date
-from flask import Blueprint, request, jsonify, g, send_file
+from flask import Blueprint, current_app, request, jsonify, g, send_file
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -351,12 +351,25 @@ def delete_assessment(assessment_id):
     db.session.delete(assessment)
     db.session.commit()
 
-    # Remove artifact files from disk after the DB commit succeeds
+    # Remove artifact files from disk after the DB commit succeeds.
+    # Validate each real path is within UPLOAD_DIR to prevent path-traversal
+    # via a tampered file_path value stored in the DB.
+    upload_dir = os.path.realpath(current_app.config.get('UPLOAD_DIR', '/app/uploads'))
     for path in artifact_paths:
+        if not path:
+            continue
+        real_path = os.path.realpath(path)
+        if not real_path.startswith(upload_dir + os.sep) and real_path != upload_dir:
+            current_app.logger.warning(
+                'artifact file_path %r is outside UPLOAD_DIR — deletion skipped', path
+            )
+            continue
         try:
-            os.remove(path)
-        except OSError:
-            pass  # file already gone or inaccessible — not fatal
+            os.remove(real_path)
+        except OSError as exc:
+            current_app.logger.warning(
+                'artifact file could not be removed: %s — %s', real_path, exc
+            )
 
     return '', 204
 

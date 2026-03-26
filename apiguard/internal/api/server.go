@@ -36,6 +36,7 @@ type Server struct {
 	scanLimiter    *middleware.RateLimiter
 	reportLimiter  *middleware.RateLimiter
 	refreshLimiter *middleware.RateLimiter
+	apiKeyLimiter  *middleware.RateLimiter
 	shutdownCtx    context.Context
 	shutdownCancel context.CancelFunc
 	scansHandler   *handlers.Scans // kept for WaitScans() on shutdown
@@ -127,12 +128,15 @@ func (s *Server) Start() error {
 		}
 		drainCtx, drainCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer drainCancel()
-		s.citadel.Drain(drainCtx)
+		if err := s.citadel.Drain(drainCtx); err != nil {
+			s.logger.Warn().Err(err).Msg("CITADEL drain did not complete cleanly on shutdown")
+		}
 		s.globalLimiter.Stop()
 		s.authLimiter.Stop()
 		s.scanLimiter.Stop()
 		s.reportLimiter.Stop()
 		s.refreshLimiter.Stop()
+		s.apiKeyLimiter.Stop()
 		s.db.Close()
 		s.logger.Info().Msg("server stopped cleanly")
 		return nil
@@ -175,6 +179,7 @@ func (s *Server) registerRoutes() {
 	s.scanLimiter = middleware.NewRateLimiter(60)    // 60 req/min per IP on scan creation
 	s.reportLimiter = middleware.NewRateLimiter(10)  // 10 req/min per IP on report generation
 	s.refreshLimiter = middleware.NewRateLimiter(20) // 20 req/min per IP on refresh revocation
+	s.apiKeyLimiter = middleware.NewRateLimiter(5)   // 5 req/min per IP on API key creation
 
-	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, s.config, s.authLimiter, s.scanLimiter, s.reportLimiter, s.refreshLimiter, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies))
+	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, s.config, s.authLimiter, s.scanLimiter, s.reportLimiter, s.refreshLimiter, s.apiKeyLimiter, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies))
 }

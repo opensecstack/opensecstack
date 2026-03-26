@@ -233,11 +233,29 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check whether this refresh token has been explicitly revoked.
+	// Cache layer: check in-memory map first to avoid a DB round-trip for
+	// tokens that were revoked in the current process lifetime.
 	tokenHash := refreshTokenHash(req.RefreshToken)
 	if _, revoked := revokedRefreshTokens.Load(tokenHash); revoked {
-		a.logger.Warn().Str("remote_addr", middleware.ClientIPFromRequest(r, a.trustedProxies)).Msg("revoked refresh token presented")
+		a.logger.Warn().Str("remote_addr", middleware.ClientIPFromRequest(r, a.trustedProxies)).Msg("revoked refresh token presented (cache hit)")
 		writeError(w, http.StatusUnauthorized, "token has been revoked")
 		return
+	}
+	// DB layer: check persistent revocation store (survives restarts).
+	if a.db != nil {
+		revoked, err := db.IsRefreshTokenRevoked(r.Context(), a.db.Pool, tokenHash)
+		if err != nil {
+			a.logger.Error().Err(err).Msg("failed to check refresh token revocation in DB")
+			writeError(w, http.StatusInternalServerError, "unable to verify token status")
+			return
+		}
+		if revoked {
+			// Populate the in-memory cache so subsequent requests are fast.
+			revokedRefreshTokens.Store(tokenHash, struct{}{})
+			a.logger.Warn().Str("remote_addr", middleware.ClientIPFromRequest(r, a.trustedProxies)).Msg("revoked refresh token presented (db hit)")
+			writeError(w, http.StatusUnauthorized, "token has been revoked")
+			return
+		}
 	}
 
 	// H3: verify the API key referenced in the refresh token is still active.
@@ -313,8 +331,45 @@ func (a *Auth) RevokeRefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	revokedRefreshTokens.Store(refreshTokenHash(tokenStr), struct{}{})
+	tokenHash := refreshTokenHash(tokenStr)
+
+	// Persist the revocation to the database so it survives restarts.
+	if a.db != nil {
+		if err := db.RevokeRefreshToken(r.Context(), a.db.Pool, tokenHash); err != nil {
+			a.logger.Error().Err(err).Msg("failed to persist refresh token revocation to DB")
+			writeError(w, http.StatusInternalServerError, "failed to revoke token")
+			return
+		}
+	}
+
+	// Also store in the in-memory cache for fast subsequent checks.
+	revokedRefreshTokens.Store(tokenHash, struct{}{})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ListRefreshTokens handles GET /api/v1/auth/refresh.
+// Returns recently revoked refresh tokens (token_hash truncated to 8 chars,
+// revoked_at timestamp). Since only revoked tokens are persisted, this list
+// represents the revocation log rather than all issued tokens.
+func (a *Auth) ListRefreshTokens(w http.ResponseWriter, r *http.Request) {
+	if a.db == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not available")
+		return
+	}
+
+	page := 1
+	perPage := 50
+	tokens, err := db.ListRevokedRefreshTokens(r.Context(), a.db.Pool, perPage, (page-1)*perPage)
+	if err != nil {
+		a.logger.Error().Err(err).Msg("failed to list revoked refresh tokens")
+		writeError(w, http.StatusInternalServerError, "failed to list revoked tokens")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"revoked_tokens": tokens,
+		"count":          len(tokens),
+	})
 }
 
 // refreshTokenHash returns the hex-encoded SHA-256 hash of a raw refresh token

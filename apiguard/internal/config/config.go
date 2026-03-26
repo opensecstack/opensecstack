@@ -54,6 +54,13 @@ type ScannerConfig struct {
 // AuthConfig holds authentication settings.
 type AuthConfig struct {
 	JWTSecret     string        `mapstructure:"jwt_secret" json:"-"`
+	// PreviousJWTSecret supports zero-downtime JWT secret rotation.
+	// Rotation strategy: set PreviousJWTSecret to the old key and JWTSecret to
+	// the new key. The middleware will accept tokens signed with either secret
+	// so that in-flight tokens issued under the old key remain valid until they
+	// expire naturally. Once all old tokens have expired, clear PreviousJWTSecret.
+	// Set via APIGUARD_AUTH_PREVIOUS_JWT_SECRET or auth.previous_jwt_secret in config.
+	PreviousJWTSecret string        `mapstructure:"previous_jwt_secret" json:"-"`
 	TokenExpiry   time.Duration `mapstructure:"token_expiry"`
 	EnableAPIKeys bool          `mapstructure:"enable_api_keys"`
 	// APIKeys is the list of pre-shared keys accepted by POST /api/v1/auth/token.
@@ -136,10 +143,11 @@ func Load() *Config {
 			CustomRulesDir: viper.GetString("scanner.custom_rules_dir"),
 		},
 		Auth: AuthConfig{
-			JWTSecret:     viper.GetString("auth.jwt_secret"),
-			TokenExpiry:   viper.GetDuration("auth.token_expiry"),
-			EnableAPIKeys: viper.GetBool("auth.enable_api_keys"),
-			APIKeys:       viper.GetStringSlice("auth.api_keys"),
+			JWTSecret:         viper.GetString("auth.jwt_secret"),
+			PreviousJWTSecret: viper.GetString("auth.previous_jwt_secret"),
+			TokenExpiry:       viper.GetDuration("auth.token_expiry"),
+			EnableAPIKeys:     viper.GetBool("auth.enable_api_keys"),
+			APIKeys:           viper.GetStringSlice("auth.api_keys"),
 		},
 		Report: ReportConfig{
 			DefaultFormat: viper.GetString("report.default_format"),

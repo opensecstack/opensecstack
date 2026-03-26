@@ -42,6 +42,8 @@ def validate_api_key(api_key: str) -> tuple[bool, str]:
             # will persist this — no explicit commit here to avoid mid-request
             # transaction boundaries.
             record.last_used_at = datetime.now(timezone.utc)
+            # Store the key's UUID on g so JWT issuance can use it as identity.
+            g.api_key_id = str(record.id)
             write_audit(
                 db.session,
                 action='api_key_used',

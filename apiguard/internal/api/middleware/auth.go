@@ -42,7 +42,19 @@ func ClaimsFromContext(ctx context.Context) (*Claims, bool) {
 // trustedProxies is used to correctly resolve the real client IP for log entries
 // (X-Forwarded-For is honoured only when the direct peer is a trusted proxy).
 // Pass nil to always use r.RemoteAddr.
+//
+// Secret rotation: if previousSecret is non-empty and validation with secret
+// fails due to a signature error, the middleware retries with previousSecret.
+// This allows zero-downtime rotation: set previousSecret to the old key and
+// secret to the new key; tokens issued under the old key remain valid until
+// they expire naturally. Once all old tokens have expired, clear previousSecret.
 func JWTAuth(secret string, trustedProxies []*net.IPNet) func(next http.Handler) http.Handler {
+	return JWTAuthWithRotation(secret, "", trustedProxies)
+}
+
+// JWTAuthWithRotation is like JWTAuth but also accepts tokens signed with
+// previousSecret when it is non-empty. Use this during JWT secret rotation.
+func JWTAuthWithRotation(secret, previousSecret string, trustedProxies []*net.IPNet) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// If no secret is configured, reject all requests to protected endpoints.
@@ -70,8 +82,17 @@ func JWTAuth(secret string, trustedProxies []*net.IPNet) func(next http.Handler)
 				return
 			}
 
-			// Validate JWT token signature and claims.
+			// Validate JWT token signature and claims using the current secret.
 			claims, err := validateJWT(token, secret)
+			if err != nil && previousSecret != "" {
+				// Secret rotation: if signature verification failed and a previous
+				// secret is configured, retry validation with the previous secret.
+				// This allows tokens issued before the rotation to remain valid.
+				if prevClaims, prevErr := validateJWT(token, previousSecret); prevErr == nil {
+					claims = prevClaims
+					err = nil
+				}
+			}
 			if err != nil {
 				// A-M1: use the real client IP (honoring trusted proxies) rather
 				// than the raw r.RemoteAddr which may be a proxy address.

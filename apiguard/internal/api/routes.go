@@ -11,10 +11,10 @@ import (
 )
 
 // RegisterRoutes sets up all API routes on the given router.
-// authLimiter, scanLimiter, reportLimiter, and refreshLimiter must be created
-// by the caller (stored on the Server) so their Stop() methods can be called
-// on shutdown. trustedProxies is forwarded to JWTAuth so auth failures log the
-// real client IP.
+// authLimiter, scanLimiter, reportLimiter, refreshLimiter, and apiKeyLimiter
+// must be created by the caller (stored on the Server) so their Stop() methods
+// can be called on shutdown. trustedProxies is forwarded to JWTAuth so auth
+// failures log the real client IP.
 func RegisterRoutes(
 	r chi.Router,
 	health *handlers.Health,
@@ -29,6 +29,7 @@ func RegisterRoutes(
 	scanLimiter *middleware.RateLimiter,
 	reportLimiter *middleware.RateLimiter,
 	refreshLimiter *middleware.RateLimiter,
+	apiKeyLimiter *middleware.RateLimiter,
 	trustedProxies []*net.IPNet,
 ) {
 
@@ -46,9 +47,10 @@ func RegisterRoutes(
 			r.Post("/auth/refresh", auth.RefreshToken) // POST → exchange refresh_token → new tokens
 		})
 
-		// Refresh token revocation — dedicated rate limiter (20 req/min).
+		// Refresh token revocation and listing — dedicated rate limiter (20 req/min).
 		r.Group(func(r chi.Router) {
 			r.Use(refreshLimiter.Middleware)
+			r.Get("/auth/refresh", auth.ListRefreshTokens)     // GET    → list recently revoked tokens
 			r.Delete("/auth/refresh", auth.RevokeRefreshToken) // DELETE → revoke a refresh token
 		})
 
@@ -56,7 +58,7 @@ func RegisterRoutes(
 
 		// ── Protected endpoints (Bearer JWT required) ────────────────────────
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.JWTAuth(cfg.Auth.JWTSecret, trustedProxies))
+			r.Use(middleware.JWTAuthWithRotation(cfg.Auth.JWTSecret, cfg.Auth.PreviousJWTSecret, trustedProxies))
 
 			// Scans — scan creation is expensive; apply a dedicated rate limiter.
 			r.With(scanLimiter.Middleware).Post("/scans", scans.Create)
@@ -80,7 +82,7 @@ func RegisterRoutes(
 			// API key management.
 			r.Route("/api-keys", func(r chi.Router) {
 				r.Get("/", apiKeys.List)
-				r.Post("/", apiKeys.Create)
+				r.With(apiKeyLimiter.Middleware).Post("/", apiKeys.Create) // rate-limited: 5 req/min
 				r.Delete("/{id}", apiKeys.Revoke)
 			})
 		})

@@ -24,8 +24,19 @@ def _hash_key(plaintext: str) -> str:
 @api_keys_bp.get('/api-keys')
 @require_auth
 def list_api_keys():
-    keys = db.session.query(ApiKey).filter(ApiKey.created_by == g.actor).order_by(ApiKey.created_at.desc()).all()
-    return jsonify([k.to_dict() for k in keys]), 200
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = min(100, max(1, request.args.get('per_page', 20, type=int)))
+
+    query = db.session.query(ApiKey).filter(ApiKey.created_by == g.actor).order_by(ApiKey.created_at.desc())
+    total = query.count()
+    keys = query.offset((page - 1) * per_page).limit(per_page).all()
+
+    return jsonify({
+        'data': [k.to_dict() for k in keys],
+        'page': page,
+        'per_page': per_page,
+        'total': total,
+    }), 200
 
 
 # ------------------------------------------------------------------ #

@@ -1,5 +1,5 @@
 import hashlib
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, g
 from ..auth import validate_api_key, issue_jwt
 
 auth_bp = Blueprint('auth_api', __name__)
@@ -18,8 +18,13 @@ def token():
     if not valid:
         return jsonify({'error': 'Invalid API key', 'code': 'UNAUTHORIZED'}), 401
 
-    # Use a stable identity — in the future this can be looked up from a keys table
-    identity = 'api_key:' + hashlib.sha256(api_key.encode()).hexdigest()[:16]
+    # Use the DB key UUID when available (set by validate_api_key for DB-backed keys).
+    # Fall back to a hash prefix for bootstrap env-var keys that have no DB record.
+    api_key_id = getattr(g, 'api_key_id', None)
+    if api_key_id:
+        identity = 'api_key:' + api_key_id
+    else:
+        identity = 'api_key:' + hashlib.sha256(api_key.encode()).hexdigest()[:16]
     jwt_token, expires_at = issue_jwt(identity, scope=scope)
 
     return jsonify({

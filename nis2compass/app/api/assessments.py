@@ -41,7 +41,7 @@ def _check_report_rate_limit(actor: str) -> bool:
     elsewhere by extensions.init_extensions).
     """
     from .. import extensions as _ext
-    from ..middleware import LUA_RATE_LIMIT
+    from ..middleware import _get_rate_limit_script
 
     rc = _ext.redis_client
     if rc is not None:
@@ -53,7 +53,7 @@ def _check_report_rate_limit(actor: str) -> bool:
         key = f'report_rl:{actor}'
         req_id = str(_uuid_mod.uuid4())
         try:
-            script = rc.register_script(LUA_RATE_LIMIT)
+            script = _get_rate_limit_script(rc)
             result = script(
                 keys=[key],
                 args=[now_ms, window_ms, _REPORT_RATE_LIMIT_MAX, req_id],
@@ -748,7 +748,11 @@ def generate_report(assessment_id):
         .all()
     )
 
-    pdf_buf = _generate_pdf(assessment, org, controls, templates)
+    try:
+        pdf_buf = _generate_pdf(assessment, org, controls, templates)
+    except Exception as exc:
+        current_app.logger.error('PDF generation failed for assessment %s: %s', assessment_id, exc)
+        return jsonify({'error': 'Report generation failed', 'code': 'REPORT_ERROR'}), 500
 
     write_audit(
         db.session,

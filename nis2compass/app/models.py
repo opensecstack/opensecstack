@@ -106,7 +106,7 @@ class Control(db.Model):
         nullable=False,
     )
     title = db.Column(db.String(255), nullable=False)
-    description = db.Column(db.Text, nullable=True)
+    description = db.Column(db.String(1000), nullable=True)
     status = db.Column(
         db.Enum('not_assessed', 'compliant', 'partially_compliant', 'non_compliant', 'not_applicable', name='control_status'),
         nullable=False, server_default='not_assessed',

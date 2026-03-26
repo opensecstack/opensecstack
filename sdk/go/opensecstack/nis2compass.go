@@ -31,6 +31,9 @@ type NIS2CompassClient struct {
 	// HTTPClient is the underlying HTTP client. A default client with a
 	// 30-second timeout is used when nil.
 	HTTPClient *http.Client
+	// ReportTimeout is the maximum time to wait for GenerateReport to complete.
+	// When zero, it defaults to 120 seconds (matching the Python SDK).
+	ReportTimeout time.Duration
 
 	mu          sync.RWMutex
 	jwt         string    // cached Bearer token; empty means unauthenticated
@@ -46,9 +49,10 @@ func NewNIS2CompassClient(baseURL, apiKey string) *NIS2CompassClient {
 		return http.ErrUseLastResponse // do not follow redirects
 	}
 	return &NIS2CompassClient{
-		BaseURL:    strings.TrimRight(baseURL, "/"),
-		APIKey:     apiKey,
-		HTTPClient: httpClient,
+		BaseURL:       strings.TrimRight(baseURL, "/"),
+		APIKey:        apiKey,
+		HTTPClient:    httpClient,
+		ReportTimeout: 120 * time.Second,
 	}
 }
 
@@ -363,7 +367,7 @@ func (c *NIS2CompassClient) deleteJSON(ctx context.Context, path string) error {
 // GetOrganisations returns a paginated list of organisations.
 //
 // opts controls pagination. Pass a zero-value GetOrganisationsOptions{} to
-// use defaults (page 1, per_page 100). PerPage is clamped to 100 when zero.
+// use defaults (page 1, per_page 20). PerPage is clamped to 100 when greater.
 func (c *NIS2CompassClient) GetOrganisations(ctx context.Context, opts GetOrganisationsOptions) ([]Organisation, error) {
 	page := opts.Page
 	if page <= 0 {
@@ -371,7 +375,7 @@ func (c *NIS2CompassClient) GetOrganisations(ctx context.Context, opts GetOrgani
 	}
 	perPage := opts.PerPage
 	if perPage <= 0 {
-		perPage = 100
+		perPage = 20
 	}
 	if perPage > 100 {
 		perPage = 100
@@ -432,8 +436,8 @@ func (c *NIS2CompassClient) DeleteOrganisation(ctx context.Context, id string) e
 // GetAssessments returns assessments belonging to the given organisation UUID.
 //
 // opts controls pagination and optional server-side filtering by status.
-// Pass a zero-value GetAssessmentsOptions{} to use server defaults
-// (page 1, per_page 100, no status filter).
+// Pass a zero-value GetAssessmentsOptions{} to use defaults
+// (page 1, per_page 20, no status filter). PerPage is clamped to 100 when greater.
 func (c *NIS2CompassClient) GetAssessments(ctx context.Context, orgID string, opts GetAssessmentsOptions) ([]Assessment, error) {
 	page := opts.Page
 	if page <= 0 {
@@ -441,7 +445,7 @@ func (c *NIS2CompassClient) GetAssessments(ctx context.Context, orgID string, op
 	}
 	perPage := opts.PerPage
 	if perPage <= 0 {
-		perPage = 100
+		perPage = 20
 	}
 	if perPage > 100 {
 		perPage = 100
@@ -717,7 +721,17 @@ func (c *NIS2CompassClient) RevokeAPIKey(ctx context.Context, keyID string) erro
 // GenerateReport requests a PDF compliance report for the given assessment and
 // returns the raw PDF bytes. The caller is responsible for writing the bytes to
 // a file or forwarding them to an HTTP response.
+//
+// The request uses a dedicated timeout from ReportTimeout (default 120s) rather
+// than the general HTTPClient timeout, because report generation can be slow.
 func (c *NIS2CompassClient) GenerateReport(ctx context.Context, assessmentID string) ([]byte, error) {
+	timeout := c.ReportTimeout
+	if timeout == 0 {
+		timeout = 120 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	resp, err := c.do(ctx, http.MethodPost, "assessments/"+assessmentID+"/report", nil,
 		map[string]string{"Accept": "application/pdf"})
 	if err != nil {
@@ -742,14 +756,19 @@ func (c *NIS2CompassClient) GenerateReport(ctx context.Context, assessmentID str
 // Audit log
 // ----------------------------------------------------------------------------
 
-// GetAuditLog retrieves the most recent NIS2 audit log entries (up to limit).
+// GetAuditLog retrieves NIS2 audit log entries with pagination support.
 // When limit is <= 0 a default of 50 is used.
-func (c *NIS2CompassClient) GetAuditLog(ctx context.Context, limit int) ([]NIS2AuditEntry, error) {
+// When page is < 1 a default of 1 is used.
+func (c *NIS2CompassClient) GetAuditLog(ctx context.Context, limit int, page int) ([]NIS2AuditEntry, error) {
 	if limit <= 0 {
 		limit = 50
 	}
+	if page < 1 {
+		page = 1
+	}
 	params := url.Values{}
 	params.Set("per_page", strconv.Itoa(limit))
+	params.Set("page", strconv.Itoa(page))
 
 	var entries []NIS2AuditEntry
 	if err := c.getJSON(ctx, "audit", params, &entries); err != nil {

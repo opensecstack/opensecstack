@@ -361,11 +361,11 @@ func (d *DB) ListAuditLog(ctx context.Context, filters AuditLogFilters, page, pe
 	}
 
 	// Fetch page.
-	// Append LIMIT and OFFSET to args; derive their placeholder indices from
-	// the current slice length so no separate counter variable is needed.
+	// Record the current arg count before appending LIMIT/OFFSET so that the
+	// $N placeholder indices are derived unambiguously.
+	limitPlaceholder := len(args) + 1  // $N for LIMIT  (perPage)
+	offsetPlaceholder := len(args) + 2 // $N for OFFSET (offset)
 	dataArgs := append(args, perPage, offset)
-	limitIdx := len(dataArgs) - 1  // 1-based index of perPage
-	offsetIdx := len(dataArgs)     // 1-based index of offset
 	rows, err := d.Pool.Query(ctx, fmt.Sprintf(`
 		SELECT id, actor_id, actor_type, action, resource_type, resource_id,
 		       ip_address, user_agent, before_state, after_state, metadata,
@@ -373,7 +373,7 @@ func (d *DB) ListAuditLog(ctx context.Context, filters AuditLogFilters, page, pe
 		FROM audit_log %s
 		ORDER BY id DESC
 		LIMIT $%d OFFSET $%d
-	`, whereClause, limitIdx, offsetIdx), dataArgs...)
+	`, whereClause, limitPlaceholder, offsetPlaceholder), dataArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("querying audit log: %w", err)
 	}

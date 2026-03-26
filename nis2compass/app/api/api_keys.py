@@ -97,8 +97,8 @@ def revoke_api_key(key_id):
     api_key = db.session.get(ApiKey, key_id)
     if api_key is None:
         return jsonify({'error': 'API key not found', 'code': 'NOT_FOUND'}), 404
-    if api_key.created_by is not None and api_key.created_by != g.actor:
-        return jsonify({'error': 'Access denied', 'code': 'FORBIDDEN'}), 403
+    if api_key.created_by != g.actor:
+        return jsonify({'error': 'Forbidden', 'code': 'FORBIDDEN'}), 403
 
     api_key.is_active = False
     write_audit(

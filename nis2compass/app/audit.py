@@ -123,9 +123,10 @@ def write_audit(
     db_session.execute(text(f'SELECT pg_advisory_xact_lock({_AUDIT_CHAIN_LOCK_ID})'))
 
     # Fetch the most recent chain_hash (within this transaction's snapshot).
+    # Order by seq (BIGSERIAL) which is strictly monotonic — unlike UUID ids.
     last = (
         db_session.query(AuditLog.chain_hash)
-        .order_by(AuditLog.timestamp.desc(), AuditLog.id.desc())
+        .order_by(AuditLog.seq.desc())
         .first()
     )
     prev_hash = last[0] if last else None
@@ -181,13 +182,28 @@ def write_audit(
     except RuntimeError:
         pass  # No app context (e.g. during testing without full stack)
 
-    # Forward to CITADEL (fire-and-forget — never raises)
-    entry_data = {
-        'action': action,
-        'actor': actor,
-        'resource_type': resource_type,
-        'resource_id': resource_id,
-        'risk_class': risk_class,
-        'chain_hash': chain_hash,
-    }
-    _forward_to_citadel(entry_data)
+    # Forward to CITADEL (fire-and-forget — never raises) — deferred until
+    # after commit so that a rolled-back transaction does not send a ghost
+    # event to CITADEL.
+    try:
+        from flask import current_app as _app
+        from sqlalchemy import event as sa_event
+
+        citadel_url = _app.config.get('CITADEL_API_URL')
+        if citadel_url:
+            entry_data = {
+                'action': action,
+                'actor': actor,
+                'resource_type': resource_type,
+                'resource_id': resource_id,
+                'risk_class': risk_class,
+                'chain_hash': chain_hash,
+            }
+
+            def _after_commit_citadel(session):
+                _forward_to_citadel(entry_data)
+                sa_event.remove(session, 'after_commit', _after_commit_citadel)
+
+            sa_event.listen(db_session, 'after_commit', _after_commit_citadel)
+    except RuntimeError:
+        pass  # No app context (e.g. during testing without full stack)

@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net"
 	"net/http"
 	"time"
 
@@ -9,7 +10,10 @@ import (
 )
 
 // RequestLogger returns a middleware that logs each HTTP request using zerolog.
-func RequestLogger(logger zerolog.Logger) func(next http.Handler) http.Handler {
+// trustedProxies is the list of upstream proxy CIDRs whose X-Forwarded-For
+// header should be trusted when determining the real client IP. Pass nil to
+// always use r.RemoteAddr (safe default).
+func RequestLogger(logger zerolog.Logger, trustedProxies []*net.IPNet) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -19,7 +23,7 @@ func RequestLogger(logger zerolog.Logger) func(next http.Handler) http.Handler {
 				logger.Info().
 					Str("method", r.Method).
 					Str("path", r.URL.Path).
-					Str("remote_addr", r.RemoteAddr).
+					Str("client_ip", ClientIPFromRequest(r, trustedProxies)).
 					Str("request_id", chimw.GetReqID(r.Context())).
 					Int("status", ww.Status()).
 					Int("bytes", ww.BytesWritten()).

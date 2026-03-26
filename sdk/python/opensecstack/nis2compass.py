@@ -84,6 +84,8 @@ class NIS2CompassClient:
         logger.debug("Authentication successful; JWT acquired")
 
     def _raise_for_status(self, resp: requests.Response) -> None:
+        if resp.status_code == 401:
+            raise AuthenticationError("JWT expired or invalid — re-authenticate")
         if resp.status_code == 429:
             try:
                 detail = resp.json()
@@ -139,7 +141,15 @@ class NIS2CompassClient:
                         # Another thread already refreshed the token; just retry.
                         logger.debug("Token already refreshed by another thread; retrying request")
                     else:
-                        self._authenticate()
+                        try:
+                            self._authenticate()
+                        except AuthenticationError:
+                            logger.warning(
+                                "%s %s — re-authentication failed after 401; "
+                                "API key may be invalid or revoked",
+                                method.upper(), path,
+                            )
+                            raise
                 resp = getattr(self._session, method)(self._url(path), timeout=self._timeout, **kwargs)
             return resp
 
@@ -537,23 +547,29 @@ class NIS2CompassClient:
         description:    Optional free-text description.
         """
         file_path = os.path.expanduser(file_path)
+        data: dict = {"type": artifact_type}
+        if control_id is not None:
+            data["control_id"] = control_id
+        if description is not None:
+            data["description"] = description
         with open(file_path, "rb") as fh:
-            # Pass the open file handle directly to avoid reading the entire
-            # file into memory — requests will stream it as multipart form data.
-            files = {"file": (os.path.basename(file_path), fh)}
-            data: dict = {"type": artifact_type}
-            if control_id is not None:
-                data["control_id"] = control_id
-            if description is not None:
-                data["description"] = description
-            resp = self._request(
-                "post",
-                f"assessments/{assessment_id}/artifacts",
-                files=files,
+            # Encode the multipart body explicitly so we can supply the exact
+            # Content-Type boundary string to _request.  This is more reliable
+            # than passing Content-Type: None and trusting requests to strip
+            # the session-level 'application/json' header before setting the
+            # multipart boundary.
+            _prep = requests.Request(
+                "POST",
+                "x://x",
+                files={"file": (os.path.basename(file_path), fh)},
                 data=data,
-                headers={"Content-Type": None},
-            )
-
+            ).prepare()
+        resp = self._request(
+            "post",
+            f"assessments/{assessment_id}/artifacts",
+            data=_prep.body,
+            headers={"Content-Type": _prep.headers["Content-Type"]},
+        )
         return resp.json()
 
     def get_artifact(self, artifact_id: str) -> dict:
@@ -576,9 +592,28 @@ class NIS2CompassClient:
         dest_path:   Local filesystem path where the file will be written.
         """
         dest_path = os.path.expanduser(dest_path)
-        resp = self._get(f"artifacts/{artifact_id}/download")
+        # Ensure we have a valid token before the streamed request.
+        with self._auth_lock:
+            if "Authorization" not in self._session.headers:
+                self._authenticate()
+
+        def _stream() -> requests.Response:
+            return self._session.get(
+                self._url(f"artifacts/{artifact_id}/download"),
+                timeout=self._timeout,
+                stream=True,
+            )
+
+        resp = _stream()
+        if resp.status_code == 401:
+            with self._auth_lock:
+                self._authenticate()
+            resp = _stream()
+
+        self._raise_for_status(resp)
         with open(dest_path, "wb") as fh:
-            fh.write(resp.content)
+            for chunk in resp.iter_content(chunk_size=65536):
+                fh.write(chunk)
 
     def delete_artifact(self, artifact_id: str) -> None:
         """

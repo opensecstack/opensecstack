@@ -94,12 +94,17 @@ func (a *Audit) List(w http.ResponseWriter, r *http.Request) {
 	if v := q.Get("resource_type"); v != "" {
 		filters.ResourceType = &v
 	}
-	// resource_id is a UUID — skip if parse fails.
+	// resource_id must be a valid UUID; reject invalid values with 400.
 	if v := q.Get("resource_id"); v != "" {
 		parsed, err := uuid.Parse(v)
-		if err == nil {
-			filters.ResourceID = &parsed
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "resource_id must be a valid UUID",
+				"code":  "INVALID_INPUT",
+			})
+			return
 		}
+		filters.ResourceID = &parsed
 	}
 
 	entries, total, err := a.db.ListAuditLog(r.Context(), filters, page, perPage)

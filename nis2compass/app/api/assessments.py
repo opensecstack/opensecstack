@@ -97,14 +97,19 @@ def _check_org_access(org_id):
 
     if org.created_by is None:
         # Atomically claim the ownerless org — only the first caller wins.
-        updated = db.session.execute(
-            db.text(
-                "UPDATE organisations SET created_by = :actor"
-                " WHERE id = :id AND created_by IS NULL"
-            ),
-            {"actor": g.actor, "id": str(org_id)},
-        ).rowcount
-        db.session.commit()
+        # Use a savepoint (nested transaction) so only this CAS UPDATE is
+        # isolated; the caller's staged ORM changes are not prematurely flushed.
+        with db.session.begin_nested():
+            updated = db.session.execute(
+                db.text(
+                    "UPDATE organisations SET created_by = :actor"
+                    " WHERE id = :id AND created_by IS NULL"
+                ),
+                {"actor": g.actor, "id": str(org_id)},
+            ).rowcount
+            db.session.flush()
+        # Make the savepoint visible within the outer transaction.
+        db.session.flush()
         # Re-fetch so the ORM instance reflects the current DB value.
         db.session.refresh(org)
         if org.created_by != g.actor:
@@ -639,7 +644,7 @@ def _generate_pdf(assessment, org, controls, templates):
         8  * mm,   # Ref
         18 * mm,   # Article
         16 * mm,   # NIST
-        W - 8 - 18 - 16 - 28 - 14 - 30 * mm,  # Title (remaining)
+        W - 8*mm - 18*mm - 16*mm - 28*mm - 14*mm - 30*mm,  # Title (remaining)
         28 * mm,   # Status
         14 * mm,   # Evidence
         30 * mm,   # Notes

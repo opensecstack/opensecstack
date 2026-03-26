@@ -158,8 +158,9 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A-C2: Validate target URL against SSRF before starting the scan.
-	if err := validateSpecURL(req.Target); err != nil {
+	// A-M2: Validate target URL — only scheme + host checks; no SSRF DNS lookup
+	// because the target is an intentional endpoint under test.
+	if err := validateTarget(req.Target); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid target: "+err.Error())
 		return
 	}
@@ -176,7 +177,7 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 
 	// C4: Validate spec_url against SSRF before storing or fetching.
 	if req.SpecURL != "" {
-		if err := validateSpecURL(req.SpecURL); err != nil {
+		if err := validateSpecURL(r.Context(), req.SpecURL); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}
@@ -709,6 +710,16 @@ func writeError(w http.ResponseWriter, code int, message string) {
 	})
 }
 
+// writeErrorWithCode writes a JSON error response with an application-level error code.
+func writeErrorWithCode(w http.ResponseWriter, httpCode int, message, errCode string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(httpCode)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error": message,
+		"code":  errCode,
+	})
+}
+
 // privateIPNets are the IP ranges that must not be reached via spec_url (SSRF prevention).
 var privateIPNets []*net.IPNet
 
@@ -771,9 +782,30 @@ var ssrfSafeClient = func() *http.Client {
 	}
 }()
 
+// validateTarget checks that rawURL is a valid http/https URL with a non-empty
+// host. It does not perform DNS resolution or SSRF checks because the target is
+// an intentional endpoint under test chosen by the operator.
+func validateTarget(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("scheme must be http or https, got %q", parsed.Scheme)
+	}
+	if parsed.Hostname() == "" {
+		return fmt.Errorf("URL has no hostname")
+	}
+	return nil
+}
+
 // validateSpecURL checks that rawURL uses http/https and does not resolve to a
 // private or loopback IP address, preventing SSRF attacks.
-func validateSpecURL(rawURL string) error {
+// ctx is used for the DNS lookup so that it honours request deadlines and can
+// be cancelled (e.g. on server shutdown) rather than blocking for the full OS
+// DNS timeout.
+func validateSpecURL(ctx context.Context, rawURL string) error {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return fmt.Errorf("invalid spec_url: %w", err)
@@ -786,7 +818,7 @@ func validateSpecURL(rawURL string) error {
 	if hostname == "" {
 		return fmt.Errorf("spec_url has no hostname")
 	}
-	addrs, err := net.LookupHost(hostname)
+	addrs, err := net.DefaultResolver.LookupHost(ctx, hostname)
 	if err != nil {
 		return fmt.Errorf("spec_url hostname resolution failed: %w", err)
 	}

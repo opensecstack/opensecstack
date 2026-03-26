@@ -1,4 +1,5 @@
 import hashlib
+import magic
 import os
 import uuid as uuid_lib
 from flask import Blueprint, request, jsonify, g, current_app, send_file
@@ -9,23 +10,9 @@ from ..auth import require_auth, require_scope
 from ..audit import write_audit
 from .assessments import _check_org_access
 
-# Magic-byte signatures used to verify the declared MIME type against the
-# actual file content.  Each entry maps a set of leading bytes (as a bytes
-# literal) to the MIME type it represents.  Only the MIME types listed in
-# ALLOWED_MIME_TYPES that have reliable signatures are covered here; types
-# without a distinctive header (plain text, CSV, JSON, XML) are skipped.
-_MAGIC_SIGNATURES: list[tuple[bytes, str]] = [
-    (b'%PDF',                                         'application/pdf'),
-    (b'\xd0\xcf\x11\xe0',                            'application/msword'),           # OLE2 (also .xls)
-    (b'PK\x03\x04',                                  'application/zip'),              # OOXML (.docx/.xlsx) and .zip
-    (b'\x89PNG\r\n\x1a\n',                           'image/png'),
-    (b'\xff\xd8\xff',                                'image/jpeg'),
-    (b'GIF87a',                                      'image/gif'),
-    (b'GIF89a',                                      'image/gif'),
-]
-
 # MIME types that do not have a reliable magic-byte signature and whose
 # declared type we therefore accept without content inspection.
+# libmagic does not identify these text-based formats precisely.
 _SKIP_MAGIC_CHECK: frozenset = frozenset({
     'text/plain',
     'text/csv',
@@ -33,33 +20,6 @@ _SKIP_MAGIC_CHECK: frozenset = frozenset({
     'application/xml',
     'text/xml',
 })
-
-# OOXML and OLE2 both start with a PK or OLE2 header.  Map the declared MIME
-# type to the acceptable magic bytes so we can validate without the full
-# libmagic database.
-_OOXML_MIMES: frozenset = frozenset({
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/x-zip-compressed',
-})
-
-
-def _detect_mime_from_bytes(header: bytes) -> set[str]:
-    """Return the set of MIME types compatible with the given file header."""
-    matches: set[str] = set()
-    for signature, mime in _MAGIC_SIGNATURES:
-        if header[:len(signature)] == signature:
-            matches.add(mime)
-    # PK header covers all OOXML and zip variants
-    if header[:4] == b'PK\x03\x04':
-        matches.update(_OOXML_MIMES)
-        matches.add('application/zip')
-        matches.add('application/x-zip-compressed')
-    # OLE2 header covers both .doc and .xls
-    if header[:4] == b'\xd0\xcf\x11\xe0':
-        matches.add('application/msword')
-        matches.add('application/vnd.ms-excel')
-    return matches
 
 artifacts_bp = Blueprint('artifacts', __name__)
 
@@ -177,14 +137,15 @@ def upload_artifact(assessment_id):
             'allowed_types': sorted(ALLOWED_MIME_TYPES),
         }), 415
 
-    # Magic-byte check: read the first 512 bytes, then seek back to the start.
-    # Skip the check for text-based types that have no distinctive header.
+    # Magic-byte check: read the first 512 bytes via python-magic, then seek
+    # back to the start.  Skip the check for text-based types that libmagic
+    # does not identify precisely.
     if content_type not in _SKIP_MAGIC_CHECK:
         file.stream.seek(0)
         header_bytes = file.stream.read(512)
         file.stream.seek(0)
-        compatible_mimes = _detect_mime_from_bytes(header_bytes)
-        if compatible_mimes and content_type not in compatible_mimes:
+        detected = magic.from_buffer(header_bytes, mime=True)
+        if detected not in ALLOWED_MIME_TYPES or detected != content_type:
             return jsonify({
                 'error': 'File content does not match declared MIME type',
                 'code': 'UNSUPPORTED_MEDIA_TYPE',
@@ -206,31 +167,40 @@ def upload_artifact(assessment_id):
 
     file_path, file_hash, size_bytes, mime_type = _save_file(file, str(assessment_id))
 
-    artifact = Artifact(
-        assessment_id=assessment_id,
-        control_id=control_id,
-        type=art_type,
-        filename=secure_filename(file.filename or 'upload'),
-        file_path=file_path,
-        hash=file_hash,
-        size_bytes=size_bytes,
-        mime_type=mime_type,
-        description=description,
-        created_by=g.actor,
-    )
-    db.session.add(artifact)
-    db.session.flush()
+    try:
+        artifact = Artifact(
+            assessment_id=assessment_id,
+            control_id=control_id,
+            type=art_type,
+            filename=secure_filename(file.filename or 'upload'),
+            file_path=file_path,
+            hash=file_hash,
+            size_bytes=size_bytes,
+            mime_type=mime_type,
+            description=description,
+            created_by=g.actor,
+        )
+        db.session.add(artifact)
+        db.session.flush()
 
-    write_audit(
-        db.session,
-        action='artifact_uploaded',
-        actor=g.actor,
-        resource_type='artifact',
-        resource_id=artifact.id,
-        risk_class='INFO',
-        metadata={'filename': artifact.filename, 'type': artifact.type, 'hash': artifact.hash, 'size_bytes': size_bytes},
-    )
-    db.session.commit()
+        write_audit(
+            db.session,
+            action='artifact_uploaded',
+            actor=g.actor,
+            resource_type='artifact',
+            resource_id=artifact.id,
+            risk_class='INFO',
+            metadata={'filename': artifact.filename, 'type': artifact.type, 'hash': artifact.hash, 'size_bytes': size_bytes},
+        )
+        db.session.commit()
+    except Exception:
+        # Clean up the orphaned file if the DB write failed
+        try:
+            os.remove(file_path)
+        except OSError:
+            current_app.logger.warning('Could not remove orphaned file: %s', file_path)
+        raise
+
     return jsonify(artifact.to_dict()), 201
 
 

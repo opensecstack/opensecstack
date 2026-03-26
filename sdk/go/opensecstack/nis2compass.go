@@ -270,6 +270,9 @@ func (c *NIS2CompassClient) GetOrganisations(ctx context.Context, opts GetOrgani
 	if perPage <= 0 {
 		perPage = 100
 	}
+	if perPage > 100 {
+		perPage = 100
+	}
 
 	params := url.Values{}
 	params.Set("page", strconv.Itoa(page))
@@ -335,6 +338,9 @@ func (c *NIS2CompassClient) GetAssessments(ctx context.Context, orgID string, op
 	}
 	perPage := opts.PerPage
 	if perPage <= 0 {
+		perPage = 100
+	}
+	if perPage > 100 {
 		perPage = 100
 	}
 

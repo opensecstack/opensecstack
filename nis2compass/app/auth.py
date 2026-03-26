@@ -53,9 +53,10 @@ def validate_api_key(api_key: str) -> tuple[bool, str]:
             )
             return True, record.scope
 
-        # If DB has any active keys, don't fall through to env-var
-        if db.session.query(ApiKey).filter(ApiKey.is_active == True).count() > 0:
-            return False, 'read_write'
+        # No DB key matched — fall through to env-var bootstrap keys
+        current_app.logger.debug(
+            'API key not found in DB; checking bootstrap env-var keys'
+        )
     except Exception as exc:
         # DB unavailable — fall through to env-var check
         current_app.logger.error(

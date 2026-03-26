@@ -18,11 +18,11 @@ import time
 import uuid
 from typing import Optional
 
-logger = logging.getLogger(__name__)
-
 import requests
 
 from .exceptions import APIError, AuthenticationError, NotFoundError, RateLimitError
+
+logger = logging.getLogger(__name__)
 
 
 class APIGuardClient:
@@ -129,7 +129,15 @@ class APIGuardClient:
             if resp.status_code == 401:
                 # Token may have expired — try to re-authenticate once.
                 with self._auth_lock:
-                    self._authenticate()
+                    try:
+                        self._authenticate()
+                    except AuthenticationError:
+                        logger.warning(
+                            "%s %s — re-authentication failed after 401; "
+                            "API key may be invalid or revoked",
+                            method.upper(), path,
+                        )
+                        raise
                 resp = self._session.request(
                     method, self._url(path), timeout=self._timeout, **kwargs
                 )

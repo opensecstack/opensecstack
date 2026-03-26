@@ -164,9 +164,11 @@ func (f *Findings) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 // updateFindingRequest is the JSON body for PATCH /api/v1/findings/{id}.
+// Both fields are optional pointers so the handler can distinguish between
+// "field not sent" and "field sent as empty string".
 type updateFindingRequest struct {
-	Status string `json:"status"`
-	Note   string `json:"note"`
+	Status *string `json:"status"`
+	Note   *string `json:"note"`
 }
 
 // Update handles PATCH /api/v1/findings/{id}.
@@ -184,25 +186,59 @@ func (f *Findings) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate status value.
-	switch db.FindingStatus(req.Status) {
-	case db.FindingStatusOpen,
-		db.FindingStatusConfirmed,
-		db.FindingStatusFalsePositive,
-		db.FindingStatusAccepted,
-		db.FindingStatusFixed:
-		// valid
-	default:
-		writeError(w, http.StatusUnprocessableEntity,
-			"status must be one of: open, confirmed, false_positive, accepted, fixed")
+	// At least one of status or note must be present.
+	if req.Status == nil && req.Note == nil {
+		writeErrorWithCode(w, http.StatusBadRequest, "at least one of status or note must be provided", "INVALID_INPUT")
 		return
+	}
+
+	// Validate status only when it was provided.
+	if req.Status != nil {
+		switch db.FindingStatus(*req.Status) {
+		case db.FindingStatusOpen,
+			db.FindingStatusConfirmed,
+			db.FindingStatusFalsePositive,
+			db.FindingStatusAccepted,
+			db.FindingStatusFixed:
+			// valid
+		default:
+			writeError(w, http.StatusUnprocessableEntity,
+				"status must be one of: open, confirmed, false_positive, accepted, fixed")
+			return
+		}
+	}
+
+	// Resolve the effective status: use the provided value, or fall back to
+	// the finding's current status so the DB call always receives a valid value.
+	var effectiveStatus db.FindingStatus
+	if req.Status != nil {
+		effectiveStatus = db.FindingStatus(*req.Status)
+	} else {
+		existing, err := f.db.GetFinding(r.Context(), id)
+		if err != nil {
+			if isNotFound(err) {
+				writeError(w, http.StatusNotFound, "finding not found")
+				return
+			}
+			f.logger.Error().Err(err).Str("finding_id", id.String()).Msg("failed to fetch finding")
+			writeError(w, http.StatusInternalServerError, "failed to fetch finding")
+			return
+		}
+		effectiveStatus = existing.Status
+	}
+
+	// Resolve the effective note: use the provided value, or keep empty string
+	// (UpdateFindingStatus always writes the note column).
+	effectiveNote := ""
+	if req.Note != nil {
+		effectiveNote = *req.Note
 	}
 
 	actorID := "system"
 	if claims, ok := middleware.ClaimsFromContext(r.Context()); ok && claims.Sub != "" {
 		actorID = claims.Sub
 	}
-	if err := f.db.UpdateFindingStatus(r.Context(), id, db.FindingStatus(req.Status), req.Note, actorID); err != nil {
+	if err := f.db.UpdateFindingStatus(r.Context(), id, effectiveStatus, effectiveNote, actorID); err != nil {
 		if isNotFound(err) {
 			writeError(w, http.StatusNotFound, "finding not found")
 			return
@@ -212,8 +248,12 @@ func (f *Findings) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	auditMeta := map[string]interface{}{"note": effectiveNote}
+	if req.Status != nil {
+		auditMeta["status"] = *req.Status
+	}
 	f.auditLog(r.Context(), db.AuditActionFindingStatusChanged, "findings", &id,
-		middleware.ClientIPFromRequest(r, f.trustedProxies), r.UserAgent(), map[string]interface{}{"status": req.Status, "note": req.Note})
+		middleware.ClientIPFromRequest(r, f.trustedProxies), r.UserAgent(), auditMeta)
 
 	// Return the updated finding.
 	finding, err := f.db.GetFinding(r.Context(), id)

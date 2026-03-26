@@ -147,7 +147,7 @@ func (s *Server) Router() chi.Router {
 func (s *Server) setupMiddleware() {
 	s.router.Use(chimw.RequestID)
 	s.router.Use(chimw.RealIP)
-	s.router.Use(middleware.RequestLogger(s.logger))
+	s.router.Use(middleware.RequestLogger(s.logger, parseTrustedProxyNets(s.config)))
 	s.router.Use(chimw.Recoverer)
 	s.router.Use(chimw.Timeout(60 * time.Second))
 	rateLimit := s.config.Scanner.RateLimit

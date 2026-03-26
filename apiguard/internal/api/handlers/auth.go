@@ -102,7 +102,7 @@ func (a *Auth) Token(w http.ResponseWriter, r *http.Request) {
 	keyHashBytes := sha256.Sum256([]byte(req.APIKey))
 	subject := "api-client:" + hex.EncodeToString(keyHashBytes[:])
 
-	token, err := issueJWT(a.cfg.Auth.JWTSecret, subject, "apiguard", "apiguard", expiry)
+	token, err := issueJWT(a.cfg.Auth.JWTSecret, subject, "apiguard", "apiguard", "access", expiry)
 	if err != nil {
 		a.logger.Error().Err(err).Msg("failed to issue JWT")
 		writeError(w, http.StatusInternalServerError, "failed to issue token")
@@ -144,8 +144,9 @@ func (a *Auth) validAPIKey(key string) bool {
 	return false
 }
 
-// issueJWT creates a signed HS256 JWT with sub, iat, exp, iss, and aud claims.
-func issueJWT(secret, subject, issuer, audience string, expiry time.Duration) (string, error) {
+// issueJWT creates a signed HS256 JWT with sub, iat, exp, iss, aud, and typ claims.
+// tokenType should be "access" for access tokens and "refresh" for refresh tokens.
+func issueJWT(secret, subject, issuer, audience, tokenType string, expiry time.Duration) (string, error) {
 	header := jwtBase64([]byte(`{"alg":"HS256","typ":"JWT"}`))
 
 	now := time.Now()
@@ -155,6 +156,7 @@ func issueJWT(secret, subject, issuer, audience string, expiry time.Duration) (s
 		"exp": now.Add(expiry).Unix(),
 		"iss": issuer,
 		"aud": audience,
+		"typ": tokenType,
 	})
 	if err != nil {
 		return "", err
@@ -243,7 +245,7 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		expiry = 24 * time.Hour
 	}
 
-	accessToken, err := issueJWT(a.cfg.Auth.JWTSecret, claims.Sub, "apiguard", "apiguard", expiry)
+	accessToken, err := issueJWT(a.cfg.Auth.JWTSecret, claims.Sub, "apiguard", "apiguard", "access", expiry)
 	if err != nil {
 		a.logger.Error().Err(err).Msg("failed to issue access token")
 		writeError(w, http.StatusInternalServerError, "failed to issue token")
@@ -254,7 +256,7 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	// the exposure window to 24 hours so a leaked token cannot be misused
 	// indefinitely. TODO: implement a refresh-token allowlist/revocation store
 	// to fully invalidate issued refresh tokens.
-	newRefreshToken, err := issueJWT(a.cfg.Auth.JWTSecret, claims.Sub, "apiguard", "apiguard", 24*time.Hour)
+	newRefreshToken, err := issueJWT(a.cfg.Auth.JWTSecret, claims.Sub, "apiguard", "apiguard", "refresh", 24*time.Hour)
 	if err != nil {
 		a.logger.Error().Err(err).Msg("failed to issue refresh token")
 		writeError(w, http.StatusInternalServerError, "failed to issue token")
@@ -320,6 +322,9 @@ func validateRefreshToken(token, secret string) (*jwtClaims, error) {
 	if claims.Aud != "apiguard" {
 		return nil, fmt.Errorf("invalid aud claim: %q", claims.Aud)
 	}
+	if claims.Typ != "refresh" {
+		return nil, fmt.Errorf("invalid token type %q: expected \"refresh\"", claims.Typ)
+	}
 
 	return &claims, nil
 }
@@ -331,15 +336,10 @@ type jwtClaims struct {
 	Iat int64  `json:"iat"`
 	Iss string `json:"iss"`
 	Aud string `json:"aud"`
+	Typ string `json:"typ"`
 }
 
 // jwtBase64Decode decodes a base64url-encoded string (without padding).
 func jwtBase64Decode(s string) ([]byte, error) {
-	switch len(s) % 4 {
-	case 2:
-		s += "=="
-	case 3:
-		s += "="
-	}
-	return base64.URLEncoding.DecodeString(s)
+	return base64.RawURLEncoding.DecodeString(s)
 }

@@ -390,6 +390,9 @@ func (c *APIGuardClient) GetFindings(ctx context.Context, scanID string, opts Ge
 	if perPage <= 0 {
 		perPage = 100
 	}
+	if perPage > 100 {
+		perPage = 100
+	}
 
 	params := url.Values{}
 	params.Set("page", strconv.Itoa(page))
@@ -548,6 +551,9 @@ func (c *APIGuardClient) ListScans(ctx context.Context, opts ListScansOptions) (
 	if perPage <= 0 {
 		perPage = 20
 	}
+	if perPage > 100 {
+		perPage = 100
+	}
 	params := url.Values{}
 	params.Set("page", strconv.Itoa(page))
 	params.Set("per_page", strconv.Itoa(perPage))
@@ -577,6 +583,9 @@ func (c *APIGuardClient) ListFindings(ctx context.Context, opts ListFindingsOpti
 	perPage := opts.PerPage
 	if perPage <= 0 {
 		perPage = 20
+	}
+	if perPage > 100 {
+		perPage = 100
 	}
 	params := url.Values{}
 	params.Set("page", strconv.Itoa(page))

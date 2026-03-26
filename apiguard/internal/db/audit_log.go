@@ -4,25 +4,176 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/opensecstack/apiguard/internal/citadel"
 )
 
-// AppendAuditLog inserts a new audit log entry with CITADEL chain-hash integrity.
+// auditQueueCapacity is the maximum number of pending audit entries before the
+// non-blocking send path begins dropping (with a logged warning).
+const auditQueueCapacity = 1000
+
+// auditBatchSize is the maximum number of entries written in a single worker
+// iteration before the batch timer is reset.
+const auditBatchSize = 50
+
+// auditFlushInterval is the maximum time the worker waits before writing
+// whatever has accumulated in the batch channel.
+const auditFlushInterval = 100 * time.Millisecond
+
+// auditEntry is the internal envelope that travels through auditQueue.
+type auditEntry struct {
+	entry   *AuditLog
+	citadel *citadel.Client
+}
+
+// auditQueue is the package-level buffered channel. It is initialised by
+// StartAuditWorker and must be non-nil before AppendAuditLog is called.
+var (
+	auditQueue   chan *auditEntry
+	auditQueueMu sync.Mutex // guards initialisation check only
+)
+
+// StartAuditWorker initialises the package-level audit queue and launches a
+// single background goroutine that is the **only** writer to the audit_log
+// table. Because there is exactly one writer, the PostgreSQL advisory lock is
+// held only by this goroutine — contention drops to zero.
 //
-// The fetch of the previous chain_hash and the INSERT are executed inside a
-// single serializable transaction protected by a PostgreSQL advisory lock
-// (pg_advisory_xact_lock). This prevents two concurrent goroutines from racing
-// to become the "previous" entry and breaking the chain.
+// The goroutine drains the queue in batches of up to auditBatchSize entries
+// or after auditFlushInterval, whichever fires first.
 //
-// When citadelClient is non-nil and configured with a base URL, the completed
-// entry is also forwarded to CITADEL asynchronously (fire-and-forget).
-func (d *DB) AppendAuditLog(ctx context.Context, entry *AuditLog, citadelClient *citadel.Client) error {
-	tx, err := d.Pool.Begin(ctx)
+// Call StartAuditWorker once during application startup, before serving
+// requests. The returned stop function should be called on shutdown (it does
+// not drain — use FlushAuditLog for a graceful drain before stopping).
+func StartAuditWorker(pool *pgxpool.Pool) (stop func()) {
+	auditQueueMu.Lock()
+	if auditQueue == nil {
+		auditQueue = make(chan *auditEntry, auditQueueCapacity)
+	}
+	auditQueueMu.Unlock()
+
+	quit := make(chan struct{})
+
+	go func() {
+		ticker := time.NewTicker(auditFlushInterval)
+		defer ticker.Stop()
+
+		batch := make([]*auditEntry, 0, auditBatchSize)
+
+		flush := func() {
+			if len(batch) == 0 {
+				return
+			}
+			for _, e := range batch {
+				if err := writeEntryToDB(context.Background(), pool, e); err != nil {
+					log.Printf("audit worker: write failed: %v", err)
+				}
+			}
+			batch = batch[:0]
+		}
+
+		for {
+			select {
+			case e := <-auditQueue:
+				batch = append(batch, e)
+				if len(batch) >= auditBatchSize {
+					flush()
+					ticker.Reset(auditFlushInterval)
+				}
+
+			case <-ticker.C:
+				flush()
+
+			case <-quit:
+				// Drain whatever remains before exiting.
+				for {
+					select {
+					case e := <-auditQueue:
+						batch = append(batch, e)
+					default:
+						flush()
+						return
+					}
+				}
+			}
+		}
+	}()
+
+	return func() { close(quit) }
+}
+
+// FlushAuditLog blocks until either all entries currently in the queue have
+// been written to the database or ctx is cancelled. It is intended for graceful
+// shutdown sequences.
+//
+// FlushAuditLog does not stop the worker — it simply waits for the queue to
+// drain. Call the stop function returned by StartAuditWorker afterwards if you
+// want to shut down the goroutine entirely.
+func FlushAuditLog(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			auditQueueMu.Lock()
+			q := auditQueue
+			auditQueueMu.Unlock()
+			if q == nil || len(q) == 0 {
+				return nil
+			}
+			// Yield briefly so the worker can drain.
+			time.Sleep(auditFlushInterval)
+		}
+	}
+}
+
+// AppendAuditLog enqueues an audit log entry for asynchronous writing by the
+// background worker goroutine. The call is non-blocking: if the internal
+// queue is full the entry is dropped and a warning is logged — callers on the
+// hot request path are never stalled.
+//
+// The public signature is identical to the previous synchronous implementation
+// so no call-site changes are required.
+func (d *DB) AppendAuditLog(_ context.Context, entry *AuditLog, citadelClient *citadel.Client) error {
+	auditQueueMu.Lock()
+	q := auditQueue
+	auditQueueMu.Unlock()
+
+	if q == nil {
+		// Worker has not been started — fall back to a synchronous write so
+		// that audit events are never silently lost in test or CLI contexts.
+		return writeEntryToDB(context.Background(), d.Pool, &auditEntry{
+			entry:   entry,
+			citadel: citadelClient,
+		})
+	}
+
+	e := &auditEntry{entry: entry, citadel: citadelClient}
+	select {
+	case q <- e:
+		// Successfully queued.
+	default:
+		// Queue full — log a warning and drop rather than blocking the caller.
+		log.Printf("audit log queue full (capacity %d): dropping entry action=%s actor=%s",
+			auditQueueCapacity, entry.Action, entry.ActorID)
+	}
+	return nil
+}
+
+// writeEntryToDB performs the actual chain-hash computation and INSERT for a
+// single audit entry. It is called exclusively from the worker goroutine
+// (or from the synchronous fallback path), so the advisory lock serialises a
+// single goroutine — contention is eliminated.
+func writeEntryToDB(ctx context.Context, pool *pgxpool.Pool, e *auditEntry) error {
+	entry := e.entry
+
+	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("beginning audit log transaction: %w", err)
 	}
@@ -122,14 +273,14 @@ func (d *DB) AppendAuditLog(ctx context.Context, entry *AuditLog, citadelClient 
 	entry.CreatedAt = now
 
 	// Forward to CITADEL asynchronously — best-effort, never blocks the caller.
-	if citadelClient != nil {
+	if e.citadel != nil {
 		metadata := map[string]interface{}{
 			"resource_type": entry.ResourceType,
 			"actor_type":    string(entry.ActorType),
 			"chain_hash":    chainHash,
 			"platform":      "apiguard",
 		}
-		citadelClient.LogEvent(
+		e.citadel.LogEvent(
 			string(entry.Action),
 			entry.ActorID,
 			string(entry.ActorType),

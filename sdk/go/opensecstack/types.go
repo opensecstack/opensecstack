@@ -113,7 +113,7 @@ type findingsResponse struct {
 type createScanRequest struct {
 	SpecURL    string   `json:"spec_url,omitempty"`
 	SpecPath   string   `json:"spec_path,omitempty"`
-	Target     string   `json:"target"`
+	Target     string   `json:"target,omitempty"`
 	Modules    []string `json:"modules,omitempty"`
 	AuthType   string   `json:"auth_type,omitempty"`
 	AuthToken  string   `json:"auth_token,omitempty"`

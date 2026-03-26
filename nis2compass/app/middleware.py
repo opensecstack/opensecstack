@@ -37,16 +37,12 @@ def _check_rate_limit(ip: str, limit: int, window: int = 60) -> tuple[bool, int]
 
     now = time.time()
     key = f'rate:{ip}'
-    pipe = rc.pipeline()
-    # Remove entries outside the current window
-    pipe.zremrangebyscore(key, 0, now - window)
-    # Count remaining entries
-    pipe.zcard(key)
-    # Add current request
-    pipe.zadd(key, {str(now): now})
-    # Expire the key after the window to clean up idle IPs
-    pipe.expire(key, window * 2)
+
     try:
+        # First pipeline: remove expired entries and check current count
+        pipe = rc.pipeline()
+        pipe.zremrangebyscore(key, 0, now - window)
+        pipe.zcard(key)
         results = pipe.execute()
         count = results[1]
     except Exception as exc:
@@ -60,6 +56,16 @@ def _check_rate_limit(ip: str, limit: int, window: int = 60) -> tuple[bool, int]
         else:
             retry_after = window
         return False, retry_after
+
+    try:
+        # Second pipeline: record this request only if it is allowed
+        pipe = rc.pipeline()
+        pipe.zadd(key, {str(now): now})
+        # Expire the key after the window to clean up idle IPs
+        pipe.expire(key, window * 2)
+        pipe.execute()
+    except Exception as exc:
+        _log.warning('rate_limit: Redis error on ZADD, failing open: %s', exc)
 
     return True, 0
 

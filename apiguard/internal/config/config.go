@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/spf13/viper"
@@ -161,6 +162,15 @@ func Load() *Config {
 	}
 
 	return cfg
+}
+
+// WarnIfInsecure logs a prominent warning for any configuration options that
+// are unsafe for production use. It should be called once at startup, after
+// Load() returns.
+func (c *Config) WarnIfInsecure() {
+	if c.Scanner.TLSSkipVerify {
+		log.Println("WARNING: TLS certificate verification is disabled (TLS_SKIP_VERIFY=true) — do not use in production")
+	}
 }
 
 func setDefaults() {

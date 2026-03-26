@@ -15,6 +15,9 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// errInvalidTokenType is returned by validateJWT when the typ claim is not "access".
+var errInvalidTokenType = fmt.Errorf("invalid token type")
+
 // claimsKey is the context key for storing JWT claims.
 type claimsKey struct{}
 
@@ -26,6 +29,7 @@ type Claims struct {
 	Nbf int64  `json:"nbf,omitempty"`
 	Iss string `json:"iss"`
 	Aud string `json:"aud"`
+	Typ string `json:"typ"`
 }
 
 // ClaimsFromContext retrieves the JWT claims from the request context.
@@ -73,6 +77,15 @@ func JWTAuth(secret string, trustedProxies []*net.IPNet) func(next http.Handler)
 				// than the raw r.RemoteAddr which may be a proxy address.
 				clientIP := ClientIPFromRequest(r, trustedProxies)
 				log.Warn().Err(err).Str("client_ip", clientIP).Msg("JWT validation failed")
+				if err == errInvalidTokenType {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnauthorized)
+					_ = json.NewEncoder(w).Encode(map[string]string{
+						"error": "invalid token type",
+						"code":  "INVALID_TOKEN",
+					})
+					return
+				}
 				unauthorized(w, "invalid or expired token")
 				return
 			}
@@ -167,20 +180,16 @@ func validateJWT(token, secret string) (*Claims, error) {
 	if claims.Aud != "apiguard" {
 		return nil, fmt.Errorf("invalid aud claim: %q", claims.Aud)
 	}
+	if claims.Typ != "access" {
+		return nil, errInvalidTokenType
+	}
 
 	return &claims, nil
 }
 
 // base64URLDecode decodes a base64url-encoded string (without padding).
 func base64URLDecode(s string) ([]byte, error) {
-	// Add padding if needed.
-	switch len(s) % 4 {
-	case 2:
-		s += "=="
-	case 3:
-		s += "="
-	}
-	return base64.URLEncoding.DecodeString(s)
+	return base64.RawURLEncoding.DecodeString(s)
 }
 
 func unauthorized(w http.ResponseWriter, message string) {

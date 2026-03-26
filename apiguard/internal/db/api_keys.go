@@ -109,42 +109,6 @@ func (d *DB) ListAPIKeysPaginated(ctx context.Context, limit, offset int) ([]API
 	return keys, total, rows.Err()
 }
 
-// ListAPIKeys returns all active API keys. key_hash is never included.
-func (d *DB) ListAPIKeys(ctx context.Context) ([]APIKey, error) {
-	rows, err := d.Pool.Query(ctx, `
-		SELECT id, label, created_by, is_active, last_used_at, created_at, revoked_at, revoked_by
-		FROM api_keys
-		WHERE is_active = TRUE
-		ORDER BY created_at DESC
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("querying api keys: %w", err)
-	}
-	defer rows.Close()
-
-	var keys []APIKey
-	for rows.Next() {
-		var k APIKey
-		if err := rows.Scan(
-			&k.ID,
-			&k.Label,
-			&k.CreatedBy,
-			&k.IsActive,
-			&k.LastUsedAt,
-			&k.CreatedAt,
-			&k.RevokedAt,
-			&k.RevokedBy,
-		); err != nil {
-			return nil, fmt.Errorf("scanning api key row: %w", err)
-		}
-		keys = append(keys, k)
-	}
-	if keys == nil {
-		keys = []APIKey{}
-	}
-	return keys, rows.Err()
-}
-
 // RevokeAPIKey marks an API key as inactive and records who revoked it.
 func (d *DB) RevokeAPIKey(ctx context.Context, id uuid.UUID, revokedBy string) error {
 	tag, err := d.Pool.Exec(ctx, `

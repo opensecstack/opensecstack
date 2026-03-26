@@ -29,13 +29,34 @@ func NewAudit(logger zerolog.Logger, database *db.DB) *Audit {
 func (a *Audit) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
-	page, _ := strconv.Atoi(q.Get("page"))
-	if page < 1 {
-		page = 1
+	page := 1
+	if v := q.Get("page"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "invalid page parameter",
+				"code":  "INVALID_INPUT",
+			})
+			return
+		}
+		if n > 0 {
+			page = n
+		}
 	}
-	perPage, _ := strconv.Atoi(q.Get("per_page"))
-	if perPage < 1 {
-		perPage = 50
+
+	perPage := 50
+	if v := q.Get("per_page"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "invalid per_page parameter",
+				"code":  "INVALID_INPUT",
+			})
+			return
+		}
+		if n > 0 {
+			perPage = n
+		}
 	}
 	if perPage > 100 {
 		perPage = 100

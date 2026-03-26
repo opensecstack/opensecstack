@@ -138,6 +138,38 @@ class APIGuardClient:
     def _patch(self, path: str, json: Optional[dict] = None) -> requests.Response:
         return self._request("PATCH", path, json=json)
 
+    def _delete(self, path: str) -> requests.Response:
+        return self._request("DELETE", path)
+
+    # ------------------------------------------------------------------
+    # Auth
+    # ------------------------------------------------------------------
+
+    def refresh_token(self, refresh_token: str) -> dict:
+        """
+        Exchange a refresh token for a new access token.
+
+        Issues ``POST /api/v1/auth/refresh`` directly (without requiring
+        a valid JWT). Updates the internal JWT on success.
+
+        Returns the full response dict (access_token, refresh_token, etc.).
+        """
+        resp = self._session.post(
+            self._url("auth/refresh"),
+            json={"refresh_token": refresh_token},
+            timeout=self._timeout,
+        )
+        if resp.status_code == 401:
+            raise AuthenticationError("Refresh token is invalid or expired")
+        if resp.status_code >= 400:
+            raise APIError(resp.status_code, resp.text)
+        data = resp.json()
+        token = data.get("access_token") or data.get("token")
+        if token:
+            self._jwt = token
+            self._session.headers["Authorization"] = f"Bearer {self._jwt}"
+        return data
+
     # ------------------------------------------------------------------
     # Specs
     # ------------------------------------------------------------------
@@ -165,6 +197,23 @@ class APIGuardClient:
     # ------------------------------------------------------------------
     # Scans
     # ------------------------------------------------------------------
+
+    def list_scans(self, page: int = 1, per_page: int = 20) -> dict:
+        """
+        Return a paginated list of scans.
+
+        Issues ``GET /api/v1/scans`` and returns the envelope dict with
+        keys ``items``, ``total``, ``page``, ``per_page``.
+        """
+        return self._get("scans", params={"page": page, "per_page": per_page}).json()
+
+    def delete_scan(self, scan_id: str) -> None:
+        """
+        Delete a scan by UUID.
+
+        Issues ``DELETE /api/v1/scans/{scan_id}``.  Returns None on success.
+        """
+        self._delete(f"scans/{scan_id}")
 
     def create_scan(
         self,
@@ -259,6 +308,28 @@ class APIGuardClient:
         """
         resp = self._get(f"scans/{scan_id}/report", params={"format": format})
         return resp.content
+
+    def list_findings(
+        self,
+        page: int = 1,
+        per_page: int = 20,
+        scan_id: Optional[str] = None,
+    ) -> dict:
+        """
+        Return a paginated list of findings across all scans.
+
+        Issues ``GET /api/v1/findings``.  Supply ``scan_id`` to filter by scan.
+        Returns the envelope dict with keys ``items`` (or ``data``), ``total``,
+        ``page``, ``per_page``.
+        """
+        params: dict = {"page": page, "per_page": per_page}
+        if scan_id is not None:
+            params["scan_id"] = scan_id
+        return self._get("findings", params=params).json()
+
+    def get_finding(self, finding_id: str) -> dict:
+        """Return a single finding by UUID."""
+        return self._get(f"findings/{finding_id}").json()
 
     def patch_finding(
         self,

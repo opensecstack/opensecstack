@@ -31,6 +31,7 @@ type Server struct {
 	db             *db.DB
 	scanner        *scanner.Scanner
 	citadel        *citadel.Client
+	globalLimiter  *middleware.RateLimiter
 	shutdownCtx    context.Context
 	shutdownCancel context.CancelFunc
 }
@@ -104,6 +105,7 @@ func (s *Server) Start() error {
 		if err := srv.Shutdown(shutCtx); err != nil {
 			return fmt.Errorf("graceful shutdown: %w", err)
 		}
+		s.globalLimiter.Stop()
 		s.db.Close()
 		s.logger.Info().Msg("server stopped cleanly")
 		return nil
@@ -125,8 +127,8 @@ func (s *Server) setupMiddleware() {
 	if rateLimit <= 0 {
 		rateLimit = 120
 	}
-	globalLimiter := middleware.NewRateLimiterWithProxies(rateLimit, s.config.RateLimit.TrustedProxies)
-	s.router.Use(globalLimiter.Middleware) // requests per minute per IP
+	s.globalLimiter = middleware.NewRateLimiterWithProxies(rateLimit, s.config.RateLimit.TrustedProxies)
+	s.router.Use(s.globalLimiter.Middleware) // requests per minute per IP
 	s.router.Use(middleware.CORS(s.config.CORS.Origins)) // CORS must run before JWT auth
 }
 
@@ -137,7 +139,7 @@ func (s *Server) registerRoutes() {
 	f := handlers.NewFindingsWithCitadel(s.logger, s.db, s.citadel, s.config)
 	sp := handlers.NewSpecs(s.logger, "")
 	au := handlers.NewAudit(s.logger, s.db)
-	ak := handlers.NewAPIKeys(s.logger, s.db, s.citadel)
+	ak := handlers.NewAPIKeys(s.logger, s.db, s.citadel, s.config)
 
 	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, s.config)
 }

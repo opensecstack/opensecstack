@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"net"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -12,22 +13,25 @@ import (
 
 	"github.com/opensecstack/apiguard/internal/api/middleware"
 	"github.com/opensecstack/apiguard/internal/citadel"
+	"github.com/opensecstack/apiguard/internal/config"
 	"github.com/opensecstack/apiguard/internal/db"
 )
 
 // APIKeys handles API key management endpoints.
 type APIKeys struct {
-	logger  zerolog.Logger
-	db      *db.DB
-	citadel *citadel.Client
+	logger         zerolog.Logger
+	db             *db.DB
+	citadel        *citadel.Client
+	trustedProxies []*net.IPNet // parsed from cfg.RateLimit.TrustedProxies
 }
 
 // NewAPIKeys creates a new APIKeys handler.
-func NewAPIKeys(logger zerolog.Logger, database *db.DB, citadelClient *citadel.Client) *APIKeys {
+func NewAPIKeys(logger zerolog.Logger, database *db.DB, citadelClient *citadel.Client, cfg *config.Config) *APIKeys {
 	return &APIKeys{
-		logger:  logger.With().Str("handler", "apikeys").Logger(),
-		db:      database,
-		citadel: citadelClient,
+		logger:         logger.With().Str("handler", "apikeys").Logger(),
+		db:             database,
+		citadel:        citadelClient,
+		trustedProxies: parseTrustedProxies(cfg),
 	}
 }
 
@@ -105,7 +109,7 @@ func (h *APIKeys) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.auditLog(r.Context(), db.AuditActionAPIKeyCreated, "api_keys", &key.ID,
-		r.RemoteAddr, r.UserAgent(), createdBy)
+		middleware.ClientIPFromRequest(r, h.trustedProxies), r.UserAgent(), createdBy)
 
 	writeJSON(w, http.StatusCreated, createAPIKeyResponse{
 		APIKey:  key,
@@ -133,7 +137,7 @@ func (h *APIKeys) Revoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.auditLog(r.Context(), db.AuditActionAPIKeyRevoked, "api_keys", &id,
-		r.RemoteAddr, r.UserAgent(), revokedBy)
+		middleware.ClientIPFromRequest(r, h.trustedProxies), r.UserAgent(), revokedBy)
 
 	w.WriteHeader(http.StatusNoContent)
 }

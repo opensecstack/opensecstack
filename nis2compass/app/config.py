@@ -1,20 +1,43 @@
 import ipaddress
+import logging
 import os
 import urllib.parse
+
+_logger = logging.getLogger(__name__)
+
+
+def _build_database_uri() -> str:
+    """Return the database URI, failing fast if credentials are not configured."""
+    db_url = os.getenv('NIS2_DB_URL')
+    if db_url:
+        return db_url
+
+    db_password = os.getenv('NIS2_DB_PASSWORD') or None
+    if not db_password:
+        _logger.warning(
+            'NIS2_DB_PASSWORD not set — refusing to start with default credentials'
+        )
+        raise RuntimeError(
+            'NIS2_DB_PASSWORD (or NIS2_DB_URL) must be set; '
+            'refusing to start with no database password.'
+        )
+
+    db_user = os.getenv('NIS2_DB_USER', 'nis2compass')
+    db_host = os.getenv('NIS2_DB_HOST', 'localhost')
+    db_port = os.getenv('NIS2_DB_PORT', '5432')
+    db_name = os.getenv('NIS2_DB_NAME', 'nis2compass')
+    encoded_password = urllib.parse.quote_plus(db_password)
+    return (
+        f"postgresql+psycopg2://{db_user}:{encoded_password}"
+        f"@{db_host}:{db_port}/{db_name}"
+    )
 
 
 class Config:
     # ------------------------------------------------------------------ #
     # Database                                                             #
     # ------------------------------------------------------------------ #
-    SQLALCHEMY_DATABASE_URI = os.getenv('NIS2_DB_URL') or (
-        "postgresql+psycopg2://"
-        f"{os.getenv('NIS2_DB_USER', 'nis2compass')}:"
-        f"{os.getenv('NIS2_DB_PASSWORD', 'nis2compassdev')}@"
-        f"{os.getenv('NIS2_DB_HOST', 'localhost')}:"
-        f"{os.getenv('NIS2_DB_PORT', '5432')}/"
-        f"{os.getenv('NIS2_DB_NAME', 'nis2compass')}"
-    )
+    SQLALCHEMY_DATABASE_URI = _build_database_uri()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_size': int(os.getenv('NIS2_DB_POOL_SIZE', '10')),
@@ -49,7 +72,15 @@ class Config:
     WEBHOOK_URL = os.getenv('NIS2_WEBHOOK_URL', '')           # POST target; empty = disabled
     WEBHOOK_SECRET = os.getenv('NIS2_WEBHOOK_SECRET', '')     # HMAC-SHA256 signing secret
 
-    # H4: validate WEBHOOK_URL at startup — reject non-http(s), localhost, and
+    # H1: require WEBHOOK_SECRET when WEBHOOK_URL is configured — signing with
+    # an empty secret provides no authentication for the webhook receiver.
+    if WEBHOOK_URL and not WEBHOOK_SECRET:
+        raise ValueError(
+            'NIS2_WEBHOOK_SECRET must be set when NIS2_WEBHOOK_URL is configured. '
+            'Generate one with: openssl rand -hex 32'
+        )
+
+    # validate WEBHOOK_URL at startup — reject non-http(s), localhost, and
     # private-range addresses to prevent Server-Side Request Forgery (SSRF).
     if WEBHOOK_URL:
         _parsed = urllib.parse.urlparse(WEBHOOK_URL)

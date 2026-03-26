@@ -262,6 +262,21 @@ func (c *APIGuardClient) patchJSON(ctx context.Context, path string, reqBody int
 	return json.Unmarshal(raw, out)
 }
 
+// deleteJSON issues a DELETE request. A 204 No Content response is treated as
+// success. Any body in a 2xx response is discarded.
+func (c *APIGuardClient) deleteJSON(ctx context.Context, path string) error {
+	resp, err := c.do(ctx, http.MethodDelete, path, nil, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNoContent {
+		return nil
+	}
+	_, err = checkResponse(resp)
+	return err
+}
+
 // ----------------------------------------------------------------------------
 // Public API
 // ----------------------------------------------------------------------------
@@ -482,4 +497,112 @@ func (c *APIGuardClient) GetAuditLog(ctx context.Context, limit int) ([]AuditEnt
 		return nil, fmt.Errorf("GetAuditLog: %w", err)
 	}
 	return entries, nil
+}
+
+// ListScans returns a paginated list of scans from GET /api/v1/scans.
+func (c *APIGuardClient) ListScans(ctx context.Context, opts ListScansOptions) ([]Scan, error) {
+	page := opts.Page
+	if page <= 0 {
+		page = 1
+	}
+	perPage := opts.PerPage
+	if perPage <= 0 {
+		perPage = 20
+	}
+	params := url.Values{}
+	params.Set("page", strconv.Itoa(page))
+	params.Set("per_page", strconv.Itoa(perPage))
+
+	var envelope scansResponse
+	if err := c.getJSON(ctx, "scans", params, &envelope); err != nil {
+		return nil, fmt.Errorf("ListScans: %w", err)
+	}
+	return envelope.Items, nil
+}
+
+// DeleteScan deletes a scan by UUID via DELETE /api/v1/scans/{id}.
+func (c *APIGuardClient) DeleteScan(ctx context.Context, scanID string) error {
+	if err := c.deleteJSON(ctx, "scans/"+scanID); err != nil {
+		return fmt.Errorf("DeleteScan %s: %w", scanID, err)
+	}
+	return nil
+}
+
+// ListFindings returns a paginated list of findings from GET /api/v1/findings.
+// Optionally filter by scan UUID via opts.ScanID.
+func (c *APIGuardClient) ListFindings(ctx context.Context, opts ListFindingsOptions) ([]Finding, error) {
+	page := opts.Page
+	if page <= 0 {
+		page = 1
+	}
+	perPage := opts.PerPage
+	if perPage <= 0 {
+		perPage = 20
+	}
+	params := url.Values{}
+	params.Set("page", strconv.Itoa(page))
+	params.Set("per_page", strconv.Itoa(perPage))
+	if opts.ScanID != "" {
+		params.Set("scan_id", opts.ScanID)
+	}
+
+	fullPath := "findings?" + params.Encode()
+	resp, err := c.do(ctx, http.MethodGet, fullPath, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("ListFindings: %w", err)
+	}
+	raw, err := checkResponse(resp)
+	if err != nil {
+		return nil, fmt.Errorf("ListFindings: %w", err)
+	}
+	// Try envelope format {"data": [...]} first, then plain array.
+	var envelope findingsResponse
+	if jsonErr := json.Unmarshal(raw, &envelope); jsonErr == nil && envelope.Data != nil {
+		return envelope.Data, nil
+	}
+	var findings []Finding
+	if jsonErr := json.Unmarshal(raw, &findings); jsonErr != nil {
+		return nil, fmt.Errorf("ListFindings: unexpected response format: %w", jsonErr)
+	}
+	return findings, nil
+}
+
+// GetFinding retrieves a single finding by UUID via GET /api/v1/findings/{id}.
+func (c *APIGuardClient) GetFinding(ctx context.Context, findingID string) (*Finding, error) {
+	var finding Finding
+	if err := c.getJSON(ctx, "findings/"+findingID, nil, &finding); err != nil {
+		return nil, fmt.Errorf("GetFinding %s: %w", findingID, err)
+	}
+	return &finding, nil
+}
+
+// RefreshToken exchanges a refresh token for a new access token via
+// POST /api/v1/auth/refresh (no JWT required). Updates the cached token on success.
+func (c *APIGuardClient) RefreshToken(ctx context.Context, refreshToken string) (*RefreshTokenResponse, error) {
+	body, _ := json.Marshal(map[string]string{"refresh_token": refreshToken})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.apiURL("auth/refresh"), bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("RefreshToken: building request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("RefreshToken: request failed: %w", err)
+	}
+	raw, err := checkResponse(resp)
+	if err != nil {
+		return nil, fmt.Errorf("RefreshToken: %w", err)
+	}
+	var result RefreshTokenResponse
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("RefreshToken: decoding response: %w", err)
+	}
+	if result.AccessToken != "" {
+		c.mu.Lock()
+		c.jwt = result.AccessToken
+		c.mu.Unlock()
+	}
+	return &result, nil
 }

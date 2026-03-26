@@ -56,6 +56,8 @@ def create_organisation():
 
     if not name:
         return jsonify({'error': 'name is required', 'code': 'INVALID_INPUT'}), 400
+    if len(name) > 255:
+        return jsonify({'error': 'name must not exceed 255 characters', 'code': 'INVALID_INPUT'}), 400
     if not industry:
         return jsonify({'error': 'industry is required', 'code': 'INVALID_INPUT'}), 400
     if not country or len(country) != 2:
@@ -137,6 +139,8 @@ def update_organisation(org_id):
         name = data['name'].strip()
         if not name:
             return jsonify({'error': 'name must not be empty', 'code': 'INVALID_INPUT'}), 400
+        if len(name) > 255:
+            return jsonify({'error': 'name must not exceed 255 characters', 'code': 'INVALID_INPUT'}), 400
         org.name = name
     if 'industry' in data:
         industry = data['industry'].strip()

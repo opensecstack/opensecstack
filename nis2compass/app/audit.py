@@ -18,20 +18,27 @@ def _compute_chain_hash(
     resource_id: str | None,
     prev_hash: str | None,
     timestamp: str,
+    version: int = 2,
 ) -> str:
     """
     SHA-256 chain anchor.
-    Formula: SHA-256(id || action || actor || resource_type || resource_id || prev_hash || timestamp)
-    NULL values are represented as the literal string "NULL".
 
-    NOTE: Prior to adding field delimiters, chain hashes were computed by
-    simple concatenation without any separator between fields. Existing chains
-    stored in the database were computed under that old (no-delimiter) scheme
-    and will not verify against this updated formula.
+    version=2 (current): fields joined with '||' delimiters.
+      Formula: SHA-256(id || action || actor || resource_type || resource_id || prev_hash || timestamp)
+    version=1 (legacy):  fields joined by bare concatenation — no delimiter.
+      Formula: SHA-256(id + action + actor + resource_type + resource_id + prev_hash + timestamp)
+
+    NULL values are represented as the literal string "NULL" in both versions.
+
+    The version parameter corresponds to the hash_version column on AuditLog
+    rows so that chain verification can use the correct formula for each entry.
     """
     rid = resource_id if resource_id else 'NULL'
     ph = prev_hash if prev_hash else 'NULL'
-    raw = f'{entry_id}||{action}||{actor}||{resource_type}||{rid}||{ph}||{timestamp}'
+    if version == 1:
+        raw = f'{entry_id}{action}{actor}{resource_type}{rid}{ph}{timestamp}'
+    else:
+        raw = f'{entry_id}||{action}||{actor}||{resource_type}||{rid}||{ph}||{timestamp}'
     return hashlib.sha256(raw.encode('utf-8')).hexdigest()
 
 
@@ -135,6 +142,7 @@ def write_audit(
         str(resource_id) if resource_id else None,
         prev_hash,
         ts,
+        version=2,
     )
 
     entry = AuditLog(
@@ -148,6 +156,7 @@ def write_audit(
         object_fingerprint=_compute_object_fingerprint(obj),
         prev_hash=prev_hash,
         chain_hash=chain_hash,
+        hash_version=2,
         timestamp=now,
     )
     db_session.add(entry)

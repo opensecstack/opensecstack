@@ -204,6 +204,7 @@ class AuditLog(db.Model):
     object_fingerprint = db.Column(db.String(64), nullable=True)
     prev_hash = db.Column(db.String(64), nullable=True)
     chain_hash = db.Column(db.String(64), nullable=False)
+    hash_version = db.Column(db.SmallInteger, nullable=False, default=2)
     timestamp = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text('NOW()'))
 
     def to_dict(self):
@@ -218,6 +219,7 @@ class AuditLog(db.Model):
             'object_fingerprint': self.object_fingerprint,
             'prev_hash': self.prev_hash,
             'chain_hash': self.chain_hash,
+            'hash_version': self.hash_version,
             'timestamp': self.timestamp.isoformat() if self.timestamp else None,
         }
 
@@ -233,6 +235,7 @@ class ApiKey(db.Model):
     created_by = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text('NOW()'))
     last_used_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=True)  # NULL = never expires
 
     def to_dict(self):
         return {
@@ -243,6 +246,7 @@ class ApiKey(db.Model):
             'created_by': self.created_by,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'last_used_at': self.last_used_at.isoformat() if self.last_used_at else None,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
         }
 
 

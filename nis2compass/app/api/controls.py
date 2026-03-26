@@ -36,10 +36,20 @@ def list_controls(assessment_id):
     if measure := request.args.get('measure_ref'):
         query = query.filter(Control.measure_ref == measure)
 
-    controls = query.order_by(Control.measure_ref).all()
-    response = jsonify([c.to_dict() for c in controls])
-    response.headers['X-Total-Count'] = str(len(controls))
-    return response, 200
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+        per_page = min(100, max(1, int(request.args.get('per_page', 20))))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'page and per_page must be integers', 'code': 'INVALID_INPUT'}), 400
+
+    total = query.count()
+    controls = query.order_by(Control.measure_ref).offset((page - 1) * per_page).limit(per_page).all()
+    return jsonify({
+        'items': [c.to_dict() for c in controls],
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+    }), 200
 
 
 # ------------------------------------------------------------------ #

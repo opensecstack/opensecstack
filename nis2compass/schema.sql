@@ -97,7 +97,8 @@ CREATE INDEX idx_artifacts_hash          ON artifacts(hash);
 
 -- audit_log: CITADEL-compatible append-only evidence ledger
 -- Enforced immutable via trigger (no UPDATE, no DELETE — mirrors CITADEL WORM log spec).
--- chain_hash = SHA-256(id || action || actor || resource_type || resource_id || prev_hash || timestamp)
+-- hash_version=1: chain_hash = SHA-256(id + action + actor + resource_type + resource_id + prev_hash + timestamp)  [bare concat, legacy]
+-- hash_version=2: chain_hash = SHA-256(id || action || actor || resource_type || resource_id || prev_hash || timestamp)  [|| delimiters, current]
 CREATE TABLE audit_log (
     id                  UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
     action              VARCHAR(100)   NOT NULL,   -- e.g. assessment_created, control_updated
@@ -109,6 +110,7 @@ CREATE TABLE audit_log (
     object_fingerprint  CHAR(64),                 -- SHA-256 of object canonical JSON at time of action
     prev_hash           CHAR(64),                 -- chain_hash of the previous entry (NULL for genesis)
     chain_hash          CHAR(64)       NOT NULL,  -- SHA-256 chain anchor
+    hash_version        SMALLINT       NOT NULL DEFAULT 2,  -- 1=legacy bare concat, 2=|| delimiters
     timestamp           TIMESTAMPTZ    NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_audit_log_actor         ON audit_log(actor);

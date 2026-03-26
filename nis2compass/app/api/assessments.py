@@ -1,4 +1,6 @@
 import io
+import os
+import threading
 import time
 from datetime import datetime, timezone, date
 from flask import Blueprint, request, jsonify, g, send_file
@@ -11,7 +13,7 @@ from reportlab.platypus import (
 )
 from sqlalchemy.exc import IntegrityError
 from ..extensions import db
-from ..models import Assessment, Control, ControlTemplate, Organisation
+from ..models import Assessment, Artifact, Control, ControlTemplate, Organisation
 from ..auth import require_auth, require_scope
 from ..audit import write_audit
 
@@ -22,20 +24,44 @@ assessments_bp = Blueprint('assessments', __name__)
 _REPORT_RATE_LIMIT_WINDOW = 60   # seconds
 _REPORT_RATE_LIMIT_MAX    = 3    # requests per window
 _report_rate_limit: dict[str, list[float]] = {}
+_report_rate_limit_lock = threading.Lock()
 
 
 def _check_org_access(org_id):
     """Return a 403 response if the current actor does not own the org, else None.
 
-    Orgs with created_by=NULL are treated as accessible by any authenticated
-    user (backward compatibility for rows created before ownership was tracked).
+    Orgs with created_by=NULL are legacy rows created before ownership was
+    tracked.  Rather than allowing any authenticated user to access them
+    (which is a privilege-escalation vulnerability), the first actor to reach
+    this function for a given ownerless org atomically claims it.  All
+    subsequent actors are denied.  The claim is done with a single
+    compare-and-swap UPDATE so concurrent requests cannot both succeed.
     """
     org = db.session.get(Organisation, org_id)
     if org is None:
         # Let the calling route return the 404 itself
         return None
-    if org.created_by is not None and org.created_by != g.actor:
+
+    if org.created_by is None:
+        # Atomically claim the ownerless org — only the first caller wins.
+        updated = db.session.execute(
+            db.text(
+                "UPDATE organisations SET created_by = :actor"
+                " WHERE id = :id AND created_by IS NULL"
+            ),
+            {"actor": g.actor, "id": str(org_id)},
+        ).rowcount
+        db.session.commit()
+        # Re-fetch so the ORM instance reflects the current DB value.
+        db.session.refresh(org)
+        if org.created_by != g.actor:
+            # Another request won the race — this actor does not own the org.
+            return jsonify({'error': 'Access denied', 'code': 'FORBIDDEN'}), 403
+        return None
+
+    if org.created_by != g.actor:
         return jsonify({'error': 'Access denied', 'code': 'FORBIDDEN'}), 403
+
     return None
 
 
@@ -158,6 +184,11 @@ def create_assessment(org_id):
     title = (data.get('title') or '').strip()
     if not title:
         return jsonify({'error': 'title is required', 'code': 'INVALID_INPUT'}), 400
+    if len(title) > 255:
+        return jsonify({'error': 'title must not exceed 255 characters', 'code': 'INVALID_INPUT'}), 400
+    scope = data.get('scope')
+    if scope and len(scope) > 2000:
+        return jsonify({'error': 'scope must not exceed 2000 characters', 'code': 'INVALID_INPUT'}), 400
 
     due_date = None
     _due_date_raw = data.get('due_date') or None
@@ -255,8 +286,14 @@ def update_assessment(assessment_id):
 
     if 'title' in data:
         assessment.title = data['title'].strip()
+        if not assessment.title:
+            return jsonify({'error': 'title must not be empty', 'code': 'INVALID_INPUT'}), 400
+        if len(assessment.title) > 255:
+            return jsonify({'error': 'title must not exceed 255 characters', 'code': 'INVALID_INPUT'}), 400
     if 'scope' in data:
         assessment.scope = data['scope']
+        if assessment.scope and len(assessment.scope) > 2000:
+            return jsonify({'error': 'scope must not exceed 2000 characters', 'code': 'INVALID_INPUT'}), 400
     if 'assessor' in data:
         assessment.assessor = data['assessor']
     if 'due_date' in data:
@@ -295,6 +332,12 @@ def delete_assessment(assessment_id):
     if err:
         return err
 
+    # Collect artifact file paths before cascade-delete removes the DB rows
+    artifact_paths = [
+        a.file_path
+        for a in db.session.query(Artifact).filter_by(assessment_id=assessment.id).all()
+    ]
+
     write_audit(
         db.session,
         action='assessment_deleted',
@@ -307,6 +350,14 @@ def delete_assessment(assessment_id):
     )
     db.session.delete(assessment)
     db.session.commit()
+
+    # Remove artifact files from disk after the DB commit succeeds
+    for path in artifact_paths:
+        try:
+            os.remove(path)
+        except OSError:
+            pass  # file already gone or inaccessible — not fatal
+
     return '', 204
 
 
@@ -597,15 +648,16 @@ def _generate_pdf(assessment, org, controls, templates):
 @require_scope('read_write')
 def generate_report(assessment_id):
     # L2: enforce per-user rate limit of 3 PDF requests per minute
-    _now = time.time()
-    _window_start = _now - _REPORT_RATE_LIMIT_WINDOW
-    _timestamps = _report_rate_limit.get(g.actor, [])
-    _timestamps = [t for t in _timestamps if t > _window_start]
-    if len(_timestamps) >= _REPORT_RATE_LIMIT_MAX:
+    with _report_rate_limit_lock:
+        _now = time.time()
+        _window_start = _now - _REPORT_RATE_LIMIT_WINDOW
+        _timestamps = _report_rate_limit.get(g.actor, [])
+        _timestamps = [t for t in _timestamps if t > _window_start]
+        if len(_timestamps) >= _REPORT_RATE_LIMIT_MAX:
+            _report_rate_limit[g.actor] = _timestamps
+            return jsonify({'error': 'Rate limit exceeded', 'code': 'RATE_LIMIT_EXCEEDED'}), 429
+        _timestamps.append(_now)
         _report_rate_limit[g.actor] = _timestamps
-        return jsonify({'error': 'Rate limit exceeded', 'code': 'RATE_LIMIT_EXCEEDED'}), 429
-    _timestamps.append(_now)
-    _report_rate_limit[g.actor] = _timestamps
 
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:

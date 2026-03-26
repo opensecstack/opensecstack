@@ -3,6 +3,7 @@ import jwt
 from datetime import datetime, timezone, timedelta
 from functools import wraps
 from flask import request, jsonify, g, current_app
+from .audit import write_audit
 
 
 def _constant_eq(a: str, b: str) -> bool:
@@ -34,8 +35,19 @@ def validate_api_key(api_key: str) -> tuple[bool, str]:
             .first()
         )
         if record is not None:
-            # Update last_used_at without triggering audit
+            # Reject expired keys
+            if record.expires_at is not None and record.expires_at <= datetime.now(timezone.utc):
+                return False, 'read_write'
             record.last_used_at = datetime.now(timezone.utc)
+            write_audit(
+                db.session,
+                action='api_key_used',
+                actor=record.created_by or str(record.id),
+                resource_type='api_keys',
+                resource_id=record.id,
+                risk_class='INFO',
+                metadata={'label': record.label, 'scope': record.scope},
+            )
             db.session.commit()
             return True, record.scope
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -108,7 +109,7 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 			if retryAfter < 1 {
 				retryAfter = 60
 			}
-			w.Header().Set("Retry-After", "60")
+			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusTooManyRequests)
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{

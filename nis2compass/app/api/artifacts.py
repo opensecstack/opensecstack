@@ -73,10 +73,20 @@ def list_artifacts(assessment_id):
         query = query.filter(Artifact.type == art_type)
     query = query.order_by(Artifact.created_at.desc())
 
-    items = query.all()
-    response = jsonify([a.to_dict() for a in items])
-    response.headers['X-Total-Count'] = str(len(items))
-    return response, 200
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+        per_page = min(100, max(1, int(request.args.get('per_page', 20))))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'page and per_page must be integers', 'code': 'INVALID_INPUT'}), 400
+
+    total = query.count()
+    items = query.offset((page - 1) * per_page).limit(per_page).all()
+    return jsonify({
+        'items': [a.to_dict() for a in items],
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+    }), 200
 
 
 # ------------------------------------------------------------------ #
@@ -252,10 +262,19 @@ def delete_artifact(artifact_id):
     db.session.commit()
 
     # Remove the file from disk after the DB commit succeeds.
+    # Validate the real path is within the configured upload directory to
+    # prevent path-traversal via a tampered file_path stored in the DB.
     if file_path and os.path.isfile(file_path):
-        try:
-            os.remove(file_path)
-        except OSError as exc:
-            current_app.logger.warning('artifact file could not be removed: %s — %s', file_path, exc)
+        upload_dir = os.path.realpath(current_app.config.get('UPLOAD_DIR', '/app/uploads'))
+        real_path = os.path.realpath(file_path)
+        if not real_path.startswith(upload_dir + os.sep) and real_path != upload_dir:
+            current_app.logger.error(
+                'artifact file_path %r is outside UPLOAD_DIR — deletion blocked', file_path
+            )
+        else:
+            try:
+                os.remove(real_path)
+            except OSError as exc:
+                current_app.logger.warning('artifact file could not be removed: %s — %s', real_path, exc)
 
     return '', 204

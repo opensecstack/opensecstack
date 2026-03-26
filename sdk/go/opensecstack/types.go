@@ -344,3 +344,36 @@ type UploadSpecResponse struct {
 	SpecHash string `json:"spec_hash"`
 	Size     int64  `json:"size"`
 }
+
+// ListScansOptions holds pagination parameters for ListScans.
+type ListScansOptions struct {
+	// Page is the 1-based page number (default: 1).
+	Page int
+	// PerPage is the number of results per page, max 100 (default: 20).
+	PerPage int
+}
+
+// ListFindingsOptions holds filter and pagination parameters for ListFindings.
+type ListFindingsOptions struct {
+	// Page is the 1-based page number (default: 1).
+	Page int
+	// PerPage is the number of results per page, max 100 (default: 20).
+	PerPage int
+	// ScanID optionally filters findings by scan UUID.
+	ScanID string
+}
+
+// RefreshTokenResponse is the JSON body returned by POST /api/v1/auth/refresh.
+type RefreshTokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
+}
+
+// scansResponse is the paginated envelope returned by GET /api/v1/scans.
+type scansResponse struct {
+	Items   []Scan `json:"items"`
+	Total   int    `json:"total"`
+	Page    int    `json:"page"`
+	PerPage int    `json:"per_page"`
+}

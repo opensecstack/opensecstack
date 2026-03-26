@@ -13,7 +13,7 @@ type Reporter interface {
 }
 
 // New returns a Reporter for the requested format.
-// Supported formats: "json", "sarif", "html", "pdf".
+// Supported formats: "json", "sarif", "html", "text".
 func New(format string) (Reporter, error) {
 	switch format {
 	case "json":
@@ -22,7 +22,7 @@ func New(format string) (Reporter, error) {
 		return &SARIFReporter{}, nil
 	case "html":
 		return &HTMLReporter{}, nil
-	case "pdf":
+	case "text":
 		return &PDFReporter{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported report format: %q", format)

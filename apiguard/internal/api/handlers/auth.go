@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -19,6 +20,10 @@ import (
 	"github.com/opensecstack/apiguard/internal/config"
 	"github.com/opensecstack/apiguard/internal/db"
 )
+
+// revokedRefreshTokens stores SHA-256 hashes (hex-encoded) of refresh tokens
+// that have been explicitly revoked via DELETE /api/v1/auth/refresh.
+var revokedRefreshTokens sync.Map
 
 // Auth handles authentication endpoints.
 type Auth struct {
@@ -227,6 +232,14 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check whether this refresh token has been explicitly revoked.
+	tokenHash := refreshTokenHash(req.RefreshToken)
+	if _, revoked := revokedRefreshTokens.Load(tokenHash); revoked {
+		a.logger.Warn().Str("remote_addr", middleware.ClientIPFromRequest(r, a.trustedProxies)).Msg("revoked refresh token presented")
+		writeError(w, http.StatusUnauthorized, "token has been revoked")
+		return
+	}
+
 	// H3: verify the API key referenced in the refresh token is still active.
 	if a.db != nil && strings.HasPrefix(claims.Sub, "api-client:") {
 		keyHash := strings.TrimPrefix(claims.Sub, "api-client:")
@@ -256,10 +269,8 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// A-H5: refresh tokens have no server-side invalidation mechanism; limit
-	// the exposure window to 24 hours so a leaked token cannot be misused
-	// indefinitely. TODO: implement a refresh-token allowlist/revocation store
-	// to fully invalidate issued refresh tokens.
+	// Limit the refresh-token lifetime to 24 hours so a leaked token cannot be
+	// misused indefinitely. Explicit revocation is handled via RevokeRefreshToken.
 	refreshExpiry := 24 * time.Hour
 	if refreshExpiry > expiry {
 		refreshExpiry = expiry
@@ -277,6 +288,40 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		TokenType:    "Bearer",
 		ExpiresIn:    int64(expiry.Seconds()),
 	})
+}
+
+// RevokeRefreshToken handles DELETE /api/v1/auth/refresh.
+// It extracts a refresh token from the Authorization header and adds its
+// SHA-256 hash to the in-memory revocation set so that subsequent uses are
+// rejected by the RefreshToken handler.
+func (a *Auth) RevokeRefreshToken(w http.ResponseWriter, r *http.Request) {
+	if a.cfg.Auth.JWTSecret == "" {
+		writeError(w, http.StatusServiceUnavailable, "authentication not configured: jwt_secret is missing")
+		return
+	}
+
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		writeError(w, http.StatusUnauthorized, "Bearer token required in Authorization header")
+		return
+	}
+	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+
+	if _, err := validateRefreshToken(tokenStr, a.cfg.Auth.JWTSecret); err != nil {
+		a.logger.Warn().Err(err).Str("remote_addr", middleware.ClientIPFromRequest(r, a.trustedProxies)).Msg("invalid token presented for revocation")
+		writeError(w, http.StatusUnauthorized, "invalid or expired refresh token")
+		return
+	}
+
+	revokedRefreshTokens.Store(refreshTokenHash(tokenStr), struct{}{})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// refreshTokenHash returns the hex-encoded SHA-256 hash of a raw refresh token
+// string, used as the key in the revokedRefreshTokens map.
+func refreshTokenHash(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }
 
 // validateRefreshToken verifies the HS256 signature and expiry of a refresh

@@ -606,8 +606,8 @@ func (s *Scans) Report(w http.ResponseWriter, r *http.Request) {
 
 	contentType := reportContentType(format)
 	w.Header().Set("Content-Type", contentType)
-	if format == "pdf" {
-		filename := fmt.Sprintf("apiguard-report-%s.pdf", id.String())
+	if format == "text" {
+		filename := fmt.Sprintf("apiguard-report-%s.txt", id.String())
 		w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
 	}
 	w.WriteHeader(http.StatusOK)
@@ -643,8 +643,8 @@ func reportContentType(format string) string {
 		return "application/sarif+json"
 	case "html":
 		return "text/html; charset=utf-8"
-	case "pdf":
-		return "application/pdf"
+	case "text":
+		return "text/plain; charset=utf-8"
 	default:
 		return "application/json"
 	}

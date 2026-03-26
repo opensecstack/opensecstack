@@ -19,6 +19,7 @@ import (
 	"time"
 )
 
+
 // APIGuardClient is an HTTP client for the APIGuard platform API.
 //
 // Authentication uses a two-step flow: the APIKey is exchanged for a
@@ -36,18 +37,23 @@ type APIGuardClient struct {
 	// When zero, it defaults to 120 seconds (matching the Python SDK).
 	ReportTimeout time.Duration
 
-	mu  sync.Mutex
-	jwt string // cached Bearer token; empty means unauthenticated
+	mu          sync.RWMutex
+	jwt         string    // cached Bearer token; empty means unauthenticated
+	tokenExpiry time.Time // expiry time parsed from JWT exp claim
 }
 
 // NewAPIGuardClient creates an APIGuardClient with sensible defaults.
 func NewAPIGuardClient(baseURL, apiKey string) *APIGuardClient {
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse // do not follow redirects
+	}
 	return &APIGuardClient{
-		BaseURL: strings.TrimRight(baseURL, "/"),
-		APIKey:  apiKey,
-		HTTPClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		BaseURL:    strings.TrimRight(baseURL, "/"),
+		APIKey:     apiKey,
+		HTTPClient: httpClient,
 	}
 }
 
@@ -65,13 +71,13 @@ func (c *APIGuardClient) apiURL(path string) string {
 // one HTTP request: if the token is already populated when the lock is
 // re-acquired after the HTTP round-trip, the fresh token is discarded.
 func (c *APIGuardClient) authenticate(ctx context.Context) error {
-	// Fast path: check under lock before making any network call.
-	c.mu.Lock()
-	if c.jwt != "" {
-		c.mu.Unlock()
+	// Fast path: check under read lock before making any network call.
+	c.mu.RLock()
+	hasToken := c.jwt != "" && time.Now().Add(60*time.Second).Before(c.tokenExpiry)
+	c.mu.RUnlock()
+	if hasToken {
 		return nil
 	}
-	c.mu.Unlock()
 
 	// Make the HTTP call WITHOUT holding the lock.
 	body, _ := json.Marshal(map[string]string{"api_key": c.APIKey})
@@ -108,11 +114,18 @@ func (c *APIGuardClient) authenticate(ctx context.Context) error {
 		return fmt.Errorf("no access_token in auth response")
 	}
 
-	// Re-acquire lock to store the token; double-check that another goroutine
+	expiry, err := parseJWTExpiry(token)
+	if err != nil {
+		// If we cannot parse expiry, use a short default so we still refresh eventually.
+		expiry = time.Now().Add(5 * time.Minute)
+	}
+
+	// Re-acquire write lock to store the token; double-check that another goroutine
 	// did not already populate it while we were doing I/O.
 	c.mu.Lock()
-	if c.jwt == "" {
+	if c.jwt == "" || !time.Now().Add(60*time.Second).Before(c.tokenExpiry) {
 		c.jwt = token
+		c.tokenExpiry = expiry
 	}
 	c.mu.Unlock()
 	return nil
@@ -138,9 +151,9 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 	if err := c.authenticate(ctx); err != nil {
 		return nil, err
 	}
-	c.mu.Lock()
+	c.mu.RLock()
 	jwt := c.jwt
-	c.mu.Unlock()
+	c.mu.RUnlock()
 
 	newReader := func() io.Reader {
 		if bodyBuf != nil {
@@ -171,12 +184,35 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 				// Another goroutine already refreshed the token; just use it.
 				c.mu.Unlock()
 			}
-			c.mu.Lock()
+			c.mu.RLock()
 			tok = c.jwt
-			c.mu.Unlock()
+			c.mu.RUnlock()
 			r, err = c.doWithJWT(ctx, method, path, newReader(), tok, extraHeaders)
 			if err != nil {
 				return nil, err
+			}
+		}
+		if r.StatusCode == http.StatusTooManyRequests {
+			retryAfter, _ := strconv.Atoi(r.Header.Get("Retry-After"))
+			if retryAfter > 0 && retryAfter <= 60 {
+				r.Body.Close()
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(time.Duration(retryAfter) * time.Second):
+				}
+				r, err = c.doWithJWT(ctx, method, path, newReader(), tok, extraHeaders)
+				if err != nil {
+					return nil, err
+				}
+				return r, nil
+			}
+			// retryAfter > 60 or not present: return immediately.
+			raw, _ := io.ReadAll(r.Body)
+			r.Body.Close()
+			return nil, &RateLimitError{
+				Message:    fmt.Sprintf("rate limited (HTTP 429): %s", string(raw)),
+				RetryAfter: retryAfter,
 			}
 		}
 		return r, nil
@@ -195,9 +231,9 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 		}
 		resp.Body.Close()
 		// Re-capture token in case a 401 refresh updated it during a previous attempt.
-		c.mu.Lock()
+		c.mu.RLock()
 		tok := c.jwt
-		c.mu.Unlock()
+		c.mu.RUnlock()
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -687,8 +723,13 @@ func (c *APIGuardClient) RefreshToken(ctx context.Context, refreshToken string) 
 		return nil, fmt.Errorf("RefreshToken: decoding response: %w", err)
 	}
 	if result.AccessToken != "" {
+		expiry, err := parseJWTExpiry(result.AccessToken)
+		if err != nil {
+			expiry = time.Now().Add(5 * time.Minute)
+		}
 		c.mu.Lock()
 		c.jwt = result.AccessToken
+		c.tokenExpiry = expiry
 		c.mu.Unlock()
 	}
 	return &result, nil

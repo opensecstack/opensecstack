@@ -64,21 +64,53 @@ func NewRateLimiterWithProxies(requestsPerMinute int, trustedProxyCIDRs []string
 		done:           make(chan struct{}),
 	}
 
-	// Background goroutine cleans up expired visitor entries every 5 minutes.
+	// Background goroutine cleans up expired visitor entries. The interval is
+	// adaptive: it starts at 5 minutes and is halved (min 30s) when the
+	// retained count exceeds 10 000, or doubled (max 10 minutes) when it
+	// falls below 100, so the cleanup frequency tracks actual load.
 	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
+		const (
+			minInterval     = 30 * time.Second
+			maxInterval     = 10 * time.Minute
+			defaultInterval = 5 * time.Minute
+		)
+		interval := defaultInterval
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
 				rl.mu.Lock()
 				now := time.Now()
+				removed, retained := 0, 0
 				for ip, v := range rl.visitors {
 					if now.After(v.resetAt) {
 						delete(rl.visitors, ip)
+						removed++
+					} else {
+						retained++
 					}
 				}
 				rl.mu.Unlock()
+
+				// Adapt the cleanup interval based on how many entries remain.
+				_ = removed // acknowledged; retained drives the decision
+				newInterval := interval
+				if retained > 10000 {
+					newInterval = interval / 2
+					if newInterval < minInterval {
+						newInterval = minInterval
+					}
+				} else if retained < 100 {
+					newInterval = interval * 2
+					if newInterval > maxInterval {
+						newInterval = maxInterval
+					}
+				}
+				if newInterval != interval {
+					interval = newInterval
+					ticker.Reset(interval)
+				}
 			case <-rl.done:
 				return
 			}

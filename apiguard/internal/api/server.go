@@ -35,6 +35,7 @@ type Server struct {
 	authLimiter    *middleware.RateLimiter
 	scanLimiter    *middleware.RateLimiter
 	reportLimiter  *middleware.RateLimiter
+	refreshLimiter *middleware.RateLimiter
 	shutdownCtx    context.Context
 	shutdownCancel context.CancelFunc
 	scansHandler   *handlers.Scans // kept for WaitScans() on shutdown
@@ -131,6 +132,7 @@ func (s *Server) Start() error {
 		s.authLimiter.Stop()
 		s.scanLimiter.Stop()
 		s.reportLimiter.Stop()
+		s.refreshLimiter.Stop()
 		s.db.Close()
 		s.logger.Info().Msg("server stopped cleanly")
 		return nil
@@ -148,6 +150,7 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.RequestLogger(s.logger, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies)))
 	s.router.Use(chimw.Recoverer)
 	s.router.Use(chimw.Timeout(60 * time.Second))
+	s.router.Use(middleware.SecurityHeaders)
 	rateLimit := s.config.Scanner.RateLimit
 	if rateLimit <= 0 {
 		rateLimit = 120
@@ -168,9 +171,10 @@ func (s *Server) registerRoutes() {
 	ak := handlers.NewAPIKeys(s.logger, s.db, s.citadel, s.config)
 
 	// Create per-route limiters here so they can be stopped on shutdown.
-	s.authLimiter = middleware.NewRateLimiter(20)   // 20 req/min per IP on auth endpoints
-	s.scanLimiter = middleware.NewRateLimiter(60)   // 60 req/min per IP on scan creation
-	s.reportLimiter = middleware.NewRateLimiter(10) // 10 req/min per IP on report generation
+	s.authLimiter = middleware.NewRateLimiter(20)    // 20 req/min per IP on auth endpoints
+	s.scanLimiter = middleware.NewRateLimiter(60)    // 60 req/min per IP on scan creation
+	s.reportLimiter = middleware.NewRateLimiter(10)  // 10 req/min per IP on report generation
+	s.refreshLimiter = middleware.NewRateLimiter(20) // 20 req/min per IP on refresh revocation
 
-	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, s.config, s.authLimiter, s.scanLimiter, s.reportLimiter, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies))
+	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, s.config, s.authLimiter, s.scanLimiter, s.reportLimiter, s.refreshLimiter, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies))
 }

@@ -3,6 +3,7 @@ package opensecstack
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -31,19 +32,64 @@ type NIS2CompassClient struct {
 	// 30-second timeout is used when nil.
 	HTTPClient *http.Client
 
-	mu  sync.Mutex
-	jwt string // cached Bearer token; empty means unauthenticated
+	mu          sync.RWMutex
+	jwt         string    // cached Bearer token; empty means unauthenticated
+	tokenExpiry time.Time // expiry time parsed from JWT exp claim
 }
 
 // NewNIS2CompassClient creates a NIS2CompassClient with sensible defaults.
 func NewNIS2CompassClient(baseURL, apiKey string) *NIS2CompassClient {
-	return &NIS2CompassClient{
-		BaseURL: strings.TrimRight(baseURL, "/"),
-		APIKey:  apiKey,
-		HTTPClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
 	}
+	httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse // do not follow redirects
+	}
+	return &NIS2CompassClient{
+		BaseURL:    strings.TrimRight(baseURL, "/"),
+		APIKey:     apiKey,
+		HTTPClient: httpClient,
+	}
+}
+
+// parseJWTExpiry decodes the payload segment of a JWT and extracts the exp
+// (expiry) claim, returning it as a time.Time. Returns an error if the token
+// is malformed or lacks an exp claim.
+func parseJWTExpiry(token string) (time.Time, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return time.Time{}, fmt.Errorf("malformed JWT: expected 3 segments, got %d", len(parts))
+	}
+	// Add padding so base64 decoding succeeds regardless of trailing '='.
+	payload := parts[1]
+	switch len(payload) % 4 {
+	case 2:
+		payload += "=="
+	case 3:
+		payload += "="
+	}
+	decoded, err := base64.URLEncoding.DecodeString(payload)
+	if err != nil {
+		// Try without padding.
+		decoded, err = base64.RawURLEncoding.DecodeString(parts[1])
+		if err != nil {
+			return time.Time{}, fmt.Errorf("decoding JWT payload: %w", err)
+		}
+	}
+	var claims map[string]interface{}
+	if err := json.Unmarshal(decoded, &claims); err != nil {
+		return time.Time{}, fmt.Errorf("unmarshalling JWT claims: %w", err)
+	}
+	expVal, ok := claims["exp"]
+	if !ok {
+		return time.Time{}, fmt.Errorf("JWT has no exp claim")
+	}
+	// JSON numbers decode as float64.
+	expFloat, ok := expVal.(float64)
+	if !ok {
+		return time.Time{}, fmt.Errorf("JWT exp claim is not a number")
+	}
+	return time.Unix(int64(expFloat), 0), nil
 }
 
 // ----------------------------------------------------------------------------
@@ -60,13 +106,13 @@ func (c *NIS2CompassClient) apiURL(path string) string {
 // one HTTP request: if the token is already populated when the lock is
 // re-acquired after the HTTP round-trip, the fresh token is discarded.
 func (c *NIS2CompassClient) authenticate(ctx context.Context) error {
-	// Fast path: check under lock before making any network call.
-	c.mu.Lock()
-	if c.jwt != "" {
-		c.mu.Unlock()
+	// Fast path: check under read lock before making any network call.
+	c.mu.RLock()
+	hasToken := c.jwt != "" && time.Now().Add(60*time.Second).Before(c.tokenExpiry)
+	c.mu.RUnlock()
+	if hasToken {
 		return nil
 	}
-	c.mu.Unlock()
 
 	// Make the HTTP call WITHOUT holding the lock.
 	body, _ := json.Marshal(map[string]string{"api_key": c.APIKey})
@@ -103,11 +149,18 @@ func (c *NIS2CompassClient) authenticate(ctx context.Context) error {
 		return fmt.Errorf("no token in auth response")
 	}
 
-	// Re-acquire lock to store the token; double-check that another goroutine
+	expiry, err := parseJWTExpiry(token)
+	if err != nil {
+		// If we cannot parse expiry, use a short default so we still refresh eventually.
+		expiry = time.Now().Add(5 * time.Minute)
+	}
+
+	// Re-acquire write lock to store the token; double-check that another goroutine
 	// did not already populate it while we were doing I/O.
 	c.mu.Lock()
-	if c.jwt == "" {
+	if c.jwt == "" || !time.Now().Add(60*time.Second).Before(c.tokenExpiry) {
 		c.jwt = token
+		c.tokenExpiry = expiry
 	}
 	c.mu.Unlock()
 	return nil
@@ -133,9 +186,9 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 	if err := c.authenticate(ctx); err != nil {
 		return nil, err
 	}
-	c.mu.Lock()
+	c.mu.RLock()
 	jwt := c.jwt
-	c.mu.Unlock()
+	c.mu.RUnlock()
 
 	doReq := func(tok string) (*http.Response, error) {
 		var r io.Reader
@@ -177,12 +230,35 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 				// Another thread already refreshed the token; just use it.
 				c.mu.Unlock()
 			}
-			c.mu.Lock()
+			c.mu.RLock()
 			tok = c.jwt
-			c.mu.Unlock()
+			c.mu.RUnlock()
 			r, err = doReq(tok)
 			if err != nil {
 				return nil, err
+			}
+		}
+		if r.StatusCode == http.StatusTooManyRequests {
+			retryAfter, _ := strconv.Atoi(r.Header.Get("Retry-After"))
+			if retryAfter > 0 && retryAfter <= 60 {
+				r.Body.Close()
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(time.Duration(retryAfter) * time.Second):
+				}
+				r, err = doReq(tok)
+				if err != nil {
+					return nil, err
+				}
+				return r, nil
+			}
+			// retryAfter > 60 or not present: return immediately.
+			raw, _ := io.ReadAll(r.Body)
+			r.Body.Close()
+			return nil, &RateLimitError{
+				Message:    fmt.Sprintf("rate limited (HTTP 429): %s", string(raw)),
+				RetryAfter: retryAfter,
 			}
 		}
 		return r, nil
@@ -201,9 +277,9 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 		}
 		resp.Body.Close()
 		// Re-capture token in case a 401 refresh updated it during a previous attempt.
-		c.mu.Lock()
+		c.mu.RLock()
 		tok := c.jwt
-		c.mu.Unlock()
+		c.mu.RUnlock()
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()

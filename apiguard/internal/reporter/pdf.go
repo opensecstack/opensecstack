@@ -12,14 +12,14 @@ import (
 )
 
 // PDFReporter generates a well-formatted, human-readable security report
-// served as text/plain with a .txt filename.  The format is designed to be
-// easily readable in any text viewer and is structurally equivalent to a
-// printed report.
+// served as text/plain with a .txt filename (format name: "text").  The format
+// is designed to be easily readable in any text viewer and is structurally
+// equivalent to a printed report.
 //
 // To upgrade to true binary PDF output in the future, replace the Generate
-// body with a call to a library such as github.com/go-pdf/fpdf while keeping
-// this file's public interface identical, and update reportContentType in
-// scans.go to return "application/pdf".
+// body with a call to a library such as github.com/go-pdf/fpdf, rename the
+// format value back to "pdf", and update reportContentType in scans.go to
+// return "application/pdf".
 type PDFReporter struct{}
 
 const (

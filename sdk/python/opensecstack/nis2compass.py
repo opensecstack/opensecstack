@@ -8,6 +8,8 @@ the session and refreshed automatically on HTTP 401.
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
 import os
 import threading
@@ -48,6 +50,10 @@ class NIS2CompassClient:
                 "Content-Type": "application/json",
             }
         )
+        # Disable automatic redirect following to prevent auth token leakage
+        # via 3xx redirects to attacker-controlled URLs (SDK-M4).
+        self._session.max_redirects = 0
+        self._token_expiry: Optional[float] = None
         self._auth_lock = threading.Lock()
 
     # ------------------------------------------------------------------
@@ -91,11 +97,24 @@ class NIS2CompassClient:
         if not token:
             raise AuthenticationError("No token received from auth/token endpoint")
 
+        # Parse the JWT exp claim for proactive token refresh (SDK-M5).
+        expiry: Optional[float] = None
+        try:
+            payload_b64 = token.split('.')[1]
+            payload_b64 += '=' * (4 - len(payload_b64) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+            exp = payload.get('exp')
+            if exp is not None:
+                expiry = float(exp)
+        except Exception:
+            logger.debug("Could not parse JWT exp claim; proactive expiry disabled")
+
         # Re-acquire the lock to store the token; double-check that another
         # thread did not already populate it while we were doing I/O.
         with self._auth_lock:
             if "Authorization" not in self._session.headers:
                 self._session.headers["Authorization"] = f"Bearer {token}"
+                self._token_expiry = expiry
                 logger.debug("Authentication successful; JWT acquired")
 
     def _raise_for_status(self, resp: requests.Response) -> None:
@@ -125,20 +144,45 @@ class NIS2CompassClient:
         """Execute a request, authenticating (and retrying once on 401).
 
         On 5xx responses, retries up to 2 times with exponential backoff
-        (1 s then 2 s).  Raises ``RateLimitError`` on 429.
+        (1 s then 2 s).
+
+        On 429 responses, retries once automatically if ``Retry-After`` is
+        present and <= 60 seconds; otherwise raises ``RateLimitError``
+        immediately to avoid blocking the caller for an unreasonable duration
+        (SDK-L5).
+
+        HTTP redirects are never followed (``allow_redirects=False``) to
+        prevent Bearer token leakage via attacker-controlled 3xx redirect
+        targets (SDK-M4).
 
         A unique ``X-Request-ID`` header is added to every outgoing request to
         aid server-side log correlation.
         """
+        # Proactive token expiry: re-authenticate if the token expires within
+        # the next 60 seconds so we don't waste a round-trip on a stale JWT
+        # (SDK-M5).
         with self._auth_lock:
-            if "Authorization" not in self._session.headers:
-                self._authenticate()
+            token_expiring = (
+                self._token_expiry is not None
+                and time.time() > self._token_expiry - 60
+            )
+            needs_auth = "Authorization" not in self._session.headers
+        if token_expiring or needs_auth:
+            if token_expiring:
+                # Clear the existing token so _authenticate() will refresh it.
+                with self._auth_lock:
+                    self._session.headers.pop("Authorization", None)
+                    self._token_expiry = None
+            self._authenticate()
 
         # Attach a per-request ID for tracing; merge with any caller-supplied headers.
         req_id = str(uuid.uuid4())
         extra_headers = kwargs.pop("headers", None) or {}
         extra_headers.setdefault("X-Request-ID", req_id)
         kwargs["headers"] = extra_headers
+        # Never follow redirects — 3xx to an attacker URL would leak the Bearer
+        # token in the Authorization header (SDK-M4).
+        kwargs.setdefault("allow_redirects", False)
 
         _retry_delays = [1, 2]
 
@@ -156,6 +200,9 @@ class NIS2CompassClient:
                         # Another thread already refreshed the token; just retry.
                         logger.debug("Token already refreshed by another thread; retrying request")
                     else:
+                        # Clear expiry so _authenticate() proceeds unconditionally.
+                        self._token_expiry = None
+                        self._session.headers.pop("Authorization", None)
                         try:
                             self._authenticate()
                         except AuthenticationError:
@@ -169,6 +216,25 @@ class NIS2CompassClient:
             return resp
 
         resp = _do_once()
+
+        # Automatic 429 retry: sleep for Retry-After if it is <= 60 s, then
+        # retry once.  Longer waits are surfaced immediately as RateLimitError
+        # so callers are not silently blocked (SDK-L5).
+        if resp.status_code == 429:
+            retry_after: Optional[int] = None
+            try:
+                retry_after = int(resp.headers.get("Retry-After", ""))
+            except (ValueError, TypeError):
+                pass
+            if retry_after is not None and retry_after <= 60:
+                logger.debug(
+                    "429 on %s %s; sleeping %ss before single retry",
+                    method.upper(), path, retry_after,
+                )
+                time.sleep(retry_after)
+                resp = _do_once()
+            # If Retry-After is absent or > 60, fall through to _raise_for_status
+            # which will raise RateLimitError.
 
         # Retry on 5xx with exponential backoff (max 2 retries).
         for delay in _retry_delays:
@@ -611,6 +677,7 @@ class NIS2CompassClient:
                 self._url(f"artifacts/{artifact_id}/download"),
                 timeout=self._timeout,
                 stream=True,
+                allow_redirects=False,
             )
 
         old_auth = self._session.headers.get("Authorization")
@@ -698,6 +765,7 @@ class NIS2CompassClient:
                 self._url(f"assessments/{assessment_id}/report"),
                 timeout=report_timeout,
                 stream=True,
+                allow_redirects=False,
             )
 
         old_auth = self._session.headers.get("Authorization")

@@ -168,11 +168,16 @@ func (d *DB) AppendAuditLog(_ context.Context, entry *AuditLog, citadelClient *c
 	case q <- e:
 		// Successfully queued.
 	default:
-		// Queue full — log a warning and drop rather than blocking the caller.
-		// Decrement the WaitGroup counter since this entry will not be processed.
+		// Queue full — attempt a synchronous write with a short timeout as a
+		// fallback before giving up, to avoid silent loss of security events
+		// under temporary load spikes.
 		auditWg.Done()
-		log.Printf("audit log queue full (capacity %d): dropping entry action=%s actor=%s",
-			auditQueueCapacity, entry.Action, entry.ActorID)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := writeEntryToDB(ctx, d.Pool, e); err != nil {
+			log.Printf("audit log queue full (capacity %d) and synchronous fallback failed: dropping entry action=%s actor=%s: %v",
+				auditQueueCapacity, entry.Action, entry.ActorID, err)
+		}
 	}
 	return nil
 }

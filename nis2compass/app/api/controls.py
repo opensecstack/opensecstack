@@ -97,7 +97,7 @@ def update_control(assessment_id, measure_ref):
     if err:
         return err
     if assessment.status == 'archived':
-        return jsonify({'error': 'Archived assessments are read-only', 'code': 'INVALID_INPUT'}), 400
+        return jsonify({'error': 'Archived assessments are read-only', 'code': 'INVALID_INPUT'}), 409
 
     control = (
         db.session.query(Control)

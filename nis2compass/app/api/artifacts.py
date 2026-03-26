@@ -104,7 +104,7 @@ def upload_artifact(assessment_id):
     if err:
         return err
     if assessment.status == 'archived':
-        return jsonify({'error': 'Archived assessments are read-only', 'code': 'INVALID_INPUT'}), 400
+        return jsonify({'error': 'Archived assessments are read-only', 'code': 'INVALID_INPUT'}), 409
 
     if 'file' not in request.files:
         return jsonify({'error': 'file field is required', 'code': 'INVALID_INPUT'}), 400

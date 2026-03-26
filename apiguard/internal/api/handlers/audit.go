@@ -46,8 +46,29 @@ func (a *Audit) List(w http.ResponseWriter, r *http.Request) {
 		filters.ActorID = &v
 	}
 	if v := q.Get("action"); v != "" {
-		action := db.AuditAction(v)
-		filters.Action = &action
+		switch db.AuditAction(v) {
+		case db.AuditActionScanCreated,
+			db.AuditActionScanStarted,
+			db.AuditActionScanCompleted,
+			db.AuditActionScanFailed,
+			db.AuditActionScanDeleted,
+			db.AuditActionFindingTriaged,
+			db.AuditActionFindingStatusChanged,
+			db.AuditActionSpecUploaded,
+			db.AuditActionSpecParsed,
+			db.AuditActionReportGenerated,
+			db.AuditActionReportExported,
+			db.AuditActionAPIKeyCreated,
+			db.AuditActionAPIKeyRevoked:
+			action := db.AuditAction(v)
+			filters.Action = &action
+		default:
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "invalid action filter",
+				"code":  "INVALID_INPUT",
+			})
+			return
+		}
 	}
 	if v := q.Get("resource_type"); v != "" {
 		filters.ResourceType = &v

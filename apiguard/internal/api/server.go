@@ -154,34 +154,3 @@ func (s *Server) registerRoutes() {
 
 	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, s.config, s.authLimiter, s.scanLimiter, s.reportLimiter)
 }
-
-// CORSMiddleware returns a middleware that sets CORS headers for allowed origins.
-// If allowedOrigins is nil or empty, no CORS headers are set (same-origin only).
-//
-// Deprecated: use middleware.CORS instead, which is wired in setupMiddleware and
-// correctly treats an empty origins list as deny-all rather than wildcard.
-func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			origin := r.Header.Get("Origin")
-			allowed := false
-			for _, o := range allowedOrigins {
-				if o == origin || o == "*" {
-					allowed = true
-					break
-				}
-			}
-			if allowed {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-				w.Header().Set("Access-Control-Max-Age", "86400")
-			}
-			if r.Method == "OPTIONS" && allowed {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
-}

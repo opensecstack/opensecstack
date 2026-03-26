@@ -95,6 +95,21 @@ CREATE INDEX idx_artifacts_assessment_id ON artifacts(assessment_id);
 CREATE INDEX idx_artifacts_control_id    ON artifacts(control_id);
 CREATE INDEX idx_artifacts_hash          ON artifacts(hash);
 
+-- api_keys: API keys for machine-to-machine authentication
+CREATE TABLE api_keys (
+    id           UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+    key_hash     CHAR(64)      NOT NULL UNIQUE,  -- SHA-256 hex of plaintext key
+    label        VARCHAR(100),
+    scope        VARCHAR(20)   NOT NULL DEFAULT 'read_write' CHECK (scope IN ('read', 'read_write')),
+    is_active    BOOLEAN       NOT NULL DEFAULT TRUE,
+    created_by   VARCHAR(255),
+    created_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    last_used_at TIMESTAMPTZ,
+    expires_at   TIMESTAMPTZ
+);
+CREATE INDEX idx_api_keys_key_hash  ON api_keys(key_hash);
+CREATE INDEX idx_api_keys_is_active ON api_keys(is_active);
+
 -- audit_log: CITADEL-compatible append-only evidence ledger
 -- Enforced immutable via trigger (no UPDATE, no DELETE — mirrors CITADEL WORM log spec).
 -- hash_version=1: chain_hash = SHA-256(id + action + actor + resource_type + resource_id + prev_hash + timestamp)  [bare concat, legacy]

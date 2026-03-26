@@ -1,6 +1,6 @@
 import hashlib
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify, g
 from ..extensions import db
 from ..models import ApiKey
@@ -43,6 +43,17 @@ def create_api_key():
     if scope not in VALID_SCOPES:
         return jsonify({'error': f'scope must be one of: {", ".join(sorted(VALID_SCOPES))}', 'code': 'INVALID_INPUT'}), 400
 
+    expires_at = None
+    expires_in_days = data.get('expires_in_days')
+    if expires_in_days is not None:
+        try:
+            expires_in_days = int(expires_in_days)
+            if expires_in_days <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            return jsonify({'error': 'expires_in_days must be a positive integer', 'code': 'INVALID_INPUT'}), 400
+        expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
+
     # Generate a cryptographically random key — shown ONCE, never again
     plaintext = f'nis2_{secrets.token_hex(32)}'
     key_hash = _hash_key(plaintext)
@@ -52,6 +63,7 @@ def create_api_key():
         label=label,
         scope=scope,
         created_by=g.actor,
+        expires_at=expires_at,
     )
     db.session.add(api_key)
     db.session.flush()

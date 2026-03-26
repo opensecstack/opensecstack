@@ -65,7 +65,7 @@ def validate_api_key(api_key: str) -> tuple[bool, str]:
         )
         # In production, fail closed: do not allow access when we cannot
         # confirm that the key has not been revoked.
-        if current_app.config.get('NIS2_ENV') == 'production':
+        if current_app.config.get('ENV') == 'production':
             return False, None
 
     # Bootstrap fallback: env-var keys (constant-time comparison).

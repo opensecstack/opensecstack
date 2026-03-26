@@ -36,8 +36,9 @@ type auditEntry struct {
 // auditQueue is the package-level buffered channel. It is initialised by
 // StartAuditWorker and must be non-nil before AppendAuditLog is called.
 var (
-	auditQueue   chan *auditEntry
-	auditQueueMu sync.Mutex // guards initialisation check only
+	auditQueue     chan *auditEntry
+	auditQueueMu   sync.Mutex  // guards initialisation check only
+	auditWorkerOne sync.Once   // ensures the worker goroutine is started at most once
 
 	// auditWg tracks entries that have been enqueued but not yet processed by
 	// the worker. Add(1) is called before sending to auditQueue; Done() is
@@ -66,51 +67,55 @@ func StartAuditWorker(pool *pgxpool.Pool) (stop func()) {
 
 	quit := make(chan struct{})
 
-	go func() {
-		ticker := time.NewTicker(auditFlushInterval)
-		defer ticker.Stop()
+	auditWorkerOne.Do(func() {
+		go func() {
+			ticker := time.NewTicker(auditFlushInterval)
+			defer ticker.Stop()
 
-		batch := make([]*auditEntry, 0, auditBatchSize)
+			batch := make([]*auditEntry, 0, auditBatchSize)
 
-		flush := func() {
-			if len(batch) == 0 {
-				return
-			}
-			for _, e := range batch {
-				if err := writeEntryToDB(context.Background(), pool, e); err != nil {
-					log.Printf("audit worker: write failed: %v", err)
+			flush := func() {
+				if len(batch) == 0 {
+					return
 				}
-				auditWg.Done()
-			}
-			batch = batch[:0]
-		}
-
-		for {
-			select {
-			case e := <-auditQueue:
-				batch = append(batch, e)
-				if len(batch) >= auditBatchSize {
-					flush()
-					ticker.Reset(auditFlushInterval)
+				for _, e := range batch {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					if err := writeEntryToDB(ctx, pool, e); err != nil {
+						log.Printf("audit worker: write failed: %v", err)
+					}
+					cancel()
+					auditWg.Done()
 				}
+				batch = batch[:0]
+			}
 
-			case <-ticker.C:
-				flush()
-
-			case <-quit:
-				// Drain whatever remains before exiting.
-				for {
-					select {
-					case e := <-auditQueue:
-						batch = append(batch, e)
-					default:
+			for {
+				select {
+				case e := <-auditQueue:
+					batch = append(batch, e)
+					if len(batch) >= auditBatchSize {
 						flush()
-						return
+						ticker.Reset(auditFlushInterval)
+					}
+
+				case <-ticker.C:
+					flush()
+
+				case <-quit:
+					// Drain whatever remains before exiting.
+					for {
+						select {
+						case e := <-auditQueue:
+							batch = append(batch, e)
+						default:
+							flush()
+							return
+						}
 					}
 				}
 			}
-		}
-	}()
+		}()
+	})
 
 	return func() { close(quit) }
 }
@@ -320,27 +325,22 @@ func (d *DB) ListAuditLog(ctx context.Context, filters AuditLogFilters, page, pe
 
 	args := []interface{}{}
 	where := []string{}
-	i := 1
 
 	if filters.ActorID != nil {
-		where = append(where, fmt.Sprintf("actor_id = $%d", i))
 		args = append(args, *filters.ActorID)
-		i++
+		where = append(where, fmt.Sprintf("actor_id = $%d", len(args)))
 	}
 	if filters.Action != nil {
-		where = append(where, fmt.Sprintf("action = $%d", i))
 		args = append(args, string(*filters.Action))
-		i++
+		where = append(where, fmt.Sprintf("action = $%d", len(args)))
 	}
 	if filters.ResourceID != nil {
-		where = append(where, fmt.Sprintf("resource_id = $%d", i))
 		args = append(args, *filters.ResourceID)
-		i++
+		where = append(where, fmt.Sprintf("resource_id = $%d", len(args)))
 	}
 	if filters.ResourceType != nil {
-		where = append(where, fmt.Sprintf("resource_type = $%d", i))
 		args = append(args, *filters.ResourceType)
-		i++
+		where = append(where, fmt.Sprintf("resource_type = $%d", len(args)))
 	}
 
 	whereClause := ""
@@ -356,7 +356,11 @@ func (d *DB) ListAuditLog(ctx context.Context, filters AuditLogFilters, page, pe
 	}
 
 	// Fetch page.
+	// Append LIMIT and OFFSET to args; derive their placeholder indices from
+	// the current slice length so no separate counter variable is needed.
 	dataArgs := append(args, perPage, offset)
+	limitIdx := len(dataArgs) - 1  // 1-based index of perPage
+	offsetIdx := len(dataArgs)     // 1-based index of offset
 	rows, err := d.Pool.Query(ctx, fmt.Sprintf(`
 		SELECT id, actor_id, actor_type, action, resource_type, resource_id,
 		       ip_address, user_agent, before_state, after_state, metadata,
@@ -364,7 +368,7 @@ func (d *DB) ListAuditLog(ctx context.Context, filters AuditLogFilters, page, pe
 		FROM audit_log %s
 		ORDER BY id DESC
 		LIMIT $%d OFFSET $%d
-	`, whereClause, i, i+1), dataArgs...)
+	`, whereClause, limitIdx, offsetIdx), dataArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("querying audit log: %w", err)
 	}

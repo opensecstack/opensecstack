@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 import uuid as _uuid_mod
 from flask import request, jsonify
@@ -34,13 +35,16 @@ return {1, count + 1}
 
 # Registered once per Redis connection; reset to None when Redis reconnects.
 _rate_limit_script = None
+_rate_limit_script_lock = threading.Lock()
 
 
 def _get_rate_limit_script(rc):
-    """Return the registered Lua script, registering it on first call."""
+    """Return the registered Lua script, registering it on first call (thread-safe)."""
     global _rate_limit_script
     if _rate_limit_script is None:
-        _rate_limit_script = rc.register_script(LUA_RATE_LIMIT)
+        with _rate_limit_script_lock:
+            if _rate_limit_script is None:
+                _rate_limit_script = rc.register_script(LUA_RATE_LIMIT)
     return _rate_limit_script
 
 

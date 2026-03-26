@@ -52,6 +52,8 @@ def create_api_key():
                 raise ValueError
         except (TypeError, ValueError):
             return jsonify({'error': 'expires_in_days must be a positive integer', 'code': 'INVALID_INPUT'}), 400
+        if expires_in_days > 365:
+            return jsonify({'error': 'expires_in_days must not exceed 365', 'code': 'INVALID_INPUT'}), 400
         expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
 
     # Generate a cryptographically random key — shown ONCE, never again

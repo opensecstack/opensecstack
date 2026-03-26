@@ -57,7 +57,17 @@ class APIGuardClient:
         return f"{self._base}/api/v1/{path.lstrip('/')}"
 
     def _authenticate(self) -> None:
-        """Exchange the API key for a JWT and store it on the session."""
+        """Exchange the API key for a JWT and store it on the session.
+
+        Uses a lock-release pattern so that the HTTP round-trip is not made
+        while holding ``_auth_lock``, avoiding unnecessary thread contention.
+        """
+        # Fast path: if a JWT is already present, nothing to do.
+        with self._auth_lock:
+            if self._jwt is not None:
+                return
+
+        # Make the HTTP call WITHOUT holding the lock.
         resp = self._session.post(
             self._url("auth/token"),
             json={"api_key": self._api_key},
@@ -74,8 +84,13 @@ class APIGuardClient:
         token = data.get("access_token") or data.get("token")
         if not token:
             raise AuthenticationError("No access_token in auth/token response")
-        self._jwt = token
-        self._session.headers["Authorization"] = f"Bearer {self._jwt}"
+
+        # Re-acquire the lock to store the token; double-check that another
+        # thread did not already populate it while we were doing I/O.
+        with self._auth_lock:
+            if self._jwt is None:
+                self._jwt = token
+                self._session.headers["Authorization"] = f"Bearer {self._jwt}"
 
     def _raise_for_status(self, resp: requests.Response) -> None:
         if resp.status_code == 401:
@@ -422,13 +437,21 @@ class APIGuardClient:
     # Audit log
     # ------------------------------------------------------------------
 
-    def get_audit_log(self, limit: int = 50) -> list[dict]:
+    def get_audit_log(self, limit: int = 50, page: Optional[int] = None) -> list[dict]:
         """
-        Return the *limit* most-recent audit log entries (default 50).
+        Return audit log entries (default 50, up to 100 per page).
+
+        Parameters
+        ----------
+        limit: Number of entries to return per page (capped at 100 by the API).
+        page:  1-based page number.  When omitted the API returns the first page.
 
         Entries are ordered newest-first.
         """
-        resp = self._get("audit", params={"per_page": min(limit, 100)})
+        params: dict = {"per_page": min(limit, 100)}
+        if page is not None:
+            params["page"] = page
+        resp = self._get("audit", params=params)
         payload = resp.json()
         # APIGuard audit returns a plain list.
         if isinstance(payload, list):

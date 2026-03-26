@@ -765,6 +765,13 @@ var ssrfSafeClient = func() *http.Client {
 			if err != nil {
 				return nil, fmt.Errorf("ssrf-safe dial: resolve %q: %w", host, err)
 			}
+			if len(addrs) == 0 {
+				return nil, fmt.Errorf("ssrf-safe dial: no addresses resolved for %q", host)
+			}
+			// Reject the entire connection if ANY resolved address is in a
+			// private/reserved range. Checking only addrs[0] would allow a
+			// multi-record response with a private IP at a later index to
+			// bypass the SSRF guard after a connection refusal on the first.
 			for _, a := range addrs {
 				ip := net.ParseIP(a)
 				if ip != nil {
@@ -775,10 +782,17 @@ var ssrfSafeClient = func() *http.Client {
 					}
 				}
 			}
-			if len(addrs) == 0 {
-				return nil, fmt.Errorf("ssrf-safe dial: no addresses resolved for %q", host)
+			// All addresses passed the SSRF check; attempt each in order and
+			// return the first successful connection.
+			var lastErr error
+			for _, a := range addrs {
+				conn, dialErr := baseDialer.DialContext(ctx, network, net.JoinHostPort(a, port))
+				if dialErr == nil {
+					return conn, nil
+				}
+				lastErr = dialErr
 			}
-			return baseDialer.DialContext(ctx, network, net.JoinHostPort(addrs[0], port))
+			return nil, fmt.Errorf("ssrf-safe dial: could not connect to any address for %q: %w", host, lastErr)
 		},
 	}
 	return &http.Client{

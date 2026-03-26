@@ -150,6 +150,11 @@ def upload_artifact(assessment_id):
                 'error': 'File content does not match declared MIME type',
                 'code': 'UNSUPPORTED_MEDIA_TYPE',
             }), 415
+        if detected != content_type:
+            return jsonify({
+                'error': 'Detected file type does not match declared Content-Type',
+                'code': 'UNSUPPORTED_MEDIA_TYPE',
+            }), 400
 
     art_type = request.form.get('type', '').strip()
     if art_type not in VALID_TYPES:

@@ -231,6 +231,10 @@ func (f *Findings) Update(w http.ResponseWriter, r *http.Request) {
 	// (UpdateFindingStatus always writes the note column).
 	effectiveNote := ""
 	if req.Note != nil {
+		if len(*req.Note) > 4096 {
+			writeError(w, http.StatusBadRequest, "note must not exceed 4096 characters")
+			return
+		}
 		effectiveNote = *req.Note
 	}
 

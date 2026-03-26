@@ -55,8 +55,20 @@ func (c *NIS2CompassClient) apiURL(path string) string {
 }
 
 // authenticate exchanges the API key for a JWT and caches it.
-// Must be called with c.mu held.
+// It manages its own locking and must NOT be called with c.mu held.
+// It uses double-checked locking so that concurrent callers only issue
+// one HTTP request: if the token is already populated when the lock is
+// re-acquired after the HTTP round-trip, the fresh token is discarded.
 func (c *NIS2CompassClient) authenticate(ctx context.Context) error {
+	// Fast path: check under lock before making any network call.
+	c.mu.Lock()
+	if c.jwt != "" {
+		c.mu.Unlock()
+		return nil
+	}
+	c.mu.Unlock()
+
+	// Make the HTTP call WITHOUT holding the lock.
 	body, _ := json.Marshal(map[string]string{"api_key": c.APIKey})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.apiURL("auth/token"), bytes.NewReader(body))
 	if err != nil {
@@ -90,7 +102,14 @@ func (c *NIS2CompassClient) authenticate(ctx context.Context) error {
 	if token == "" {
 		return fmt.Errorf("no token in auth response")
 	}
-	c.jwt = token
+
+	// Re-acquire lock to store the token; double-check that another goroutine
+	// did not already populate it while we were doing I/O.
+	c.mu.Lock()
+	if c.jwt == "" {
+		c.jwt = token
+	}
+	c.mu.Unlock()
 	return nil
 }
 
@@ -110,13 +129,11 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 		}
 	}
 
-	c.mu.Lock()
-	if c.jwt == "" {
-		if err := c.authenticate(ctx); err != nil {
-			c.mu.Unlock()
-			return nil, err
-		}
+	// authenticate manages its own locking and must be called without c.mu held.
+	if err := c.authenticate(ctx); err != nil {
+		return nil, err
 	}
+	c.mu.Lock()
 	jwt := c.jwt
 	c.mu.Unlock()
 
@@ -145,11 +162,22 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 		}
 		if r.StatusCode == http.StatusUnauthorized {
 			r.Body.Close()
+			// Double-checked locking: only re-authenticate if another thread
+			// has not already refreshed the token while we waited.
 			c.mu.Lock()
-			if authErr := c.authenticate(ctx); authErr != nil {
+			if c.jwt == tok {
+				// Token is still the stale one — we must refresh. Unlock
+				// before making the HTTP call to avoid holding the mutex
+				// across the network round-trip.
 				c.mu.Unlock()
-				return nil, authErr
+				if authErr := c.authenticate(ctx); authErr != nil {
+					return nil, authErr
+				}
+			} else {
+				// Another thread already refreshed the token; just use it.
+				c.mu.Unlock()
 			}
+			c.mu.Lock()
 			tok = c.jwt
 			c.mu.Unlock()
 			r, err = doReq(tok)

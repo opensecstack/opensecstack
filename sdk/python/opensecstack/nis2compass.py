@@ -58,7 +58,17 @@ class NIS2CompassClient:
         return f"{self._base}/api/v1/{path.lstrip('/')}"
 
     def _authenticate(self) -> None:
-        """Exchange the API key for a JWT and store it in the session."""
+        """Exchange the API key for a JWT and store it in the session.
+
+        Uses a lock-release pattern so that the HTTP round-trip is not made
+        while holding ``_auth_lock``, avoiding unnecessary thread contention.
+        """
+        # Fast path: if a token is already present, nothing to do.
+        with self._auth_lock:
+            if "Authorization" in self._session.headers:
+                return
+
+        # Make the HTTP call WITHOUT holding the lock.
         logger.debug("Authenticating with NIS2 Compass API at %s", self._base)
         resp = self._session.post(
             self._url("auth/token"),
@@ -80,8 +90,13 @@ class NIS2CompassClient:
         token = data.get("token") or data.get("access_token")
         if not token:
             raise AuthenticationError("No token received from auth/token endpoint")
-        self._session.headers["Authorization"] = f"Bearer {token}"
-        logger.debug("Authentication successful; JWT acquired")
+
+        # Re-acquire the lock to store the token; double-check that another
+        # thread did not already populate it while we were doing I/O.
+        with self._auth_lock:
+            if "Authorization" not in self._session.headers:
+                self._session.headers["Authorization"] = f"Bearer {token}"
+                logger.debug("Authentication successful; JWT acquired")
 
     def _raise_for_status(self, resp: requests.Response) -> None:
         if resp.status_code == 401:
@@ -607,9 +622,13 @@ class NIS2CompassClient:
             resp = _stream()
 
         self._raise_for_status(resp)
-        with open(dest_path, "wb") as fh:
-            for chunk in resp.iter_content(chunk_size=65536):
-                fh.write(chunk)
+        try:
+            with open(dest_path, "wb") as fh:
+                for chunk in resp.iter_content(chunk_size=65536):
+                    fh.write(chunk)
+        except Exception:
+            resp.close()
+            raise
 
     def delete_artifact(self, artifact_id: str) -> None:
         """
@@ -681,12 +700,15 @@ class NIS2CompassClient:
                 stream=True,
             )
 
+        old_auth = self._session.headers.get("Authorization")
         resp = _stream_report()
         if resp.status_code == 401:
-            # Token expired — re-authenticate and retry once.
+            # Token expired — re-authenticate and retry once, using
+            # double-checked locking so concurrent threads don't all refresh.
             logger.debug("Received 401 on report generation for %s; refreshing token", assessment_id)
             with self._auth_lock:
-                self._authenticate()
+                if self._session.headers.get("Authorization") == old_auth:
+                    self._authenticate()
             resp = _stream_report()
 
         self._raise_for_status(resp)

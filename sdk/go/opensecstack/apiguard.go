@@ -60,8 +60,20 @@ func (c *APIGuardClient) apiURL(path string) string {
 }
 
 // authenticate exchanges the API key for a JWT and caches it.
-// Must be called with c.mu held or before the first request.
+// It manages its own locking and must NOT be called with c.mu held.
+// It uses double-checked locking so that concurrent callers only issue
+// one HTTP request: if the token is already populated when the lock is
+// re-acquired after the HTTP round-trip, the fresh token is discarded.
 func (c *APIGuardClient) authenticate(ctx context.Context) error {
+	// Fast path: check under lock before making any network call.
+	c.mu.Lock()
+	if c.jwt != "" {
+		c.mu.Unlock()
+		return nil
+	}
+	c.mu.Unlock()
+
+	// Make the HTTP call WITHOUT holding the lock.
 	body, _ := json.Marshal(map[string]string{"api_key": c.APIKey})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.apiURL("auth/token"), bytes.NewReader(body))
 	if err != nil {
@@ -95,7 +107,14 @@ func (c *APIGuardClient) authenticate(ctx context.Context) error {
 	if token == "" {
 		return fmt.Errorf("no access_token in auth response")
 	}
-	c.jwt = token
+
+	// Re-acquire lock to store the token; double-check that another goroutine
+	// did not already populate it while we were doing I/O.
+	c.mu.Lock()
+	if c.jwt == "" {
+		c.jwt = token
+	}
+	c.mu.Unlock()
 	return nil
 }
 
@@ -115,13 +134,11 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 		}
 	}
 
-	c.mu.Lock()
-	if c.jwt == "" {
-		if err := c.authenticate(ctx); err != nil {
-			c.mu.Unlock()
-			return nil, err
-		}
+	// authenticate manages its own locking and must be called without c.mu held.
+	if err := c.authenticate(ctx); err != nil {
+		return nil, err
 	}
+	c.mu.Lock()
 	jwt := c.jwt
 	c.mu.Unlock()
 
@@ -139,12 +156,22 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 		}
 		if r.StatusCode == http.StatusUnauthorized {
 			r.Body.Close()
-			// Token may have expired — re-authenticate once.
+			// Double-checked locking: only re-authenticate if another goroutine
+			// has not already refreshed the token while we waited.
 			c.mu.Lock()
-			if authErr := c.authenticate(ctx); authErr != nil {
+			if c.jwt == tok {
+				// Token is still the stale one — we must refresh. Unlock
+				// before making the HTTP call to avoid holding the mutex
+				// across the network round-trip.
 				c.mu.Unlock()
-				return nil, authErr
+				if authErr := c.authenticate(ctx); authErr != nil {
+					return nil, authErr
+				}
+			} else {
+				// Another goroutine already refreshed the token; just use it.
+				c.mu.Unlock()
 			}
+			c.mu.Lock()
 			tok = c.jwt
 			c.mu.Unlock()
 			r, err = c.doWithJWT(ctx, method, path, newReader(), tok, extraHeaders)
@@ -292,13 +319,23 @@ func (c *APIGuardClient) deleteJSON(ctx context.Context, path string) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNoContent {
 		_, _ = io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
 		return nil
 	}
-	_, err = checkResponse(resp) // checkResponse handles body close
-	return err
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("reading response body: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		var ae apiError
+		if jsonErr := json.Unmarshal(raw, &ae); jsonErr == nil && (ae.Error != "" || ae.Message != "") {
+			return fmt.Errorf("API error HTTP %d: %s — %s", resp.StatusCode, ae.Error, ae.Message)
+		}
+		return fmt.Errorf("API error HTTP %d: %s", resp.StatusCode, string(raw))
+	}
+	return nil
 }
 
 // ----------------------------------------------------------------------------

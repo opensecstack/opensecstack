@@ -139,14 +139,6 @@ func (a *Auth) validAPIKey(key string) bool {
 	// DB key state. Operators who have migrated to DB-managed keys should remove
 	// static keys from config to ensure revocation is enforced. Static keys are
 	// intended for bootstrapping only.
-	if a.db != nil {
-		if len(key) >= 8 {
-			a.logger.Debug().Str("key_prefix", key[:8]+"...").Msg("key not found in DB, checking static config keys")
-		} else {
-			a.logger.Debug().Msg("key not found in DB, checking static config keys")
-		}
-	}
-
 	// --- Static config key fallback ---
 	for _, k := range a.cfg.Auth.APIKeys {
 		if hmac.Equal([]byte(k), []byte(key)) {
@@ -268,7 +260,11 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	// the exposure window to 24 hours so a leaked token cannot be misused
 	// indefinitely. TODO: implement a refresh-token allowlist/revocation store
 	// to fully invalidate issued refresh tokens.
-	newRefreshToken, err := issueJWT(a.cfg.Auth.JWTSecret, claims.Sub, "apiguard", "apiguard", "refresh", 24*time.Hour)
+	refreshExpiry := 24 * time.Hour
+	if refreshExpiry > expiry {
+		refreshExpiry = expiry
+	}
+	newRefreshToken, err := issueJWT(a.cfg.Auth.JWTSecret, claims.Sub, "apiguard", "apiguard", "refresh", refreshExpiry)
 	if err != nil {
 		a.logger.Error().Err(err).Msg("failed to issue refresh token")
 		writeError(w, http.StatusInternalServerError, "failed to issue token")

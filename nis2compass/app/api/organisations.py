@@ -134,9 +134,11 @@ def create_organisation():
             obj=org.to_dict(),
         )
         db.session.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         db.session.rollback()
-        return jsonify({'error': 'An organisation with this name already exists', 'code': 'CONFLICT'}), 409
+        if hasattr(e, 'orig') and e.orig is not None and getattr(e.orig, 'pgcode', None) == '23505':
+            return jsonify({'error': 'An organisation with this name already exists', 'code': 'CONFLICT'}), 409
+        raise
 
     return jsonify(org.to_dict()), 201
 

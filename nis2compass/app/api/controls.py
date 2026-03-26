@@ -186,7 +186,23 @@ def update_control(assessment_id, measure_ref):
     if after.get('risk_score') is not None and after['risk_score'] >= 7.0:
         risk_class = 'CRITICAL'
 
-    action = 'control_status_changed' if 'status' in data else 'control_evidence_updated'
+    if 'status' in data:
+        action = 'control_status_updated'
+    elif 'notes' in data:
+        action = 'control_note_updated'
+    elif 'evidence' in data:
+        action = 'control_evidence_updated'
+    elif any(k in data for k in ('remediation_plan', 'remediation_due', 'remediation_owner',
+                                  'remediation_status', 'remediation_notes')):
+        action = 'control_remediation_updated'
+    elif 'risk_score' in data:
+        action = 'control_risk_score_updated'
+    elif 'gap_description' in data:
+        action = 'control_gap_updated'
+    elif 'external_ticket_url' in data:
+        action = 'control_ticket_updated'
+    else:
+        action = 'control_updated'
     write_audit(
         db.session,
         action=action,

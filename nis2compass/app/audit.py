@@ -177,8 +177,14 @@ def write_audit(
             def _after_commit(session):
                 dispatch(entry_dict, webhook_url, webhook_secret)
                 sa_event.remove(session, 'after_commit', _after_commit)
+                sa_event.remove(session, 'after_rollback', _after_rollback)
+
+            def _after_rollback(session):
+                sa_event.remove(session, 'after_commit', _after_commit)
+                sa_event.remove(session, 'after_rollback', _after_rollback)
 
             sa_event.listen(db_session, 'after_commit', _after_commit)
+            sa_event.listen(db_session, 'after_rollback', _after_rollback)
     except RuntimeError:
         pass  # No app context (e.g. during testing without full stack)
 
@@ -203,7 +209,13 @@ def write_audit(
             def _after_commit_citadel(session):
                 _forward_to_citadel(entry_data)
                 sa_event.remove(session, 'after_commit', _after_commit_citadel)
+                sa_event.remove(session, 'after_rollback', _after_rollback_citadel)
+
+            def _after_rollback_citadel(session):
+                sa_event.remove(session, 'after_commit', _after_commit_citadel)
+                sa_event.remove(session, 'after_rollback', _after_rollback_citadel)
 
             sa_event.listen(db_session, 'after_commit', _after_commit_citadel)
+            sa_event.listen(db_session, 'after_rollback', _after_rollback_citadel)
     except RuntimeError:
         pass  # No app context (e.g. during testing without full stack)

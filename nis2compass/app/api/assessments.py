@@ -198,10 +198,6 @@ def list_assessments(org_id):
     if err:
         return err
 
-    org = db.session.get(Organisation, org_id)
-    if org is None:
-        return jsonify({'error': 'Organisation not found', 'code': 'NOT_FOUND'}), 404
-
     page = max(1, request.args.get('page', 1, type=int))
     per_page = min(100, max(1, request.args.get('per_page', 20, type=int)))
     status_filter = request.args.get('status')
@@ -230,10 +226,6 @@ def create_assessment(org_id):
     err = _check_org_access(org_id)
     if err:
         return err
-
-    org = db.session.get(Organisation, org_id)
-    if org is None:
-        return jsonify({'error': 'Organisation not found', 'code': 'NOT_FOUND'}), 404
 
     data = request.get_json(silent=True) or {}
     title = (data.get('title') or '').strip()

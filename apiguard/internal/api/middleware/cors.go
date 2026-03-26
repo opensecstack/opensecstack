@@ -13,6 +13,19 @@ import (
 //
 // Preflight OPTIONS requests are answered with 204 No Content immediately,
 // before any authentication middleware runs.
+//
+// Security defaults:
+//   - Passing an empty allowedOrigins slice (or omitting cors configuration)
+//     denies all origins by default. No wildcard is assumed. Operators who
+//     expect browser clients to reach the API MUST explicitly list the allowed
+//     origins in the configuration.
+//   - Non-OPTIONS (non-preflight) requests pass through to downstream handlers
+//     without CORS headers being added when the origin is not in the allowlist.
+//     The browser will block the response on the client side, but the request
+//     itself still reaches the server; authentication and authorisation
+//     middleware remain responsible for protecting those endpoints.
+//   - The allowlist is an exact-match set; wildcard subdomains are not
+//     supported. Use an explicit list of fully qualified origins.
 func CORS(allowedOrigins []string) func(http.Handler) http.Handler {
 	// Pre-compute wildcard mode. An empty list is NOT wildcard — it denies all.
 	wildcard := false

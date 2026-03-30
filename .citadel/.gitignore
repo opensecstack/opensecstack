@@ -1,0 +1,10 @@
+# Local configuration overrides
+*.local.yaml
+*.local.yml
+*.local.json
+
+# Generated files
+/generated/
+
+# Temporary audit exports
+/exports/

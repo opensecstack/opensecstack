@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensecstack.org/citadel/schemas/beacon_advisory_output_v1.0.json",
+  "title": "BEACON Advisory Output v1.0",
+  "description": "Schema for the advisory output of the CITADEL BEACON analytical intelligence.",
+  "type": "object",
+  "required": ["meta", "signal", "context", "integrity"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["schema_version", "project_id", "advisory_id", "ts_utc", "mirror_source", "mirror_freshness_utc"],
+      "properties": {
+        "schema_version": { "type": "string", "const": "1.0" },
+        "project_id": { "type": "string", "enum": ["ABISSNET_TCL_001", "TRIA", "Portfolio_CRV_001_P01"] },
+        "advisory_id": { "type": "string", "format": "uuid" },
+        "ts_utc": { "type": "string", "format": "date-time" },
+        "mirror_source": { "type": "string" },
+        "mirror_freshness_utc": { "type": "string", "format": "date-time" }
+      }
+    },
+    "signal": {
+      "type": "object",
+      "required": ["outcome", "confidence", "domain", "findings"],
+      "properties": {
+        "outcome": { "type": "string", "enum": ["COMPLIANT", "NEEDS_REVIEW", "NON_COMPLIANT", "INSUFFICIENT_DATA"] },
+        "confidence": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+        "domain": { "type": "string", "enum": ["compliance", "financial", "operational", "hr"] },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["finding_id", "rule_ref", "description", "severity"],
+            "properties": {
+              "finding_id": { "type": "string", "format": "uuid" },
+              "rule_ref": { "type": "string", "description": "SOP or policy reference" },
+              "description": { "type": "string" },
+              "severity": { "type": "string", "enum": ["INFO", "WARNING", "CRITICAL"] },
+              "evidence_refs": {
+                "type": "array",
+                "items": { "type": "string", "format": "uuid" },
+                "description": "References to citadel.evidence record IDs"
+              }
+            }
+          }
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "required": ["applicable_sops", "data_scope"],
+      "properties": {
+        "applicable_sops": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "SOP identifiers evaluated"
+        },
+        "data_scope": {
+          "type": "object",
+          "required": ["odoo_model", "record_ids"],
+          "properties": {
+            "odoo_model": { "type": "string" },
+            "record_ids": { "type": "array", "items": { "type": "integer" } },
+            "date_range": {
+              "type": "object",
+              "properties": {
+                "from": { "type": "string", "format": "date" },
+                "to": { "type": "string", "format": "date" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "required": ["advisory_hash_sha256", "chain_anchor_id"],
+      "properties": {
+        "advisory_hash_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "chain_anchor_id": { "type": "integer" }
+      }
+    }
+  }
+}

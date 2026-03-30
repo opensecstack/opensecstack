@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opensecstack.org/citadel/schemas/marshal_primary_output_v2.0.json",
+  "title": "MARSHAL Primary Output v2.0",
+  "description": "Schema for the primary output of the CITADEL MARSHAL decision engine.",
+  "type": "object",
+  "required": ["meta", "decision", "bindings", "integrity", "actions"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["schema_version", "runtime_context", "project_id", "execution_id", "ts_utc"],
+      "properties": {
+        "schema_version": { "type": "string", "const": "2.0" },
+        "runtime_context": { "type": "string", "enum": ["production", "staging", "dry_run"] },
+        "project_id": { "type": "string", "enum": ["ABISSNET_TCL_001", "TRIA", "Portfolio_CRV_001_P01"] },
+        "execution_id": { "type": "string", "format": "uuid" },
+        "ts_utc": { "type": "string", "format": "date-time" }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": ["outcome", "severity", "gates", "reasons"],
+      "properties": {
+        "outcome": { "type": "string", "enum": ["EXECUTE", "REFUSE", "HARD_STOP"] },
+        "severity": { "type": "string", "enum": ["INFO", "WARNING", "CRITICAL"] },
+        "gates": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "required": ["gate", "name", "status"],
+            "properties": {
+              "gate": { "type": "integer", "minimum": 1, "maximum": 5 },
+              "name": { "type": "string", "enum": ["authority", "scope", "determinism", "evidence", "schema"] },
+              "status": { "type": "string", "enum": ["PASS", "FAIL", "SKIPPED"] },
+              "reason": { "type": "string" }
+            }
+          }
+        },
+        "reasons": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "required": ["odoo", "actor", "sod"],
+      "properties": {
+        "odoo": {
+          "type": "object",
+          "required": ["model", "record_id", "transaction_id"],
+          "properties": {
+            "model": { "type": "string" },
+            "record_id": { "type": "integer" },
+            "transaction_id": { "type": "string" }
+          }
+        },
+        "actor": {
+          "type": "object",
+          "required": ["user_id", "role", "groups"],
+          "properties": {
+            "user_id": { "type": "integer" },
+            "role": { "type": "string" },
+            "groups": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "sod": {
+          "type": "object",
+          "required": ["required", "operator_user_id", "verifier_user_id", "status"],
+          "properties": {
+            "required": { "type": "boolean" },
+            "operator_user_id": { "type": "integer" },
+            "verifier_user_id": { "type": "integer" },
+            "status": { "type": "string", "enum": ["VALID", "VIOLATION", "NOT_REQUIRED"] }
+          }
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "required": ["pack_hash_sha256", "canonical_fingerprint_sha256", "chain_anchor"],
+      "properties": {
+        "pack_hash_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "canonical_fingerprint_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "chain_anchor": {
+          "type": "object",
+          "required": ["anchor_id", "anchor_hash", "rotation_seq"],
+          "properties": {
+            "anchor_id": { "type": "integer" },
+            "anchor_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "rotation_seq": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "actions": {
+      "type": "object",
+      "required": ["proposed", "executed", "required_evidence", "incidents"],
+      "properties": {
+        "proposed": { "type": "array", "items": { "type": "object" } },
+        "executed": { "type": "array", "items": { "type": "object" } },
+        "required_evidence": {
+          "type": "array",
+          "items": { "type": "object" },
+          "description": "Must be empty (maxItems: 0) when outcome is EXECUTE"
+        },
+        "incidents": { "type": "array", "items": { "type": "object" } }
+      }
+    }
+  },
+  "if": {
+    "properties": { "decision": { "properties": { "outcome": { "const": "EXECUTE" } } } }
+  },
+  "then": {
+    "properties": { "actions": { "properties": { "required_evidence": { "maxItems": 0 } } } }
+  }
+}

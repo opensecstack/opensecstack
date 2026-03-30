@@ -1,6 +1,7 @@
 package reporter
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -73,7 +74,7 @@ func testResult() *domain.ScanResult {
 // --- Factory tests ---
 
 func TestNew_SupportedFormats(t *testing.T) {
-	for _, format := range []string{"json", "sarif", "html"} {
+	for _, format := range []string{"json", "sarif", "html", "text"} {
 		r, err := New(format)
 		if err != nil {
 			t.Errorf("New(%q) returned error: %v", format, err)
@@ -302,5 +303,202 @@ func TestHTMLReporter_EmptyFindings(t *testing.T) {
 	html := string(data)
 	if !strings.Contains(html, "No findings were detected") {
 		t.Error("HTML output should show 'no findings' message when findings are empty")
+	}
+}
+
+// --- PDF (text) reporter tests ---
+
+func TestPDFReporter_Generate(t *testing.T) {
+	r := &PDFReporter{}
+	data, err := r.Generate(testResult())
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	out := string(data)
+
+	// Must contain the scan ID.
+	if !strings.Contains(out, "test-scan-001") {
+		t.Error("text report missing scan ID")
+	}
+	// Must contain the target URL.
+	if !strings.Contains(out, "https://api.example.com") {
+		t.Error("text report missing target URL")
+	}
+	// Must contain the finding title.
+	if !strings.Contains(out, "BOLA: Horizontal access to user profile") {
+		t.Error("text report missing finding title")
+	}
+	// Must show severity in upper-case.
+	if !strings.Contains(out, "CRITICAL") {
+		t.Error("text report missing CRITICAL severity")
+	}
+	// Must contain summary section.
+	if !strings.Contains(out, "FINDINGS SUMMARY") {
+		t.Error("text report missing FINDINGS SUMMARY section")
+	}
+	// Must have OWASP ID.
+	if !strings.Contains(out, "API1:2023") {
+		t.Error("text report missing OWASP ID")
+	}
+	// Must have header and footer markers.
+	if !strings.Contains(out, "APIGuard Security Report") {
+		t.Error("text report missing header")
+	}
+	if !strings.Contains(out, "End of APIGuard Security Report") {
+		t.Error("text report missing footer")
+	}
+}
+
+func TestPDFReporter_EmptyFindings(t *testing.T) {
+	r := &PDFReporter{}
+	result := testResult()
+	result.Findings = nil
+	result.Summary = domain.ScanSummary{}
+
+	data, err := r.Generate(result)
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+
+	out := string(data)
+	if !strings.Contains(out, "No findings were detected") {
+		t.Error("text report should show no-findings message when findings is nil")
+	}
+}
+
+func TestPDFReporter_GenerateReturnsBytesNotEmpty(t *testing.T) {
+	r := &PDFReporter{}
+	data, err := r.Generate(testResult())
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+	if len(data) == 0 {
+		t.Error("Generate returned empty bytes")
+	}
+}
+
+// --- center helper ---
+
+func TestCenter_ShorterThanWidth(t *testing.T) {
+	got := center("hello", 20)
+	if !strings.Contains(got, "hello") {
+		t.Errorf("center(%q, 20) = %q, should contain the string", "hello", got)
+	}
+	if len(got) > 20 {
+		t.Errorf("center(%q, 20) = %q, len=%d, want <= 20", "hello", got, len(got))
+	}
+}
+
+func TestCenter_ExactWidth(t *testing.T) {
+	s := strings.Repeat("x", 20)
+	got := center(s, 20)
+	if got != s {
+		t.Errorf("center(exact-width string, 20) should return the string unchanged")
+	}
+}
+
+func TestCenter_LongerThanWidth(t *testing.T) {
+	s := strings.Repeat("x", 30)
+	got := center(s, 20)
+	if got != s {
+		t.Errorf("center(longer-than-width string, 20) should return the string unchanged")
+	}
+}
+
+func TestCenter_Symmetry(t *testing.T) {
+	// For even padding the left and right margins should be equal (or differ by 1).
+	got := center("hi", 20)
+	idx := strings.Index(got, "hi")
+	leftPad := idx
+	rightPad := len(got) - idx - len("hi")
+	diff := leftPad - rightPad
+	if diff < -1 || diff > 1 {
+		t.Errorf("center padding not symmetric: left=%d right=%d in %q", leftPad, rightPad, got)
+	}
+}
+
+// --- truncate helper ---
+
+func TestTruncate_ShortString(t *testing.T) {
+	got := truncate("hello", 10)
+	if got != "hello" {
+		t.Errorf("truncate(%q, 10) = %q, want %q", "hello", got, "hello")
+	}
+}
+
+func TestTruncate_ExactLength(t *testing.T) {
+	got := truncate("hello", 5)
+	if got != "hello" {
+		t.Errorf("truncate(%q, 5) = %q, want %q", "hello", got, "hello")
+	}
+}
+
+func TestTruncate_LongString(t *testing.T) {
+	got := truncate("hello world", 8)
+	// Should be truncated and end with ellipsis.
+	if !strings.Contains(got, "…") {
+		t.Errorf("truncate(%q, 8) = %q, should contain ellipsis", "hello world", got)
+	}
+	// Rune count should not exceed limit.
+	runes := []rune(got)
+	if len(runes) > 8 {
+		t.Errorf("truncate(%q, 8) = %q, rune count %d exceeds limit 8", "hello world", got, len(runes))
+	}
+}
+
+func TestTruncate_NToOne(t *testing.T) {
+	got := truncate("hello", 1)
+	runes := []rune(got)
+	if len(runes) > 1 {
+		t.Errorf("truncate with n=1: got %q (len %d), want at most 1 rune", got, len(runes))
+	}
+}
+
+// --- writeWrapped helper ---
+// writeWrapped is unexported but package-internal; tests call it directly.
+
+func TestWriteWrapped_ShortText(t *testing.T) {
+	var b bytes.Buffer
+	writeWrapped(&b, "short text", 2, 80)
+	got := b.String()
+	if !strings.Contains(got, "short text") {
+		t.Errorf("writeWrapped(%q) = %q, should contain the text", "short text", got)
+	}
+	if !strings.HasPrefix(got, "  ") {
+		t.Errorf("writeWrapped indent=2: output should start with 2 spaces, got %q", got)
+	}
+}
+
+func TestWriteWrapped_LongTextWraps(t *testing.T) {
+	var b bytes.Buffer
+	longText := strings.Repeat("word ", 30) // ~150 chars — forces wrapping at 80-col
+	writeWrapped(&b, longText, 4, 80)
+	out := b.String()
+	if !strings.Contains(out, "word") {
+		t.Error("wrapped long text should contain original words")
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if len([]rune(line)) > pdfLineWidth+2 {
+			t.Errorf("line exceeds %d chars: %q", pdfLineWidth, line)
+		}
+	}
+}
+
+func TestWriteWrapped_PreservesNewlines(t *testing.T) {
+	var b bytes.Buffer
+	writeWrapped(&b, "Line one.\nLine two.", 0, 80)
+	out := b.String()
+	if !strings.Contains(out, "Line one.") || !strings.Contains(out, "Line two.") {
+		t.Errorf("writeWrapped should preserve paragraph newlines, got: %q", out)
+	}
+}
+
+func TestWriteWrapped_EmptyParagraph(t *testing.T) {
+	var b bytes.Buffer
+	writeWrapped(&b, "first\n\nsecond", 0, 80)
+	out := b.String()
+	if !strings.Contains(out, "first") || !strings.Contains(out, "second") {
+		t.Errorf("writeWrapped with blank paragraph: got %q", out)
 	}
 }

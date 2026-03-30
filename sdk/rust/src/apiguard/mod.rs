@@ -231,9 +231,13 @@ impl APIGuardClient {
                     // continue to next retry attempt
                 }
                 Ok(resp) => return Ok(resp), // success or 4xx (don't retry 4xx)
-                Err(e) => {
-                    last_err = Some(e);
-                    // continue to next retry attempt for transport errors
+                Err(Error::Transport(e)) => {
+                    // Network-level error — worth retrying.
+                    last_err = Some(Error::Transport(e));
+                }
+                Err(other) => {
+                    // Auth errors, JSON errors, etc. are not transient — fail fast.
+                    return Err(other);
                 }
             }
         }

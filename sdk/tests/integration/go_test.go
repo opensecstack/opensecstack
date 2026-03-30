@@ -69,6 +69,72 @@ func TestGoAPIGuardIntegration(t *testing.T) {
 	})
 }
 
+func citadelURL() string {
+	if u := os.Getenv("INTEGRATION_CITADEL_URL"); u != "" {
+		return u
+	}
+	return "http://localhost:3001"
+}
+
+func TestGoCitadelIntegration(t *testing.T) {
+	client := opensecstack.NewCITADELClient(citadelURL(), "test-shared-secret")
+	ctx := context.Background()
+
+	var sentEventID string
+
+	t.Run("send_event", func(t *testing.T) {
+		event := opensecstack.SecurityEvent{
+			ID:           "integ-go-001",
+			EventType:    "apiguard.scan.completed",
+			Source:       "apiguard",
+			ActorID:      "test-api-key",
+			ActorType:    "api_key",
+			ResourceType: "scan",
+			ResourceID:   "scan-integ-001",
+			Severity:     "info",
+			Payload:      map[string]interface{}{"score": 95},
+			ChainHash:    "integ-genesis-go",
+		}
+		if err := client.SendEvent(ctx, event); err != nil {
+			t.Fatalf("SendEvent: %v", err)
+		}
+		sentEventID = event.ID
+	})
+
+	t.Run("get_events", func(t *testing.T) {
+		events, err := client.GetEvents(ctx, nil)
+		if err != nil {
+			t.Fatalf("GetEvents: %v", err)
+		}
+		if len(events) == 0 {
+			t.Error("expected at least one event in the audit chain")
+		}
+	})
+
+	t.Run("get_event", func(t *testing.T) {
+		if sentEventID == "" {
+			t.Skip("send_event sub-test did not produce an event ID")
+		}
+		event, err := client.GetEvent(ctx, sentEventID)
+		if err != nil {
+			t.Fatalf("GetEvent(%q): %v", sentEventID, err)
+		}
+		if event.ID != sentEventID {
+			t.Errorf("GetEvent returned ID %q, want %q", event.ID, sentEventID)
+		}
+	})
+
+	t.Run("verify_chain", func(t *testing.T) {
+		events, err := client.GetEvents(ctx, nil)
+		if err != nil {
+			t.Fatalf("GetEvents for chain verification: %v", err)
+		}
+		if err := client.VerifyChain(events); err != nil {
+			t.Fatalf("VerifyChain: %v", err)
+		}
+	})
+}
+
 func TestGoNIS2CompassIntegration(t *testing.T) {
 	client := opensecstack.NewNIS2CompassClient(nis2URL(), "test-api-key")
 	ctx := context.Background()

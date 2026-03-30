@@ -1,4 +1,4 @@
-.PHONY: help dev dev-down install fmt lint test test-cov test-fast migrate migrate-down db-reset security clean
+.PHONY: help dev dev-down install fmt lint test test-cov test-fast migrate migrate-down db-reset security clean web-install web-build web-lint web-test
 
 # Default target
 help:
@@ -19,6 +19,12 @@ help:
 	@echo "  db-reset     Downgrade to base then upgrade to head"
 	@echo ""
 	@echo "  security     Run bandit SAST and pip-audit CVE check"
+	@echo ""
+	@echo "  web-install  Install frontend npm dependencies"
+	@echo "  web-build    Build production frontend bundle"
+	@echo "  web-lint     Run ESLint on frontend source"
+	@echo "  web-test     Run frontend unit tests with vitest"
+	@echo ""
 	@echo "  clean        Remove build/cache artefacts"
 
 # ── Docker ────────────────────────────────────────────────────────────────────
@@ -75,6 +81,20 @@ security:
 	bandit -r app/
 	pip-audit -r requirements.txt
 
+# ── Frontend ─────────────────────────────────────────────────────────────────
+
+web-install:
+	cd web && npm install
+
+web-build:
+	cd web && npm run build
+
+web-lint:
+	cd web && npm run lint
+
+web-test:
+	cd web && npm test
+
 # ── Cleanup ────────────────────────────────────────────────────────────────────
 
 clean:
@@ -83,3 +103,4 @@ clean:
 	find . -type d -name .mypy_cache  -exec rm -rf {} +
 	find . -type d -name htmlcov      -exec rm -rf {} +
 	find . -name .coverage            -delete
+	rm -rf web/dist web/coverage

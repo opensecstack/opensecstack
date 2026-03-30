@@ -96,7 +96,7 @@ jobs:
         run: alembic upgrade head
 
       - name: Run tests
-        run: pytest tests/ -v --cov=app --cov-report=term-missing --cov-fail-under=70
+        run: pytest tests/ -v --cov=app --cov-report=term-missing --cov-fail-under=80
 
   test-web:
     runs-on: ubuntu-latest
@@ -137,7 +137,7 @@ jobs:
         run: pip install bandit pip-audit
 
       - name: bandit (Python SAST)
-        run: bandit -r app/ -f json -o bandit-results.json || true
+        run: bandit -r app/ -f json -o bandit-results.json
 
       - name: Upload bandit results
         uses: actions/upload-artifact@v4
@@ -147,7 +147,7 @@ jobs:
           path: nis2compass/bandit-results.json
 
       - name: pip-audit (dependency CVE check)
-        run: pip-audit -r requirements.txt --format json -o pip-audit-results.json || true
+        run: pip-audit -r requirements.txt --format json -o pip-audit-results.json
 
       - name: Upload pip-audit results
         uses: actions/upload-artifact@v4

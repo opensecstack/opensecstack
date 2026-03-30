@@ -23,7 +23,7 @@ exclude = ["migrations/", "tests/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=70"
+addopts = "-v --cov=app --cov-report=term-missing --cov-report=html --cov-fail-under=80"
 env = [
     "NIS2_ENV=testing"
 ]

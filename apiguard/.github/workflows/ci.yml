@@ -59,7 +59,7 @@ jobs:
           go tool cover -func=coverage.out | tail -1
           COVERAGE=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}' | tr -d '%')
           echo "Coverage: ${COVERAGE}%"
-          awk "BEGIN {if (${COVERAGE} < 70) {print \"Coverage ${COVERAGE}% is below 70% threshold\"; exit 1}}"
+          awk "BEGIN {if (${COVERAGE} < 80) {print \"Coverage ${COVERAGE}% is below 80% threshold\"; exit 1}}"
 
   integration:
     runs-on: ubuntu-latest

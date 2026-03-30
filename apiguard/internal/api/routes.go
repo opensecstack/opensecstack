@@ -33,6 +33,9 @@ func RegisterRoutes(
 	apiKeyLimiter *middleware.RateLimiter,
 	trustedProxies []*net.IPNet,
 ) {
+	// Dedicated rate limiter for the /metrics endpoint (30 req/min per IP).
+	// Created inline because its lifecycle is tied to the router, not the server.
+	metricsLimiter := middleware.NewRateLimiter(30)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		// ── Public endpoints (no JWT required) ──────────────────────────────
@@ -56,7 +59,7 @@ func RegisterRoutes(
 		})
 
 		r.Get("/openapi.json", handlers.OpenAPI)
-		r.Get("/metrics", metrics.Handler())
+		r.With(metricsLimiter.Middleware).Get("/metrics", metrics.Handler())
 
 		// ── Protected endpoints (Bearer JWT required) ────────────────────────
 		r.Group(func(r chi.Router) {

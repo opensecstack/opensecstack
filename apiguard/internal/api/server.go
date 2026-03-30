@@ -151,6 +151,7 @@ func (s *Server) Router() chi.Router {
 }
 
 func (s *Server) setupMiddleware() {
+	s.router.Use(middleware.CorrelationID) // must be first so all subsequent middleware can read the correlation ID
 	s.router.Use(chimw.RequestID)
 	s.router.Use(chimw.RealIP)
 	s.router.Use(middleware.RequestLogger(s.logger, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies)))

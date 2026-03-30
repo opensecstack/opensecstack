@@ -34,6 +34,12 @@ type NIS2CompassClient struct {
 	// ReportTimeout is the maximum time to wait for GenerateReport to complete.
 	// When zero, it defaults to 120 seconds (matching the Python SDK).
 	ReportTimeout time.Duration
+	// MaxRetries is the maximum number of retry attempts for transient 5xx errors.
+	// Zero (default) means no retries.
+	MaxRetries int
+	// RetryWaitBase is the base duration for exponential backoff between retries.
+	// Defaults to 500ms when MaxRetries > 0.
+	RetryWaitBase time.Duration
 
 	mu          sync.RWMutex
 	jwt         string    // cached Bearer token; empty means unauthenticated
@@ -296,6 +302,91 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 	}
 
 	return resp, nil
+}
+
+// doWithRetry executes an HTTP request function with exponential-backoff
+// retry on transient errors (5xx responses, network timeouts).
+// It does NOT retry 4xx client errors.
+//
+// fn must be idempotent — it is called up to MaxRetries+1 times.
+// fn receives the current attempt index (0-based) and returns an *http.Response
+// and error. On each retry, fn is called again with a fresh request.
+func (c *NIS2CompassClient) doWithRetry(ctx context.Context, fn func(attempt int) (*http.Response, error)) (*http.Response, error) {
+	maxAttempts := c.MaxRetries + 1
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
+	base := c.RetryWaitBase
+	if base == 0 {
+		base = 500 * time.Millisecond
+	}
+
+	var lastErr error
+	var lastResp *http.Response
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			wait := base * time.Duration(1<<(attempt-1)) // 500ms, 1s, 2s, …
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(wait):
+			}
+		}
+
+		resp, err := fn(attempt)
+		if err != nil {
+			lastErr = err
+			lastResp = nil
+			continue
+		}
+
+		// Do not retry client errors (4xx) or success (1xx/2xx/3xx).
+		if resp.StatusCode < 500 {
+			return resp, nil
+		}
+
+		// 5xx — consume and close body before retry.
+		_ = resp.Body.Close()
+		lastResp = resp
+		lastErr = fmt.Errorf("server error: HTTP %d", resp.StatusCode)
+	}
+
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return lastResp, nil
+}
+
+// GetReportStream downloads an assessment report and streams it to w.
+// format must be one of "pdf", "json", "sarif".
+func (c *NIS2CompassClient) GetReportStream(ctx context.Context, assessmentID, format string, w io.Writer) error {
+	if err := c.authenticate(ctx); err != nil {
+		return fmt.Errorf("GetReportStream: authenticate: %w", err)
+	}
+
+	u := c.apiURL(fmt.Sprintf("assessments/%s/report?format=%s", assessmentID, format))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
+	if err != nil {
+		return fmt.Errorf("GetReportStream: build request: %w", err)
+	}
+	c.mu.RLock()
+	req.Header.Set("Authorization", "Bearer "+c.jwt)
+	c.mu.RUnlock()
+
+	resp, err := c.doWithRetry(ctx, func(_ int) (*http.Response, error) {
+		r := req.Clone(ctx)
+		return c.HTTPClient.Do(r)
+	})
+	if err != nil {
+		return fmt.Errorf("GetReportStream: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("GetReportStream: HTTP %d", resp.StatusCode)
+	}
+	_, err = io.Copy(w, resp.Body)
+	return err
 }
 
 func (c *NIS2CompassClient) getJSON(ctx context.Context, path string, params url.Values, out interface{}) error {

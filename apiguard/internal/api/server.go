@@ -37,6 +37,7 @@ type Server struct {
 	reportLimiter  *middleware.RateLimiter
 	refreshLimiter *middleware.RateLimiter
 	apiKeyLimiter  *middleware.RateLimiter
+	metrics        *middleware.MetricsCollector
 	shutdownCtx    context.Context
 	shutdownCancel context.CancelFunc
 	scansHandler   *handlers.Scans // kept for WaitScans() on shutdown
@@ -67,6 +68,7 @@ func NewServer(cfg *config.Config, database *db.DB, sc *scanner.Scanner) *Server
 		shutdownCancel: shutdownCancel,
 	}
 
+	s.metrics = middleware.NewMetricsCollector()
 	s.setupMiddleware()
 	s.registerRoutes()
 
@@ -155,6 +157,7 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(chimw.Recoverer)
 	s.router.Use(chimw.Timeout(60 * time.Second))
 	s.router.Use(middleware.SecurityHeaders)
+	s.router.Use(s.metrics.Middleware)
 	rateLimit := s.config.Scanner.RateLimit
 	if rateLimit <= 0 {
 		rateLimit = 120
@@ -181,5 +184,5 @@ func (s *Server) registerRoutes() {
 	s.refreshLimiter = middleware.NewRateLimiter(20) // 20 req/min per IP on refresh revocation
 	s.apiKeyLimiter = middleware.NewRateLimiter(5)   // 5 req/min per IP on API key creation
 
-	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, s.config, s.authLimiter, s.scanLimiter, s.reportLimiter, s.refreshLimiter, s.apiKeyLimiter, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies))
+	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, s.metrics, s.config, s.authLimiter, s.scanLimiter, s.reportLimiter, s.refreshLimiter, s.apiKeyLimiter, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies))
 }

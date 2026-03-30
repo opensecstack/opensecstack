@@ -123,6 +123,20 @@ def update_control(assessment_id, measure_ref):
             return jsonify({'error': 'evidence must be a JSON object', 'code': 'INVALID_INPUT'}), 400
         if len(json.dumps(data['evidence'])) > 65536:
             return jsonify({'error': 'evidence exceeds maximum size of 65536 bytes', 'code': 'INVALID_INPUT'}), 400
+        # Validate evidence schema if provided
+        if data['evidence'] is not None:
+            if not isinstance(data['evidence'], dict):
+                return jsonify({"error": "evidence must be a JSON object"}), 400
+            # Validate known evidence keys if present
+            allowed_keys = {
+                "documents", "links", "notes", "last_reviewed",
+                "reviewed_by", "tool_output", "custom"
+            }
+            unknown = set(data['evidence'].keys()) - allowed_keys
+            if unknown:
+                return jsonify({
+                    "error": f"unknown evidence keys: {sorted(unknown)}. Allowed: {sorted(allowed_keys)}"
+                }), 422
         control.evidence = data['evidence']
 
     if 'description' in data:

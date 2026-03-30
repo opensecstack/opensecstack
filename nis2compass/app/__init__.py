@@ -1,6 +1,7 @@
 from flask import Flask
 from .config import Config
 from .extensions import init_extensions
+from .metrics import init_metrics
 from .middleware import apply_middleware
 
 
@@ -35,5 +36,7 @@ def create_app(config_class=Config):
 
     from .api import register_blueprints
     register_blueprints(app)
+
+    init_metrics(app)
 
     return app

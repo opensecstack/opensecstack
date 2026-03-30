@@ -24,6 +24,7 @@ func RegisterRoutes(
 	specs *handlers.Specs,
 	audit *handlers.Audit,
 	apiKeys *handlers.APIKeys,
+	metrics *middleware.MetricsCollector,
 	cfg *config.Config,
 	authLimiter *middleware.RateLimiter,
 	scanLimiter *middleware.RateLimiter,
@@ -55,6 +56,7 @@ func RegisterRoutes(
 		})
 
 		r.Get("/openapi.json", handlers.OpenAPI)
+		r.Get("/metrics", metrics.Handler())
 
 		// ── Protected endpoints (Bearer JWT required) ────────────────────────
 		r.Group(func(r chi.Router) {

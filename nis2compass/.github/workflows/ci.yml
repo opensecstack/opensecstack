@@ -36,6 +36,12 @@ jobs:
       - name: isort
         run: isort --check-only app/
 
+      - name: Install mypy
+        run: pip install mypy types-requests
+
+      - name: mypy
+        run: mypy app/ --ignore-missing-imports --no-error-summary
+
   test:
     runs-on: ubuntu-latest
     defaults:
@@ -90,7 +96,7 @@ jobs:
         run: alembic upgrade head
 
       - name: Run tests
-        run: pytest tests/ -v --cov=app --cov-report=term-missing
+        run: pytest tests/ -v --cov=app --cov-report=term-missing --cov-fail-under=70
 
   test-web:
     runs-on: ubuntu-latest
@@ -114,10 +120,46 @@ jobs:
       - name: Build
         run: npm run build
 
+  security:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nis2compass/
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install security tools
+        run: pip install bandit pip-audit
+
+      - name: bandit (Python SAST)
+        run: bandit -r app/ -f json -o bandit-results.json || true
+
+      - name: Upload bandit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-results
+          path: nis2compass/bandit-results.json
+
+      - name: pip-audit (dependency CVE check)
+        run: pip-audit -r requirements.txt --format json -o pip-audit-results.json || true
+
+      - name: Upload pip-audit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pip-audit-results
+          path: nis2compass/pip-audit-results.json
+
   docker-build:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [lint, test, test-web]
+    needs: [lint, test, test-web, security]
 
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
@@ -141,3 +183,16 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}/nis2compass:${{ github.sha }}
             ghcr.io/${{ github.repository }}/nis2compass:latest
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/${{ github.repository }}/nis2compass:${{ github.sha }}
+          format: sarif
+          output: trivy-nis2compass.sarif
+          severity: CRITICAL,HIGH
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-nis2compass.sarif

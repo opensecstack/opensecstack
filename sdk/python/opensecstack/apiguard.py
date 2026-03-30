@@ -111,6 +111,78 @@ class APIGuardClient:
                 self._token_expiry = expiry
                 self._session.headers["Authorization"] = f"Bearer {self._jwt}"
 
+    def _request_with_retry(
+        self,
+        method: str,
+        url: str,
+        *,
+        max_retries: int = 3,
+        retry_wait_base: float = 0.5,
+        stream: bool = False,
+        **kwargs,
+    ) -> requests.Response:
+        """
+        Execute an HTTP request with exponential-backoff retry on 5xx errors.
+
+        Retries on: 500, 502, 503, 504 and network-level errors (ConnectionError,
+        Timeout). Does NOT retry 4xx client errors.
+
+        Parameters
+        ----------
+        method:      HTTP method (GET, POST, …)
+        url:         Full URL
+        max_retries: Maximum retry attempts after the first failure (default 3)
+        retry_wait_base: Base wait in seconds; doubles each retry (default 0.5s)
+        stream:      If True, response body is not eagerly downloaded
+        **kwargs:    Passed directly to requests.Session.request()
+        """
+        import time as _time
+
+        last_exc: Exception | None = None
+        wait = retry_wait_base
+
+        for attempt in range(max_retries + 1):
+            if attempt > 0:
+                _time.sleep(wait)
+                wait *= 2
+
+            try:
+                resp = self._session.request(
+                    method, url, timeout=self._timeout, stream=stream, **kwargs
+                )
+                # Retry on server errors only
+                if resp.status_code in (500, 502, 503, 504) and attempt < max_retries:
+                    last_exc = None
+                    continue
+                return resp
+            except (requests.ConnectionError, requests.Timeout) as exc:
+                last_exc = exc
+                if attempt == max_retries:
+                    raise
+
+        # Should not reach here, but satisfy type checker
+        if last_exc:
+            raise last_exc
+        raise RuntimeError("unexpected retry loop exit")
+
+    def _api_url(self, path: str) -> str:
+        return self._url(path)
+
+    def _ensure_authenticated(self) -> None:
+        with self._auth_lock:
+            token_expiring = (
+                self._token_expiry is not None
+                and time.time() > self._token_expiry - 60
+            )
+            needs_auth = self._jwt is None
+        if token_expiring or needs_auth:
+            if token_expiring:
+                with self._auth_lock:
+                    self._jwt = None
+                    self._token_expiry = None
+                    self._session.headers.pop("Authorization", None)
+            self._authenticate()
+
     def _raise_for_status(self, resp: requests.Response) -> None:
         if resp.status_code == 401:
             raise AuthenticationError("JWT expired or invalid — re-authenticate")
@@ -454,6 +526,49 @@ class APIGuardClient:
         if expected and not ct.lower().startswith(expected):
             raise APIError(resp.status_code, f"Unexpected Content-Type: {ct!r}, expected {expected!r}")
         return resp.content
+
+    def stream_report(
+        self,
+        scan_id: str,
+        format: str,
+        dest,
+        *,
+        chunk_size: int = 8192,
+    ) -> None:
+        """
+        Stream a scan report directly to a file-like object ``dest``.
+
+        Unlike ``get_report()``, this method never buffers the entire response
+        body in memory — suitable for large PDF/HTML reports.
+
+        Parameters
+        ----------
+        scan_id:    UUID of the scan
+        format:     Report format: json | sarif | html | pdf
+        dest:       Writable file-like object (binary mode)
+        chunk_size: Streaming chunk size in bytes (default 8 192)
+        """
+        self._ensure_authenticated()
+        url = self._api_url(f"scans/{scan_id}/report")
+        resp = self._request_with_retry(
+            "GET", url,
+            params={"format": format},
+            headers={"Authorization": f"Bearer {self._jwt}"},
+            stream=True,
+        )
+        if resp.status_code == 401:
+            self._authenticate()
+            resp = self._request_with_retry(
+                "GET", url,
+                params={"format": format},
+                headers={"Authorization": f"Bearer {self._jwt}"},
+                stream=True,
+            )
+        if resp.status_code != 200:
+            raise APIError(resp.status_code, resp.text)
+        for chunk in resp.iter_content(chunk_size=chunk_size):
+            if chunk:
+                dest.write(chunk)
 
     def list_findings(
         self,

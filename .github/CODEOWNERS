@@ -1,0 +1,30 @@
+# Global fallback — core maintainers review everything
+* @opensecstack/core-maintainers
+
+# APIGuard platform
+/apiguard/ @opensecstack/apiguard-maintainers
+
+# NIS2 Compass platform
+/nis2compass/ @opensecstack/nis2compass-maintainers
+
+# SDK — both platform teams must review
+/sdk/ @opensecstack/apiguard-maintainers @opensecstack/nis2compass-maintainers
+
+# Deployment & infrastructure
+/deploy/ @opensecstack/core-maintainers
+/deploy/k8s/ @opensecstack/core-maintainers
+
+# Security-sensitive files require security team sign-off
+/SECURITY.md @opensecstack/security-team
+/apiguard/internal/auth/ @opensecstack/security-team
+/apiguard/internal/api/middleware/ @opensecstack/security-team
+/nis2compass/app/auth.py @opensecstack/security-team
+
+# Release and governance
+/CHANGELOG.md @opensecstack/core-maintainers
+/ROADMAP.md @opensecstack/core-maintainers
+/.github/ @opensecstack/core-maintainers
+
+# Architecture decisions — require two core maintainers
+/adrs/ @opensecstack/core-maintainers
+/rfcs/ @opensecstack/core-maintainers

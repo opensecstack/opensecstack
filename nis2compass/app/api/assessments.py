@@ -17,6 +17,7 @@ from ..extensions import db
 from ..models import Assessment, Artifact, Control, ControlTemplate, Organisation
 from ..auth import require_auth, require_scope
 from ..audit import write_audit
+from ..reporters import generate_json_report, generate_sarif_report
 
 assessments_bp = Blueprint('assessments', __name__)
 
@@ -736,10 +737,14 @@ def _generate_pdf(assessment, org, controls, templates):
 @require_auth
 @require_scope('read')
 def generate_report(assessment_id):
-    # Enforce per-user rate limit of 3 PDF requests per minute.
+    # Enforce per-user rate limit of 3 report requests per minute.
     # Uses Redis when available (shared across workers); in-memory fallback otherwise.
     if not _check_report_rate_limit(g.actor):
         return jsonify({'error': 'Rate limit exceeded', 'code': 'RATE_LIMITED'}), 429
+
+    fmt = request.args.get('format', 'pdf').lower()
+    if fmt not in ('pdf', 'json', 'sarif'):
+        return jsonify({'error': "format must be one of: pdf, json, sarif", 'code': 'INVALID_INPUT'}), 400
 
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
@@ -758,6 +763,62 @@ def generate_report(assessment_id):
         .order_by(Control.measure_ref)
         .all()
     )
+
+    if fmt == 'json':
+        try:
+            report_bytes = generate_json_report(assessment, controls, org)
+        except Exception as exc:
+            current_app.logger.error('JSON report generation failed for assessment %s: %s', assessment_id, exc)
+            return jsonify({'error': 'Report generation failed', 'code': 'REPORT_ERROR'}), 500
+
+        write_audit(
+            db.session,
+            action='report_generated',
+            actor=g.actor,
+            resource_type='assessment',
+            resource_id=assessment.id,
+            risk_class='INFO',
+            metadata={'format': 'json'},
+        )
+        db.session.commit()
+
+        from flask import Response
+        return Response(
+            report_bytes,
+            mimetype='application/json',
+            headers={
+                'Content-Disposition': f'attachment; filename="report-{assessment_id}.json"',
+            },
+        )
+
+    if fmt == 'sarif':
+        try:
+            report_bytes = generate_sarif_report(assessment, controls, org)
+        except Exception as exc:
+            current_app.logger.error('SARIF report generation failed for assessment %s: %s', assessment_id, exc)
+            return jsonify({'error': 'Report generation failed', 'code': 'REPORT_ERROR'}), 500
+
+        write_audit(
+            db.session,
+            action='report_generated',
+            actor=g.actor,
+            resource_type='assessment',
+            resource_id=assessment.id,
+            risk_class='INFO',
+            metadata={'format': 'sarif'},
+        )
+        db.session.commit()
+
+        from flask import Response
+        return Response(
+            report_bytes,
+            mimetype='application/sarif+json',
+            headers={
+                'Content-Disposition': f'attachment; filename="report-{assessment_id}.sarif"',
+            },
+        )
+
+    # Default: PDF
     templates = (
         db.session.query(ControlTemplate)
         .order_by(ControlTemplate.measure_ref)

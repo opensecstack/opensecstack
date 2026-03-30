@@ -54,7 +54,12 @@ jobs:
       - name: Run Go tests
         env:
           APIGUARD_DB_URL: postgres://apiguard:testpass@localhost:5432/apiguard_test?sslmode=disable
-        run: go test ./...
+        run: |
+          go test -coverprofile=coverage.out ./...
+          go tool cover -func=coverage.out | tail -1
+          COVERAGE=$(go tool cover -func=coverage.out | tail -1 | awk '{print $NF}' | tr -d '%')
+          echo "Coverage: ${COVERAGE}%"
+          awk "BEGIN {if (${COVERAGE} < 70) {print \"Coverage ${COVERAGE}% is below 70% threshold\"; exit 1}}"
 
   integration:
     runs-on: ubuntu-latest
@@ -93,10 +98,49 @@ jobs:
         working-directory: web
         run: npm run build
 
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5
+        with:
+          go-version: "1.22"
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a964f4b73aabf # stable
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+      - name: gosec
+        uses: securego/gosec@master
+        with:
+          args: '-no-fail -fmt sarif -out gosec-results.sarif ./...'
+      - name: Upload gosec SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gosec-results.sarif
+      - name: cargo audit
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit
+        working-directory: rust/
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5
+        with:
+          go-version: "1.22"
+      - name: nancy (Go CVE check)
+        run: |
+          go install github.com/sonatype-nexus-community/nancy@latest
+          go list -json -m all | nancy sleuth
+
   docker-build:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [lint, test-rust, test-go, test-web]
+    needs: [lint, test-rust, test-go, test-web, security, dependency-audit]
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
       - name: Set up Docker Buildx
@@ -115,6 +159,18 @@ jobs:
             .
           docker push ghcr.io/${{ github.repository }}/apiguard:${{ github.sha }}
           docker push ghcr.io/${{ github.repository }}/apiguard:latest
+      - name: Scan backend image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/${{ github.repository }}/apiguard:${{ github.sha }}
+          format: sarif
+          output: trivy-apiguard.sarif
+          severity: CRITICAL,HIGH
+      - name: Upload Trivy SARIF (backend)
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-apiguard.sarif
       - name: Build and push web image
         run: |
           docker build \
@@ -123,3 +179,15 @@ jobs:
             ./web/
           docker push ghcr.io/${{ github.repository }}/apiguard-web:${{ github.sha }}
           docker push ghcr.io/${{ github.repository }}/apiguard-web:latest
+      - name: Scan web image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/${{ github.repository }}/apiguard-web:${{ github.sha }}
+          format: sarif
+          output: trivy-web.sarif
+          severity: CRITICAL,HIGH
+      - name: Upload Trivy SARIF (web)
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-web.sarif

@@ -11,3 +11,5 @@ flask-cors==4.0.1
 reportlab==4.2.5
 requests==2.32.3
 python-magic==0.4.27
+prometheus-flask-exporter==0.23.1
+jsonschema==4.23.0

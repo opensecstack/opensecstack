@@ -2,30 +2,43 @@
 
 > Public roadmap for the opensecstack ecosystem.
 
+## Current Status (as of Q1 2025)
+
+### Completed
+- **APIGuard v0.1.0** — Full OWASP API Top 10 (A1–A10), CVSS 3.1, SARIF, HTML/PDF/JSON reports, React dashboard, Go + Python SDK, Kubernetes manifests
+- **NIS2 Compass MVP** — All 10 NIS2 Article 21(2) measures, PDF reports, CITADEL webhook integration, artifact evidence management
+- **opensecstack SDK** — Go and Python typed clients for APIGuard and NIS2 Compass
+- **CITADEL integration** — Webhook-based audit event forwarding from both platforms (HMAC-SHA256 signed)
+
+### In Progress
+- CITADEL governance engine — standalone MARSHAL decision engine deployment
+- Ecosystem CI/CD — root-level orchestration and cross-platform integration tests
+- Test coverage expansion — unit tests for db, middleware, handlers packages
+
 ## Phase 1 — Foundation (Current)
 
 | Deliverable | Status |
 |-------------|--------|
-| APIGuard v0.1.0 — OpenAPI parser, A1-A3 modules, CLI, reports | In Development |
+| APIGuard v0.1.0 — OpenAPI parser, A1-A3 modules, CLI, reports | Done |
 | CITADEL governance engine — MARSHAL, BEACON, PATROL, WORM log, chain anchors | In Development |
-| opensecstack/sdk — initial Go client, event schemas | In Development |
-| Ecosystem documentation and architecture | In Development |
+| opensecstack/sdk — initial Go client, event schemas | Done |
+| Ecosystem documentation and architecture | Done |
 
 ## Phase 2 — Full OWASP + CI/CD
 
 | Deliverable | Status |
 |-------------|--------|
-| APIGuard v0.2.0 — A4-A10 modules, CVSS 3.1, SARIF output | Planned |
+| APIGuard v0.2.0 — A4-A10 modules, CVSS 3.1, SARIF output | Done |
 | APIGuard v0.3.0 — GitLab CI, Jenkins, GraphQL support, baseline comparison | Planned |
-| opensecstack/sdk — Python client, OpenAPI contracts | Planned |
+| opensecstack/sdk — Python client, OpenAPI contracts | Done |
 
 ## Phase 3 — Dashboard + Multi-tenant
 
 | Deliverable | Status |
 |-------------|--------|
-| APIGuard v0.4.0 — React dashboard, scan history, regression detection | Planned |
-| APIGuard v0.5.0 — Teams, RBAC, API keys, multi-project | Planned |
-| NIS2 Compass — initial release | Planned |
+| APIGuard v0.4.0 — React dashboard, scan history, finding management, API inventory, regression detection | Done |
+| APIGuard v0.5.0 — Teams, RBAC, API keys, multi-project | Done |
+| NIS2 Compass — initial release | Done |
 
 ## Phase 4 — Governance Integration
 

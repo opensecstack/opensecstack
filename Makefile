@@ -1,4 +1,4 @@
-.PHONY: dev up test test-coverage build lint fmt migrate clean docs audit scan security
+.PHONY: dev up test test-coverage build lint fmt migrate clean docs audit scan security dast
 
 # Start full ecosystem stack with hot reload
 dev:
@@ -68,3 +68,9 @@ clean:
 # Start documentation site
 docs:
 	cd apiguard && $(MAKE) docs
+
+dast: ## Run DAST scanning against local stacks (requires running services)
+	cd apiguard && docker compose -f docker-compose.test.yml up -d --wait
+	nuclei -t apiguard/.nuclei/templates/ -u http://localhost:8080 -o apiguard-dast-results.txt || true
+	cd nis2compass && docker compose -f docker-compose.dev.yml up -d --wait
+	nuclei -tags api,owasp -u http://localhost:5000 -o nis2compass-dast-results.txt || true

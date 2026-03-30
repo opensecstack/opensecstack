@@ -46,6 +46,9 @@ Issues = "https://github.com/opensecstack/opensecstack/issues"
 [tool.hatch.build.targets.wheel]
 packages = ["opensecstack"]
 
+[tool.setuptools.package-data]
+opensecstack = ["py.typed"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"

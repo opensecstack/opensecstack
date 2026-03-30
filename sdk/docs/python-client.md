@@ -68,11 +68,11 @@ scans = client.list_scans(limit=20, status="completed")
 ### Async client
 
 ```python
-from opensecstack.aio import APIGuardClient
+from opensecstack import AsyncAPIGuardClient
 
-async with APIGuardClient(base_url=..., api_key=...) as client:
-    scan = await client.start_scan(...)
-    result = await client.wait_for_scan(scan.id)
+async with AsyncAPIGuardClient(base_url=..., client_id=..., client_secret=...) as client:
+    scan = await client.create_scan(spec_url=...)
+    result = await client.get_scan(scan["id"])
 ```
 
 ---

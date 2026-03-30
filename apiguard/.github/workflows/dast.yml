@@ -1,0 +1,104 @@
+name: APIGuard DAST
+
+on:
+  # Run manually or on a schedule — not blocking PRs
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Target URL to scan (default: local Docker stack)'
+        required: false
+        default: 'http://localhost:8080'
+  schedule:
+    - cron: '0 3 * * 1'  # Every Monday at 3am UTC
+
+jobs:
+  nuclei-dast:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apiguard/
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - name: Start services
+        run: docker compose -f docker-compose.test.yml up -d --wait
+        continue-on-error: true  # Allow scan to run even if compose isn't fully available
+
+      - name: Wait for API to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/api/v1/health > /dev/null 2>&1; then
+              echo "API is ready"
+              break
+            fi
+            echo "Waiting... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run Nuclei DAST scan
+        uses: projectdiscovery/nuclei-action@v2
+        with:
+          target: ${{ github.event.inputs.target_url || 'http://localhost:8080' }}
+          flags: >-
+            -tags api,owasp
+            -severity medium,high,critical
+            -timeout 30
+            -rate-limit 10
+          output: nuclei-apiguard-results.txt
+          sarif-export: nuclei-apiguard-results.sarif
+
+      - name: Upload Nuclei results (text)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nuclei-apiguard-results
+          path: nuclei-apiguard-results.txt
+
+      - name: Upload Nuclei SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: nuclei-apiguard-results.sarif
+          category: dast-apiguard
+
+      - name: Stop services
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
+        continue-on-error: true
+
+  zap-api-scan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apiguard/
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - name: Start services
+        run: docker compose -f docker-compose.test.yml up -d --wait
+        continue-on-error: true
+
+      - name: Wait for API to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080/api/v1/health > /dev/null 2>&1; then
+              echo "API is ready"; break
+            fi
+            sleep 2
+          done
+
+      - name: ZAP API Scan
+        uses: zaproxy/action-api-scan@v0.7.0
+        with:
+          target: 'http://localhost:8080/api/v1/openapi.json'
+          format: openapi
+          fail_action: false
+          cmd_options: '-I'
+          artifact_name: zap-apiguard-report
+
+      - name: Stop services
+        if: always()
+        run: docker compose -f docker-compose.test.yml down -v
+        continue-on-error: true

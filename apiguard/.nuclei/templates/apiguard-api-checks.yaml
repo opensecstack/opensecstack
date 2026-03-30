@@ -1,0 +1,50 @@
+id: apiguard-auth-bypass-check
+info:
+  name: APIGuard Authentication Bypass Check
+  author: opensecstack
+  severity: high
+  description: Verifies that protected API endpoints reject unauthenticated requests
+  tags: api,auth,owasp-api2
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/v1/scans"
+      - "{{BaseURL}}/api/v1/findings"
+      - "{{BaseURL}}/api/v1/api-keys"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 401
+    extractors:
+      - type: json
+        name: error_code
+        json:
+          - .code
+---
+id: apiguard-security-headers-check
+info:
+  name: APIGuard Security Headers Verification
+  author: opensecstack
+  severity: medium
+  description: Verifies that security headers are present on all responses
+  tags: api,headers
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/v1/health"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        words:
+          - "nosniff"
+        part: header
+
+      - type: word
+        words:
+          - "DENY"
+        part: header

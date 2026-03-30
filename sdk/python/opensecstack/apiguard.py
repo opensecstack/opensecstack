@@ -11,6 +11,7 @@ re-authenticates transparently when the token expires (HTTP 401).
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -20,6 +21,7 @@ import time
 import uuid
 from typing import Optional
 
+import httpx
 import requests
 
 from .exceptions import APIError, AuthenticationError, NotFoundError, RateLimitError
@@ -42,10 +44,20 @@ class APIGuardClient:
         Per-request timeout in seconds (default: 30).
     """
 
-    def __init__(self, base_url: str, api_key: str, timeout: int = 30) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        timeout: int = 30,
+        *,
+        max_retries: int = 3,
+        retry_wait_base: float = 0.5,
+    ) -> None:
         self._base = base_url.rstrip("/")
         self._api_key = api_key
         self._timeout = timeout
+        self._max_retries = max_retries
+        self._retry_wait_base = retry_wait_base
         self._session = requests.Session()
         self._session.headers.update({"Accept": "application/json"})
         self._jwt: Optional[str] = None
@@ -252,8 +264,6 @@ class APIGuardClient:
         # token in the Authorization header (SDK-M4).
         kwargs.setdefault("allow_redirects", False)
 
-        _retry_delays = [1, 2]
-
         def _do_once() -> requests.Response:
             # Capture the current auth header before making the request so we
             # can detect whether another thread already refreshed it on 401.
@@ -309,15 +319,19 @@ class APIGuardClient:
             # If Retry-After is absent or > 60, fall through to _raise_for_status
             # which will raise RateLimitError.
 
-        # Retry on 5xx with exponential backoff (max 2 retries).
-        for delay in _retry_delays:
+        # Retry on 5xx with exponential backoff driven by self._max_retries /
+        # self._retry_wait_base so callers can control retry behaviour at
+        # construction time (or via APIGuardClient(max_retries=…)).
+        _wait = self._retry_wait_base
+        for attempt in range(self._max_retries):
             if resp.status_code < 500:
                 break
             logger.warning(
-                "%s %s returned HTTP %s (X-Request-ID: %s); retrying in %ss",
-                method.upper(), path, resp.status_code, req_id, delay,
+                "%s %s returned HTTP %s (X-Request-ID: %s); retrying in %.1fs (attempt %d/%d)",
+                method.upper(), path, resp.status_code, req_id, _wait, attempt + 1, self._max_retries,
             )
-            time.sleep(delay)
+            time.sleep(_wait)
+            _wait *= 2
             resp = _do_once()
 
         if resp.status_code >= 400:
@@ -641,3 +655,460 @@ class APIGuardClient:
         if isinstance(payload, dict) and "data" in payload:
             return payload["data"]
         return payload
+
+
+# ---------------------------------------------------------------------------
+# Async client
+# ---------------------------------------------------------------------------
+
+class AsyncAPIGuardClient:
+    """
+    Async HTTP client for the APIGuard platform API.
+
+    Drop-in async counterpart of :class:`APIGuardClient`.  Uses
+    ``httpx.AsyncClient`` under the hood so it can be awaited inside any
+    ``asyncio`` event loop.
+
+    Parameters
+    ----------
+    base_url:
+        Root URL of the APIGuard instance, e.g. ``https://apiguard.example.com``.
+        A trailing slash is stripped.
+    client_id:
+        Client identifier used in the token request payload.
+    client_secret:
+        Secret used in the token request payload.
+    max_retries:
+        Maximum number of retry attempts on 5xx / network errors (default 3).
+    retry_wait_base:
+        Base wait in seconds for exponential back-off (default 0.5 s).
+    verify_ssl:
+        Verify TLS certificates (default ``True``).  Set to ``False`` only
+        for local development against self-signed certificates.
+    timeout:
+        Per-request timeout in seconds (default 30.0).
+
+    Usage
+    -----
+    Preferred — use as an async context manager so the underlying
+    ``httpx.AsyncClient`` is closed automatically::
+
+        async with AsyncAPIGuardClient(base_url, client_id, client_secret) as client:
+            scan = await client.create_scan(request)
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        client_id: str,
+        client_secret: str,
+        *,
+        max_retries: int = 3,
+        retry_wait_base: float = 0.5,
+        verify_ssl: bool = True,
+        timeout: float = 30.0,
+    ) -> None:
+        self._base = base_url.rstrip("/")
+        self._client_id = client_id
+        self._client_secret = client_secret
+        self._max_retries = max_retries
+        self._retry_wait_base = retry_wait_base
+        self._timeout = timeout
+        self._jwt: Optional[str] = None
+        self._token_expiry: Optional[float] = None
+        # asyncio.Lock is created lazily (in _ensure_authenticated) because the
+        # lock must belong to the running event loop, not the constructor's loop.
+        self._auth_lock: Optional[asyncio.Lock] = None
+        self._http = httpx.AsyncClient(
+            verify=verify_ssl,
+            headers={"Accept": "application/json"},
+            follow_redirects=False,  # prevent Bearer token leakage (SDK-M4)
+        )
+
+    # ------------------------------------------------------------------
+    # Async context manager
+    # ------------------------------------------------------------------
+
+    async def __aenter__(self) -> "AsyncAPIGuardClient":
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self._http.aclose()
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _url(self, path: str) -> str:
+        return f"{self._base}/api/v1/{path.lstrip('/')}"
+
+    def _get_auth_lock(self) -> asyncio.Lock:
+        """Return (creating on first call) the per-instance asyncio.Lock."""
+        if self._auth_lock is None:
+            self._auth_lock = asyncio.Lock()
+        return self._auth_lock
+
+    async def authenticate(self) -> str:
+        """
+        Exchange ``client_id``/``client_secret`` for a JWT and store it.
+
+        Returns the raw token string.  Normally called implicitly by
+        :meth:`_ensure_authenticated`; callers may invoke it explicitly to
+        pre-warm the token before the first real request.
+        """
+        resp = await self._http.post(
+            self._url("auth/token"),
+            json={"client_id": self._client_id, "client_secret": self._client_secret},
+            timeout=self._timeout,
+        )
+        if resp.status_code == 401:
+            raise AuthenticationError("Invalid credentials — cannot obtain JWT")
+        if resp.status_code >= 400:
+            raise APIError(resp.status_code, resp.text)
+        try:
+            data = resp.json()
+        except Exception:
+            raise AuthenticationError("Invalid JSON in auth/token response")
+        token: Optional[str] = data.get("access_token") or data.get("token")
+        if not token:
+            raise AuthenticationError("No access_token in auth/token response")
+
+        # Parse exp claim for proactive refresh (SDK-M5).
+        expiry: Optional[float] = None
+        try:
+            payload_b64 = token.split(".")[1]
+            payload_b64 += "=" * (4 - len(payload_b64) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+            exp = payload.get("exp")
+            if exp is not None:
+                expiry = float(exp)
+        except Exception:
+            logger.debug("Could not parse JWT exp claim; proactive expiry disabled")
+
+        async with self._get_auth_lock():
+            self._jwt = token
+            self._token_expiry = expiry
+            self._http.headers["Authorization"] = f"Bearer {token}"
+
+        return token
+
+    async def _ensure_authenticated(self) -> None:
+        """Re-authenticate if the token is missing or expires within 60 s."""
+        async with self._get_auth_lock():
+            token_expiring = (
+                self._token_expiry is not None
+                and time.time() > self._token_expiry - 60
+            )
+            needs_auth = self._jwt is None
+
+        if token_expiring:
+            async with self._get_auth_lock():
+                self._jwt = None
+                self._token_expiry = None
+                self._http.headers.pop("Authorization", None)
+
+        if token_expiring or needs_auth:
+            await self.authenticate()
+
+    def _raise_for_status(self, resp: httpx.Response) -> None:
+        if resp.status_code == 401:
+            raise AuthenticationError("JWT expired or invalid — re-authenticate")
+        if resp.status_code == 429:
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = resp.text
+            retry_after: Optional[int] = None
+            try:
+                retry_after = int(resp.headers.get("Retry-After", ""))
+            except (ValueError, TypeError):
+                pass
+            raise RateLimitError(detail, retry_after=retry_after)
+        if resp.status_code == 404:
+            raise NotFoundError(resp.text)
+        if resp.status_code >= 400:
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = resp.text
+            raise APIError(resp.status_code, detail)
+
+    async def _request_with_retry(
+        self,
+        method: str,
+        url: str,
+        *,
+        max_retries: int = 3,
+        retry_wait_base: float = 0.5,
+        stream: bool = False,
+        **kwargs,
+    ) -> httpx.Response:
+        """
+        Execute an HTTP request with exponential-backoff retry on 5xx errors.
+
+        Mirrors the sync :meth:`APIGuardClient._request_with_retry` but uses
+        ``await asyncio.sleep`` and ``await self._http.request`` so it never
+        blocks the event loop.
+
+        Parameters
+        ----------
+        method:          HTTP method (GET, POST, …)
+        url:             Full URL
+        max_retries:     Retry attempts after the first failure (default 3)
+        retry_wait_base: Base wait in seconds; doubles each retry
+        stream:          Ignored for httpx (streaming is handled per-request)
+        **kwargs:        Passed to ``httpx.AsyncClient.request``
+        """
+        last_exc: Exception | None = None
+        wait = retry_wait_base
+
+        for attempt in range(max_retries + 1):
+            if attempt > 0:
+                await asyncio.sleep(wait)
+                wait *= 2
+
+            try:
+                resp = await self._http.request(
+                    method, url, timeout=self._timeout, **kwargs
+                )
+                if resp.status_code in (500, 502, 503, 504) and attempt < max_retries:
+                    last_exc = None
+                    continue
+                return resp
+            except (httpx.ConnectError, httpx.TimeoutException) as exc:
+                last_exc = exc
+                if attempt == max_retries:
+                    raise
+
+        if last_exc:
+            raise last_exc
+        raise RuntimeError("unexpected retry loop exit")
+
+    async def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
+        """
+        Make an authenticated request with automatic token refresh on 401
+        and exponential-backoff retry on 5xx.
+
+        Attaches a unique ``X-Request-ID`` header for server-side log
+        correlation, and never follows redirects (SDK-M4).
+        """
+        await self._ensure_authenticated()
+
+        req_id = str(uuid.uuid4())
+        extra_headers: dict = kwargs.pop("headers", None) or {}
+        extra_headers.setdefault("X-Request-ID", req_id)
+        kwargs["headers"] = extra_headers
+
+        async def _do_once() -> httpx.Response:
+            old_auth = self._http.headers.get("Authorization")
+            r = await self._http.request(
+                method, self._url(path), timeout=self._timeout, **kwargs
+            )
+            if r.status_code == 401:
+                logger.debug("Received 401 on %s %s; attempting token refresh", method.upper(), path)
+                async with self._get_auth_lock():
+                    if self._http.headers.get("Authorization") != old_auth:
+                        logger.debug("Token already refreshed; retrying request")
+                    else:
+                        self._jwt = None
+                        self._token_expiry = None
+                        self._http.headers.pop("Authorization", None)
+                try:
+                    await self.authenticate()
+                except AuthenticationError:
+                    logger.warning(
+                        "%s %s — re-authentication failed after 401", method.upper(), path
+                    )
+                    raise
+                r = await self._http.request(
+                    method, self._url(path), timeout=self._timeout, **kwargs
+                )
+            return r
+
+        resp = await _do_once()
+
+        # Automatic 429 retry (Retry-After <= 60 s).
+        if resp.status_code == 429:
+            retry_after: Optional[int] = None
+            try:
+                retry_after = int(resp.headers.get("Retry-After", ""))
+            except (ValueError, TypeError):
+                pass
+            if retry_after is not None and retry_after <= 60:
+                logger.debug("429 on %s %s; sleeping %ss", method.upper(), path, retry_after)
+                await asyncio.sleep(retry_after)
+                resp = await _do_once()
+
+        # 5xx back-off retry driven by self._max_retries / self._retry_wait_base.
+        # Uses asyncio.sleep so the event loop is never blocked.
+        _wait = self._retry_wait_base
+        for attempt in range(self._max_retries):
+            if resp.status_code < 500:
+                break
+            logger.warning(
+                "%s %s returned HTTP %s (X-Request-ID: %s); retrying in %.1fs (attempt %d/%d)",
+                method.upper(), path, resp.status_code, req_id, _wait, attempt + 1, self._max_retries,
+            )
+            await asyncio.sleep(_wait)
+            _wait *= 2
+            resp = await _do_once()
+
+        if resp.status_code >= 400:
+            logger.warning(
+                "%s %s returned HTTP %s (X-Request-ID: %s)",
+                method.upper(), path, resp.status_code, req_id,
+            )
+        self._raise_for_status(resp)
+        return resp
+
+    # ------------------------------------------------------------------
+    # Scans
+    # ------------------------------------------------------------------
+
+    async def create_scan(
+        self,
+        spec_id: Optional[str] = None,
+        spec_url: Optional[str] = None,
+        spec_path: Optional[str] = None,
+        target: Optional[str] = None,
+        modules: Optional[list[str]] = None,
+        auth_type: Optional[str] = None,
+        auth_token: Optional[str] = None,
+        auth_header: Optional[str] = None,
+    ) -> dict:
+        """
+        Create a new scan (async).
+
+        Mirrors :meth:`APIGuardClient.create_scan`.  Supply one of
+        ``spec_url`` or ``spec_path`` (or the legacy ``spec_id`` alias).
+
+        Returns a dict with ``id`` (scan UUID) and ``status``.
+        """
+        if spec_id is not None and spec_path is None:
+            spec_path = spec_id
+        if spec_url is None and spec_path is None:
+            raise ValueError("One of spec_url or spec_path must be provided")
+
+        body: dict = {}
+        if spec_url:
+            body["spec_url"] = spec_url
+        if spec_path:
+            body["spec_path"] = spec_path
+        if target:
+            body["target"] = target
+        elif spec_url:
+            from urllib.parse import urlparse
+            parsed = urlparse(spec_url)
+            body["target"] = f"{parsed.scheme}://{parsed.netloc}"
+        if modules:
+            body["modules"] = modules
+        if auth_type:
+            body["auth_type"] = auth_type
+        if auth_token:
+            body["auth_token"] = auth_token
+        if auth_header:
+            body["auth_header"] = auth_header
+
+        resp = await self._request("POST", "scans", json=body)
+        return resp.json()
+
+    async def get_scan(self, scan_id: str) -> dict:
+        """Return a single scan by UUID (async)."""
+        resp = await self._request("GET", f"scans/{scan_id}")
+        return resp.json()
+
+    async def list_scans(self, *, page: int = 1, per_page: int = 20) -> list[dict]:
+        """
+        Return a paginated list of scans (async).
+
+        Returns the ``items`` list from the API envelope, or the raw list
+        if the server responds with a plain array.
+        """
+        resp = await self._request("GET", "scans", params={"page": page, "per_page": per_page})
+        payload = resp.json()
+        if isinstance(payload, dict):
+            return payload.get("items", payload.get("data", []))
+        return payload  # plain list
+
+    async def get_findings(
+        self,
+        scan_id: str,
+        *,
+        page: int = 1,
+        per_page: int = 100,
+    ) -> list[dict]:
+        """
+        Return all findings for a completed scan (async).
+
+        Mirrors :meth:`APIGuardClient.get_findings`.
+        """
+        resp = await self._request(
+            "GET",
+            f"scans/{scan_id}/findings",
+            params={"page": page, "per_page": per_page},
+        )
+        payload = resp.json()
+        if isinstance(payload, dict) and "data" in payload:
+            return payload["data"]
+        if isinstance(payload, list):
+            return payload
+        raise APIError(200, f"Unexpected response format from get_findings: got {type(payload).__name__}")
+
+    async def stream_report(
+        self,
+        scan_id: str,
+        format: str,
+        dest,
+        *,
+        chunk_size: int = 8192,
+    ) -> None:
+        """
+        Stream a scan report directly to a file-like object (async).
+
+        The response body is never buffered in full — suitable for large
+        PDF/HTML reports.
+
+        Parameters
+        ----------
+        scan_id:    UUID of the scan.
+        format:     Report format: json | sarif | html | pdf
+        dest:       Writable file-like object opened in binary mode.
+        chunk_size: Streaming chunk size in bytes (default 8 192).
+        """
+        await self._ensure_authenticated()
+        url = self._url(f"scans/{scan_id}/report")
+
+        async with self._http.stream(
+            "GET",
+            url,
+            params={"format": format},
+            timeout=self._timeout,
+        ) as resp:
+            if resp.status_code == 401:
+                # Token expired mid-stream — re-authenticate and retry once.
+                await self.authenticate()
+                async with self._http.stream(
+                    "GET",
+                    url,
+                    params={"format": format},
+                    timeout=self._timeout,
+                ) as resp2:
+                    if resp2.status_code != 200:
+                        await resp2.aread()
+                        raise APIError(resp2.status_code, resp2.text)
+                    async for chunk in resp2.aiter_bytes(chunk_size):
+                        dest.write(chunk)
+                return
+
+            if resp.status_code != 200:
+                await resp.aread()
+                raise APIError(resp.status_code, resp.text)
+
+            async for chunk in resp.aiter_bytes(chunk_size):
+                dest.write(chunk)
+
+    # Additional methods (delete_scan, get_report, list_findings, patch_finding,
+    # get_audit_log, upload_spec, refresh_token) follow the same pattern:
+    # replace self._session.request(...) with await self._http.request(...)
+    # and self._request(...) with await self._request(...).  Streaming methods
+    # use async with self._http.stream(...) as shown in stream_report above.

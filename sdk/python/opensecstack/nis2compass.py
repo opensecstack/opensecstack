@@ -8,6 +8,7 @@ the session and refreshed automatically on HTTP 401.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -17,6 +18,7 @@ import time
 import uuid
 from typing import Optional
 
+import httpx
 import requests
 
 from .exceptions import APIError, AuthenticationError, NotFoundError, RateLimitError
@@ -39,10 +41,20 @@ class NIS2CompassClient:
         Per-request timeout in seconds (default: 30).
     """
 
-    def __init__(self, base_url: str, api_key: str, timeout: int = 30) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str,
+        timeout: int = 30,
+        *,
+        max_retries: int = 3,
+        retry_wait_base: float = 0.5,
+    ) -> None:
         self._base = base_url.rstrip("/")
         self._api_key = api_key
         self._timeout = timeout
+        self._max_retries = max_retries
+        self._retry_wait_base = retry_wait_base
         self._session = requests.Session()
         self._session.headers.update(
             {
@@ -255,8 +267,6 @@ class NIS2CompassClient:
         # token in the Authorization header (SDK-M4).
         kwargs.setdefault("allow_redirects", False)
 
-        _retry_delays = [1, 2]
-
         def _do_once() -> requests.Response:
             # Capture the current auth header before making the request so we
             # can detect whether another thread already refreshed it on 401.
@@ -307,15 +317,19 @@ class NIS2CompassClient:
             # If Retry-After is absent or > 60, fall through to _raise_for_status
             # which will raise RateLimitError.
 
-        # Retry on 5xx with exponential backoff (max 2 retries).
-        for delay in _retry_delays:
+        # Retry on 5xx with exponential backoff driven by self._max_retries /
+        # self._retry_wait_base so callers can control retry behaviour at
+        # construction time (or via NIS2CompassClient(max_retries=…)).
+        _wait = self._retry_wait_base
+        for attempt in range(self._max_retries):
             if resp.status_code < 500:
                 break
             logger.warning(
-                "Received HTTP %s on %s %s; retrying in %ss",
-                resp.status_code, method.upper(), path, delay,
+                "Received HTTP %s on %s %s; retrying in %.1fs (attempt %d/%d)",
+                resp.status_code, method.upper(), path, _wait, attempt + 1, self._max_retries,
             )
-            time.sleep(delay)
+            time.sleep(_wait)
+            _wait *= 2
             resp = _do_once()
 
         if resp.status_code >= 400:
@@ -930,3 +944,448 @@ class NIS2CompassClient:
         entry_id: UUID of the audit log entry.
         """
         return self._get(f"audit/{entry_id}").json()
+
+
+# ---------------------------------------------------------------------------
+# Async client
+# ---------------------------------------------------------------------------
+
+class AsyncNIS2CompassClient:
+    """
+    Async HTTP client for the NIS2 Compass platform API.
+
+    Drop-in async counterpart of :class:`NIS2CompassClient`.  Uses
+    ``httpx.AsyncClient`` under the hood so it can be awaited inside any
+    ``asyncio`` event loop.
+
+    Parameters
+    ----------
+    base_url:
+        Root URL of the NIS2 Compass instance, e.g. ``https://nis2.example.com``.
+        A trailing slash is stripped.
+    client_id:
+        Client identifier used in the token request payload.
+    client_secret:
+        Secret used in the token request payload.
+    max_retries:
+        Maximum number of retry attempts on 5xx / network errors (default 3).
+    retry_wait_base:
+        Base wait in seconds for exponential back-off (default 0.5 s).
+    verify_ssl:
+        Verify TLS certificates (default ``True``).
+    timeout:
+        Per-request timeout in seconds (default 30.0).
+
+    Usage
+    -----
+    Preferred — use as an async context manager::
+
+        async with AsyncNIS2CompassClient(base_url, client_id, client_secret) as client:
+            org = await client.create_organisation(...)
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        client_id: str,
+        client_secret: str,
+        *,
+        max_retries: int = 3,
+        retry_wait_base: float = 0.5,
+        verify_ssl: bool = True,
+        timeout: float = 30.0,
+    ) -> None:
+        self._base = base_url.rstrip("/")
+        self._client_id = client_id
+        self._client_secret = client_secret
+        self._max_retries = max_retries
+        self._retry_wait_base = retry_wait_base
+        self._timeout = timeout
+        self._jwt: Optional[str] = None
+        self._token_expiry: Optional[float] = None
+        self._auth_lock: Optional[asyncio.Lock] = None
+        self._http = httpx.AsyncClient(
+            verify=verify_ssl,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+            follow_redirects=False,  # prevent Bearer token leakage (SDK-M4)
+        )
+
+    # ------------------------------------------------------------------
+    # Async context manager
+    # ------------------------------------------------------------------
+
+    async def __aenter__(self) -> "AsyncNIS2CompassClient":
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        await self._http.aclose()
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _url(self, path: str) -> str:
+        return f"{self._base}/api/v1/{path.lstrip('/')}"
+
+    def _get_auth_lock(self) -> asyncio.Lock:
+        """Return (creating on first call) the per-instance asyncio.Lock."""
+        if self._auth_lock is None:
+            self._auth_lock = asyncio.Lock()
+        return self._auth_lock
+
+    async def authenticate(self) -> str:
+        """
+        Exchange ``client_id``/``client_secret`` for a JWT and store it.
+
+        Returns the raw token string.  Normally called implicitly by
+        :meth:`_ensure_authenticated`; callers may invoke it explicitly to
+        pre-warm the token before the first real request.
+        """
+        logger.debug("Authenticating with NIS2 Compass API at %s", self._base)
+        resp = await self._http.post(
+            self._url("auth/token"),
+            json={"client_id": self._client_id, "client_secret": self._client_secret},
+            timeout=self._timeout,
+        )
+        if resp.status_code == 401:
+            raise AuthenticationError("Invalid or missing credentials")
+        if resp.status_code >= 400:
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = resp.text
+            raise APIError(resp.status_code, detail)
+        try:
+            data = resp.json()
+        except Exception:
+            raise AuthenticationError("Invalid JSON in auth/token response")
+        token: Optional[str] = data.get("token") or data.get("access_token")
+        if not token:
+            raise AuthenticationError("No token received from auth/token endpoint")
+
+        # Parse exp claim for proactive refresh (SDK-M5).
+        expiry: Optional[float] = None
+        try:
+            payload_b64 = token.split(".")[1]
+            payload_b64 += "=" * (4 - len(payload_b64) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+            exp = payload.get("exp")
+            if exp is not None:
+                expiry = float(exp)
+        except Exception:
+            logger.debug("Could not parse JWT exp claim; proactive expiry disabled")
+
+        async with self._get_auth_lock():
+            self._jwt = token
+            self._token_expiry = expiry
+            self._http.headers["Authorization"] = f"Bearer {token}"
+            logger.debug("Authentication successful; JWT acquired")
+
+        return token
+
+    async def _ensure_authenticated(self) -> None:
+        """Re-authenticate if the token is missing or expires within 60 s."""
+        async with self._get_auth_lock():
+            token_expiring = (
+                self._token_expiry is not None
+                and time.time() > self._token_expiry - 60
+            )
+            needs_auth = self._jwt is None
+
+        if token_expiring:
+            async with self._get_auth_lock():
+                self._jwt = None
+                self._token_expiry = None
+                self._http.headers.pop("Authorization", None)
+
+        if token_expiring or needs_auth:
+            await self.authenticate()
+
+    def _raise_for_status(self, resp: httpx.Response) -> None:
+        if resp.status_code == 401:
+            raise AuthenticationError("JWT expired or invalid — re-authenticate")
+        if resp.status_code == 429:
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = resp.text
+            retry_after: Optional[int] = None
+            try:
+                retry_after = int(resp.headers.get("Retry-After", ""))
+            except (ValueError, TypeError):
+                pass
+            raise RateLimitError(detail, retry_after=retry_after)
+        if resp.status_code == 404:
+            raise NotFoundError(resp.text)
+        if resp.status_code >= 400:
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = resp.text
+            raise APIError(resp.status_code, detail)
+
+    async def _request_with_retry(
+        self,
+        method: str,
+        url: str,
+        *,
+        max_retries: int = 3,
+        retry_wait_base: float = 0.5,
+        stream: bool = False,
+        **kwargs,
+    ) -> httpx.Response:
+        """
+        Execute an HTTP request with exponential-backoff retry on 5xx errors.
+
+        Mirrors the sync :meth:`NIS2CompassClient._request_with_retry` but uses
+        ``await asyncio.sleep`` and ``await self._http.request`` so it never
+        blocks the event loop.
+
+        Parameters
+        ----------
+        method:          HTTP method (GET, POST, …)
+        url:             Full URL
+        max_retries:     Retry attempts after the first failure (default 3)
+        retry_wait_base: Base wait in seconds; doubles each retry
+        stream:          Ignored for httpx (streaming is handled per-request)
+        **kwargs:        Passed to ``httpx.AsyncClient.request``
+        """
+        last_exc: Exception | None = None
+        wait = retry_wait_base
+
+        for attempt in range(max_retries + 1):
+            if attempt > 0:
+                await asyncio.sleep(wait)
+                wait *= 2
+
+            try:
+                resp = await self._http.request(
+                    method, url, timeout=self._timeout, **kwargs
+                )
+                if resp.status_code in (500, 502, 503, 504) and attempt < max_retries:
+                    last_exc = None
+                    continue
+                return resp
+            except (httpx.ConnectError, httpx.TimeoutException) as exc:
+                last_exc = exc
+                if attempt == max_retries:
+                    raise
+
+        if last_exc:
+            raise last_exc
+        raise RuntimeError("unexpected retry loop exit")
+
+    async def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
+        """
+        Make an authenticated request with automatic token refresh on 401
+        and exponential-backoff retry on 5xx.
+
+        Attaches a unique ``X-Request-ID`` header and never follows
+        redirects (SDK-M4).
+        """
+        await self._ensure_authenticated()
+
+        req_id = str(uuid.uuid4())
+        extra_headers: dict = kwargs.pop("headers", None) or {}
+        extra_headers.setdefault("X-Request-ID", req_id)
+        kwargs["headers"] = extra_headers
+
+        async def _do_once() -> httpx.Response:
+            old_auth = self._http.headers.get("Authorization")
+            r = await self._http.request(
+                method, self._url(path), timeout=self._timeout, **kwargs
+            )
+            if r.status_code == 401:
+                logger.debug("Received 401 on %s %s; attempting token refresh", method.upper(), path)
+                async with self._get_auth_lock():
+                    if self._http.headers.get("Authorization") != old_auth:
+                        logger.debug("Token already refreshed; retrying request")
+                    else:
+                        self._jwt = None
+                        self._token_expiry = None
+                        self._http.headers.pop("Authorization", None)
+                try:
+                    await self.authenticate()
+                except AuthenticationError:
+                    logger.warning(
+                        "%s %s — re-authentication failed after 401", method.upper(), path
+                    )
+                    raise
+                r = await self._http.request(
+                    method, self._url(path), timeout=self._timeout, **kwargs
+                )
+            return r
+
+        resp = await _do_once()
+
+        # Automatic 429 retry (Retry-After <= 60 s).
+        if resp.status_code == 429:
+            retry_after: Optional[int] = None
+            try:
+                retry_after = int(resp.headers.get("Retry-After", ""))
+            except (ValueError, TypeError):
+                pass
+            if retry_after is not None and retry_after <= 60:
+                logger.debug("429 on %s %s; sleeping %ss", method.upper(), path, retry_after)
+                await asyncio.sleep(retry_after)
+                resp = await _do_once()
+
+        # 5xx back-off retry driven by self._max_retries / self._retry_wait_base.
+        # Uses asyncio.sleep so the event loop is never blocked.
+        _wait = self._retry_wait_base
+        for attempt in range(self._max_retries):
+            if resp.status_code < 500:
+                break
+            logger.warning(
+                "%s %s returned HTTP %s (X-Request-ID: %s); retrying in %.1fs (attempt %d/%d)",
+                method.upper(), path, resp.status_code, req_id, _wait, attempt + 1, self._max_retries,
+            )
+            await asyncio.sleep(_wait)
+            _wait *= 2
+            resp = await _do_once()
+
+        if resp.status_code >= 400:
+            logger.warning(
+                "%s %s returned HTTP %s (X-Request-ID: %s)",
+                method.upper(), path, resp.status_code, req_id,
+            )
+        self._raise_for_status(resp)
+        return resp
+
+    # ------------------------------------------------------------------
+    # Organisations
+    # ------------------------------------------------------------------
+
+    async def create_organisation(
+        self,
+        name: str,
+        industry: str,
+        country: str,
+        size: str = "medium",
+        entity_type: str = "important",
+        registration_number: Optional[str] = None,
+        contact_email: Optional[str] = None,
+    ) -> dict:
+        """
+        Create a new organisation (async).
+
+        Mirrors :meth:`NIS2CompassClient.create_organisation`.
+        Returns the server response dict (includes ``id``).
+        """
+        body: dict = {
+            "name": name,
+            "industry": industry,
+            "country": country,
+            "size": size,
+            "entity_type": entity_type,
+        }
+        if registration_number is not None:
+            body["registration_number"] = registration_number
+        if contact_email is not None:
+            body["contact_email"] = contact_email
+        resp = await self._request("POST", "organisations", json=body)
+        return resp.json()
+
+    async def get_organisation(self, org_id: str) -> dict:
+        """Return a single organisation by UUID (async)."""
+        resp = await self._request("GET", f"organisations/{org_id}")
+        return resp.json()
+
+    # ------------------------------------------------------------------
+    # Assessments
+    # ------------------------------------------------------------------
+
+    async def create_assessment(
+        self,
+        org_id: str,
+        title: str,
+        framework_version: str = "NIS2-2022/0383",
+        scope: Optional[str] = None,
+        assessor: Optional[str] = None,
+        due_date: Optional[str] = None,
+    ) -> dict:
+        """
+        Create a new NIS2 assessment under an organisation (async).
+
+        Mirrors :meth:`NIS2CompassClient.create_assessment`.
+        Returns the server response dict (includes ``id``).
+        """
+        body: dict = {
+            "title": title,
+            "framework_version": framework_version,
+        }
+        if scope is not None:
+            body["scope"] = scope
+        if assessor is not None:
+            body["assessor"] = assessor
+        if due_date is not None:
+            body["due_date"] = due_date
+        resp = await self._request("POST", f"organisations/{org_id}/assessments", json=body)
+        return resp.json()
+
+    async def get_assessment(self, assessment_id: str) -> dict:
+        """Return a single assessment by UUID (async)."""
+        resp = await self._request("GET", f"assessments/{assessment_id}")
+        return resp.json()
+
+    async def stream_report(
+        self,
+        assessment_id: str,
+        format: str,
+        dest,
+        *,
+        chunk_size: int = 8192,
+    ) -> None:
+        """
+        Stream an assessment report to a file-like object (async).
+
+        The response body is never buffered in full — suitable for large
+        PDF reports.
+
+        Parameters
+        ----------
+        assessment_id: UUID of the assessment.
+        format:        pdf | json | sarif
+        dest:          Writable file-like object opened in binary mode.
+        chunk_size:    Streaming chunk size in bytes (default 8 192).
+        """
+        await self._ensure_authenticated()
+        url = self._url(f"assessments/{assessment_id}/report")
+
+        async with self._http.stream(
+            "POST",
+            url,
+            params={"format": format},
+            timeout=max(self._timeout, 120),
+        ) as resp:
+            if resp.status_code == 401:
+                # Token expired mid-stream — re-authenticate and retry once.
+                await self.authenticate()
+                async with self._http.stream(
+                    "POST",
+                    url,
+                    params={"format": format},
+                    timeout=max(self._timeout, 120),
+                ) as resp2:
+                    if resp2.status_code != 200:
+                        await resp2.aread()
+                        raise APIError(resp2.status_code, resp2.text)
+                    async for chunk in resp2.aiter_bytes(chunk_size):
+                        dest.write(chunk)
+                return
+
+            if resp.status_code != 200:
+                await resp.aread()
+                raise APIError(resp.status_code, resp.text)
+
+            async for chunk in resp.aiter_bytes(chunk_size):
+                dest.write(chunk)
+
+    # Additional methods (patch_organisation, delete_organisation,
+    # list_assessments, patch_assessment, delete_assessment, list_controls,
+    # patch_control, upload_artifact, get_audit_log, etc.) follow the same
+    # pattern: replace self._request(...) with await self._request(...)
+    # and self._session.* calls with self._http.* equivalents.

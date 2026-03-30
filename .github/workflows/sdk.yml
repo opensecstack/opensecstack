@@ -23,6 +23,10 @@ jobs:
           go-version: "1.22"
       - name: Test with coverage
         run: go test ./... -coverprofile=coverage.out -covermode=atomic
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
       - name: Coverage report
         run: go tool cover -func=coverage.out
       - name: Enforce 70% coverage
@@ -51,6 +55,10 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install -r requirements.txt pytest pytest-cov
+      - name: pip-audit
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt
       - name: Test with coverage
         run: pytest tests/ -v --cov=opensecstack --cov-report=term-missing --cov-fail-under=70
       - name: Upload coverage
@@ -96,3 +104,186 @@ jobs:
         run: flake8 opensecstack/ --max-line-length=120
       - name: mypy
         run: mypy opensecstack/ --ignore-missing-imports
+
+  test-rust-sdk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/rust
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sdk/rust
+      - name: fmt check
+        run: cargo fmt --check
+      - name: clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: test
+        run: cargo test --all-features
+
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin --quiet
+
+      - name: Coverage report
+        run: cargo tarpaulin --out Xml --output-dir coverage/ --timeout 120
+
+      - name: Check coverage threshold (70%)
+        run: |
+          COVERAGE=$(grep -oP 'line-rate="\K[0-9.]+' coverage/cobertura.xml | head -1)
+          PCT=$(echo "$COVERAGE * 100" | bc -l | xargs printf "%.0f")
+          echo "Coverage: ${PCT}%"
+          if [ "$PCT" -lt 70 ]; then
+            echo "Coverage ${PCT}% is below 70% threshold"
+            exit 1
+          fi
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rust-sdk-coverage
+          path: sdk/rust/coverage/
+
+      - name: audit
+        run: |
+          cargo install cargo-audit --quiet
+          cargo audit
+
+  lint-rust-sdk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/rust
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+      - name: clippy (strict)
+        run: cargo clippy -- -D warnings -W clippy::pedantic -A clippy::must_use_candidate
+
+  tds-scanner:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/tools/tds-scanner
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: "1.22"
+
+      - name: Build tds-scanner
+        run: go build -o tds-scanner ./...
+
+      - name: Scan Go SDK
+        run: ./tds-scanner scan --lang go --format json --output tds-go-results.json ../../go/opensecstack/ || true
+
+      - name: Scan Python SDK
+        run: ./tds-scanner scan --lang python --format json --output tds-python-results.json ../../python/opensecstack/ || true
+
+      - name: Scan Rust SDK
+        run: ./tds-scanner scan --lang rust --format json --output tds-rust-results.json ../../rust/src/ || true
+
+      - name: Upload TDS scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tds-scanner-results
+          path: |
+            sdk/tools/tds-scanner/tds-go-results.json
+            sdk/tools/tds-scanner/tds-python-results.json
+            sdk/tools/tds-scanner/tds-rust-results.json
+
+      - name: tds-scanner tests
+        run: go test ./...
+
+  cross-language-integration:
+    runs-on: ubuntu-latest
+    needs: [test-go-sdk, test-python-sdk, test-rust-sdk]
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - name: Install mockoon CLI
+        run: npm install -g @mockoon/cli
+
+      - name: Start mock API server
+        run: |
+          mockoon-cli start --data sdk/tests/integration/mockoon-env.json --port 3000 &
+          sleep 3
+          curl -sf http://localhost:3000/api/v1/health || (echo "Mock API not ready" && exit 1)
+
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: "1.22"
+
+      - uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5
+        with:
+          python-version: "3.12"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Go integration tests
+        working-directory: sdk
+        env:
+          INTEGRATION_APIGUARD_URL: http://localhost:3000
+          INTEGRATION_NIS2_URL: http://localhost:3000
+        run: cd go && go test -tags integration ./... -v -run TestGo
+
+      - name: Python integration tests
+        working-directory: sdk/python
+        env:
+          INTEGRATION_APIGUARD_URL: http://localhost:3000
+          INTEGRATION_NIS2_URL: http://localhost:3000
+        run: |
+          pip install -r requirements.txt
+          pytest ../tests/integration/test_python_integration.py -v
+
+      - name: Rust integration tests
+        working-directory: sdk/rust
+        env:
+          INTEGRATION_APIGUARD_URL: http://localhost:3000
+          INTEGRATION_NIS2_URL: http://localhost:3000
+        run: cargo test --test integration_tests --features integration
+
+  security-sdk:
+    runs-on: ubuntu-latest
+    needs: [test-go-sdk, test-python-sdk, test-rust-sdk, tds-scanner]
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: "1.22"
+
+      - uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5
+        with:
+          python-version: "3.12"
+
+      - name: govulncheck (Go SDK)
+        working-directory: sdk/go
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: pip-audit (Python SDK)
+        working-directory: sdk/python
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt --format json -o pip-audit-results.json
+
+      - name: Upload pip-audit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sdk-pip-audit-results
+          path: sdk/python/pip-audit-results.json

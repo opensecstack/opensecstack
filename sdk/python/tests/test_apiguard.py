@@ -266,3 +266,70 @@ def test_proactive_token_refresh(client: APIGuardClient) -> None:
     assert client._session.headers.get("Authorization") == f"Bearer {fresh_token}"
     auth_calls = [c for c in rsps_lib.calls if c.request.method == "POST"]
     assert len(auth_calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# 8. 5xx retry logic
+# ---------------------------------------------------------------------------
+
+_VALID_SCAN = {
+    "id": "00000000-0000-0000-0000-000000000001",
+    "target_url": "https://api.example.com",
+    "status": "completed",
+    "modules": [],
+    "total_findings": 0,
+    "critical_count": 0,
+    "high_count": 0,
+    "medium_count": 0,
+    "low_count": 0,
+    "info_count": 0,
+    "created_at": "2025-01-01T00:00:00Z",
+    "updated_at": "2025-01-01T00:00:00Z",
+}
+
+
+@rsps_lib.activate
+def test_retry_on_5xx(client: APIGuardClient) -> None:
+    """Client retries on 500 and succeeds on the third attempt."""
+    token = _fresh_jwt()
+    # Auth call
+    rsps_lib.add(rsps_lib.POST, AUTH_URL, json={"access_token": token}, status=200)
+    # First two scan calls return 500
+    rsps_lib.add(rsps_lib.GET, f"{BASE_URL}/api/v1/scans/abc", json={"error": "server error"}, status=500)
+    rsps_lib.add(rsps_lib.GET, f"{BASE_URL}/api/v1/scans/abc", json={"error": "server error"}, status=500)
+    # Third scan call succeeds
+    rsps_lib.add(rsps_lib.GET, f"{BASE_URL}/api/v1/scans/abc", json=_VALID_SCAN, status=200)
+
+    # Use a client configured for 3 retries so the two 500s are within budget.
+    from opensecstack.apiguard import APIGuardClient as _AG
+    retrying_client = _AG(BASE_URL, API_KEY, max_retries=3, retry_wait_base=0.0)
+
+    with patch("time.sleep"):
+        result = retrying_client.get_scan("abc")
+
+    assert result is not None
+    assert result["id"] == _VALID_SCAN["id"]
+    scan_calls = [c for c in rsps_lib.calls if "/scans/abc" in c.request.url]
+    assert len(scan_calls) == 3
+
+
+@rsps_lib.activate
+def test_no_retry_on_4xx(client: APIGuardClient) -> None:
+    """Client does NOT retry on 404 — exactly one scan request is made."""
+    from opensecstack.exceptions import NotFoundError
+
+    token = _fresh_jwt()
+    rsps_lib.add(rsps_lib.POST, AUTH_URL, json={"access_token": token}, status=200)
+    rsps_lib.add(
+        rsps_lib.GET,
+        f"{BASE_URL}/api/v1/scans/abc",
+        json={"code": "NOT_FOUND", "message": "not found"},
+        status=404,
+    )
+
+    with pytest.raises(NotFoundError):
+        client.get_scan("abc")
+
+    scan_calls = [c for c in rsps_lib.calls if "/scans/abc" in c.request.url]
+    # auth + exactly 1 scan call (no retry on 4xx)
+    assert len(scan_calls) == 1

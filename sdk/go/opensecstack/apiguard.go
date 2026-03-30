@@ -157,9 +157,6 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 	if err := c.authenticate(ctx); err != nil {
 		return nil, err
 	}
-	c.mu.RLock()
-	jwt := c.jwt
-	c.mu.RUnlock()
 
 	newReader := func() io.Reader {
 		if bodyBuf != nil {
@@ -224,34 +221,17 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 		return r, nil
 	}
 
-	resp, err := doOnce(jwt)
-	if err != nil {
-		return nil, err
-	}
-
-	// Retry up to 2 times on 5xx with exponential backoff.
-	retryDelays := []time.Duration{1 * time.Second, 2 * time.Second}
-	for _, delay := range retryDelays {
-		if resp.StatusCode < 500 {
-			break
-		}
-		resp.Body.Close()
-		// Re-capture token in case a 401 refresh updated it during a previous attempt.
+	// Use doWithRetry to honour MaxRetries / RetryWaitBase for 5xx / network errors.
+	// doOnce already handles 401 re-auth and 429 back-off internally, so we wrap
+	// it here only for the exponential-backoff retry on 5xx responses.
+	return c.doWithRetry(ctx, func(_ int) (*http.Response, error) {
+		// Re-read the current token on each attempt so that a 401 refresh
+		// performed inside doOnce on a previous attempt is picked up.
 		c.mu.RLock()
 		tok := c.jwt
 		c.mu.RUnlock()
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(delay):
-		}
-		resp, err = doOnce(tok)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return resp, nil
+		return doOnce(tok)
+	})
 }
 
 // newRequestID generates a random hex request ID for X-Request-ID headers.

@@ -266,3 +266,76 @@ func TestUploadSpec_Multipart(t *testing.T) {
 		t.Errorf("unexpected spec hash: %q", result.SpecHash)
 	}
 }
+
+// ----------------------------------------------------------------------------
+// TestRetryOn5xx
+// ----------------------------------------------------------------------------
+
+// TestRetryOn5xx verifies that the client retries on 5xx responses and
+// ultimately returns the successful 200 on the third attempt.
+func TestRetryOn5xx(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+
+	var callCount int32
+
+	srv := makeAPIGuardServer(t, token, func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&callCount, 1)
+		if n <= 2 {
+			// First two calls return 500.
+			http.Error(w, `{"error":"temporary server error"}`, http.StatusInternalServerError)
+			return
+		}
+		// Third call succeeds.
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(Scan{ID: "scan-retried", Status: ScanStatusCompleted})
+	})
+	defer srv.Close()
+
+	c := NewAPIGuardClient(srv.URL, "test-key")
+	// Allow up to 2 retries (3 total attempts) with a very short backoff so
+	// the test does not take seconds to run.
+	c.MaxRetries = 2
+	c.RetryWaitBase = 1 * time.Millisecond
+
+	scan, err := c.GetScan(t.Context(), "scan-retried")
+	if err != nil {
+		t.Fatalf("GetScan: expected success after retries, got error: %v", err)
+	}
+	if scan.ID != "scan-retried" {
+		t.Errorf("unexpected scan ID: got %q, want %q", scan.ID, "scan-retried")
+	}
+	if got := atomic.LoadInt32(&callCount); got != 3 {
+		t.Errorf("expected 3 total calls (2 failures + 1 success), got %d", got)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestNoRetryOn4xx
+// ----------------------------------------------------------------------------
+
+// TestNoRetryOn4xx verifies that the client does NOT retry on 4xx client
+// errors and returns immediately after the first response.
+func TestNoRetryOn4xx(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+
+	var callCount int32
+
+	srv := makeAPIGuardServer(t, token, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&callCount, 1)
+		http.Error(w, `{"error":"not found"}`, http.StatusBadRequest)
+	})
+	defer srv.Close()
+
+	c := NewAPIGuardClient(srv.URL, "test-key")
+	// Configure retries — they must NOT fire for 4xx.
+	c.MaxRetries = 3
+	c.RetryWaitBase = 1 * time.Millisecond
+
+	_, err := c.GetScan(t.Context(), "no-such-scan")
+	if err == nil {
+		t.Fatal("GetScan: expected an error for HTTP 400, got nil")
+	}
+	if got := atomic.LoadInt32(&callCount); got != 1 {
+		t.Errorf("expected exactly 1 call (no retry on 4xx), got %d", got)
+	}
+}

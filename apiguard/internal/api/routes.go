@@ -60,6 +60,7 @@ func RegisterRoutes(
 
 		r.Get("/openapi.json", handlers.OpenAPI)
 		r.With(metricsLimiter.Middleware).Get("/metrics", metrics.Handler())
+		r.With(metricsLimiter.Middleware).Get("/metrics/prometheus", middleware.PrometheusHandler())
 
 		// ── Protected endpoints (Bearer JWT required) ────────────────────────
 		r.Group(func(r chi.Router) {

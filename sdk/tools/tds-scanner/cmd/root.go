@@ -9,7 +9,7 @@ import (
 
 // Populated via -ldflags at build time.
 var (
-	version   = "dev"
+	version   = "0.1.0"
 	gitCommit = "unknown"
 )
 

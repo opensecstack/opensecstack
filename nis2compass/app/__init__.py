@@ -1,3 +1,5 @@
+__version__ = "0.1.0"
+
 from flask import Flask
 from .config import Config
 from .extensions import init_extensions

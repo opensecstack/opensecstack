@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useCallback } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
-import type { Mesh } from 'three'
+import * as THREE from 'three'
 import type { Platform } from '../data/platforms'
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
 }
 
 export default function OrbitalNode({ platform, angle, radius }: Props) {
-  const ref = useRef<Mesh>(null)
+  const ref = useRef<THREE.Mesh>(null)
   const [hovered, setHovered] = useState(false)
 
   useFrame(({ clock }) => {
@@ -20,43 +20,70 @@ export default function OrbitalNode({ platform, angle, radius }: Props) {
     ref.current.position.x = Math.cos(t) * radius
     ref.current.position.z = Math.sin(t) * radius
     ref.current.position.y = Math.sin(t * 2) * 0.3
+
+    // Smooth scale lerp
+    const target = hovered ? 1.4 : 1
+    ref.current.scale.lerp(new THREE.Vector3(target, target, target), 0.1)
   })
 
   const isActive = platform.status === 'active'
 
+  const onOver = useCallback(() => {
+    setHovered(true)
+    document.body.style.cursor = 'pointer'
+  }, [])
+
+  const onOut = useCallback(() => {
+    setHovered(false)
+    document.body.style.cursor = 'auto'
+  }, [])
+
   return (
-    <mesh
-      ref={ref}
-      onPointerOver={() => setHovered(true)}
-      onPointerOut={() => setHovered(false)}
-      scale={hovered ? 1.3 : 1}
-    >
-      <sphereGeometry args={[0.25, 32, 32]} />
+    <mesh ref={ref} onPointerOver={onOver} onPointerOut={onOut}>
+      <sphereGeometry args={[0.3, 32, 32]} />
       <meshStandardMaterial
         color={platform.color}
         emissive={platform.color}
-        emissiveIntensity={hovered ? 0.8 : isActive ? 0.4 : 0.15}
+        emissiveIntensity={hovered ? 1.0 : isActive ? 0.4 : 0.15}
         transparent={!isActive}
         opacity={isActive ? 1 : 0.5}
+        toneMapped={false}
       />
-      {hovered && (
-        <Html center distanceFactor={8} style={{ pointerEvents: 'none' }}>
-          <div style={{
-            background: 'rgba(13,13,31,0.9)',
-            border: `1px solid ${platform.color}`,
-            borderRadius: 8,
-            padding: '6px 12px',
-            whiteSpace: 'nowrap',
-            fontSize: 13,
-            fontFamily: 'Inter, sans-serif',
-            color: '#e2e8f0',
+      {/* Always render the label — visibility controlled by opacity */}
+      <Html
+        center
+        distanceFactor={8}
+        style={{
+          pointerEvents: 'none',
+          transition: 'opacity 0.2s ease',
+          opacity: hovered ? 1 : 0,
+        }}
+      >
+        <div style={{
+          background: 'rgba(5,5,16,0.95)',
+          border: `1px solid ${platform.color}`,
+          borderRadius: 10,
+          padding: '8px 16px',
+          whiteSpace: 'nowrap',
+          fontSize: 14,
+          fontFamily: 'Inter, sans-serif',
+          color: '#e2e8f0',
+          boxShadow: `0 0 20px ${platform.color}44`,
+          transform: 'translateY(-20px)',
+        }}>
+          <strong style={{ color: platform.color }}>{platform.name}</strong>
+          <br />
+          <span style={{ fontSize: 11, color: '#94a3b8' }}>{platform.tagline}</span>
+          <span style={{
+            display: 'inline-block', marginLeft: 8,
+            fontSize: 10, padding: '1px 6px', borderRadius: 4,
+            background: isActive ? 'rgba(16,185,129,0.2)' : 'rgba(148,163,184,0.1)',
+            color: isActive ? '#10b981' : '#94a3b8',
           }}>
-            <strong style={{ color: platform.color }}>{platform.name}</strong>
-            <br />
-            <span style={{ fontSize: 11, color: '#94a3b8' }}>{platform.tagline}</span>
-          </div>
-        </Html>
-      )}
+            {platform.status}
+          </span>
+        </div>
+      </Html>
     </mesh>
   )
 }

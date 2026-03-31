@@ -26,9 +26,14 @@ import respx
 import responses as rsps_lib
 
 from opensecstack.citadel import (
+    Advisory,
+    AdvisoryAffects,
     AsyncCITADELClient,
     CITADELClient,
+    CreateAdvisoryRequest,
     GetEventsOptions,
+    ListAdvisoriesOptions,
+    PatchAdvisoryRequest,
     SecurityEvent,
 )
 
@@ -365,6 +370,143 @@ def test_verify_chain_single_and_empty(client: CITADELClient) -> None:
     """verify_chain accepts zero and one-element lists without error."""
     client.verify_chain([])
     client.verify_chain([_make_event(id="only")])
+
+
+# ---------------------------------------------------------------------------
+# AUGUR advisory tests
+# ---------------------------------------------------------------------------
+
+ADVISORIES_URL = f"{BASE_URL}/api/v1/augur/advisories"
+
+
+def _make_advisory_dict(
+    id: str = "adv-001",
+    title: str = "Test Advisory",
+    severity: str = "high",
+    status: str = "draft",
+) -> dict:
+    return {
+        "id": id,
+        "title": title,
+        "description": "A test advisory",
+        "severity": severity,
+        "status": status,
+        "affects": [{"component": "apiguard", "version_min": "0.1.0", "version_max": "0.1.5"}],
+        "cve": "CVE-2026-0001",
+        "references": ["https://example.com/vuln"],
+        "created_at": "2026-03-15T10:00:00+00:00",
+        "updated_at": "2026-03-15T10:00:00+00:00",
+    }
+
+
+# 16. create_advisory — POST with HMAC signature
+
+@rsps_lib.activate
+def test_create_advisory(client: CITADELClient) -> None:
+    """POST /api/v1/augur/advisories → 201: returns Advisory."""
+    adv_data = _make_advisory_dict()
+    rsps_lib.add(rsps_lib.POST, ADVISORIES_URL, json=adv_data, status=201)
+
+    req = CreateAdvisoryRequest(
+        title="Test Advisory",
+        description="A test advisory",
+        severity="high",
+        affects=[AdvisoryAffects(component="apiguard", version_min="0.1.0", version_max="0.1.5")],
+        cve="CVE-2026-0001",
+    )
+    result = client.create_advisory(req)
+
+    assert result.id == "adv-001"
+    assert result.severity == "high"
+    assert result.status == "draft"
+    assert len(result.affects) == 1
+    assert result.affects[0].component == "apiguard"
+
+    post_call = next(c for c in rsps_lib.calls if c.request.method == "POST")
+    assert "X-Citadel-Signature" in post_call.request.headers
+
+
+# 17. list_advisories — GET with filter params
+
+@rsps_lib.activate
+def test_list_advisories(client: CITADELClient) -> None:
+    """GET /api/v1/augur/advisories → 200: returns list."""
+    rsps_lib.add(rsps_lib.GET, ADVISORIES_URL, json=[_make_advisory_dict()], status=200)
+
+    result = client.list_advisories(ListAdvisoriesOptions(status="draft", severity="high"))
+
+    assert len(result) == 1
+    assert result[0].title == "Test Advisory"
+
+
+# 18. get_advisory — GET by ID
+
+@rsps_lib.activate
+def test_get_advisory(client: CITADELClient) -> None:
+    """GET /api/v1/augur/advisories/{id} → 200."""
+    adv_data = _make_advisory_dict(id="adv-specific")
+    rsps_lib.add(rsps_lib.GET, f"{ADVISORIES_URL}/adv-specific", json=adv_data, status=200)
+
+    result = client.get_advisory("adv-specific")
+    assert result.id == "adv-specific"
+
+
+# 19. patch_advisory — PATCH updates status
+
+@rsps_lib.activate
+def test_patch_advisory(client: CITADELClient) -> None:
+    """PATCH /api/v1/augur/advisories/{id} → 200."""
+    updated = _make_advisory_dict(id="adv-001", status="published")
+    rsps_lib.add(rsps_lib.PATCH, f"{ADVISORIES_URL}/adv-001", json=updated, status=200)
+
+    req = PatchAdvisoryRequest(status="published")
+    result = client.patch_advisory("adv-001", req)
+
+    assert result.status == "published"
+
+
+# 20. delete_advisory — DELETE
+
+@rsps_lib.activate
+def test_delete_advisory(client: CITADELClient) -> None:
+    """DELETE /api/v1/augur/advisories/{id} → 204."""
+    rsps_lib.add(rsps_lib.DELETE, f"{ADVISORIES_URL}/adv-001", status=204)
+
+    client.delete_advisory("adv-001")  # should not raise
+
+
+# 21. get_active_advisories — convenience wrapper
+
+@rsps_lib.activate
+def test_get_active_advisories(client: CITADELClient) -> None:
+    """get_active_advisories passes status=published to list_advisories."""
+    published = _make_advisory_dict(status="published")
+    rsps_lib.add(rsps_lib.GET, ADVISORIES_URL, json=[published], status=200)
+
+    result = client.get_active_advisories()
+
+    assert len(result) == 1
+    assert result[0].status == "published"
+    # Verify the query param was sent
+    call = next(c for c in rsps_lib.calls if c.request.method == "GET")
+    assert "status=published" in call.request.url
+
+
+# 22. disabled mode — list returns empty, create raises
+
+def test_advisory_disabled_mode() -> None:
+    """Advisory methods respect disabled mode (empty base_url)."""
+    disabled = CITADELClient("", SHARED_SECRET)
+
+    assert disabled.list_advisories() == []
+    disabled.delete_advisory("any")  # no-op, no raise
+
+    with pytest.raises(ValueError, match="disabled"):
+        disabled.create_advisory(CreateAdvisoryRequest(title="x", description="x", severity="low"))
+    with pytest.raises(ValueError, match="disabled"):
+        disabled.get_advisory("any")
+    with pytest.raises(ValueError, match="disabled"):
+        disabled.patch_advisory("any", PatchAdvisoryRequest(title="x"))
 
 
 # ---------------------------------------------------------------------------

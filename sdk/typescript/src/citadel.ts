@@ -16,6 +16,10 @@ export interface CITADELClientOptions {
   timeout?: number;
   maxRetries?: number;
   retryWaitBase?: number;
+  /** Maximum number of events that can be buffered in the dispatch queue (default 1000). */
+  maxQueueSize?: number;
+  /** Maximum number of concurrent in-flight HTTP event deliveries (default 16). */
+  concurrency?: number;
 }
 
 export class CITADELClient {
@@ -28,6 +32,15 @@ export class CITADELClient {
   private readonly disabled: boolean;
   private readonly pending = new Set<Promise<void>>();
 
+  // ─── Non-blocking event dispatch ───
+  private readonly queue: Array<
+    Omit<SecurityEvent, "id" | "chain_hash" | "prev_hash" | "timestamp">
+  > = [];
+  private readonly maxQueueSize: number;
+  private readonly concurrency: number;
+  private inflight = 0;
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor(opts: CITADELClientOptions) {
     this.baseURL = opts.baseURL.replace(/\/+$/, "");
     this.keyID = opts.keyID;
@@ -36,6 +49,8 @@ export class CITADELClient {
     this.maxRetries = opts.maxRetries ?? 3;
     this.retryWaitBase = opts.retryWaitBase ?? 500;
     this.disabled = !opts.baseURL;
+    this.maxQueueSize = opts.maxQueueSize ?? 1000;
+    this.concurrency = opts.concurrency ?? 16;
   }
 
   // ─── HMAC Signing ───
@@ -133,18 +148,69 @@ export class CITADELClient {
     throw lastError ?? new Error("Request failed");
   }
 
+  // ─── Non-blocking dispatch internals ───
+
+  private scheduleFlush(): void {
+    if (this.flushTimer) return;
+    this.flushTimer = setTimeout(() => {
+      this.flushTimer = null;
+      this.processQueue();
+    }, 0);
+  }
+
+  private processQueue(): void {
+    while (this.queue.length > 0 && this.inflight < this.concurrency) {
+      const event = this.queue.shift()!;
+      this.inflight++;
+      const promise = this.do("POST", "/api/v1/events", event)
+        .catch(() => {}) // fire-and-forget: swallow errors
+        .then(() => {
+          this.inflight--;
+          this.pending.delete(promise);
+          if (this.queue.length > 0) this.scheduleFlush();
+        });
+      this.pending.add(promise);
+    }
+  }
+
   // ─── Events ───
 
-  async sendEvent(
+  /**
+   * Fire-and-forget event dispatch. Queues the event for background delivery
+   * and returns immediately (synchronous, returns void — not a Promise).
+   *
+   * If the internal queue is full the event is silently dropped, matching the
+   * Go SDK's back-pressure behaviour.
+   *
+   * If the client is disabled (empty baseURL) this is a no-op.
+   */
+  sendEvent(
+    event: Omit<
+      SecurityEvent,
+      "id" | "chain_hash" | "prev_hash" | "timestamp"
+    >,
+  ): void {
+    if (this.disabled) return;
+    if (this.queue.length >= this.maxQueueSize) {
+      // Queue full — drop event (matches Go semaphore behaviour).
+      return;
+    }
+    this.queue.push(event);
+    this.scheduleFlush();
+  }
+
+  /**
+   * Blocking event send. Sends the event via HTTP and waits for the response.
+   * Use this when you need confirmation that the event was delivered.
+   */
+  async sendEventSync(
     event: Omit<
       SecurityEvent,
       "id" | "chain_hash" | "prev_hash" | "timestamp"
     >,
   ): Promise<void> {
-    const promise = this.do("POST", "/api/v1/events", event).then(() => {});
-    this.pending.add(promise);
-    promise.finally(() => this.pending.delete(promise));
-    return promise;
+    if (this.disabled) return;
+    await this.do("POST", "/api/v1/events", event);
   }
 
   async getEvents(opts?: GetEventsOptions): Promise<SecurityEvent[]> {
@@ -199,13 +265,40 @@ export class CITADELClient {
 
   // ─── Drain ───
 
+  /**
+   * Flush any buffered events in the queue and wait for all in-flight HTTP
+   * deliveries to complete. Call this on graceful shutdown.
+   *
+   * After drain returns the client should not be used to send further events.
+   */
   async drain(timeoutMs: number = 30_000): Promise<void> {
-    if (this.pending.size === 0) return;
-    const allDone = Promise.all(this.pending);
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Drain timed out")), timeoutMs),
-    );
-    await Promise.race([allDone, timeout]);
+    // Cancel the periodic flush timer — we will process everything now.
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+
+    const deadline = Date.now() + timeoutMs;
+
+    // Loop: dispatch a batch, wait for it, repeat until the queue is fully
+    // drained. Each iteration dispatches up to `concurrency` events; when
+    // those settle the loop picks up the next batch.
+    while (this.queue.length > 0 || this.pending.size > 0) {
+      this.processQueue();
+
+      if (this.pending.size === 0) break;
+
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        throw new Error("Drain timed out");
+      }
+
+      const allDone = Promise.all(this.pending).then(() => {});
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Drain timed out")), remaining),
+      );
+      await Promise.race([allDone, timeout]);
+    }
   }
 
   // ─── AUGUR Advisories ───

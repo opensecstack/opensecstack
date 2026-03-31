@@ -21,11 +21,14 @@ import { APIGuardClient } from "@opensecstack/sdk";
 
 const apiguard = new APIGuardClient({
   baseURL: "http://localhost:8080",
-  token: "your-api-token",
+  apiKey: "your-api-key",
 });
 
-// Upload an OpenAPI spec and start a scan
-const scan = await apiguard.createScan({
+// Start a scan from a spec URL
+const scan = await apiguard.createScan("https://example.com/openapi.yaml");
+
+// Or use createScanFull for additional options
+const scanFull = await apiguard.createScanFull({
   spec_url: "https://example.com/openapi.yaml",
   target: "https://api.example.com",
   modules: ["auth", "injection", "bola"],
@@ -42,12 +45,12 @@ const findings = await apiguard.getFindings(scan.id, {
   per_page: 25,
 });
 
-for (const finding of findings.data) {
+for (const finding of findings) {
   console.log(`[${finding.severity}] ${finding.title} -- ${finding.endpoint_method} ${finding.endpoint_path}`);
 }
 
 // Triage a finding
-await apiguard.patchFinding(finding.id, {
+await apiguard.patchFinding(findings[0].id, {
   status: "confirmed",
   note: "Verified in staging environment",
 });
@@ -60,7 +63,7 @@ import { NIS2CompassClient } from "@opensecstack/sdk";
 
 const nis2 = new NIS2CompassClient({
   baseURL: "http://localhost:8081",
-  token: "your-api-token",
+  apiKey: "your-api-key",
 });
 
 // Create an organisation
@@ -81,7 +84,7 @@ const assessment = await nis2.createAssessment(org.id, {
 });
 
 // List controls for the assessment
-const controls = await nis2.listControls(org.id, assessment.id, {
+const controls = await nis2.listControls(assessment.id, {
   status: "not_assessed",
 });
 
@@ -90,7 +93,7 @@ for (const control of controls) {
 }
 
 // Update a control with evidence
-await nis2.patchControl(org.id, assessment.id, control.id, {
+await nis2.patchControl(assessment.id, controls[0].measure_ref, {
   status: "partially_met",
   notes: "MFA deployed for admin accounts, rollout pending for all users",
   risk_score: 3,
@@ -106,7 +109,8 @@ import { CITADELClient } from "@opensecstack/sdk";
 
 const citadel = new CITADELClient({
   baseURL: "http://localhost:8082",
-  token: "your-api-token",
+  keyID: "your-key-id",
+  sharedSecret: "your-shared-secret",
 });
 
 // Query recent security events
@@ -116,7 +120,7 @@ const events = await citadel.getEvents({
   limit: 50,
 });
 
-for (const event of events.data) {
+for (const event of events) {
   console.log(`[${event.severity}] ${event.event_type} from ${event.source} at ${event.timestamp}`);
 }
 
@@ -150,10 +154,14 @@ Each client accepts the following common options:
 | Option         | Type     | Default  | Description                          |
 | -------------- | -------- | -------- | ------------------------------------ |
 | `baseURL`      | `string` | required | Base URL of the service              |
-| `token`        | `string` | --       | Bearer token for authentication      |
 | `timeout`      | `number` | `30000`  | Request timeout in milliseconds      |
 | `maxRetries`   | `number` | `3`      | Maximum number of retry attempts     |
 | `retryWaitBase`| `number` | `500`    | Base wait time (ms) between retries  |
+
+Authentication differs per client:
+
+- **APIGuardClient** and **NIS2CompassClient** use `apiKey: string` (sent as a Bearer token).
+- **CITADELClient** uses `keyID: string` and `sharedSecret: string` (HMAC-signed requests).
 
 Retries use exponential backoff and are applied to 5xx errors and 429 rate-limit responses automatically.
 

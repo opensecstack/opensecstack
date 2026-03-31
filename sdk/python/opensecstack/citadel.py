@@ -104,6 +104,163 @@ class SecurityEvent:
 
 
 @dataclass
+class AdvisoryAffects:
+    """Describes the component and version range affected by an advisory."""
+
+    component: str
+    version_min: str = ""
+    version_max: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {"component": self.component}
+        if self.version_min:
+            d["version_min"] = self.version_min
+        if self.version_max:
+            d["version_max"] = self.version_max
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "AdvisoryAffects":
+        return cls(
+            component=data["component"],
+            version_min=data.get("version_min", ""),
+            version_max=data.get("version_max", ""),
+        )
+
+
+@dataclass
+class Advisory:
+    """An AUGUR security advisory retrieved from CITADEL."""
+
+    id: str
+    title: str
+    description: str
+    severity: str  # "critical" | "high" | "medium" | "low" | "none"
+    status: str  # "draft" | "published" | "revoked"
+    affects: list[AdvisoryAffects] = field(default_factory=list)
+    cve: str = ""
+    references: list[str] = field(default_factory=list)
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "id": self.id,
+            "title": self.title,
+            "description": self.description,
+            "severity": self.severity,
+            "status": self.status,
+            "affects": [a.to_dict() for a in self.affects],
+        }
+        if self.cve:
+            d["cve"] = self.cve
+        if self.references:
+            d["references"] = self.references
+        if self.created_at:
+            d["created_at"] = self.created_at.isoformat()
+        if self.updated_at:
+            d["updated_at"] = self.updated_at.isoformat()
+        return d
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "Advisory":
+        created = data.get("created_at")
+        if isinstance(created, str):
+            created = datetime.fromisoformat(created.replace("Z", "+00:00"))
+        updated = data.get("updated_at")
+        if isinstance(updated, str):
+            updated = datetime.fromisoformat(updated.replace("Z", "+00:00"))
+        affects = [AdvisoryAffects.from_dict(a) for a in (data.get("affects") or [])]
+        return cls(
+            id=data["id"],
+            title=data["title"],
+            description=data.get("description", ""),
+            severity=data.get("severity", "none"),
+            status=data.get("status", "draft"),
+            affects=affects,
+            cve=data.get("cve", ""),
+            references=data.get("references") or [],
+            created_at=created,
+            updated_at=updated,
+        )
+
+
+@dataclass
+class CreateAdvisoryRequest:
+    """Payload for creating a new AUGUR advisory."""
+
+    title: str
+    description: str
+    severity: str  # "critical" | "high" | "medium" | "low" | "none"
+    affects: list[AdvisoryAffects] = field(default_factory=list)
+    cve: str = ""
+    references: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "title": self.title,
+            "description": self.description,
+            "severity": self.severity,
+        }
+        if self.affects:
+            d["affects"] = [a.to_dict() for a in self.affects]
+        if self.cve:
+            d["cve"] = self.cve
+        if self.references:
+            d["references"] = self.references
+        return d
+
+
+@dataclass
+class PatchAdvisoryRequest:
+    """Payload for updating an existing AUGUR advisory. All fields are optional."""
+
+    title: Optional[str] = None
+    description: Optional[str] = None
+    severity: Optional[str] = None
+    status: Optional[str] = None
+    affects: Optional[list[AdvisoryAffects]] = None
+    cve: Optional[str] = None
+    references: Optional[list[str]] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {}
+        if self.title is not None:
+            d["title"] = self.title
+        if self.description is not None:
+            d["description"] = self.description
+        if self.severity is not None:
+            d["severity"] = self.severity
+        if self.status is not None:
+            d["status"] = self.status
+        if self.affects is not None:
+            d["affects"] = [a.to_dict() for a in self.affects]
+        if self.cve is not None:
+            d["cve"] = self.cve
+        if self.references is not None:
+            d["references"] = self.references
+        return d
+
+
+@dataclass
+class ListAdvisoriesOptions:
+    """Optional filters for ``list_advisories``."""
+
+    page: int = 1
+    per_page: int = 50
+    status: Optional[str] = None
+    severity: Optional[str] = None
+
+    def to_params(self) -> dict[str, str]:
+        p: dict[str, str] = {"page": str(self.page), "per_page": str(self.per_page)}
+        if self.status:
+            p["status"] = self.status
+        if self.severity:
+            p["severity"] = self.severity
+        return p
+
+
+@dataclass
 class GetEventsOptions:
     """Optional filter and pagination parameters for ``get_events``."""
 
@@ -338,6 +495,77 @@ class CITADELClient:
         """
         _verify_chain_integrity(events)
 
+    # ------------------------------------------------------------------
+    # AUGUR advisories
+    # ------------------------------------------------------------------
+
+    def create_advisory(self, req: CreateAdvisoryRequest) -> Advisory:
+        """Create a new AUGUR advisory. Returns the created advisory."""
+        if not self._base:
+            raise ValueError("CITADELClient is disabled (base_url is empty)")
+        body = json.dumps(req.to_dict(), separators=(",", ":")).encode()
+        resp = self._post_with_retry(self._url("augur/advisories"), body)
+        resp.raise_for_status()
+        return Advisory.from_dict(resp.json())
+
+    def list_advisories(
+        self, opts: Optional[ListAdvisoriesOptions] = None
+    ) -> list[Advisory]:
+        """List AUGUR advisories with optional filters. Returns [] when disabled."""
+        if not self._base:
+            return []
+        params = (opts or ListAdvisoriesOptions()).to_params()
+        resp = self._session.get(
+            self._url("augur/advisories"),
+            params=params,
+            timeout=self._timeout,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        items = data if isinstance(data, list) else (data.get("items") or data.get("data") or [])
+        return [Advisory.from_dict(item) for item in items]
+
+    def get_advisory(self, advisory_id: str) -> Advisory:
+        """Fetch a single advisory by ID."""
+        if not self._base:
+            raise ValueError("CITADELClient is disabled (base_url is empty)")
+        resp = self._session.get(
+            self._url(f"augur/advisories/{advisory_id}"),
+            timeout=self._timeout,
+        )
+        resp.raise_for_status()
+        return Advisory.from_dict(resp.json())
+
+    def patch_advisory(
+        self, advisory_id: str, req: PatchAdvisoryRequest
+    ) -> Advisory:
+        """Update an existing advisory. Returns the updated advisory."""
+        if not self._base:
+            raise ValueError("CITADELClient is disabled (base_url is empty)")
+        body = json.dumps(req.to_dict(), separators=(",", ":"))
+        resp = self._session.patch(
+            self._url(f"augur/advisories/{advisory_id}"),
+            data=body,
+            headers={"Content-Type": "application/json"},
+            timeout=self._timeout,
+        )
+        resp.raise_for_status()
+        return Advisory.from_dict(resp.json())
+
+    def delete_advisory(self, advisory_id: str) -> None:
+        """Delete an advisory by ID."""
+        if not self._base:
+            return
+        resp = self._session.delete(
+            self._url(f"augur/advisories/{advisory_id}"),
+            timeout=self._timeout,
+        )
+        resp.raise_for_status()
+
+    def get_active_advisories(self) -> list[Advisory]:
+        """Convenience wrapper — returns only published advisories."""
+        return self.list_advisories(ListAdvisoriesOptions(status="published"))
+
 
 # ---------------------------------------------------------------------------
 # Async client
@@ -497,6 +725,66 @@ try:
         async def verify_chain(self, events: list[SecurityEvent]) -> None:
             """Verify SHA-256 chain integrity. Raises ``ValueError`` on broken link."""
             _verify_chain_integrity(events)
+
+        # ------------------------------------------------------------------
+        # AUGUR advisories (async)
+        # ------------------------------------------------------------------
+
+        async def create_advisory(self, req: CreateAdvisoryRequest) -> Advisory:
+            """Create a new AUGUR advisory."""
+            if not self._base:
+                raise ValueError("AsyncCITADELClient is disabled (base_url is empty)")
+            body = json.dumps(req.to_dict(), separators=(",", ":")).encode()
+            resp = await self._post_with_retry(self._url("augur/advisories"), body)
+            resp.raise_for_status()
+            return Advisory.from_dict(resp.json())
+
+        async def list_advisories(
+            self, opts: Optional[ListAdvisoriesOptions] = None
+        ) -> list[Advisory]:
+            """List AUGUR advisories with optional filters."""
+            if not self._base:
+                return []
+            params = (opts or ListAdvisoriesOptions()).to_params()
+            resp = await self._http().get(self._url("augur/advisories"), params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            items = data if isinstance(data, list) else (data.get("items") or data.get("data") or [])
+            return [Advisory.from_dict(item) for item in items]
+
+        async def get_advisory(self, advisory_id: str) -> Advisory:
+            """Fetch a single advisory by ID."""
+            if not self._base:
+                raise ValueError("AsyncCITADELClient is disabled (base_url is empty)")
+            resp = await self._http().get(self._url(f"augur/advisories/{advisory_id}"))
+            resp.raise_for_status()
+            return Advisory.from_dict(resp.json())
+
+        async def patch_advisory(
+            self, advisory_id: str, req: PatchAdvisoryRequest
+        ) -> Advisory:
+            """Update an existing advisory."""
+            if not self._base:
+                raise ValueError("AsyncCITADELClient is disabled (base_url is empty)")
+            body = json.dumps(req.to_dict(), separators=(",", ":"))
+            resp = await self._http().patch(
+                self._url(f"augur/advisories/{advisory_id}"),
+                content=body,
+                headers={"Content-Type": "application/json"},
+            )
+            resp.raise_for_status()
+            return Advisory.from_dict(resp.json())
+
+        async def delete_advisory(self, advisory_id: str) -> None:
+            """Delete an advisory by ID."""
+            if not self._base:
+                return
+            resp = await self._http().delete(self._url(f"augur/advisories/{advisory_id}"))
+            resp.raise_for_status()
+
+        async def get_active_advisories(self) -> list[Advisory]:
+            """Convenience wrapper — returns only published advisories."""
+            return await self.list_advisories(ListAdvisoriesOptions(status="published"))
 
 except ImportError:
     # httpx is an optional dependency; only the sync client is available.

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createHmac, createHash } from "node:crypto";
 import { CITADELClient } from "../citadel.js";
+import type { CITADELClientOptions } from "../citadel.js";
 import { OpenSecStackError, RateLimitError } from "../types.js";
 import type { SecurityEvent, Advisory } from "../types.js";
 
@@ -55,7 +56,7 @@ const CLIENT_OPTS = {
   retryWaitBase: 0,
 };
 
-function makeClient(overrides?: Partial<typeof CLIENT_OPTS>) {
+function makeClient(overrides?: Partial<CITADELClientOptions>) {
   return new CITADELClient({ ...CLIENT_OPTS, ...overrides });
 }
 
@@ -157,7 +158,7 @@ describe("CITADELClient", () => {
       };
 
       mockFetch.mockResolvedValueOnce(jsonResponse(200, undefined));
-      await client.sendEvent(event);
+      await client.sendEventSync(event);
 
       const headers = getHeaders();
       const ts = headers["X-CITADEL-TS"]!;
@@ -190,7 +191,7 @@ describe("CITADELClient", () => {
   // ─── Events ───
 
   describe("Events", () => {
-    it("4. sendEvent — POST /api/v1/events with event body", async () => {
+    it("4. sendEventSync — POST /api/v1/events with event body", async () => {
       mockFetch.mockResolvedValueOnce(jsonResponse(200, { id: "evt-new" }));
 
       const event = {
@@ -204,7 +205,7 @@ describe("CITADELClient", () => {
         payload: { ip: "10.0.0.1" },
       };
 
-      await client.sendEvent(event);
+      await client.sendEventSync(event);
 
       expect(mockFetch).toHaveBeenCalledOnce();
       const [url, init] = mockFetch.mock.calls[0]!;
@@ -377,10 +378,10 @@ describe("CITADELClient", () => {
     it("drain waits for in-flight sendEvent to complete", async () => {
       vi.useRealTimers();
       const drainClient = makeClient({ maxRetries: 0, retryWaitBase: 0 });
-      mockFetch.mockResolvedValue(jsonResponse(200, { id: "evt-new" }));
+      mockFetch.mockResolvedValueOnce(jsonResponse(200, { id: "evt-new" }));
 
-      // Fire off a sendEvent (don't await it yet — drain should wait for it)
-      const sendPromise = drainClient.sendEvent({
+      // Fire off a sendEvent (fire-and-forget, returns void)
+      drainClient.sendEvent({
         event_type: "auth.login",
         source: "auth-service",
         actor_id: "user-1",
@@ -391,11 +392,9 @@ describe("CITADELClient", () => {
         payload: {},
       });
 
-      // drain should wait for the in-flight send
+      // drain should flush the queue and wait for all in-flight sends
       await drainClient.drain();
 
-      // The send should have completed
-      await expect(sendPromise).resolves.toBeUndefined();
       expect(mockFetch).toHaveBeenCalled();
     });
 
@@ -406,7 +405,7 @@ describe("CITADELClient", () => {
       // Mock fetch that never resolves
       mockFetch.mockReturnValue(new Promise(() => {}));
 
-      // Fire off a sendEvent that will hang
+      // Fire off a sendEvent (fire-and-forget) that will hang during HTTP delivery
       hangClient.sendEvent({
         event_type: "auth.login",
         source: "auth-service",
@@ -420,6 +419,147 @@ describe("CITADELClient", () => {
 
       // drain with a very short timeout should reject
       await expect(hangClient.drain(50)).rejects.toThrow("Drain timed out");
+    });
+  });
+
+  // ─── Non-blocking event dispatch ───
+
+  describe("Non-blocking event dispatch", () => {
+    const sampleEvent = {
+      event_type: "auth.login",
+      source: "auth-service",
+      actor_id: "user-1",
+      actor_type: "user",
+      resource_type: "session",
+      resource_id: "sess-1",
+      severity: "medium",
+      payload: {},
+    };
+
+    it("sendEvent is non-blocking (fire-and-forget)", () => {
+      // sendEvent returns void, not a Promise — it is synchronous
+      const result = client.sendEvent(sampleEvent);
+      expect(result).toBeUndefined();
+      // Since it's undefined, it's certainly not a Promise/thenable.
+      // Compare with sendEventSync which returns a Promise:
+      mockFetch.mockResolvedValueOnce(jsonResponse(200, { id: "evt-new" }));
+      const syncResult = client.sendEventSync(sampleEvent);
+      expect(syncResult).toBeInstanceOf(Promise);
+    });
+
+    it("sendEvent drops events when queue is full", async () => {
+      vi.useRealTimers();
+      // Create a client with a tiny queue (maxQueueSize=3) and mock fetch that never resolves
+      // so nothing drains from the queue via inflight processing.
+      const smallQueueClient = makeClient({
+        maxRetries: 0,
+        retryWaitBase: 0,
+        maxQueueSize: 3,
+      });
+      mockFetch.mockReturnValue(new Promise(() => {}));
+
+      // Fill the queue to capacity
+      smallQueueClient.sendEvent({ ...sampleEvent, payload: { i: 1 } });
+      smallQueueClient.sendEvent({ ...sampleEvent, payload: { i: 2 } });
+      smallQueueClient.sendEvent({ ...sampleEvent, payload: { i: 3 } });
+
+      // The 4th event should be silently dropped (no error thrown)
+      expect(() => {
+        smallQueueClient.sendEvent({ ...sampleEvent, payload: { i: 4 } });
+      }).not.toThrow();
+
+      // Drain will process the 3 queued events (they hang forever), so we timeout
+      // and just verify the fetch was called exactly 3 times (not 4).
+      // Give drain a moment to flush the queue before timing out.
+      try {
+        await smallQueueClient.drain(100);
+      } catch {
+        // expected timeout
+      }
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
+    it("sendEventSync blocks until HTTP completes", async () => {
+      vi.useRealTimers();
+      const syncClient = makeClient({ maxRetries: 0, retryWaitBase: 0 });
+      mockFetch.mockResolvedValueOnce(jsonResponse(200, { id: "evt-new" }));
+
+      // sendEventSync returns a Promise
+      const result = syncClient.sendEventSync(sampleEvent);
+      expect(result).toBeInstanceOf(Promise);
+
+      await result;
+
+      // Fetch should have been called
+      expect(mockFetch).toHaveBeenCalledOnce();
+      const [url, init] = mockFetch.mock.calls[0]!;
+      expect(url).toBe("https://citadel.example.com/api/v1/events");
+      expect(init.method).toBe("POST");
+    });
+
+    it("drain processes remaining queued events", async () => {
+      vi.useRealTimers();
+      const drainClient = makeClient({ maxRetries: 0, retryWaitBase: 0 });
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse(200, { id: "evt-1" }))
+        .mockResolvedValueOnce(jsonResponse(200, { id: "evt-2" }))
+        .mockResolvedValueOnce(jsonResponse(200, { id: "evt-3" }));
+
+      // Queue 3 events (fire-and-forget)
+      drainClient.sendEvent({ ...sampleEvent, payload: { i: 1 } });
+      drainClient.sendEvent({ ...sampleEvent, payload: { i: 2 } });
+      drainClient.sendEvent({ ...sampleEvent, payload: { i: 3 } });
+
+      // Drain should flush the queue and wait for all 3 HTTP requests to complete
+      await drainClient.drain();
+
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      // Verify each call was a POST to the events endpoint
+      for (const [url, init] of mockFetch.mock.calls) {
+        expect(url).toBe("https://citadel.example.com/api/v1/events");
+        expect(init.method).toBe("POST");
+      }
+    });
+
+    it("concurrent event dispatch respects concurrency limit", async () => {
+      vi.useRealTimers();
+      const concurrencyClient = makeClient({
+        maxRetries: 0,
+        retryWaitBase: 0,
+        concurrency: 4,
+      });
+
+      // Track peak concurrency
+      let currentInflight = 0;
+      let peakInflight = 0;
+
+      mockFetch.mockImplementation(() => {
+        currentInflight++;
+        if (currentInflight > peakInflight) {
+          peakInflight = currentInflight;
+        }
+        return new Promise<ReturnType<typeof jsonResponse>>((resolve) => {
+          setTimeout(() => {
+            currentInflight--;
+            resolve(jsonResponse(200, { id: "evt-new" }));
+          }, 10);
+        });
+      });
+
+      // Queue 20 events
+      for (let i = 0; i < 20; i++) {
+        concurrencyClient.sendEvent({ ...sampleEvent, payload: { i } });
+      }
+
+      // Drain and wait for all to complete
+      await concurrencyClient.drain(10_000);
+
+      // All 20 events should have been sent
+      expect(mockFetch).toHaveBeenCalledTimes(20);
+      // Peak concurrency should not exceed the limit of 4
+      expect(peakInflight).toBeLessThanOrEqual(4);
+      // But it should actually use concurrency (at least 2 at once)
+      expect(peakInflight).toBeGreaterThanOrEqual(2);
     });
   });
 
@@ -614,7 +754,20 @@ describe("CITADELClient", () => {
     it("25. when baseURL is empty, all methods return undefined/void without HTTP calls", async () => {
       const disabled = makeClient({ baseURL: "" });
 
-      await expect(disabled.sendEvent({
+      // sendEvent is fire-and-forget (synchronous void) — just call it
+      disabled.sendEvent({
+        event_type: "test",
+        source: "test",
+        actor_id: "u1",
+        actor_type: "user",
+        resource_type: "r",
+        resource_id: "r1",
+        severity: "low",
+        payload: {},
+      });
+
+      // sendEventSync is the blocking variant
+      await expect(disabled.sendEventSync({
         event_type: "test",
         source: "test",
         actor_id: "u1",

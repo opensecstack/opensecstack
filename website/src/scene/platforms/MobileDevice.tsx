@@ -17,11 +17,11 @@ interface LayerDef {
 }
 
 const LAYERS: LayerDef[] = [
-  { name: 'Microkernel + HW',  color: '#ef4444', services: ['TrustZone', 'Enclave', 'TPM', 'Boot'],       description: 'ARM TrustZone hardware root of trust.' },
+  { name: 'Microkernel + HW',  color: '#ef4444', services: ['TrustZone', 'Enclave', 'TPM', 'Boot'],       description: 'Rust + ARM TrustZone root of trust.' },
   { name: 'Radio (RIL)',       color: '#f59e0b', services: ['Baseband', 'Modem', 'Antenna', 'Signal'],     description: 'Isolated user-space radio interface.' },
   { name: 'MVNO Stack',        color: '#10b981', services: ['SIM', 'eSIM', 'VoIP', 'Policy'],              description: 'Mobile network ops, CITADEL-gated.' },
   { name: 'CITADEL Layer',     color: '#3b82f6', services: ['MARSHAL', 'VIGIL', 'SIM-Gov', 'Roaming'],     description: 'SIM & roaming governance engine.' },
-  { name: 'App Runtime',       color: '#7c3aed', services: ['Cell-A', 'Cell-B', 'Cell-C', 'Permit'],       description: 'MARSHAL-gated sandbox cells.' },
+  { name: 'App Runtime',       color: '#7c3aed', services: ['WASM-A', 'WASM-B', 'WASM-C', 'Permit'],     description: 'WebAssembly MARSHAL-gated cells.' },
   { name: 'User Interface',    color: '#00f0ff', services: ['Dialer', 'Messages', 'Launcher', 'Settings'], description: 'Secure UI in sandboxed cells.' },
 ]
 

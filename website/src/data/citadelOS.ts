@@ -29,7 +29,7 @@ export const sandboxTiers: SandboxTier[] = [
 ]
 
 export const osPhases = [
-  { phase: 'Alpha',   target: '2027 Q1', items: ['Microkernel boot', 'Capability manager', 'Basic IPC', 'CITADEL runtime stub'] },
+  { phase: 'Alpha',   target: '2027 Q1', items: ['Rust microkernel boot', 'Capability manager', 'Basic IPC', 'WASM runtime', 'CITADEL runtime stub'] },
   { phase: 'Beta',    target: '2027 Q3', items: ['Grid sandbox isolation', 'Network stack (user-space)', 'Filesystem driver', 'MARSHAL integration'] },
   { phase: 'RC',      target: '2028 Q1', items: ['Desktop shell', 'Application framework', 'WORM chain boot verification', 'Hardware attestation'] },
   { phase: 'v1.0',    target: '2028 Q3', items: ['NIS2/GDPR compliance suite', 'Secure update channel', 'Full MARSHAL governance', 'EU Cyber Resilience Act alignment'] },

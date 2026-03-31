@@ -18,12 +18,12 @@ interface LayerDef {
 }
 
 const LAYERS: LayerDef[] = [
-  { name: 'Microkernel',       color: '#ef4444', services: ['IPC', 'Memory', 'Threads', 'Scheduler'],       description: '~50K LOC. Only privileged component.' },
+  { name: 'Microkernel',       color: '#ef4444', services: ['IPC', 'Memory', 'Threads', 'Scheduler'],       description: 'Rust. ~50K LOC. Only privileged component.' },
   { name: 'Capability Manager', color: '#f59e0b', services: ['Tokens', 'ACL', 'Signing', 'Revoke'],         description: 'Capability-based access control.' },
   { name: 'OS Services',       color: '#10b981', services: ['FS', 'Network', 'Audio', 'Display'],           description: 'All run as isolated user-space.' },
-  { name: 'Grid Sandbox',      color: '#3b82f6', services: ['Cell-1', 'Cell-2', 'Cell-3', 'Permit'],        description: 'Cryptographic cell isolation.' },
+  { name: 'Grid Sandbox',      color: '#3b82f6', services: ['WASM-1', 'WASM-2', 'WASM-3', 'Permit'],       description: 'WebAssembly cell isolation.' },
   { name: 'CITADEL Runtime',   color: '#7c3aed', services: ['MARSHAL', 'WORM', 'VIGIL', 'AUGUR'],           description: 'Governance as infrastructure.' },
-  { name: 'Application Layer', color: '#00f0ff', services: ['App-A', 'App-B', 'App-C', 'Shell'],            description: 'Zero-trust sandboxed apps.' },
+  { name: 'Application Layer', color: '#00f0ff', services: ['App-A', 'App-B', 'App-C', 'Shell'],            description: 'WASM apps. Zero-trust sandbox.' },
 ]
 
 const LAYER_HEIGHT = 0.3

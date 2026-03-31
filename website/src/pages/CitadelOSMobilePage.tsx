@@ -65,7 +65,7 @@ export default function CitadelOSMobilePage() {
               ARM TrustZone &middot; SIM Governance &middot; MVNO-Native
             </p>
             <p style={{ marginTop: '1.5rem', fontSize: '1.1rem', color: '#8892a8', lineHeight: 1.7, maxWidth: 620 }}>
-              A mobile operating system where MVNO operations run natively on the microkernel stack.
+              A Rust + WebAssembly mobile OS where MVNO operations run natively on the microkernel stack.
               Every SIM activation, data policy change, and roaming agreement is a CITADEL governance event &mdash;
               auditable, immutable, NIS2-compliant.
             </p>

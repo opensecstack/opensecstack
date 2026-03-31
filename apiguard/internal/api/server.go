@@ -184,7 +184,7 @@ func (s *Server) setupMiddleware() {
 }
 
 func (s *Server) registerRoutes() {
-	h := handlers.NewHealth(s.logger)
+	h := handlers.NewHealthWithDB(s.logger, s.db)
 	a := handlers.NewAuthWithDB(s.logger, s.config, s.db)
 	sc := handlers.NewScansWithCitadel(s.logger, s.db, s.scanner, s.citadel, s.shutdownCtx, s.config)
 	s.scansHandler = sc // store for WaitScans() on shutdown

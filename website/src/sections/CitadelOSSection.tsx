@@ -18,13 +18,13 @@ export default function CitadelOSSection() {
               <span className="badge badge-planned">Phase 5</span>
             </div>
             <p style={{ color: '#8892a8', fontSize: '0.88rem', lineHeight: 1.7 }}>
-              ~50K LOC microkernel. 6 security layers. Capability-based access control.
+              Rust microkernel (~50K LOC) + WebAssembly app isolation. 6 security layers.
               MARSHAL 5-gate at boot. WORM hash chain from firmware to shell.
             </p>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
-              <span className="tech-tag">Microkernel</span>
+              <span className="tech-tag">Rust</span>
+              <span className="tech-tag">WebAssembly</span>
               <span className="tech-tag">Grid Sandbox</span>
-              <span className="tech-tag">TPM 2.0</span>
             </div>
           </div>
           <Link to="/citadelos" style={{
@@ -45,13 +45,18 @@ export default function CitadelOSSection() {
               <span className="badge badge-planned">Phase 5</span>
             </div>
             <p style={{ color: '#8892a8', fontSize: '0.88rem', lineHeight: 1.7 }}>
-              ARM TrustZone hardware root of trust. SIM governance and eSIM lifecycle.
-              MVNO operations run natively on the microkernel stack.
+              Rust + ARM TrustZone hardware root of trust. Full MVNO stack with
+              SIM/eSIM governance, VoIP, roaming, and data policies &mdash; all CITADEL-gated.
             </p>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
-              <span className="tech-tag">ARM TrustZone</span>
-              <span className="tech-tag">eSIM</span>
               <span className="tech-tag">MVNO</span>
+              <span className="tech-tag">eSIM</span>
+              <span className="tech-tag">SIM Governance</span>
+              <span className="tech-tag">VoIP</span>
+              <span className="tech-tag">Roaming</span>
+              <span className="tech-tag">Rust</span>
+              <span className="tech-tag">ARM TrustZone</span>
+              <span className="tech-tag">WASM</span>
             </div>
           </div>
           <Link to="/citadelos/mobile" style={{

@@ -15,8 +15,8 @@ func TestDefaultValues_AreNonEmpty(t *testing.T) {
 }
 
 func TestVersion_DefaultIsDev(t *testing.T) {
-	if Version != "0.1.0" {
-		t.Errorf("Version = %q, want %q", Version, "0.1.0")
+	if Version != "1.0.0" {
+		t.Errorf("Version = %q, want %q", Version, "1.0.0")
 	}
 }
 

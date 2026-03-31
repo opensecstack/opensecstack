@@ -8,11 +8,11 @@ export interface MobileLayer {
 
 export const mobileLayers: MobileLayer[] = [
   { number: 6, code: 'L6', name: 'User Interface',      description: 'Secure dialer, messaging, app launcher — all sandboxed cells.', color: '#00f0ff' },
-  { number: 5, code: 'L5', name: 'App Runtime',          description: 'Application sandbox cells — each MARSHAL-gated. Grid isolation model.', color: '#7c3aed' },
+  { number: 5, code: 'L5', name: 'App Runtime',          description: 'WebAssembly sandbox cells — each MARSHAL-gated. Apps compiled to WASM.', color: '#7c3aed' },
   { number: 4, code: 'L4', name: 'CITADEL Layer',        description: 'MARSHAL + VIGIL — SIM governance, roaming control, policy enforcement.', color: '#3b82f6' },
-  { number: 3, code: 'L3', name: 'MVNO Stack',           description: 'SIM provisioning, data policies, VoIP, eSIM lifecycle management.', color: '#10b981' },
+  { number: 3, code: 'L3', name: 'MVNO Stack',           description: 'Rust + WebAssembly. SIM provisioning, data policies, VoIP, eSIM lifecycle.', color: '#10b981' },
   { number: 2, code: 'L2', name: 'Radio Abstraction',    description: 'RIL (Radio Interface Layer) — isolated user-space process. No kernel access.', color: '#f59e0b' },
-  { number: 1, code: 'L1', name: 'Microkernel + HW',     description: 'ARM TrustZone, Secure Enclave, TPM. Hardware-backed cryptographic root of trust.', color: '#ef4444' },
+  { number: 1, code: 'L1', name: 'Microkernel + HW',     description: 'Rust microkernel + ARM TrustZone. Secure Enclave, TPM. Hardware-backed root of trust.', color: '#ef4444' },
 ]
 
 export interface MVNOEvent {
@@ -77,7 +77,7 @@ export const mvnoFeatures: MVNOFeature[] = [
 ]
 
 export const mobilePhases = [
-  { phase: 'Alpha', target: '2027 Q2', items: ['ARM TrustZone boot', 'RIL isolation', 'Basic SIM provisioning', 'CITADEL runtime stub'] },
+  { phase: 'Alpha', target: '2027 Q2', items: ['Rust + ARM TrustZone boot', 'RIL isolation', 'WASM runtime', 'Basic SIM provisioning', 'CITADEL runtime stub'] },
   { phase: 'Beta',  target: '2027 Q4', items: ['MVNO stack core', 'eSIM lifecycle', 'Data policy engine', 'MARSHAL integration'] },
   { phase: 'RC',    target: '2028 Q2', items: ['Secure dialer', 'VoIP trunk', 'Roaming governance', 'VIGIL health monitoring'] },
   { phase: 'v1.0',  target: '2028 Q4', items: ['Full MVNO operations', 'NIS2 compliance suite', 'Network slicing', 'EU regulatory alignment'] },

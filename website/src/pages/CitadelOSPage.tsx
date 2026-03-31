@@ -65,9 +65,9 @@ export default function CitadelOSPage() {
               The Secure Operating System
             </p>
             <p style={{ marginTop: '1.5rem', fontSize: '1.1rem', color: '#8892a8', lineHeight: 1.7, maxWidth: 600 }}>
-              A microkernel-based OS built for security from the ground up &mdash; not bolted on after the fact.
-              CITADEL governance runs natively inside the OS. Every driver, filesystem, and network stack
-              runs in isolated user-space processes.
+              A Rust microkernel + WebAssembly OS built for security from the ground up &mdash; not bolted on after the fact.
+              CITADEL governance runs natively inside the OS. Drivers, filesystems, and apps
+              run as isolated Rust processes or WebAssembly modules.
             </p>
 
             <div className="stat-grid" style={{ marginTop: '2.5rem' }}>
@@ -101,9 +101,9 @@ export default function CitadelOSPage() {
             <div className="glass-card">
               <h3 style={{ color: '#10b981', fontSize: '1.1rem', marginBottom: '0.75rem' }}>CitadelOS Approach</h3>
               <p style={{ color: '#8892a8', fontSize: '0.9rem', lineHeight: 1.7 }}>
-                Only IPC, memory management, and thread scheduling run in kernel space (~50K LOC).
+                Rust microkernel: only IPC, memory management, and thread scheduling in kernel space (~50K LOC).
                 <strong style={{ color: '#e2e8f0' }}> Everything else</strong> &mdash; drivers, filesystems,
-                network &mdash; runs in isolated user-space with capability-based access control.
+                network &mdash; runs as isolated Rust user-space processes or WebAssembly modules.
               </p>
             </div>
           </div>

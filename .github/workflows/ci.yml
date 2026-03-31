@@ -28,12 +28,13 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      apiguard:      ${{ steps.filter.outputs.apiguard }}
-      nis2compass:   ${{ steps.filter.outputs.nis2compass }}
-      citadel:       ${{ steps.filter.outputs.citadel }}
-      sdk:           ${{ steps.filter.outputs.sdk }}
-      vantage_hash:  ${{ steps.filter.outputs.vantage_hash }}
-      deploy:        ${{ steps.filter.outputs.deploy }}
+      apiguard:        ${{ steps.filter.outputs.apiguard }}
+      nis2compass:     ${{ steps.filter.outputs.nis2compass }}
+      citadel:         ${{ steps.filter.outputs.citadel }}
+      sdk:             ${{ steps.filter.outputs.sdk }}
+      typescript_sdk:  ${{ steps.filter.outputs.typescript_sdk }}
+      vantage_hash:    ${{ steps.filter.outputs.vantage_hash }}
+      deploy:          ${{ steps.filter.outputs.deploy }}
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
       - uses: dorny/paths-filter@de90cc6fb38505f5d1dba880b5b18bd2de29a3be # v3
@@ -49,6 +50,8 @@ jobs:
             sdk:
               - 'sdk/**'
               - '!sdk/vantage-hash/**'
+            typescript_sdk:
+              - 'sdk/typescript/**'
             vantage_hash:
               - 'sdk/vantage-hash/**'
             deploy:
@@ -464,6 +467,32 @@ jobs:
         run: npm run build
 
   # ──────────────────────────────────────────────────────────────────────────
+  # 3e. TypeScript SDK — type check, lint, unit tests
+  # ──────────────────────────────────────────────────────────────────────────
+  test-typescript-sdk:
+    needs: changes
+    if: needs.changes.outputs.typescript_sdk == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/typescript
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-node@1a4442cacd436585916779262731d1f68fdf5c7e # v3
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: sdk/typescript/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Type check
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm test
+
+  # ──────────────────────────────────────────────────────────────────────────
   # 4a. vantage-hash — Rust crate (TripleHash)
   # ──────────────────────────────────────────────────────────────────────────
   test-vantage-hash:
@@ -608,6 +637,7 @@ jobs:
       - test-citadel-worm
       - lint-citadel
       - security-citadel
+      - test-typescript-sdk
       - test-vantage-hash
       - docker-build
       - integration

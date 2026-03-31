@@ -135,6 +135,12 @@ jobs:
             sdk/vantage-hash
             sdk/rust
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: sdk/typescript/package-lock.json
+
       - name: Go SDK tests
         working-directory: sdk/go
         run: go test -race -count=1 -timeout=15m ./...
@@ -144,6 +150,12 @@ jobs:
         run: |
           pip install -r requirements.txt pytest pytest-cov
           pytest tests/ -v --timeout=300
+
+      - name: TypeScript SDK tests
+        working-directory: sdk/typescript
+        run: |
+          npm ci
+          npm test
 
       - name: vantage-hash tests (Rust)
         working-directory: sdk/vantage-hash

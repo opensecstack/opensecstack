@@ -51,5 +51,23 @@ Initial release of the opensecstack SDK.
 - `webhook.verify_signature`, `webhook.parse_event`
 - Exception types: `AuthError`, `NotFoundError`, `RateLimitError`, `ServerError`
 
+**TypeScript SDK** (`sdk/typescript` — `@opensecstack/sdk`)
+- `APIGuardClient` — typed client for APIGuard v0.1.x API
+  - `createScan`, `createScanFull`, `getScan`, `listScans`, `deleteScan`
+  - `getFindings`, `getFinding`, `listFindings`, `patchFinding`
+  - `getReport`, `getReportStream` — ArrayBuffer and ReadableStream output
+  - `uploadSpec`, `getAuditLog`, `refreshToken`
+- `NIS2CompassClient` — typed client for NIS2 Compass v0.1.x API
+  - Full CRUD for organisations, assessments, controls, artifacts, API keys
+  - `generateReport`, `getAuditLog`, `getAuditEntry`, `getHealth`, `getHealthDetail`
+- `CITADELClient` — HMAC-SHA256 signed CITADEL connector client
+  - `sendEvent`, `getEvents`, `getEvent`, `verifyChain`
+  - AUGUR advisory methods: `createAdvisory`, `listAdvisories`, `getAdvisory`, `patchAdvisory`, `deleteAdvisory`, `getActiveAdvisories`
+- `WebhookRouter` — HMAC-SHA256 signature verification and event routing
+  - `verifySignature`, `handle`, `handleHttp` (Node.js HTTP handler)
+  - Event type constants matching Go/Python SDKs
+- Error types: `OpenSecStackError`, `RateLimitError`, `InvalidSignatureError`
+- Built on native `fetch` API (Node.js 18+), no external dependencies
+
 **Tools**
 - `tds-scanner` — CLI tool for TDS compliance analysis of platform integrations

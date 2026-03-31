@@ -1,6 +1,6 @@
 # opensecstack SDK
 
-> Go, Python, and Rust clients for inter-platform communication.
+> Go, Python, TypeScript, and Rust clients for inter-platform communication.
 
 The SDK provides typed contracts, event schemas, and client libraries that all opensecstack platforms use to communicate with each other and with CITADEL.
 
@@ -10,23 +10,27 @@ The SDK provides typed contracts, event schemas, and client libraries that all o
 |-----------|----------|---------|
 | Go client | Go | HTTP client for platform-to-platform and platform-to-CITADEL communication |
 | Python client | Python | Same capabilities for Python-based platforms (NIS2 Compass, SecureLab) |
+| TypeScript client | TypeScript | Browser and Node.js client using native `fetch` API |
 | Rust client | Rust | Async-first client for high-performance and systems integration use-cases |
 | Event schemas | JSON Schema | Typed contracts for all inter-platform events |
 | OpenAPI specs | YAML | API contracts for each platform's public endpoints |
 
 ## Language Matrix
 
-| Feature | Go | Python | Rust |
-|---------|----|--------|------|
-| APIGuard client | Yes | Yes | Yes |
-| NIS2 Compass client | Yes | Yes | Yes |
-| Async / non-blocking | Yes (goroutines) | Yes (asyncio) | Yes (tokio) |
-| Auto token refresh | Yes | Yes | Yes |
-| Redirect guard (SDK-M4) | Yes | Yes | Yes |
-| JWT exp parsing (SDK-M5) | Yes | Yes | Yes |
-| Report streaming | Yes | Yes | Yes |
-| Builder pattern | Yes | Yes | Yes |
-| Min runtime version | Go 1.22 | Python 3.11 | Rust 1.75 |
+| Feature | Go | Python | TypeScript | Rust |
+|---------|----|--------|------------|------|
+| APIGuard client | Yes | Yes | Yes | Yes |
+| NIS2 Compass client | Yes | Yes | Yes | Yes |
+| CITADEL client | Yes | Yes | Yes | Yes |
+| AUGUR advisory client | Yes | Yes | Yes | — |
+| Webhook router | Yes | Yes | Yes | — |
+| Async / non-blocking | Yes (goroutines) | Yes (asyncio) | Yes (async/await) | Yes (tokio) |
+| Auto token refresh | Yes | Yes | Yes | Yes |
+| Redirect guard (SDK-M4) | Yes | Yes | Yes | Yes |
+| JWT exp parsing (SDK-M5) | Yes | Yes | — | Yes |
+| Report streaming | Yes | Yes | Yes | Yes |
+| Builder pattern | Yes | Yes | — | Yes |
+| Min runtime version | Go 1.24 | Python 3.11 | Node.js 18 | Rust 1.75 |
 
 ## Integration Contracts
 

@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.x (current) | Yes |
+| 1.0.x   | ✅ Current |
+| 0.x     | ❌ End of life |
 
 ## Reporting a Vulnerability
 

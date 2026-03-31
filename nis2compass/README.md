@@ -174,4 +174,5 @@ Detailed documentation lives in the `docs/` directory. The table below lists eve
 | [integrations.md](docs/integrations.md) | Guide for connecting NIS2 Compass with external systems (ticketing, dashboards, SIEM) via the REST API |
 | [runbook.md](docs/runbook.md) | Operations runbook — health checks, monitoring, backup, restore, and on-call procedures |
 | [troubleshooting.md](docs/troubleshooting.md) | Common failure modes with symptoms, diagnosis steps, and resolutions |
+| [versioning.md](docs/versioning.md) | Versioning policy, backwards compatibility guarantees, deprecation process, and SDK compatibility |
 | [faq.md](docs/faq.md) | Frequently asked questions about NIS2 Compass, compliance scope, and operational concerns |

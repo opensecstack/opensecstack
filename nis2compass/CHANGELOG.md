@@ -9,6 +9,10 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+---
+
+## [1.0.0] — 2026-03-31
+
 ### Added
 
 - Organisation management: create, update, and manage NIS2-subject organisations with entity type (essential/important), industry, country, and size classification
@@ -29,9 +33,3 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Docker Compose stacks: development and production configurations
 - Webhook support: receive scan results from APIGuard and platform events from other opensecstack platforms
 - Test suite: 10 test modules covering all major API endpoints and audit chain integrity
-
----
-
-## [0.1.0] — Unreleased
-
-Initial release. See [Unreleased] above for the full feature list.

@@ -106,7 +106,7 @@ See [ECOSYSTEM.md](ECOSYSTEM.md) for the full architecture diagram and data-flow
 
 **Automated API security testing against the OWASP API Security Top 10.**
 
-- Parses OpenAPI 3.x, Swagger 2.0, and GraphQL schemas (Rust-powered parser)
+- Parses OpenAPI 3.x and Swagger 2.0 schemas (Rust-powered parser; GraphQL planned)
 - Tests A1 (Broken Object Level Authorisation) through A10 (Unsafe Consumption of APIs)
 - CVSS 3.1 scoring for every finding
 - Reports in JSON, SARIF, HTML, and PDF

@@ -6,7 +6,7 @@ Open Source API Security Testing Framework | OWASP API Top 10 | Go + Rust + Reac
 
 ## What It Does
 
-- **Parses** OpenAPI/Swagger/GraphQL schemas into a normalised internal representation
+- **Parses** OpenAPI/Swagger schemas into a normalised internal representation (GraphQL planned)
 - **Runs** OWASP API Top 10 security tests against your live API endpoints
 - **Outputs** HTML/PDF/JSON/SARIF reports with CVSS 3.1 scoring and remediation guidance
 

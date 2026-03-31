@@ -21,22 +21,26 @@ Initial release of the opensecstack SDK.
 
 **Go SDK** (`sdk/go/opensecstack`)
 - `APIGuardClient` — typed client for APIGuard v0.1.x API
-  - `StartScan`, `GetScan`, `WaitForScan`, `ListScans`
-  - `ExportNIS2Evidence` — exports scan result as NIS2Compass-compatible evidence bundle
-  - `ExportSARIF` — exports findings as SARIF 2.1.0
-- `NIS2CompassClient` — typed client for NIS2Compass v0.1.x API
-  - `CreateOrganisation`, `GetOrganisation`, `ListOrganisations`
-  - `CreateAssessment`, `GetAssessment`, `ListAssessments`
-  - `PatchControl`, `GetControl`
-  - `UploadArtifact`, `GetArtifact`
-- `citadel.NewClient` — HMAC-signed CITADEL connector client
-  - `Evaluate` — submit Kerkese to MARSHAL
-  - `EmitWORM` — emit event to WORM log
-  - `GetAdvisory` — query AUGUR pre-check advisory
-- Typed contracts: `ScanResult`, `Finding`, `IOCBundle`, `IncidentRecord`, `ComplianceAssessment`, `AuditEntry`, `NIS2AuditEntry`
-- `webhook` package — signature verification and event router
+  - `CreateScan`, `CreateScanFull`, `GetScan`, `ListScans`, `DeleteScan`
+  - `GetFindings`, `GetFinding`, `ListFindings`, `PatchFinding`
+  - `GetReport`, `GetReportStream` — JSON, SARIF, HTML, PDF output
+  - `UploadSpec`, `GetAuditLog`, `RefreshToken`
+- `NIS2CompassClient` — typed client for NIS2 Compass v0.1.x API
+  - `CreateOrganisation`, `GetOrganisation`, `GetOrganisations`, `PatchOrganisation`, `DeleteOrganisation`
+  - `CreateAssessment`, `GetAssessment`, `GetAssessments`, `PatchAssessment`, `DeleteAssessment`
+  - `GetControls`, `ListControls`, `GetControl`, `PatchControl`
+  - `ListArtifacts`, `UploadArtifact`, `GetArtifact`, `DownloadArtifact`, `DeleteArtifact`
+  - `GenerateReport`, `GetReportStream`, `GetAuditLog`, `GetAuditEntry`
+  - `ListAPIKeys`, `CreateAPIKey`, `RevokeAPIKey`
+  - `GetHealth`, `GetHealthDetail`
+- `NewCITADELClient` — HMAC-SHA256 signed CITADEL connector client
+  - `SendEvent` — non-blocking event dispatch via buffered channel + background worker
+  - `GetEvents`, `GetEvent` — query the WORM audit chain
+  - `VerifyChain` — local SHA-256 chain integrity verification
+  - `Drain` — graceful shutdown, waits for in-flight deliveries
+- Typed contracts: `Scan`, `Finding`, `Organisation`, `Assessment`, `Control`, `Artifact`, `SecurityEvent`, `AuditEntry`, `NIS2AuditEntry`
+- `WebhookRouter` — HMAC-SHA256 signature verification and event routing (`On`, `ServeHTTP`)
 - Error types: `AuthError`, `NotFoundError`, `RateLimitError`, `ServerError`
-- Client options: `WithAPIKey`, `WithTimeout`, `WithHTTPClient`, `WithUserAgent`, `WithRetry`
 
 **Python SDK** (`sdk/python/opensecstack`)
 - `APIGuardClient` — typed client for APIGuard v0.1.x API

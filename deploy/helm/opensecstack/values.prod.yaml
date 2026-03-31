@@ -1,0 +1,136 @@
+# Production overrides for the opensecstack Helm chart.
+#
+# Apply on top of values.yaml:
+#   helm upgrade --install opensecstack ./deploy/helm/opensecstack \
+#     -f values.yaml \
+#     -f values.prod.yaml \
+#     --set apiguard.ingress.host=apiguard.yourdomain.com \
+#     --set nis2compass.ingress.host=nis2compass.yourdomain.com \
+#     --set certManager.email=ops@yourdomain.com
+#
+# Secrets are NOT stored here. Provision them separately:
+#   kubectl create secret generic opensecstack-db-secrets  -n opensecstack \
+#     --from-literal=POSTGRES_PASSWORD=<strong-password>  \
+#     --from-literal=NIS2_DB_PASSWORD=<strong-password>
+#   kubectl create secret generic opensecstack-app-secrets -n opensecstack \
+#     --from-literal=APIGUARD_JWT_SECRET=<32-byte-hex>    \
+#     --from-literal=NIS2_JWT_SECRET=<32-byte-hex>         \
+#     --from-literal=NIS2_SECRET_KEY=<32-byte-hex>         \
+#     --from-literal=REDIS_PASSWORD=<strong-password>
+
+# ---------------------------------------------------------------------------
+# Global
+# ---------------------------------------------------------------------------
+global:
+  imagePullPolicy: IfNotPresent   # never pull :latest blindly in production
+
+# ---------------------------------------------------------------------------
+# APIGuard — Go binary, CPU-bound during scans
+# ---------------------------------------------------------------------------
+apiguard:
+  image:
+    tag: "1.0.0"                  # pin to a release tag, never use latest
+
+  replicas: 3                     # baseline; HPA takes over above this
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"                    # allow full core during an active scan burst
+      memory: 1Gi
+
+  ingress:
+    host: apiguard.yourdomain.com     # REPLACE with real hostname
+    tlsSecret: apiguard-tls           # cert-manager will create this
+
+# ---------------------------------------------------------------------------
+# NIS2 Compass — Python/Flask, memory-bound (WeasyPrint PDF generation)
+# ---------------------------------------------------------------------------
+nis2compass:
+  image:
+    tag: "1.0.0"
+
+  replicas: 3
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 384Mi               # Flask + WeasyPrint baseline
+    limits:
+      cpu: "1"
+      memory: 1536Mi              # WeasyPrint can spike during PDF rendering
+
+  ingress:
+    host: nis2compass.yourdomain.com  # REPLACE with real hostname
+    tlsSecret: nis2compass-tls
+
+# ---------------------------------------------------------------------------
+# CITADEL — Go binary, low CPU but needs headroom for chain verification
+# ---------------------------------------------------------------------------
+citadel:
+  image:
+    tag: "1.0.0"
+
+  replicas: 2
+
+  resources:
+    requests:
+      cpu: 150m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ---------------------------------------------------------------------------
+# PostgreSQL — tune to actual workload; these are conservative starting points
+# ---------------------------------------------------------------------------
+postgres:
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 4Gi
+
+  persistence:
+    size: 100Gi
+    storageClass: "standard-retain"  # REPLACE with your cloud's retain-policy class
+                                     # AWS: gp3, GKE: standard-rwo, AKS: managed-premium
+
+# ---------------------------------------------------------------------------
+# Redis — bounded by maxmemory; set to ~80 % of memory limit
+# ---------------------------------------------------------------------------
+redis:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi               # configure maxmemory 400mb inside redis config
+
+# ---------------------------------------------------------------------------
+# Application config
+# ---------------------------------------------------------------------------
+config:
+  logLevel: warn                  # info in dev, warn in prod (reduces log volume)
+
+# ---------------------------------------------------------------------------
+# HPA — scale earlier and wider in production
+# ---------------------------------------------------------------------------
+hpa:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  cpuThreshold: 65                # scale at 65 % CPU (lower than dev's 70 %)
+
+# ---------------------------------------------------------------------------
+# cert-manager — use the real Let's Encrypt production ACME endpoint
+# ---------------------------------------------------------------------------
+certManager:
+  enabled: true
+  email: ops@yourdomain.com       # REPLACE — receives cert expiry warnings
+  issuerType: letsencrypt-prod

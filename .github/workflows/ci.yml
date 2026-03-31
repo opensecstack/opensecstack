@@ -1,0 +1,578 @@
+name: Ecosystem CI
+
+# Runs on every push to main/develop and on every PR targeting main.
+# Jobs are path-filtered so only affected components run on PRs; on branch
+# pushes every component is always exercised.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# ---------------------------------------------------------------------------
+# Shared defaults
+# ---------------------------------------------------------------------------
+env:
+  GO_VERSION: "1.22"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # 0. Detect changed components (PR path-filter; pushes run everything)
+  # ──────────────────────────────────────────────────────────────────────────
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      apiguard:      ${{ steps.filter.outputs.apiguard }}
+      nis2compass:   ${{ steps.filter.outputs.nis2compass }}
+      citadel:       ${{ steps.filter.outputs.citadel }}
+      sdk:           ${{ steps.filter.outputs.sdk }}
+      vantage_hash:  ${{ steps.filter.outputs.vantage_hash }}
+      deploy:        ${{ steps.filter.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: dorny/paths-filter@de90cc6fb38505f5d1dba880b5b18bd2de29a3be # v3
+        id: filter
+        with:
+          filters: |
+            apiguard:
+              - 'apiguard/**'
+            nis2compass:
+              - 'nis2compass/**'
+            citadel:
+              - '.citadel/**'
+            sdk:
+              - 'sdk/**'
+              - '!sdk/vantage-hash/**'
+            vantage_hash:
+              - 'sdk/vantage-hash/**'
+            deploy:
+              - 'deploy/**'
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 1a. APIGuard — Go backend tests (with Postgres)
+  # ──────────────────────────────────────────────────────────────────────────
+  test-apiguard:
+    needs: changes
+    if: needs.changes.outputs.apiguard == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apiguard
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: apiguard_test
+          POSTGRES_USER: apiguard
+          POSTGRES_PASSWORD: apiguard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: apiguard/go.sum
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apiguard/rust
+
+      - name: Go tests (with race detector)
+        env:
+          DATABASE_URL: postgres://apiguard:apiguard@localhost:5432/apiguard_test?sslmode=disable
+        run: go test ./... -coverprofile=coverage.out -covermode=atomic -race
+
+      - name: Enforce 70 % coverage
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${COVERAGE}%"
+          if [ "$(echo "$COVERAGE < 70" | bc -l)" -eq 1 ]; then
+            echo "::error::Coverage ${COVERAGE}% is below the 70% threshold"
+            exit 1
+          fi
+
+      - name: Rust analyser unit tests
+        working-directory: apiguard/rust
+        run: cargo test --workspace
+
+      - name: Upload Go coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: apiguard-go-coverage
+          path: apiguard/coverage.out
+
+  # 1b. APIGuard — lint
+  lint-apiguard:
+    needs: changes
+    if: needs.changes.outputs.apiguard == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: apiguard/go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@3a919529898de77ec3da873e3063ca4b10e7f5cc # v3
+        with:
+          version: v1.57
+          working-directory: apiguard
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apiguard/rust
+      - name: cargo fmt check
+        working-directory: apiguard/rust
+        run: cargo fmt --check
+      - name: cargo clippy
+        working-directory: apiguard/rust
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+  # 1c. APIGuard — security
+  security-apiguard:
+    needs: [test-apiguard]
+    if: needs.changes.outputs.apiguard == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: apiguard/go.sum
+      - name: govulncheck
+        working-directory: apiguard
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+      - name: gosec (SAST)
+        working-directory: apiguard
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -fmt json -out gosec-results.json -stdout -verbose=text ./...
+      - name: Upload gosec results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: apiguard-gosec
+          path: apiguard/gosec-results.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apiguard/rust
+      - name: cargo audit
+        working-directory: apiguard/rust
+        run: |
+          cargo install cargo-audit --quiet
+          cargo audit
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 2a. NIS2 Compass — Python tests (with Postgres + Redis)
+  # ──────────────────────────────────────────────────────────────────────────
+  test-nis2compass:
+    needs: changes
+    if: needs.changes.outputs.nis2compass == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nis2compass
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: nis2_test
+          POSTGRES_USER: nis2
+          POSTGRES_PASSWORD: nis2
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: nis2compass/requirements*.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgresql://nis2:nis2@localhost:5432/nis2_test
+        run: alembic upgrade head
+      - name: pytest with coverage
+        env:
+          DATABASE_URL: postgresql://nis2:nis2@localhost:5432/nis2_test
+          REDIS_URL: redis://localhost:6379/0
+          FLASK_ENV: testing
+          SECRET_KEY: ci-test-secret-key
+        run: |
+          pytest tests/ -v \
+            --cov=app --cov-report=xml --cov-report=term-missing \
+            --cov-fail-under=70
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nis2compass-coverage
+          path: nis2compass/coverage.xml
+
+  # 2b. NIS2 Compass — lint
+  lint-nis2compass:
+    needs: changes
+    if: needs.changes.outputs.nis2compass == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nis2compass
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install linters
+        run: pip install black isort flake8 mypy types-requests
+      - name: black
+        run: black --check app/
+      - name: isort
+        run: isort --check-only app/
+      - name: flake8
+        run: flake8 app/ --max-line-length=120
+      - name: mypy
+        run: mypy app/ --ignore-missing-imports
+
+  # 2c. NIS2 Compass — security
+  security-nis2compass:
+    needs: [test-nis2compass]
+    if: needs.changes.outputs.nis2compass == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nis2compass
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install tools
+        run: pip install pip-audit bandit
+      - name: pip-audit
+        run: pip-audit -r requirements.txt --format json -o pip-audit-results.json
+      - name: bandit (SAST)
+        run: bandit -r app/ -f json -o bandit-results.json || true
+      - name: Upload security results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nis2compass-security
+          path: |
+            nis2compass/pip-audit-results.json
+            nis2compass/bandit-results.json
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 3a. Citadel — Go tests (with Postgres)
+  # ──────────────────────────────────────────────────────────────────────────
+  test-citadel:
+    needs: changes
+    if: needs.changes.outputs.citadel == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .citadel
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: citadel_test
+          POSTGRES_USER: citadel
+          POSTGRES_PASSWORD: citadel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: .citadel/go.sum
+      - name: Run tests
+        env:
+          DATABASE_URL: postgres://citadel:citadel@localhost:5432/citadel_test?sslmode=disable
+        run: go test ./... -v -count=1 -coverprofile=coverage.out -covermode=atomic
+      - name: Enforce 70 % coverage
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${COVERAGE}%"
+          if [ "$(echo "$COVERAGE < 70" | bc -l)" -eq 1 ]; then
+            echo "::error::Coverage ${COVERAGE}% is below the 70% threshold"
+            exit 1
+          fi
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: citadel-coverage
+          path: .citadel/coverage.out
+
+  # 3b. Citadel — lint
+  lint-citadel:
+    needs: changes
+    if: needs.changes.outputs.citadel == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: .citadel/go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@3a919529898de77ec3da873e3063ca4b10e7f5cc # v3
+        with:
+          version: v1.57
+          working-directory: .citadel
+
+  # 3c. Citadel — security
+  security-citadel:
+    needs: [test-citadel]
+    if: needs.changes.outputs.citadel == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: .citadel/go.sum
+      - name: govulncheck
+        working-directory: .citadel
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+      - name: gosec (SAST)
+        working-directory: .citadel
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -fmt json -out gosec-results.json -stdout -verbose=text ./...
+      - name: Upload gosec results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: citadel-gosec
+          path: .citadel/gosec-results.json
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 3d. NIS2 Compass — web frontend (React/Node)
+  # ──────────────────────────────────────────────────────────────────────────
+  test-nis2compass-web:
+    needs: changes
+    if: needs.changes.outputs.nis2compass == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nis2compass/web
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-node@1a4442cacd436585916779262731d1f68fdf5c7e # v3
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: nis2compass/web/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm test -- --run
+      - name: Build
+        run: npm run build
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 4a. vantage-hash — Rust crate (TripleHash)
+  # ──────────────────────────────────────────────────────────────────────────
+  test-vantage-hash:
+    needs: changes
+    if: needs.changes.outputs.vantage_hash == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/vantage-hash
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: sdk/vantage-hash
+      - name: fmt
+        run: cargo fmt --check
+      - name: clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: test
+        run: cargo test --all-features
+      - name: cargo audit
+        run: |
+          cargo install cargo-audit --quiet
+          cargo audit
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 4b. Docker image build — verifies all Dockerfiles compile cleanly
+  #    Runs only after all unit tests pass to avoid wasting build minutes
+  # ──────────────────────────────────────────────────────────────────────────
+  docker-build:
+    needs:
+      - test-apiguard
+      - test-nis2compass
+      - test-citadel
+    # Run when any of the relevant jobs succeeded or were skipped (path filter)
+    if: |
+      always() &&
+      !contains(needs.*.result, 'failure') &&
+      !contains(needs.*.result, 'cancelled')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3
+      - name: Build all images (no push)
+        run: docker compose -f deploy/docker-compose.yml build --parallel
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 5. Integration — spin up full stack and verify all health endpoints respond
+  # ──────────────────────────────────────────────────────────────────────────
+  integration:
+    needs: [docker-build]
+    if: always() && needs.docker-build.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - name: Start full stack
+        run: |
+          docker compose -f deploy/docker-compose.dev.yml up -d --wait --wait-timeout 120
+      - name: Health check — APIGuard
+        run: |
+          curl -sf --retry 10 --retry-delay 3 --retry-connrefused \
+            http://localhost:8080/api/v1/health \
+            | grep -q '"status"'
+      - name: Health check — NIS2 Compass
+        run: |
+          curl -sf --retry 10 --retry-delay 3 --retry-connrefused \
+            http://localhost:5000/api/v1/health \
+            | grep -q '"status"'
+      - name: Health check — Citadel
+        run: |
+          curl -sf --retry 10 --retry-delay 3 --retry-connrefused \
+            http://localhost:9000/health \
+            | grep -q '"status"'
+      - name: Collect container logs on failure
+        if: failure()
+        run: docker compose -f deploy/docker-compose.dev.yml logs --no-color > stack-logs.txt
+      - name: Upload stack logs
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: integration-stack-logs
+          path: stack-logs.txt
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f deploy/docker-compose.dev.yml down -v
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 6. DAST — Nuclei scans against the running stack (main branch only)
+  # ──────────────────────────────────────────────────────────────────────────
+  dast:
+    needs: [integration]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.integration.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - name: Start full stack
+        run: docker compose -f deploy/docker-compose.dev.yml up -d --wait --wait-timeout 120
+      - name: Install Nuclei
+        run: |
+          go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+          nuclei -update-templates
+      - name: DAST — APIGuard
+        run: |
+          nuclei -t apiguard/.nuclei/templates/ \
+            -u http://localhost:8080 \
+            -jsonl -output apiguard-dast.jsonl || true
+      - name: DAST — NIS2 Compass (OWASP API templates)
+        run: |
+          nuclei -tags api,owasp \
+            -u http://localhost:5000 \
+            -jsonl -output nis2compass-dast.jsonl || true
+      - name: Upload DAST results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dast-results
+          path: |
+            apiguard-dast.jsonl
+            nis2compass-dast.jsonl
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f deploy/docker-compose.dev.yml down -v
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 7. CI Gate — single required status check for branch protection
+  #    "skipped" (path-filtered) jobs are treated as success.
+  # ──────────────────────────────────────────────────────────────────────────
+  ci-gate:
+    needs:
+      - test-apiguard
+      - lint-apiguard
+      - security-apiguard
+      - test-nis2compass
+      - lint-nis2compass
+      - security-nis2compass
+      - test-nis2compass-web
+      - test-citadel
+      - lint-citadel
+      - security-citadel
+      - test-vantage-hash
+      - docker-build
+      - integration
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: All required jobs passed (or were skipped)
+        run: |
+          results="${{ join(needs.*.result, ' ') }}"
+          echo "Job results: $results"
+          for result in $results; do
+            if [[ "$result" == "failure" || "$result" == "cancelled" ]]; then
+              echo "::error::A required job finished with status '$result'."
+              exit 1
+            fi
+          done
+          echo "All checks passed."

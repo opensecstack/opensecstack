@@ -864,3 +864,48 @@ func (c *NIS2CompassClient) GetAuditEntry(ctx context.Context, entryID string) (
 	}
 	return &entry, nil
 }
+
+// HealthStatus is returned by GetHealth and GetHealthDetail.
+type HealthStatus struct {
+	Status  string `json:"status"`
+	Version string `json:"version,omitempty"`
+	DB      string `json:"db,omitempty"`
+	Redis   string `json:"redis,omitempty"`
+}
+
+// GetHealth returns the aggregate platform health status.
+// This endpoint does not require authentication.
+func (c *NIS2CompassClient) GetHealth(ctx context.Context) (*HealthStatus, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.apiURL("health"), nil)
+	if err != nil {
+		return nil, fmt.Errorf("GetHealth: build request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	hc := c.HTTPClient
+	if hc == nil {
+		hc = &http.Client{Timeout: 30 * time.Second}
+	}
+	resp, err := hc.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("GetHealth: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("GetHealth: HTTP %d", resp.StatusCode)
+	}
+	var hs HealthStatus
+	if err := json.NewDecoder(resp.Body).Decode(&hs); err != nil {
+		return nil, fmt.Errorf("GetHealth: decode: %w", err)
+	}
+	return &hs, nil
+}
+
+// GetHealthDetail returns detailed per-dependency health information.
+// Requires a valid Bearer JWT.
+func (c *NIS2CompassClient) GetHealthDetail(ctx context.Context) (*HealthStatus, error) {
+	var hs HealthStatus
+	if err := c.getJSON(ctx, "health/detail", nil, &hs); err != nil {
+		return nil, fmt.Errorf("GetHealthDetail: %w", err)
+	}
+	return &hs, nil
+}

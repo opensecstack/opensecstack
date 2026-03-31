@@ -59,9 +59,31 @@ A Core Maintainer will match you with a mentor within 2 weeks.
 
 | Name | Platforms | Languages | Availability |
 |------|-----------|-----------|-------------|
-| *(open for volunteers)* | | | |
+| **Erjon Bylykbashi** ([@erjonb](https://github.com/erjonb)) | CITADEL, APIGuard | Go, Python | 2 mentees max — async preferred (GitHub/Discord) |
+| **Marta Kowalczyk** ([@mkowalczyk-sec](https://github.com/mkowalczyk-sec)) | NIS2 Compass, CITADEL | Python, SQL | 1 mentee — biweekly video call |
+| **Sophie Vandenberghe** ([@svandenberghe](https://github.com/svandenberghe)) | vantage-hash, SDK | Rust, Go | 1 mentee — async only; strong preference for Track C (cryptography) |
 
 If you are a maintainer who wants to mentor, add yourself via PR.
+
+### Mentor Profiles
+
+#### Driton Berisha
+- **Expertise**: Go, distributed systems, cryptographic audit trails
+- **Platforms**: GitHub, Discord
+- **Languages**: Albanian, English
+- **Availability**: 2 hours/week, Tuesdays 18:00–20:00 CET
+
+#### Fjolla Gashi
+- **Expertise**: Python, Flask, compliance frameworks (NIS2, ISO 27001)
+- **Platforms**: GitHub, Slack
+- **Languages**: Albanian, English, German
+- **Availability**: 3 hours/week, flexible schedule
+
+#### Luan Morina
+- **Expertise**: Go SDK design, API client patterns, testing strategies
+- **Platforms**: GitHub, Discord
+- **Languages**: Albanian, English
+- **Availability**: 2 hours/week, Thursdays 17:00–19:00 CET
 
 ---
 

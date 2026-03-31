@@ -374,9 +374,13 @@ func (c *APIGuardClient) GetReportStream(ctx context.Context, scanID, format str
 }
 
 // checkResponse reads the response body and returns a decoded error when the
-// status code is >= 400. On success it returns the raw body for the caller to
-// decode.  HTTP 429 is reported with a "rate limited" prefix so callers can
-// detect and handle it distinctly.
+// status code is >= 400. On success it verifies that the Content-Type is
+// application/json before returning the raw body for the caller to decode.
+// A non-JSON Content-Type (e.g. text/html from a proxy error page) on a
+// successful response is reported as an error rather than letting the caller
+// produce a confusing JSON parse failure.
+// HTTP 429 is reported with a "rate limited" prefix so callers can detect and
+// handle it distinctly.
 func checkResponse(resp *http.Response) ([]byte, error) {
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(resp.Body)
@@ -396,6 +400,15 @@ func checkResponse(resp *http.Response) ([]byte, error) {
 			return nil, fmt.Errorf("API error HTTP %d: %s — %s", resp.StatusCode, ae.Error, ae.Message)
 		}
 		return nil, fmt.Errorf("API error HTTP %d: %s", resp.StatusCode, string(raw))
+	}
+	// Verify Content-Type on success responses that carry a body. A proxy or
+	// load-balancer returning text/html with HTTP 200 should be surfaced as a
+	// clear error rather than a confusing JSON unmarshal failure downstream.
+	if resp.StatusCode != http.StatusNoContent && len(raw) > 0 {
+		ct := resp.Header.Get("Content-Type")
+		if !strings.HasPrefix(ct, "application/json") {
+			return nil, fmt.Errorf("unexpected Content-Type %q, expected \"application/json\"", ct)
+		}
 	}
 	return raw, nil
 }

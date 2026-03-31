@@ -1,6 +1,7 @@
 package opensecstack
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -1189,5 +1190,109 @@ func TestGetAuditEntry_NIS2_Success(t *testing.T) {
 	}
 	if got.ID != want.ID || got.Action != want.Action {
 		t.Errorf("unexpected entry: %+v", got)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestNIS2CompassClient_ContextCancellation
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// TestGetHealth_Success
+// ----------------------------------------------------------------------------
+
+func TestGetHealth_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/health" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		// Health endpoint must NOT require an Authorization header.
+		if r.Header.Get("Authorization") != "" {
+			t.Error("GetHealth sent an Authorization header; endpoint should be unauthenticated")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"ok"}`)
+	}))
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	got, err := c.GetHealth(t.Context())
+	if err != nil {
+		t.Fatalf("GetHealth: %v", err)
+	}
+	if got.Status != "ok" {
+		t.Errorf("expected status ok, got %q", got.Status)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestGetHealthDetail_Success
+// ----------------------------------------------------------------------------
+
+func TestGetHealthDetail_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/health/detail" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"ok","version":"1.0.0","db":"ok","redis":"ok"}`)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	got, err := c.GetHealthDetail(t.Context())
+	if err != nil {
+		t.Fatalf("GetHealthDetail: %v", err)
+	}
+	if got.Status != "ok" || got.DB != "ok" || got.Redis != "ok" {
+		t.Errorf("unexpected health detail: %+v", got)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestGetHealth_ServiceUnavailable
+// ----------------------------------------------------------------------------
+
+func TestGetHealth_ServiceUnavailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		fmt.Fprint(w, `{"status":"degraded"}`)
+	}))
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	_, err := c.GetHealth(t.Context())
+	if err == nil {
+		t.Error("expected error on 503, got nil")
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestNIS2CompassClient_ContextCancellation
+// ----------------------------------------------------------------------------
+
+// TestNIS2CompassClient_ContextCancellation verifies that a context cancelled
+// before the server responds causes GetOrganisations to return a non-nil error.
+func TestNIS2CompassClient_ContextCancellation(t *testing.T) {
+	// Slow server: delays 2 seconds before replying so the short-lived context
+	// is guaranteed to expire first.
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(2 * time.Second)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer slow.Close()
+
+	client := NewNIS2CompassClient(slow.URL, "token")
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := client.GetOrganisations(ctx, GetOrganisationsOptions{})
+	if err == nil {
+		t.Error("expected error on context cancellation, got nil")
 	}
 }

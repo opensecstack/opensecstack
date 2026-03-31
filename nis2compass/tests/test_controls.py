@@ -57,7 +57,8 @@ class TestListControls:
 
         resp = client.get(f'{ASSESS_BASE}/{assessment_id}/controls', headers=auth_headers)
         assert resp.status_code == 200
-        controls = resp.get_json()
+        body = resp.get_json()
+        controls = body['data']
         assert len(controls) == 10
         assert all(c['status'] == 'not_assessed' for c in controls)
 
@@ -76,7 +77,8 @@ class TestListControls:
             headers=auth_headers,
         )
         assert resp.status_code == 200
-        controls = resp.get_json()
+        body = resp.get_json()
+        controls = body['data']
         assert len(controls) == 1
         assert controls[0]['measure_ref'] == 'a'
 

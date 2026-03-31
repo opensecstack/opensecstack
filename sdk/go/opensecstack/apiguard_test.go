@@ -1,6 +1,7 @@
 package opensecstack
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"mime"
@@ -635,5 +636,54 @@ func TestRefreshToken_Concurrent(t *testing.T) {
 		// Each goroutine issues its own HTTP call (RefreshToken is not
 		// deduplicated like authenticate).  All calls must have been made.
 		t.Errorf("expected %d refresh calls, got %d", goroutines, got)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestAPIGuardClient_ContextCancellation
+// ----------------------------------------------------------------------------
+
+// TestAPIGuardClient_ContextCancellation verifies that a context cancelled
+// before the server responds causes ListScans to return a non-nil error.
+func TestAPIGuardClient_ContextCancellation(t *testing.T) {
+	// Slow server: delays 2 seconds before replying so the short-lived context
+	// is guaranteed to expire first.
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(2 * time.Second)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer slow.Close()
+
+	client := NewAPIGuardClient(slow.URL, "token")
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := client.ListScans(ctx, ListScansOptions{Page: 1, PerPage: 20})
+	if err == nil {
+		t.Error("expected error on context cancellation, got nil")
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestAPIGuardClient_NonJSONResponse_ReturnsError
+// ----------------------------------------------------------------------------
+
+// TestAPIGuardClient_NonJSONResponse_ReturnsError verifies that a 200 response
+// with a text/html Content-Type (e.g. a proxy error page) is surfaced as an
+// error rather than causing a confusing JSON decode failure downstream.
+func TestAPIGuardClient_NonJSONResponse_ReturnsError(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+
+	ts := makeAPIGuardServer(t, token, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("<html>Gateway Error</html>"))
+	})
+	defer ts.Close()
+
+	client := NewAPIGuardClient(ts.URL, "token")
+	_, err := client.ListScans(context.Background(), ListScansOptions{Page: 1, PerPage: 20})
+	if err == nil {
+		t.Error("expected error for non-JSON response, got nil")
 	}
 }

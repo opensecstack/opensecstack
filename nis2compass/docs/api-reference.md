@@ -18,15 +18,16 @@ Tokens are obtained via `POST /api/v1/auth/token` and carry a finite expiry. All
 2. [Authentication](#authentication)
 3. [Organisations](#organisations)
 4. [Assessments](#assessments)
-5. [Controls](#controls)
-6. [Artifacts](#artifacts)
-7. [Audit Log](#audit-log)
-8. [Control Templates](#control-templates)
-9. [API Key Management](#api-key-management)
-10. [API Schema](#api-schema)
-11. [Error Responses](#error-responses)
-12. [Pagination](#pagination)
-13. [Rate Limiting](#rate-limiting)
+5. [Reports](#reports)
+6. [Controls](#controls)
+7. [Artifacts](#artifacts)
+8. [Audit Log](#audit-log)
+9. [Control Templates](#control-templates)
+10. [API Key Management](#api-key-management)
+11. [API Schema](#api-schema)
+12. [Error Responses](#error-responses)
+13. [Pagination](#pagination)
+14. [Rate Limiting](#rate-limiting)
 
 ---
 
@@ -444,6 +445,67 @@ Delete an assessment. All associated controls and artifacts are permanently dele
 
 ---
 
+## Reports
+
+### POST /api/v1/assessments/{id}/report
+
+Generate a compliance report for a completed assessment. The report can be produced in PDF, JSON, or SARIF format. PDF reports are streamed as binary content; JSON and SARIF reports are returned as downloadable attachments.
+
+This endpoint is rate-limited to **3 requests per minute per user** (independent of the global rate limit).
+
+**Auth required:** Yes (minimum scope: `read`)
+
+**Path parameters**
+
+| Parameter | Description |
+|---|---|
+| `id` | UUID of the assessment |
+
+**Query parameters**
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `format` | string | `pdf` | Report output format. One of: `pdf`, `json`, `sarif` |
+
+**Response — 200 OK (format=pdf)**
+
+Binary PDF content returned as an attachment.
+
+| Header | Value |
+|---|---|
+| `Content-Type` | `application/pdf` |
+| `Content-Disposition` | `attachment; filename="nis2-assessment-<id>.pdf"` |
+
+**Response — 200 OK (format=json)**
+
+JSON report returned as an attachment.
+
+| Header | Value |
+|---|---|
+| `Content-Type` | `application/json` |
+| `Content-Disposition` | `attachment; filename="report-<id>.json"` |
+
+**Response — 200 OK (format=sarif)**
+
+SARIF report returned as an attachment.
+
+| Header | Value |
+|---|---|
+| `Content-Type` | `application/sarif+json` |
+| `Content-Disposition` | `attachment; filename="report-<id>.sarif"` |
+
+**Status codes**
+
+| Code | Condition |
+|---|---|
+| 200 | Report generated successfully |
+| 400 | Invalid `format` value |
+| 404 | Assessment or organisation not found |
+| 429 | Per-user report rate limit exceeded |
+| 500 | Report generation failed (server-side error) |
+
+---
+
 ## Controls
 
 Controls are automatically created when an assessment is created. They are updated — not created — through the PATCH endpoint.
@@ -822,7 +884,8 @@ Create a new API key. The raw key value is returned **once** in the response and
 ```json
 {
   "label": "ci-pipeline-prod",
-  "scope": "read_write"
+  "scope": "read_write",
+  "expires_in_days": 90
 }
 ```
 
@@ -830,6 +893,7 @@ Create a new API key. The raw key value is returned **once** in the response and
 |---|---|---|---|
 | `label` | string | No | Human-readable label to identify the key's purpose |
 | `scope` | string | No | One of: `read`, `read_write`. Defaults to `read_write` |
+| `expires_in_days` | integer | No | Number of days until the key expires (1-365). When omitted the key does not expire. |
 
 **Response — 201 Created**
 

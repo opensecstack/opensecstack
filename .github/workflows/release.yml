@@ -1,0 +1,325 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run -- build and test but do not push or release"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GO_VERSION: "1.24"
+  PYTHON_VERSION: "3.12"
+  REGISTRY: ghcr.io
+
+# ---------------------------------------------------------------------------
+# 1. Parallel test stage (5 jobs running simultaneously)
+# ---------------------------------------------------------------------------
+jobs:
+  test-apiguard:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apiguard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: apiguard/go.sum
+      - name: Run tests
+        run: go test -race -count=1 ./...
+
+  test-nis2compass:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: nis2compass/requirements.txt
+      - name: Install dependencies
+        run: pip install -r nis2compass/requirements.txt
+      - name: Run tests
+        run: pytest nis2compass/
+
+  test-citadel:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .citadel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: .citadel/go.sum
+      - name: Run tests
+        run: go test -race -count=1 ./...
+
+  test-vantage-hash:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/vantage-hash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run tests
+        run: cargo test
+
+  test-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Go SDK tests
+        working-directory: sdk/go
+        run: go test -race -count=1 ./...
+      - name: Python SDK tests
+        working-directory: sdk/python
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
+          pytest tests/
+
+  # ---------------------------------------------------------------------------
+  # 2. Docker build + push + sign + SBOM (needs all test jobs)
+  # ---------------------------------------------------------------------------
+  docker:
+    needs:
+      - test-apiguard
+      - test-nis2compass
+      - test-citadel
+      - test-vantage-hash
+      - test-sdk
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      matrix:
+        include:
+          - component: apiguard
+            context: apiguard
+          - component: nis2compass
+            context: nis2compass
+          - component: citadel
+            context: .citadel
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version and short SHA
+        id: meta
+        run: |
+          RAW_TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${RAW_TAG#v}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: ${{ !inputs.dry_run }}
+          tags: |
+            ghcr.io/${{ github.repository }}/${{ matrix.component }}:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ github.repository }}/${{ matrix.component }}:${{ steps.meta.outputs.short_sha }}
+          cache-from: type=gha,scope=${{ matrix.component }}
+          cache-to: type=gha,scope=${{ matrix.component }},mode=max
+
+      - name: Install cosign
+        if: ${{ !inputs.dry_run }}
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image with cosign (keyless)
+        if: ${{ !inputs.dry_run }}
+        run: |
+          cosign sign --yes ghcr.io/${{ github.repository }}/${{ matrix.component }}@${{ steps.build.outputs.digest }}
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Generate SBOM
+        run: |
+          IMAGE="ghcr.io/${{ github.repository }}/${{ matrix.component }}:${{ steps.meta.outputs.version }}"
+          syft "${IMAGE}" -o spdx-json > sbom-${{ matrix.component }}.json
+
+      - name: Attest SBOM to image
+        if: ${{ !inputs.dry_run }}
+        run: |
+          cosign attest --yes \
+            --predicate sbom-${{ matrix.component }}.json \
+            --type spdxjson \
+            ghcr.io/${{ github.repository }}/${{ matrix.component }}@${{ steps.build.outputs.digest }}
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.component }}
+          path: sbom-${{ matrix.component }}.json
+
+  # ---------------------------------------------------------------------------
+  # 3. SDK publish (needs all test jobs)
+  # ---------------------------------------------------------------------------
+  sdk-publish:
+    needs:
+      - test-apiguard
+      - test-nis2compass
+      - test-citadel
+      - test-vantage-hash
+      - test-sdk
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # -- Python SDK -> PyPI --
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Build Python SDK
+        working-directory: sdk/python
+        run: |
+          pip install build
+          python -m build
+
+      - name: Publish Python SDK to PyPI
+        if: ${{ !inputs.dry_run }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdk/python/dist/
+
+      # -- Rust SDK -> crates.io --
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish Rust SDK
+        working-directory: sdk/rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            cargo publish --dry-run
+          else
+            cargo publish
+          fi
+
+      # -- vantage-hash -> crates.io --
+      - name: Publish vantage-hash
+        working-directory: sdk/vantage-hash
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            cargo publish --dry-run
+          else
+            cargo publish
+          fi
+
+  # ---------------------------------------------------------------------------
+  # 4. GitHub Release (needs docker + sdk-publish)
+  # ---------------------------------------------------------------------------
+  github-release:
+    needs:
+      - docker
+      - sdk-publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download SBOM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: sbom-*
+          merge-multiple: true
+          path: release-assets/
+
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: "*-coverage"
+          merge-multiple: true
+          path: release-assets/
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          RAW_TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${RAW_TAG#v}"
+          awk "/^## \[?v?${VERSION//./\\.}\]?/{found=1; next} found && /^## \[/{exit} found{print}" \
+            CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "No changelog entry found for ${VERSION}." > release-notes.md
+            echo "" >> release-notes.md
+            echo "See [CHANGELOG.md](CHANGELOG.md) for the full history." >> release-notes.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md
+          draft: ${{ inputs.dry_run == true }}
+          files: |
+            release-assets/**
+
+  # ---------------------------------------------------------------------------
+  # 5. Release gate (needs all above)
+  # ---------------------------------------------------------------------------
+  release-gate:
+    needs:
+      - test-apiguard
+      - test-nis2compass
+      - test-citadel
+      - test-vantage-hash
+      - test-sdk
+      - docker
+      - sdk-publish
+      - github-release
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify all jobs succeeded
+        run: |
+          results="${{ join(needs.*.result, ' ') }}"
+          for r in $results; do
+            if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then
+              echo "::error::Release pipeline failed -- job result: $r"
+              exit 1
+            fi
+          done
+          echo "Release pipeline complete"

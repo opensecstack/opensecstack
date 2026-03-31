@@ -65,7 +65,9 @@ class TestListOrganisations:
         resp = client.get(BASE, headers=auth_headers)
         assert resp.status_code == 200
 
-        items = resp.get_json()
+        body = resp.get_json()
+        assert 'data' in body
+        items = body['data']
         assert isinstance(items, list)
 
         names = [o['name'] for o in items]
@@ -80,8 +82,10 @@ class TestListOrganisations:
         resp = client.get(BASE, headers=auth_headers)
         assert resp.status_code == 200
         assert 'X-Total-Count' in resp.headers
+        body = resp.get_json()
         count_header = int(resp.headers['X-Total-Count'])
-        assert count_header == len(resp.get_json())
+        assert count_header == body['total']
+        assert count_header == len(body['data'])
 
 
 class TestGetOrganisation:

@@ -1,6 +1,6 @@
 # SDK Go Client
 
-The Go SDK provides typed clients for APIGuard and NIS2Compass, plus shared types for the opensecstack integration contracts.
+The Go SDK provides typed clients for APIGuard, NIS2 Compass, and CITADEL, plus shared types for the opensecstack integration contracts.
 
 ---
 
@@ -10,7 +10,8 @@ The Go SDK provides typed clients for APIGuard and NIS2Compass, plus shared type
 go get github.com/opensecstack/sdk/go/opensecstack@latest
 ```
 
-Requires Go 1.22+.
+Requires Go 1.22+.  
+No external dependencies — uses only the standard library.
 
 ---
 
@@ -23,77 +24,125 @@ import "github.com/opensecstack/sdk/go/opensecstack"
 
 client := opensecstack.NewAPIGuardClient(
     "https://apiguard.internal",
-    opensecstack.WithAPIKey("ag_key_..."),
-    opensecstack.WithTimeout(30 * time.Second),
+    "ag_key_...",
 )
 ```
 
 ### Starting a scan
 
 ```go
-scan, err := client.StartScan(ctx, &opensecstack.StartScanRequest{
-    Target:   "https://api.example.com",
-    SpecURL:  "https://api.example.com/openapi.json",
-    Modules:  []string{"bola", "broken_auth", "injection"},
-    Metadata: map[string]string{"project": "ABISSNET_TCL_001"},
-})
+// Simple — scan a remote OpenAPI spec URL.
+scan, err := client.CreateScan(ctx, "https://api.example.com/openapi.json")
 if err != nil {
     return err
 }
 fmt.Println("Scan ID:", scan.ID)
+
+// Full options — auth, modules, spec path override.
+scan, err = client.CreateScanFull(ctx, opensecstack.CreateScanOptions{
+    SpecURL:   "https://api.example.com/openapi.json",
+    Target:    "https://api.example.com",
+    Modules:   []string{"owasp-api1", "owasp-api2", "owasp-api3"},
+    AuthType:  "bearer",
+    AuthToken: "my-test-token",
+})
 ```
 
 ### Polling for results
 
+The server starts scans asynchronously. Poll `GetScan` until the status reaches a terminal state:
+
 ```go
-result, err := client.WaitForScan(ctx, scan.ID, &opensecstack.WaitOptions{
-    PollInterval: 5 * time.Second,
-    Timeout:      10 * time.Minute,
-})
-if err != nil {
-    return err
+for {
+    scan, err = client.GetScan(ctx, scan.ID)
+    if err != nil {
+        return err
+    }
+    if scan.Status == opensecstack.ScanStatusCompleted ||
+        scan.Status == opensecstack.ScanStatusFailed {
+        break
+    }
+    fmt.Printf("  ... status: %s\n", scan.Status)
+    time.Sleep(5 * time.Second)
 }
 
-for _, finding := range result.Findings {
-    fmt.Printf("[%s] %s — %s\n", finding.Severity, finding.OWASP, finding.Title)
+for _, finding := range findings {
+    fmt.Printf("[%s] %s — %s %s\n",
+        finding.Severity, finding.Title,
+        finding.EndpointMethod, finding.EndpointPath)
 }
 ```
 
 ### Getting scan results directly
 
 ```go
-result, err := client.GetScan(ctx, scan.ID)
+scan, err := client.GetScan(ctx, scanID)
 ```
 
 ### Listing recent scans
 
 ```go
-scans, err := client.ListScans(ctx, &opensecstack.ListScansOptions{
-    Limit:  20,
-    Status: opensecstack.ScanStatusCompleted,
+scans, err := client.ListScans(ctx, opensecstack.ListScansOptions{
+    Page:    1,
+    PerPage: 20,
 })
+```
+
+### Retrieving findings
+
+```go
+findings, err := client.GetFindings(ctx, scan.ID, opensecstack.GetFindingsOptions{
+    Severity: "critical",
+})
+```
+
+### Updating a finding triage status
+
+```go
+updated, err := client.PatchFinding(ctx, findingID, opensecstack.PatchFindingRequest{
+    Status: "accepted",
+})
+```
+
+### Uploading a spec file
+
+```go
+resp, err := client.UploadSpec(ctx, "/path/to/openapi.yaml")
+fmt.Println("Stored at:", resp.SpecPath)
+```
+
+### Streaming a report
+
+```go
+f, _ := os.Create("report.sarif")
+defer f.Close()
+err = client.GetReportStream(ctx, scan.ID, "sarif", f)
+```
+
+### Audit log
+
+```go
+entries, err := client.GetAuditLog(ctx, 20, 1)
+for _, e := range entries {
+    fmt.Printf("%s  %s  %s\n", e.CreatedAt.Format(time.RFC3339), e.Action, e.ActorID)
+}
 ```
 
 ---
 
-## NIS2Compass Client
+## NIS2 Compass Client
 
 ### Creating a client
 
 ```go
-import "github.com/opensecstack/sdk/go/opensecstack"
-
-client := opensecstack.NewNIS2CompassClient(
-    "https://nis2compass.internal",
-    opensecstack.WithAPIKey("nc_key_..."),
-)
+client := opensecstack.NewNIS2CompassClient("https://nis2compass.internal", "nc_key_...")
 ```
 
 ### Managing organisations
 
 ```go
 // Create
-org, err := client.CreateOrganisation(ctx, &opensecstack.CreateOrganisationRequest{
+org, err := client.CreateOrganisation(ctx, opensecstack.CreateOrganisationRequest{
     Name:       "Acme Corp",
     Industry:   "finance",
     Country:    "AL",
@@ -102,69 +151,114 @@ org, err := client.CreateOrganisation(ctx, &opensecstack.CreateOrganisationReque
 })
 
 // Get
-org, err := client.GetOrganisation(ctx, orgID)
+org, err = client.GetOrganisation(ctx, orgID)
 
-// List
-orgs, err := client.ListOrganisations(ctx, nil)
+// List (paginated)
+orgs, err := client.GetOrganisations(ctx, opensecstack.GetOrganisationsOptions{
+    Page:    1,
+    PerPage: 50,
+})
 ```
 
 ### Managing assessments
 
 ```go
-// Create
-assessment, err := client.CreateAssessment(ctx, orgID, &opensecstack.CreateAssessmentRequest{
+// Create — 10 NIS2 Article 21(2) controls (a–j) are seeded automatically.
+assessment, err := client.CreateAssessment(ctx, org.ID, opensecstack.CreateAssessmentRequest{
     Title:            "Q1 2026 NIS2 Assessment",
     FrameworkVersion: "NIS2-2022/0383",
 })
 
-// Get with controls
-assessment, err := client.GetAssessment(ctx, orgID, assessmentID)
-for _, control := range assessment.Controls {
-    fmt.Printf("%s: %s\n", control.MeasureRef, control.Status)
-}
+// Transition to in_progress
+assessment, err = client.PatchAssessment(ctx, assessment.ID, opensecstack.PatchAssessmentRequest{
+    Status: "in_progress",
+})
+
+// Get
+assessment, err = client.GetAssessment(ctx, assessment.ID)
 ```
 
 ### Updating a control
 
+Measure references are single letters `a` through `j`, matching Article 21(2)(a)–(j):
+
 ```go
-updated, err := client.PatchControl(ctx, orgID, assessmentID, "art21_e", &opensecstack.PatchControlRequest{
+ctrl, err := client.PatchControl(ctx, assessment.ID, "e", opensecstack.PatchControlRequest{
     Status: "compliant",
     Notes:  "APIGuard scan completed — zero critical findings",
-    EvidenceRefs: []string{"sha256:abc123..."},
 })
+fmt.Printf("Control %s (%s): %s\n", ctrl.MeasureRef, ctrl.ArticleRef, ctrl.Status)
+```
+
+### Artifacts
+
+```go
+// Upload
+artifact, err := client.UploadArtifact(ctx, assessment.ID,
+    "/path/to/evidence.pdf", "evidence", "", "APIGuard scan evidence")
+
+// Download
+err = client.DownloadArtifact(ctx, artifact.ID, "/tmp/downloaded.pdf")
+
+// Delete
+err = client.DeleteArtifact(ctx, artifact.ID)
+```
+
+### Generating a report
+
+```go
+pdf, err := client.GenerateReport(ctx, assessment.ID)
+if err != nil {
+    return err
+}
+os.WriteFile("report.pdf", pdf, 0644)
+```
+
+### Audit log
+
+```go
+entries, err := client.GetAuditLog(ctx, 20, 1)
+for _, e := range entries {
+    fmt.Printf("%s  [%s]  %s  %s\n",
+        e.Timestamp.Format(time.RFC3339), e.RiskClass, e.Action, e.Actor)
+}
 ```
 
 ---
 
 ## CITADEL Client
 
+The CITADEL client delivers structured security events to the immutable WORM audit chain via HMAC-SHA256 signed HTTP POST.
+`SendEvent` is non-blocking — it enqueues the event and returns immediately; a background goroutine handles delivery.
+
 ```go
-import "github.com/opensecstack/sdk/go/opensecstack/citadel"
-
-client := citadel.NewClient(
-    "https://citadel.internal",
-    keyID,
-    secret,
-)
-
-// Check advisory before submitting
-advisory, err := client.GetAdvisory(ctx, "ABISSNET_TCL_001", "deploy_change")
-if advisory.HasCritical() {
-    log.Warn("CITADEL advisory", "details", advisory.Advisories)
-}
-
-// Submit Kerkese
-result, err := client.Evaluate(ctx, &citadel.Kerkese{
-    Version:   "2.0",
-    ProjectID: "ABISSNET_TCL_001",
-    Action:    citadel.Action{Type: "deploy_change", Description: "Deploy v2.1.0"},
-    Actor:     citadel.Principal{UserID: "alice@example.com", Role: "group_sig_operator"},
-    Verifier:  citadel.Principal{UserID: "bob@example.com", Role: "group_sig_verifier"},
-    Evidence:  citadel.Evidence{ChangeID: "CHG-001"},
+citadel := opensecstack.NewCITADELClient(opensecstack.CITADELClientOptions{
+    BaseURL:      "https://citadel.internal",
+    SharedSecret: "hmac-secret",
 })
-if result.Outcome != citadel.OutcomeExecute {
-    return fmt.Errorf("MARSHAL refused: %v", result.Reasons)
-}
+defer citadel.Drain(context.Background()) // flush in-flight events on shutdown
+
+// Dispatch an event (non-blocking)
+citadel.SendEvent(ctx, opensecstack.SecurityEvent{
+    EventType:    "apiguard.scan.completed",
+    Source:       "apiguard",
+    ActorID:      apiKeyID,
+    ActorType:    "api_key",
+    ResourceType: "scan",
+    ResourceID:   scan.ID,
+    Severity:     "info",
+    Payload:      json.RawMessage(`{"total_findings":3}`),
+})
+
+// Query events
+events, err := citadel.GetEvents(ctx, opensecstack.GetEventsOptions{
+    Source:    "apiguard",
+    EventType: "apiguard.scan.completed",
+    Limit:     50,
+})
+
+// Verify the WORM chain integrity locally
+err = citadel.VerifyChain(ctx, events)
 ```
 
 ---
@@ -174,7 +268,9 @@ if result.Outcome != citadel.OutcomeExecute {
 All clients return typed errors:
 
 ```go
-result, err := client.StartScan(ctx, req)
+scan, err := client.CreateScanFull(ctx, opensecstack.CreateScanOptions{
+    SpecURL: "https://api.example.com/openapi.json",
+})
 if err != nil {
     var rateLimitErr *opensecstack.RateLimitError
     if errors.As(err, &rateLimitErr) {
@@ -196,41 +292,53 @@ Error types:
 
 ---
 
-## Client Options
-
-```go
-opensecstack.NewAPIGuardClient(
-    baseURL,
-    opensecstack.WithAPIKey(key),
-    opensecstack.WithTimeout(30 * time.Second),
-    opensecstack.WithHTTPClient(customHTTPClient),
-    opensecstack.WithUserAgent("myapp/1.0"),
-    opensecstack.WithRetry(3, opensecstack.ExponentialBackoff),
-)
-```
-
----
-
 ## Complete Example: Scan and Update NIS2 Control
 
 ```go
-apiguard := opensecstack.NewAPIGuardClient(apiguardURL, opensecstack.WithAPIKey(apiguardKey))
-nis2 := opensecstack.NewNIS2CompassClient(nis2URL, opensecstack.WithAPIKey(nis2Key))
+apiguard := opensecstack.NewAPIGuardClient(apiguardURL, apiguardKey)
+nis2    := opensecstack.NewNIS2CompassClient(nis2URL, nis2Key)
 
-// Run scan
-scan, _ := apiguard.StartScan(ctx, &opensecstack.StartScanRequest{Target: target})
-result, _ := apiguard.WaitForScan(ctx, scan.ID, nil)
+// Start scan
+scan, err := apiguard.CreateScan(ctx, "https://api.example.com/openapi.json")
+if err != nil {
+    log.Fatal(err)
+}
 
-// Export evidence bundle
-bundle, _ := apiguard.ExportNIS2Evidence(ctx, scan.ID)
+// Poll until complete
+for {
+    scan, err = apiguard.GetScan(ctx, scan.ID)
+    if err != nil {
+        log.Fatal(err)
+    }
+    if scan.Status == opensecstack.ScanStatusCompleted ||
+        scan.Status == opensecstack.ScanStatusFailed {
+        break
+    }
+    time.Sleep(5 * time.Second)
+}
 
-// Upload evidence to NIS2Compass
-artifact, _ := nis2.UploadArtifact(ctx, orgID, bundle)
+if scan.Status == opensecstack.ScanStatusFailed {
+    log.Fatalf("scan failed: %s", scan.ErrorMessage)
+}
 
-// Mark control compliant
-nis2.PatchControl(ctx, orgID, assessmentID, "art21_e", &opensecstack.PatchControlRequest{
-    Status:       "compliant",
-    Notes:        fmt.Sprintf("APIGuard scan %s — %d critical findings", scan.ID, result.Stats.Critical),
-    EvidenceRefs: []string{artifact.Hash},
+// Upload the SARIF report as a NIS2 evidence artifact
+buf := &bytes.Buffer{}
+apiguard.GetReportStream(ctx, scan.ID, "sarif", buf)
+
+tmp, _ := os.CreateTemp("", "apiguard-*.sarif")
+tmp.Write(buf.Bytes())
+tmp.Close()
+
+artifact, err := nis2.UploadArtifact(ctx, assessmentID, tmp.Name(), "evidence", "", "APIGuard SARIF report")
+if err != nil {
+    log.Fatal(err)
+}
+
+// Mark control e as compliant
+nis2.PatchControl(ctx, assessmentID, "e", opensecstack.PatchControlRequest{
+    Status: "compliant",
+    Notes:  fmt.Sprintf("APIGuard scan %s — %d critical findings", scan.ID, scan.CriticalCount),
 })
+
+fmt.Printf("Evidence artifact %s linked to control e\n", artifact.ID)
 ```

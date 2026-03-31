@@ -1,0 +1,131 @@
+# Staging overrides for the opensecstack Helm chart.
+#
+# Staging mirrors production topology (real TLS, same image tags) but
+# uses smaller resources and Let's Encrypt staging to avoid rate limits.
+#
+# Apply on top of values.yaml:
+#   helm upgrade --install opensecstack-staging ./deploy/helm/opensecstack \
+#     -f values.yaml \
+#     -f values.staging.yaml \
+#     --set apiguard.ingress.host=apiguard-staging.yourdomain.com \
+#     --set nis2compass.ingress.host=nis2compass-staging.yourdomain.com \
+#     --set certManager.email=ops@yourdomain.com
+
+# ---------------------------------------------------------------------------
+# Global
+# ---------------------------------------------------------------------------
+global:
+  imagePullPolicy: Always         # staging always pulls to catch new builds
+
+namespace: opensecstack-staging
+
+# ---------------------------------------------------------------------------
+# APIGuard
+# ---------------------------------------------------------------------------
+apiguard:
+  image:
+    tag: "1.0.0-rc1"              # RC tag for staging; swap to release for prod
+
+  replicas: 2
+
+  resources:
+    requests:
+      cpu: 150m
+      memory: 192Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  ingress:
+    host: apiguard-staging.yourdomain.com
+    tlsSecret: apiguard-staging-tls
+
+# ---------------------------------------------------------------------------
+# NIS2 Compass
+# ---------------------------------------------------------------------------
+nis2compass:
+  image:
+    tag: "1.0.0-rc1"
+
+  replicas: 2
+
+  resources:
+    requests:
+      cpu: 150m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  ingress:
+    host: nis2compass-staging.yourdomain.com
+    tlsSecret: nis2compass-staging-tls
+
+# ---------------------------------------------------------------------------
+# CITADEL
+# ---------------------------------------------------------------------------
+citadel:
+  image:
+    tag: "1.0.0-rc1"
+
+  replicas: 1                     # single replica is enough for staging
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# ---------------------------------------------------------------------------
+# PostgreSQL — smaller disk in staging; same engine version as prod
+# ---------------------------------------------------------------------------
+postgres:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+  persistence:
+    size: 20Gi
+    storageClass: ""              # use cluster default in staging
+
+# ---------------------------------------------------------------------------
+# Redis
+# ---------------------------------------------------------------------------
+redis:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+# ---------------------------------------------------------------------------
+# Application config
+# ---------------------------------------------------------------------------
+config:
+  logLevel: debug                 # verbose logs help catch issues before prod
+
+# ---------------------------------------------------------------------------
+# HPA — still enabled so we catch autoscaling bugs before prod
+# ---------------------------------------------------------------------------
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  cpuThreshold: 70
+
+# ---------------------------------------------------------------------------
+# cert-manager — Let's Encrypt STAGING avoids rate limits during testing
+# Switch to letsencrypt-prod only after TLS flow is confirmed working
+# ---------------------------------------------------------------------------
+certManager:
+  enabled: true
+  email: ops@yourdomain.com
+  issuerType: letsencrypt-staging

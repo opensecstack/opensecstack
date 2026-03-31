@@ -73,15 +73,18 @@ Notes are published as Discussions posts within 48 hours of each call.
 
 ---
 
-## Host rotation
+## Host rotation — April to June 2026
 
-Community calls rotate between Core Maintainers. If you want to host or co-host, open a PR adding your name to the rotation below.
+Community calls rotate between Core Maintainers and Ambassadors. If you want to host or co-host, open a PR adding your name to the rotation below.
 
-| Month | Host |
-|-------|------|
-| April 2026 | — open |
-| May 2026 | — open |
-| June 2026 | — open |
+| Date | Host | Topic |
+|------|------|-------|
+| April 7, 2026 | Marek Kowalski (Poland) | NIS2 transposition progress in Central Europe |
+| April 21, 2026 | Giulia Rossi (Italy) | API fuzzing strategies for OWASP Top 10 |
+| May 5, 2026 | Sophie Dubois (Belgium) | DORA compliance tooling roadmap |
+| May 19, 2026 | Elira Hoxha (Albania) | Adoption challenges in EU candidate countries |
+| June 2, 2026 | Arben Krasniqi | APIGuard v0.2.0 scan engine improvements |
+| June 16, 2026 | Community | v0.2.0 release retrospective & v0.3.0 planning |
 
 ---
 

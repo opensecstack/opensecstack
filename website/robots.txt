@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://opensecstack.github.io/opensecstack/sitemap.xml

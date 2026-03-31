@@ -4,11 +4,11 @@ Request for Comments (RFCs) for significant changes to the opensecstack ecosyste
 
 ## When to Write an RFC
 
-- New platform addition
+- New platform or governance subsystem
 - Breaking changes to SDK contracts
 - Cross-platform architectural changes
-- New integration patterns
-- Plugin system design (RFC-0001)
+- New integration patterns or authentication protocols
+- Data retention, archival, or chain-integrity policies
 
 ## RFC Process
 
@@ -21,8 +21,8 @@ Request for Comments (RFCs) for significant changes to the opensecstack ecosyste
 
 ## RFCs
 
-| RFC | Title | Status |
-|-----|-------|--------|
-| [RFC-0001](RFC-0001.md) | CITADEL Governance Protocol — MARSHAL, WORM, and VIGIL | Accepted |
-| [RFC-0002](RFC-0002.md) | AUGUR Threat Advisory Engine | Draft |
-| [RFC-0003](RFC-0003.md) | WORM Long-Term Archival and Cold Storage | Draft |
+| RFC | Title | Status | Priority | Depends on |
+|-----|-------|--------|----------|------------|
+| [RFC-0001](RFC-0001.md) | CITADEL Governance Protocol — MARSHAL, WORM, and VIGIL | Accepted | — | — |
+| [RFC-0002](RFC-0002.md) | AUGUR Threat Advisory Engine | Draft | Low | RFC-0001 |
+| [RFC-0003](RFC-0003.md) | WORM Long-Term Archival and Cold Storage | Draft | Low | RFC-0001 |

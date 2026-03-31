@@ -399,3 +399,73 @@ type scansResponse struct {
 	Page    int    `json:"page"`
 	PerPage int    `json:"per_page"`
 }
+
+// AdvisoryStatus represents the lifecycle state of an advisory.
+type AdvisoryStatus string
+
+const (
+	AdvisoryStatusDraft     AdvisoryStatus = "draft"
+	AdvisoryStatusPublished AdvisoryStatus = "published"
+	AdvisoryStatusRevoked   AdvisoryStatus = "revoked"
+)
+
+// AdvisorySeverity represents CVSS-aligned severity levels.
+type AdvisorySeverity string
+
+const (
+	AdvisorySeverityCritical AdvisorySeverity = "critical"
+	AdvisorySeverityHigh     AdvisorySeverity = "high"
+	AdvisorySeverityMedium   AdvisorySeverity = "medium"
+	AdvisorySeverityLow      AdvisorySeverity = "low"
+	AdvisorySeverityNone     AdvisorySeverity = "none"
+)
+
+// AdvisoryAffects describes an affected component/version range.
+type AdvisoryAffects struct {
+	Component  string `json:"component"`
+	VersionMin string `json:"version_min,omitempty"`
+	VersionMax string `json:"version_max,omitempty"`
+}
+
+// Advisory is a security advisory managed by CITADEL AUGUR.
+type Advisory struct {
+	ID          string           `json:"id"`
+	Title       string           `json:"title"`
+	Description string           `json:"description"`
+	Severity    AdvisorySeverity `json:"severity"`
+	Status      AdvisoryStatus   `json:"status"`
+	Affects     []AdvisoryAffects `json:"affects,omitempty"`
+	CVE         string           `json:"cve,omitempty"`
+	References  []string         `json:"references,omitempty"`
+	CreatedAt   string           `json:"created_at"`
+	UpdatedAt   string           `json:"updated_at"`
+}
+
+// CreateAdvisoryRequest is the payload for creating a new advisory.
+type CreateAdvisoryRequest struct {
+	Title       string            `json:"title"`
+	Description string            `json:"description"`
+	Severity    AdvisorySeverity  `json:"severity"`
+	Affects     []AdvisoryAffects `json:"affects,omitempty"`
+	CVE         string            `json:"cve,omitempty"`
+	References  []string          `json:"references,omitempty"`
+}
+
+// PatchAdvisoryRequest is the payload for partially updating an advisory.
+type PatchAdvisoryRequest struct {
+	Title       *string           `json:"title,omitempty"`
+	Description *string           `json:"description,omitempty"`
+	Severity    *AdvisorySeverity `json:"severity,omitempty"`
+	Status      *AdvisoryStatus   `json:"status,omitempty"`
+	Affects     []AdvisoryAffects `json:"affects,omitempty"`
+	CVE         *string           `json:"cve,omitempty"`
+	References  []string          `json:"references,omitempty"`
+}
+
+// ListAdvisoriesOptions contains query parameters for listing advisories.
+type ListAdvisoriesOptions struct {
+	Page     int              `url:"page,omitempty"`
+	PerPage  int              `url:"per_page,omitempty"`
+	Status   AdvisoryStatus   `url:"status,omitempty"`
+	Severity AdvisorySeverity `url:"severity,omitempty"`
+}

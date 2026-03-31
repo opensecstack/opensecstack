@@ -124,7 +124,9 @@ class TestListArtifacts:
             headers=auth_headers,
         )
         assert resp.status_code == 200
-        items = resp.get_json()
+        body = resp.get_json()
+        assert 'data' in body
+        items = body['data']
         assert isinstance(items, list)
         assert len(items) >= 1
 
@@ -138,8 +140,10 @@ class TestListArtifacts:
 
         resp = client.get(f'{ASSESS_BASE}/{assessment_id}/artifacts', headers=auth_headers)
         assert resp.status_code == 200
+        body = resp.get_json()
         count = int(resp.headers['X-Total-Count'])
-        assert count == len(resp.get_json())
+        assert count == len(body['data'])
+        assert count == body['total']
         assert count == 2
 
 

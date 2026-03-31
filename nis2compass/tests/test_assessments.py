@@ -80,7 +80,8 @@ class TestCreateAssessment:
             headers=auth_headers,
         )
         assert resp.status_code == 200
-        controls = resp.get_json()
+        body = resp.get_json()
+        controls = body['data']
         assert len(controls) == 10
 
         measure_refs = sorted(c['measure_ref'] for c in controls)
@@ -177,9 +178,11 @@ class TestListAssessments:
 
         resp = client.get(f'{ORG_BASE}/{org_id}/assessments', headers=auth_headers)
         assert resp.status_code == 200
-        items = resp.get_json()
+        body = resp.get_json()
+        items = body['data']
         assert len(items) == 2
         titles = {a['title'] for a in items}
         assert titles == {'First', 'Second'}
         assert 'X-Total-Count' in resp.headers
         assert int(resp.headers['X-Total-Count']) == 2
+        assert body['total'] == 2

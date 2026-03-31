@@ -1,3 +1,38 @@
+## Deployment
+
+### GitHub Pages
+
+Deployment is automatic. Every push to `main` that touches files under `website/` triggers
+the [Deploy Website](.github/workflows/website-deploy.yml) workflow, which uploads the
+`website/` directory as a Pages artifact and publishes it.
+
+Live URL: **https://opensecstack.github.io/opensecstack/**
+
+Manual re-deploy: open the workflow in the Actions tab and click **Run workflow**.
+
+### Netlify
+
+**Drag-and-drop:** go to [netlify.com/drop](https://app.netlify.com/drop) and drop the
+`website/` folder.
+
+**Connect repo:** create a new Netlify site, point it at this repository, and set the
+publish directory to `website/`. The `netlify.toml` in that directory handles security
+headers and SPA-style redirects automatically — no further configuration needed.
+
+### Manual / local
+
+```bash
+# Python (no install required)
+python -m http.server 8000 --directory website/
+# Open http://localhost:8000
+
+# Node.js (npx, no global install required)
+npx serve website/
+# Open http://localhost:3000
+```
+
+---
+
 # opensecstack.org
 
 Source for the opensecstack project website.
@@ -72,10 +107,3 @@ The site uses inline CSS with CSS custom properties. Key tokens:
 No external fonts, no framework, no CDN dependencies. The site renders correctly without
 any network access.
 
-## Deployment
-
-The site can be deployed to any static hosting service by uploading `index.html`:
-
-- **GitHub Pages:** push to a `gh-pages` branch or configure Pages from the `website/` directory
-- **Netlify / Vercel:** point to the `website/` directory as the publish directory
-- **Nginx / Caddy:** serve the `website/` directory as the document root

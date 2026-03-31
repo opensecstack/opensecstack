@@ -200,6 +200,21 @@ class NIS2CompassClient:
                     self._token_expiry = None
             self._authenticate()
 
+    def _check_content_type(self, resp: requests.Response, expected: str = "application/json") -> None:
+        """Raise APIError when the response Content-Type does not match *expected*.
+
+        Called on successful (2xx) responses before the caller decodes the body
+        as JSON, so that a proxy error page (text/html) produces a clear message
+        instead of a confusing JSON parse error.
+
+        Responses with no body (HTTP 204) are exempt from the check.
+        """
+        if resp.status_code == 204 or not resp.content:
+            return
+        ct = resp.headers.get("Content-Type", "")
+        if not ct.startswith(expected):
+            raise APIError(resp.status_code, f"Unexpected Content-Type: {ct!r}, expected {expected!r}")
+
     def _raise_for_status(self, resp: requests.Response) -> None:
         if resp.status_code == 401:
             raise AuthenticationError("JWT expired or invalid — re-authenticate")
@@ -343,6 +358,7 @@ class NIS2CompassClient:
                 method.upper(), path, resp.status_code, req_id,
             )
         self._raise_for_status(resp)
+        self._check_content_type(resp)
         return resp
 
     def _get(self, path: str, params: Optional[dict] = None) -> requests.Response:
@@ -1149,6 +1165,21 @@ class AsyncNIS2CompassClient:
         if token_expiring or needs_auth:
             await self.authenticate()
 
+    def _check_content_type(self, resp: httpx.Response, expected: str = "application/json") -> None:
+        """Raise APIError when the response Content-Type does not match *expected*.
+
+        Called on successful (2xx) responses before the caller decodes the body
+        as JSON, so that a proxy error page (text/html) produces a clear message
+        instead of a confusing JSON parse error.
+
+        Responses with no body (HTTP 204) are exempt from the check.
+        """
+        if resp.status_code == 204 or not resp.content:
+            return
+        ct = resp.headers.get("Content-Type", "")
+        if not ct.startswith(expected):
+            raise APIError(resp.status_code, f"Unexpected Content-Type: {ct!r}, expected {expected!r}")
+
     def _raise_for_status(self, resp: httpx.Response) -> None:
         if resp.status_code == 401:
             raise AuthenticationError("JWT expired or invalid — re-authenticate")
@@ -1298,6 +1329,7 @@ class AsyncNIS2CompassClient:
                 method.upper(), path, resp.status_code, req_id,
             )
         self._raise_for_status(resp)
+        self._check_content_type(resp)
         return resp
 
     # ------------------------------------------------------------------

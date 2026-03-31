@@ -587,6 +587,8 @@ Update the triage status of a finding.
 
 ## API Inventory
 
+> **Status: Planned** — these endpoints are not yet implemented and will return 404.
+
 ### GET /api/v1/inventory
 
 List all tracked APIs that have been scanned.

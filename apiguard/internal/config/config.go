@@ -108,12 +108,21 @@ type RateLimitConfig struct {
 	TrustedProxies []string `mapstructure:"trusted_proxies"`
 }
 
-// CitadelConfig holds CITADEL audit-forwarding settings.
+// CitadelConfig holds CITADEL governance integration settings.
 type CitadelConfig struct {
-	// APIURL is read from APIGUARD_CITADEL_URL. When empty, forwarding is disabled.
+	// APIURL is read from APIGUARD_CITADEL_URL. When empty, all CITADEL calls are no-ops.
 	APIURL string `mapstructure:"api_url" json:"-"`
-	// APIKey is read from APIGUARD_CITADEL_API_KEY and sent as a Bearer token.
-	APIKey string `mapstructure:"api_key" json:"-"`
+	// KeyID is the HMAC connector key identifier (X-CITADEL-KEY header).
+	KeyID string `mapstructure:"key_id" json:"-"`
+	// KeySecret is the HMAC-SHA256 signing secret (never logged or serialised).
+	KeySecret string `mapstructure:"key_secret" json:"-"`
+	// ProjectID identifies this apiguard instance as a CITADEL project.
+	// Used as the project_id in Kerkese payloads and WORM events.
+	ProjectID string `mapstructure:"project_id"`
+	// DryRun controls whether MARSHAL evaluate calls use dry_run=true.
+	// When true, CITADEL logs the decision but never blocks scans.
+	// Default: true (safe for initial rollout).
+	DryRun bool `mapstructure:"dry_run"`
 }
 
 // Load reads configuration from viper with defaults applied.
@@ -164,8 +173,11 @@ func Load() *Config {
 			TrustedProxies: viper.GetStringSlice("ratelimit.trusted_proxies"),
 		},
 		Citadel: CitadelConfig{
-			APIURL: viper.GetString("citadel.api_url"),
-			APIKey: viper.GetString("citadel.api_key"),
+			APIURL:    viper.GetString("citadel.api_url"),
+			KeyID:     viper.GetString("citadel.key_id"),
+			KeySecret: viper.GetString("citadel.key_secret"),
+			ProjectID: viper.GetString("citadel.project_id"),
+			DryRun:    viper.GetBool("citadel.dry_run"),
 		},
 	}
 
@@ -230,7 +242,12 @@ func setDefaults() {
 	// CITADEL defaults: empty = forwarding disabled.
 	// Set APIGUARD_CITADEL_URL=http://citadel-api:8099 to enable.
 	viper.SetDefault("citadel.api_url", "")
-	viper.SetDefault("citadel.api_key", "")
+	viper.SetDefault("citadel.key_id", "")
+	viper.SetDefault("citadel.key_secret", "")
+	viper.SetDefault("citadel.project_id", "apiguard")
+	// dry_run=true by default — CITADEL logs decisions without blocking scans.
+	// Set APIGUARD_CITADEL_DRY_RUN=false to enable full governance enforcement.
+	viper.SetDefault("citadel.dry_run", true)
 
 	viper.SetEnvPrefix("APIGUARD")
 	viper.AutomaticEnv()

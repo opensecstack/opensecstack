@@ -52,8 +52,8 @@ func NewServer(cfg *config.Config, database *db.DB, sc *scanner.Scanner) *Server
 		Logger()
 
 	// Initialise the CITADEL client. When APIGUARD_CITADEL_URL is unset the
-	// client is a no-op — all LogEvent calls return immediately.
-	cc := citadel.New(cfg.Citadel.APIURL, cfg.Citadel.APIKey)
+	// client is a no-op — all EvaluateScan/EmitWORM/LogEvent calls return immediately.
+	cc := citadel.New(cfg.Citadel.APIURL, cfg.Citadel.KeyID, cfg.Citadel.KeySecret)
 
 	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
 	s := &Server{

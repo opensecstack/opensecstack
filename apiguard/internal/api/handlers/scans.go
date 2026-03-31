@@ -196,6 +196,45 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 	s.auditLog(r.Context(), db.AuditActionScanCreated, "scans", &scanID,
 		middleware.ClientIPFromRequest(r, s.trustedProxies), r.UserAgent(), map[string]interface{}{"target": req.Target})
 
+	// CITADEL governance check: evaluate the scan against MARSHAL before launching.
+	// A REFUSE or HARD_STOP outcome blocks the scan regardless of dry_run config —
+	// dry_run is set on the Kerkese itself, so CITADEL decides whether to enforce.
+	if s.citadel != nil && s.cfg != nil {
+		k := &citadel.Kerkese{
+			KerkeseVersion: "1.0",
+			TsUTC:          time.Now().UTC(),
+			ProjectID:      s.cfg.Citadel.ProjectID,
+			ExecutionID:    scanID,
+			Action: citadel.KerkeseAction{
+				Type:        "deploy_change",
+				Description: "APIGuard security scan: " + req.Target,
+				ChangeID:    scanID.String(),
+			},
+			Actor:    citadel.KerkeseActor{UserID: 0, Role: "group_sig_operator"},
+			Verifier: citadel.KerkeseVerifier{UserID: 0, Role: "group_sig_verifier"},
+			Evidence: citadel.KerkeseEvidence{
+				ChangeID: scanID.String(),
+				Extra: map[string]any{
+					"target_url": req.Target,
+					"modules":    req.Modules,
+				},
+			},
+			SoD:    citadel.KerkeseSoD{OperatorUserID: 0, VerifierUserID: 0},
+			DryRun: s.cfg.Citadel.DryRun,
+		}
+		decision, evalErr := s.citadel.EvaluateScan(r.Context(), k)
+		if evalErr != nil {
+			s.logger.Warn().Err(evalErr).Str("scan_id", scanID.String()).Msg("CITADEL marshal evaluate failed — proceeding with scan")
+		} else if decision != nil && (decision.Outcome == citadel.OutcomeRefuse || decision.Outcome == citadel.OutcomeHardStop) {
+			reasons := decision.Reasons
+			if len(reasons) == 0 {
+				reasons = []string{"CITADEL governance check rejected this scan"}
+			}
+			writeError(w, http.StatusForbidden, strings.Join(reasons, "; "))
+			return
+		}
+	}
+
 	// Build scanner request.
 	scanReq := scanner.ScanRequest{
 		SpecPath: req.SpecPath,
@@ -256,6 +295,19 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 			s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to set scan status to running")
 		}
 		s.auditLog(bgCtx, db.AuditActionScanStarted, "scans", &scanID, "", "", nil)
+
+		// WORM: immutable record of scan start.
+		if s.citadel != nil && s.cfg != nil {
+			projectID := s.cfg.Citadel.ProjectID
+			_, _, wormErr := s.citadel.EmitWORM(bgCtx, "apiguard", "scan.started", projectID, map[string]any{
+				"scan_id":    scanID.String(),
+				"target_url": req.Target,
+				"modules":    req.Modules,
+			})
+			if wormErr != nil {
+				s.logger.Warn().Err(wormErr).Str("scan_id", scanID.String()).Msg("CITADEL WORM emit scan.started failed")
+			}
+		}
 
 		result, err := s.scanner.Run(bgCtx, scanReq)
 		if err != nil {
@@ -329,6 +381,42 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 		completed = true
 		if err := s.db.UpdateScanStatus(bgCtx, scanID, db.ScanStatusCompleted); err != nil {
 			s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to set scan status to completed")
+		}
+
+		// WORM: immutable record of scan completion with finding summary.
+		if s.citadel != nil && s.cfg != nil {
+			projectID := s.cfg.Citadel.ProjectID
+
+			// Emit one WORM event per CRITICAL finding with NIS2 measure code.
+			for _, f := range result.Findings {
+				if strings.EqualFold(f.Severity, "critical") {
+					nis2Code := citadel.NIS2Measure[f.OWASPId]
+					_, _, wormErr := s.citadel.EmitWORM(bgCtx, "apiguard", "scan.critical_finding", projectID, map[string]any{
+						"scan_id":      scanID.String(),
+						"owasp_id":     f.OWASPId,
+						"title":        f.Title,
+						"endpoint":     f.EndpointPath,
+						"method":       f.EndpointMethod,
+						"nis2_measure": nis2Code,
+					})
+					if wormErr != nil {
+						s.logger.Warn().Err(wormErr).Str("scan_id", scanID.String()).Str("owasp_id", f.OWASPId).Msg("CITADEL WORM emit scan.critical_finding failed")
+					}
+				}
+			}
+
+			_, _, wormErr := s.citadel.EmitWORM(bgCtx, "apiguard", "scan.completed", projectID, map[string]any{
+				"scan_id":        scanID.String(),
+				"target_url":     req.Target,
+				"total_findings": summary.TotalFindings,
+				"critical":       summary.CriticalCount,
+				"high":           summary.HighCount,
+				"medium":         summary.MediumCount,
+				"low":            summary.LowCount,
+			})
+			if wormErr != nil {
+				s.logger.Warn().Err(wormErr).Str("scan_id", scanID.String()).Msg("CITADEL WORM emit scan.completed failed")
+			}
 		}
 
 		// Upsert api_spec and link it to this scan if we have a spec hash.

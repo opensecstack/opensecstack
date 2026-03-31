@@ -103,6 +103,27 @@ services:
         condition: service_healthy
     restart: on-failure
 
+  # --- ThreatFlow ---
+  threatflow-api:
+    image: ghcr.io/opensecstack/threatflow:latest
+    build:
+      context: ../threatflow
+      dockerfile: Dockerfile
+    ports:
+      - "8091:8091"
+    environment:
+      THREATFLOW_PORT: "8091"
+      THREATFLOW_DB_URL: "postgres://threatflow:${POSTGRES_PASSWORD}@postgres:5432/threatflow?sslmode=disable"
+      THREATFLOW_LOG_LEVEL: "info"
+      THREATFLOW_CITADEL_API_URL: ""
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   # --- Shared Infrastructure ---
   postgres:
     image: postgres:16-alpine
@@ -115,6 +136,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./scripts/init-nis2-db.sql:/docker-entrypoint-initdb.d/02-init-nis2.sql:ro
+      - ./scripts/init-threatflow-db.sql:/docker-entrypoint-initdb.d/03-init-threatflow.sql:ro
     networks:
       - backend
     healthcheck:

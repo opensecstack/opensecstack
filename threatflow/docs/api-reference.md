@@ -182,6 +182,57 @@ Ingest a STIX 2.1 bundle. All objects in the bundle are parsed, validated, and s
 }
 ```
 
+### GET /stix/bundles/export *(planned)*
+
+Export a filtered STIX 2.1 bundle for downstream consumers.
+
+**Query Parameters:**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `since` | ISO 8601 | Only objects created/modified after this timestamp |
+| `type` | string | Filter by STIX object type (e.g. `indicator`, `malware`) |
+| `confidence_min` | number | Minimum IOC confidence score (0–100) |
+
+**Headers:**
+```
+Accept: application/stix+json;version=2.1
+```
+
+**Response 200:** A valid STIX 2.1 bundle containing all matching objects and relationships.
+
+See [STIX 2.1 Integration](stix-integration.md) for bundle format details.
+
+---
+
+## IOC Updates
+
+### PATCH /iocs/{id} *(planned)*
+
+Update metadata on an existing IOC (e.g. confidence override, tags, TTP assignments).
+
+**Request Body:** Only include fields to update.
+```json
+{
+  "confidence": 90,
+  "tags": ["c2", "confirmed"],
+  "ttp": ["T1071.001", "T1059.001"],
+  "description": "Confirmed C2 server — analyst verified"
+}
+```
+
+**Response 200:** The updated IOC object (same shape as GET /iocs/{id}).
+
+**Response 404:**
+```json
+{
+  "error": "ioc not found",
+  "id": "ioc-..."
+}
+```
+
+Note: manual confidence overrides are MARSHAL-gated when CITADEL integration is enabled. See [CITADEL Integration](citadel-integration.md) for details.
+
 ---
 
 ## Error Responses
@@ -203,3 +254,14 @@ All errors follow a consistent format:
 | 404 | Resource not found |
 | 429 | Rate limit exceeded |
 | 500 | Internal server error |
+
+---
+
+## See Also
+
+- [Architecture](architecture.md) — system design and component interactions
+- [STIX 2.1 Integration](stix-integration.md) — STIX object types, bundle format
+- [IOC Feeds](ioc-feeds.md) — ingestion pipeline and deduplication
+- [CITADEL Integration](citadel-integration.md) — MARSHAL gating and WORM events
+- [Configuration](configuration.md) — environment variables and auth settings
+- [Troubleshooting](troubleshooting.md) — debugging API errors

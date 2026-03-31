@@ -85,6 +85,12 @@ docker build -t irflow .
 docker run -p 8083:8083 irflow
 ```
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [API Reference](docs/api.md) | IRFlow REST API reference |
+
 ## Development
 
 ```bash

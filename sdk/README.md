@@ -45,6 +45,19 @@ The SDK provides typed contracts, event schemas, and client libraries that all o
 | Advisory | CSAF 2.0 | v1 | OpenCSIRT → ThreatFlow |
 | Simulation Result | JSON | v1 | SecureLab → IRFlow, OpenScrub, ThreatFlow |
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Go Client](docs/go-client.md) | Typed Go clients for APIGuard, NIS2 Compass, and CITADEL, plus shared contract types |
+| [Python Client](docs/python-client.md) | Typed Python clients for APIGuard and NIS2 Compass, plus contract dataclasses |
+| [TypeScript Client](docs/typescript-client.md) | Typed TypeScript clients for APIGuard, NIS2 Compass, and CITADEL, plus webhook router with HMAC-SHA256 verification |
+| [Rust Client](docs/rust-client.md) | Async, type-safe Rust clients for APIGuard and NIS2 Compass built on tokio + reqwest |
+| [Contracts](docs/contracts.md) | Typed integration contracts for data exchanged between opensecstack platforms |
+| [Events](docs/events.md) | Typed event system for webhooks and async notifications, including signature verification and event routing |
+| [Migration Guide](docs/migration.md) | Breaking changes and upgrade instructions for each SDK release |
+| [Troubleshooting](docs/troubleshooting.md) | Common integration issues with symptoms, root causes, and copy-paste solutions |
+
 ## Status
 
 In development. Initial contracts being defined alongside APIGuard v0.1.0.

@@ -18,7 +18,9 @@ export default function MobileScene() {
 
         <Suspense fallback={null}>
           <Stars radius={80} depth={40} count={1500} factor={3} saturation={0} fade speed={0.3} />
-          <MobileDevice />
+          <group position={[3, 0, 0]} scale={[0.6, 0.6, 0.6]}>
+            <MobileDevice />
+          </group>
           <EffectComposer>
             <Bloom luminanceThreshold={0.4} luminanceSmoothing={0.9} intensity={0.5} />
             <Vignette eskil={false} offset={0.1} darkness={0.5} />

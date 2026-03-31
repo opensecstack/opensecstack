@@ -32,6 +32,7 @@ jobs:
       nis2compass:     ${{ steps.filter.outputs.nis2compass }}
       citadel:         ${{ steps.filter.outputs.citadel }}
       irflow:          ${{ steps.filter.outputs.irflow }}
+      threatflow:      ${{ steps.filter.outputs.threatflow }}
       sdk:             ${{ steps.filter.outputs.sdk }}
       typescript_sdk:  ${{ steps.filter.outputs.typescript_sdk }}
       vantage_hash:    ${{ steps.filter.outputs.vantage_hash }}
@@ -57,6 +58,8 @@ jobs:
               - 'sdk/vantage-hash/**'
             irflow:
               - 'irflow/**'
+            threatflow:
+              - 'threatflow/**'
             deploy:
               - 'deploy/**'
 
@@ -433,6 +436,41 @@ jobs:
           DATABASE_URL: postgres://irflow:irflow@localhost:5432/irflow_test?sslmode=disable
         run: go test -race -count=1 ./...
 
+  # ──────────────────────────────────────────────────────────────────────────
+  # 3e. ThreatFlow — Go tests (with Postgres)
+  # ──────────────────────────────────────────────────────────────────────────
+  test-threatflow:
+    needs: changes
+    if: needs.changes.outputs.threatflow == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: threatflow
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: threatflow_test
+          POSTGRES_USER: threatflow
+          POSTGRES_PASSWORD: threatflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: "1.24"
+          cache-dependency-path: threatflow/go.sum
+      - name: Go tests (race detector)
+        env:
+          DATABASE_URL: postgres://threatflow:threatflow@localhost:5432/threatflow_test?sslmode=disable
+        run: go test -race -count=1 ./...
+
   # 3d. Citadel — lint
   lint-citadel:
     needs: changes
@@ -569,6 +607,7 @@ jobs:
       - test-nis2compass
       - test-citadel
       - test-irflow
+      - test-threatflow
     # Run when any of the relevant jobs succeeded or were skipped (path filter)
     if: |
       always() &&
@@ -677,6 +716,7 @@ jobs:
       - lint-citadel
       - security-citadel
       - test-irflow
+      - test-threatflow
       - test-typescript-sdk
       - test-vantage-hash
       - docker-build

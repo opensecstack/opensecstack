@@ -150,3 +150,28 @@ The NIS2 Compass API listens on **port 8090** (both development and production).
 | `/api/v1/assessments/{id}/controls/{ref}` | PATCH | Update control status and evidence |
 
 Full OpenAPI specification is available at `http://localhost:8090/docs` when the API is running.
+
+---
+
+## Documentation Index
+
+Detailed documentation lives in the `docs/` directory. The table below lists every document, sorted by topic.
+
+| Document | Description |
+|---|---|
+| [quick-start.md](docs/quick-start.md) | Zero-to-first-assessment guide covering prerequisites, stack startup, and initial API calls |
+| [user-guide.md](docs/user-guide.md) | End-user guide covering core concepts, organisations, assessments, and control workflows |
+| [assessment-workflow.md](docs/assessment-workflow.md) | Step-by-step walkthrough of the complete NIS2 Article 21(2) compliance assessment process |
+| [architecture.md](docs/architecture.md) | System overview — Flask API, PostgreSQL, Redis, Alembic migrations, and the CITADEL WORM audit subsystem |
+| [schema-reference.md](docs/schema-reference.md) | Complete PostgreSQL 16 schema reference including ENUM types, tables, indexes, and constraints |
+| [api-reference.md](docs/api-reference.md) | Full REST API reference with endpoints, request/response schemas, and JWT authentication details |
+| [nis2-controls-reference.md](docs/nis2-controls-reference.md) | Canonical reference for all ten NIS2 Article 21(2) cybersecurity risk-management measures (a)-(j) |
+| [security-model.md](docs/security-model.md) | Security architecture — authentication, secret management, database hardening, and CITADEL WORM audit chain |
+| [audit-log.md](docs/audit-log.md) | Design, implementation, and operational use of the CITADEL WORM append-only audit log |
+| [configuration.md](docs/configuration.md) | Environment variable reference for all runtime configuration across development, staging, and production |
+| [deployment.md](docs/deployment.md) | Production deployment guide using Docker Compose, including TLS, secrets, and hardening steps |
+| [migrations.md](docs/migrations.md) | Alembic database migration guide — migration chain, standard procedures, rolling upgrades, and emergency rollback |
+| [integrations.md](docs/integrations.md) | Guide for connecting NIS2 Compass with external systems (ticketing, dashboards, SIEM) via the REST API |
+| [runbook.md](docs/runbook.md) | Operations runbook — health checks, monitoring, backup, restore, and on-call procedures |
+| [troubleshooting.md](docs/troubleshooting.md) | Common failure modes with symptoms, diagnosis steps, and resolutions |
+| [faq.md](docs/faq.md) | Frequently asked questions about NIS2 Compass, compliance scope, and operational concerns |

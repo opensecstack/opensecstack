@@ -1,0 +1,16 @@
+.git
+.github
+.env
+.env.*
+*.md
+!README.md
+docs/
+target/
+bin/
+tmp/
+coverage.out
+*.test
+.air.toml
+docker-compose*.yml
+Makefile
+.golangci.yml

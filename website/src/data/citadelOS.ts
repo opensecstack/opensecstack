@@ -6,12 +6,12 @@ export interface OSLayer {
 }
 
 export const desktopLayers: OSLayer[] = [
-  { number: 1, name: 'Microkernel',        description: 'IPC, memory management, thread scheduling. Only ~50K LOC in privileged space.', color: '#ef4444' },
+  { number: 1, name: 'Microkernel',        description: 'Written in Rust. IPC, memory management, thread scheduling. ~50K LOC in privileged space.', color: '#ef4444' },
   { number: 2, name: 'Capability Manager',  description: 'Capability-based access control. Every resource access requires a signed, time-bounded capability token.', color: '#f59e0b' },
-  { number: 3, name: 'OS Services',         description: 'Filesystems, network stack, audio — all run as isolated user-space processes, not in kernel.', color: '#10b981' },
-  { number: 4, name: 'Grid Sandbox',        description: 'Cryptographically isolated cells. Apps cannot access each other without MARSHAL-issued channel permits.', color: '#3b82f6' },
+  { number: 3, name: 'OS Services',         description: 'Rust user-space daemons + WebAssembly sandboxed plugins. Filesystems, network, audio — all isolated.', color: '#10b981' },
+  { number: 4, name: 'Grid Sandbox',        description: 'WebAssembly runtime for app isolation. Cryptographic cells with MARSHAL-issued channel permits.', color: '#3b82f6' },
   { number: 5, name: 'CITADEL Runtime',     description: 'MARSHAL 5-gate evaluation, WORM audit chain, VIGIL health monitoring — governance as infrastructure.', color: '#7c3aed' },
-  { number: 6, name: 'Application Layer',   description: 'User applications run in sandboxed cells with zero trust. All privileged ops go through MARSHAL.', color: '#00f0ff' },
+  { number: 6, name: 'Application Layer',   description: 'Apps compiled to WebAssembly run in sandboxed cells. Zero trust — all privileged ops go through MARSHAL.', color: '#00f0ff' },
 ]
 
 export interface SandboxTier {

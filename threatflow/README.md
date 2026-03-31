@@ -130,10 +130,20 @@ See [docs/configuration.md](docs/configuration.md) for the full reference.
 | [MITRE ATT&CK Mapping](docs/mitre-attack.md) | TTP classification and tagging |
 | [Data Model](docs/data-model.md) | Database schema and relationships |
 | [CITADEL Integration](docs/citadel-integration.md) | MARSHAL governance, WORM logging |
+| [Security Model](docs/security-model.md) | Authentication, authorization, data protection |
+| [Security Guide](docs/security.md) | Operational security configuration, TLS, secrets, rate limiting |
+| [Compliance](docs/compliance.md) | NIS2 Directive Article 21(2) compliance mapping and evidence |
+| [Integration Guide](docs/integration.md) | Cross-platform integration architecture and flows |
+| [Webhook Specification](docs/webhook-spec.md) | Webhook protocol, signatures, retry policy, payloads |
 | [Configuration](docs/configuration.md) | Environment variables, config file format |
 | [Deployment](docs/deployment.md) | Docker, Kubernetes, production checklist |
-| [Security Model](docs/security-model.md) | Authentication, authorization, data protection |
+| [Operator Handbook](docs/operator-handbook.md) | Day-to-day operations, monitoring, and runbooks for production |
+| [Performance](docs/performance.md) | Throughput targets, database optimization, caching, scaling |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and solutions |
+| [Migrations](docs/migrations.md) | Database schema migrations with golang-migrate |
+| [Testing](docs/testing.md) | Testing strategy, conventions, and unit/integration/e2e patterns |
+| [Contributing](docs/contributing.md) | Development setup, coding conventions, pull request process |
+| [FAQ](docs/faq.md) | Frequently asked questions about ThreatFlow |
 
 ---
 

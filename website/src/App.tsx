@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import ScrollToTop from './components/ScrollToTop'
 import { useWebGL } from './hooks/useWebGL'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
@@ -11,6 +12,12 @@ import CitadelSection from './sections/CitadelSection'
 import SDKSection from './sections/SDKSection'
 import RoadmapSection from './sections/RoadmapSection'
 import CitadelOSSection from './sections/CitadelOSSection'
+import ThreatFlowSection from './sections/ThreatFlowSection'
+import IRFlowSection from './sections/IRFlowSection'
+import OpenScrubSection from './sections/OpenScrubSection'
+import CyberPathSection from './sections/CyberPathSection'
+import SecureLabSection from './sections/SecureLabSection'
+import OpenCSIRTSection from './sections/OpenCSIRTSection'
 
 const EcosystemScene = lazy(() => import('./scene/EcosystemScene'))
 const CitadelOSPage = lazy(() => import('./pages/CitadelOSPage'))
@@ -34,6 +41,12 @@ function HomePage() {
         <NIS2CompassSection />
         <CitadelSection />
         <CitadelOSSection />
+        <ThreatFlowSection />
+        <IRFlowSection />
+        <OpenScrubSection />
+        <CyberPathSection />
+        <SecureLabSection />
+        <OpenCSIRTSection />
         <SDKSection />
         <RoadmapSection />
         <Footer />
@@ -45,6 +58,7 @@ function HomePage() {
 export default function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/citadelos" element={

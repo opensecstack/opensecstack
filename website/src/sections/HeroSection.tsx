@@ -56,7 +56,7 @@ export default function HeroSection() {
             { v: '10/10', l: 'OWASP API Top 10' },
             { v: '10', l: 'NIS2 Controls' },
             { v: '5', l: 'MARSHAL Gates' },
-            { v: '3', l: 'SDKs' },
+            { v: '4', l: 'SDKs' },
           ].map(s => (
             <div className="stat-item" key={s.l}>
               <div className="stat-value">{s.v}</div>

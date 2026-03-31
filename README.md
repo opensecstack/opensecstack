@@ -202,7 +202,7 @@ See [ROADMAP.md](ROADMAP.md) for phase timelines and deliverables.
 
 ## SDK
 
-The [opensecstack SDK](sdk/) provides typed clients for both Go and Python — the same clients used internally between platforms.
+The [opensecstack SDK](sdk/) provides typed clients in **Go, Python, TypeScript, and Rust** — the same clients used internally between platforms.
 
 ### Go SDK
 
@@ -211,17 +211,12 @@ Zero external dependencies. Requires Go 1.21+.
 ```go
 import "github.com/opensecstack/opensecstack/sdk/go/opensecstack"
 
-// APIGuard — run a scan and fetch findings
 client := opensecstack.NewAPIGuardClient("https://apiguard.example.com", "your-api-key")
 scan, err := client.CreateScan(ctx, "https://api.example.com/openapi.json")
 findings, err := client.GetFindings(ctx, scan.ID, opensecstack.GetFindingsOptions{
     PerPage: 100,
     Severity: "critical",
 })
-
-// NIS2 Compass — manage assessments
-nis2 := opensecstack.NewNIS2CompassClient("https://nis2.example.com", "your-api-key")
-orgs, err := nis2.GetOrganisations(ctx, opensecstack.GetOrganisationsOptions{PerPage: 50})
 ```
 
 ### Python SDK
@@ -229,22 +224,43 @@ orgs, err := nis2.GetOrganisations(ctx, opensecstack.GetOrganisationsOptions{Per
 Requires Python 3.10+ and `requests >= 2.31`.
 
 ```python
-from opensecstack import APIGuardClient, NIS2CompassClient
+from opensecstack import APIGuardClient
 
-# APIGuard
 client = APIGuardClient("https://apiguard.example.com", api_key="your-api-key")
 scan = client.create_scan(spec_url="https://api.example.com/openapi.json")
 findings = client.get_findings(scan["id"])
-
-# NIS2 Compass
-nis2 = NIS2CompassClient("https://nis2.example.com", api_key="your-api-key")
-orgs = nis2.list_organisations()
-report = nis2.generate_report(assessment_id, output_path="report.pdf")
 ```
 
-Both clients handle JWT acquisition and refresh automatically, retry on 5xx with exponential backoff, and emit structured warning logs on persistent auth failures.
+### TypeScript SDK
 
-See [sdk/README.md](sdk/README.md), [sdk/go/README.md](sdk/go/README.md), and [sdk/python/README.md](sdk/python/README.md).
+Zero external dependencies. Requires Node.js 18+. Published as `@opensecstack/sdk` on npm.
+
+```typescript
+import { APIGuardClient } from "@opensecstack/sdk";
+
+const client = new APIGuardClient({
+  baseURL: "https://apiguard.example.com",
+  apiKey: "your-api-key",
+});
+const scan = await client.createScan("https://api.example.com/openapi.json");
+const findings = await client.getFindings(scan.id);
+```
+
+### Rust SDK
+
+Async-first with tokio + reqwest. Requires Rust 1.75+.
+
+```rust
+use opensecstack::APIGuardClient;
+
+let client = APIGuardClient::new("https://apiguard.example.com", "your-api-key");
+let scan = client.create_scan("https://api.example.com/openapi.json").await?;
+let findings = client.get_findings(&scan.id, Default::default()).await?;
+```
+
+All clients handle JWT acquisition and refresh automatically, retry on 5xx with exponential backoff, and emit structured warning logs on persistent auth failures.
+
+See [sdk/README.md](sdk/README.md) · [sdk/go/](sdk/go/) · [sdk/python/](sdk/python/) · [sdk/typescript/](sdk/typescript/) · [sdk/rust/](sdk/rust/).
 
 ---
 
@@ -356,10 +372,15 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 | Document | Description |
 |----------|-------------|
 | [ECOSYSTEM.md](ECOSYSTEM.md) | Full architecture diagram, data-flow map, integration contracts, licensing rationale |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture, component interactions, deployment topology |
+| [GOVERNANCE.md](GOVERNANCE.md) | Project governance model, decision-making process |
 | [ROADMAP.md](ROADMAP.md) | Phase-by-phase delivery plan |
+| [CHANGELOG.md](CHANGELOG.md) | Project-wide changelog |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guide — code, docs, security research |
 | [SECURITY.md](SECURITY.md) | Vulnerability disclosure policy |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
+| [docs/security-architecture.md](docs/security-architecture.md) | Security architecture — five-layer defence model |
+| [docs/tds-integration.md](docs/tds-integration.md) | TDS integration guide for new platform components |
 | [adrs/](adrs/) | Architecture Decision Records |
 | [rfcs/](rfcs/) | Request for Comments |
 
@@ -367,12 +388,18 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 | Platform | Reference |
 |----------|-----------|
-| APIGuard | [apiguard/README.md](apiguard/README.md) · [apiguard/docs/](apiguard/docs/) (12 guides) |
-| NIS2 Compass | [nis2compass/README.md](nis2compass/README.md) |
-| CITADEL | [.citadel/README.md](.citadel/README.md) · [.citadel/docs/](.citadel/docs/) |
-| Go SDK | [sdk/go/README.md](sdk/go/README.md) |
+| APIGuard | [apiguard/README.md](apiguard/README.md) · [apiguard/docs/](apiguard/docs/) (22 guides) |
+| NIS2 Compass | [nis2compass/README.md](nis2compass/README.md) · [nis2compass/docs/](nis2compass/docs/) (16 guides) |
+| CITADEL | [.citadel/README.md](.citadel/README.md) · [.citadel/docs/](.citadel/docs/) (26 guides) |
+| IRFlow | [irflow/README.md](irflow/README.md) · [irflow/docs/](irflow/docs/) |
+| ThreatFlow | [threatflow/README.md](threatflow/README.md) · [threatflow/docs/](threatflow/docs/) (21 guides) |
+| Go SDK | [sdk/go/README.md](sdk/go/README.md) · [sdk/go/RELEASING.md](sdk/go/RELEASING.md) |
 | Python SDK | [sdk/python/README.md](sdk/python/README.md) |
+| TypeScript SDK | [sdk/typescript/README.md](sdk/typescript/README.md) · [sdk/typescript/RELEASING.md](sdk/typescript/RELEASING.md) |
+| Rust SDK | [sdk/rust/README.md](sdk/rust/README.md) |
+| SDK Docs | [sdk/docs/](sdk/docs/) (8 guides) |
 | Kubernetes | [deploy/k8s/README.md](deploy/k8s/README.md) |
+| Website | [website/README.md](website/README.md) |
 
 ### Architecture Decision Records
 
@@ -380,6 +407,7 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 |-----|----------|
 | [ADR-001](adrs/ADR-001-rust-for-parsing.md) | Rust for the OpenAPI/GraphQL parsing and analysis layer |
 | [ADR-002](adrs/ADR-002-go-for-http-and-orchestration.md) | Go for HTTP servers and orchestration |
+| [ADR-009](adrs/ADR-009-time-dimension-segmentation.md) | Time Dimension Segmentation (TDS) |
 
 ---
 
@@ -417,7 +445,16 @@ We welcome contributions to every platform — code, tests, documentation, trans
 
 - **GitHub Discussions** — questions, ideas, show & tell
 - **Discord** — real-time chat (`#general`, `#contributors`, per-platform channels)
-- **Monthly community calls** — open to all, schedule in GitHub Discussions
+- **Monthly community calls** — open to all, schedule in [community/MEETINGS.md](community/MEETINGS.md)
+
+| Resource | Description |
+|----------|-------------|
+| [community/README.md](community/README.md) | Community hub and programme overview |
+| [community/GOOD-FIRST-ISSUES.md](community/GOOD-FIRST-ISSUES.md) | Curated starter issues for new contributors |
+| [community/AMBASSADORS.md](community/AMBASSADORS.md) | EU regional ambassador profiles |
+| [community/HALL-OF-FAME.md](community/HALL-OF-FAME.md) | Outstanding contributor recognition |
+| [community/MEETINGS.md](community/MEETINGS.md) | Meeting schedule and host rotation |
+| [community/MENTORSHIP.md](community/MENTORSHIP.md) | Mentorship programme and mentor profiles |
 
 ---
 

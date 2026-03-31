@@ -122,5 +122,16 @@ threatflow/
 ├── docs/                       # Documentation
 ├── Dockerfile
 ├── go.mod
+
+---
+
+## See Also
+
+- [API Reference](api-reference.md) — HTTP endpoints documented here
+- [Data Model](data-model.md) — PostgreSQL schema backing the IOC store
+- [STIX 2.1 Integration](stix-integration.md) — STIX object flow through the system
+- [IOC Feeds](ioc-feeds.md) — feed ingestion pipeline detail
+- [CITADEL Integration](citadel-integration.md) — governance layer in the architecture
+- [Deployment](deployment.md) — running this architecture in Docker / Kubernetes
 └── go.sum
 ```

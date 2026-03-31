@@ -4,6 +4,7 @@ const sdks = [
   { lang: 'Go', color: '#00ADD8', methods: 49, tests: 102, example: 'client := sin.NewAPIGuardClient(url, key)\nscan, _ := client.CreateScan(ctx, specURL)' },
   { lang: 'Python', color: '#3776AB', methods: 47, tests: 67, example: 'client = APIGuardClient(url, api_key)\nscan = client.create_scan(spec_url=url)' },
   { lang: 'Rust', color: '#CE422B', methods: 40, tests: 75, example: 'let client = APIGuardClient::new(url, key);\nlet scan = client.create_scan(spec_url).await?;' },
+  { lang: 'TypeScript', color: '#3178C6', methods: 35, tests: 48, example: 'const client = new APIGuardClient(url, key);\nconst scan = await client.createScan(specUrl);' },
 ]
 
 export default function SDKSection() {
@@ -11,7 +12,7 @@ export default function SDKSection() {
     <ScrollSection id="sdks">
       <h2 className="section-title"><span className="gradient-text">Multi-Language</span> SDKs</h2>
       <p className="section-subtitle">
-        Type-safe clients for APIGuard, NIS2 Compass, and CITADEL. Consistent API across Go, Python, and Rust.
+        Type-safe clients for APIGuard, NIS2 Compass, and CITADEL. Consistent API across Go, Python, Rust, and TypeScript.
       </p>
       <div className="grid-3">
         {sdks.map(s => (

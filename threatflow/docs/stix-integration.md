@@ -112,3 +112,13 @@ indicator--SHA256(pattern_type + ":" + pattern_value)[:36 as UUID v5]
 ```
 
 This ensures the same indicator from different feeds produces the same STIX ID, enabling automatic deduplication and relationship merging.
+
+---
+
+## See Also
+
+- [IOC Feeds](ioc-feeds.md) — how feeds are normalised to STIX format during ingestion
+- [MITRE ATT&CK Mapping](mitre-attack.md) — STIX Relationship objects linking indicators to TTPs
+- [API Reference](api-reference.md) — STIX bundle API endpoints
+- [Data Model](data-model.md) — `stix_bundles` and `stix_objects` tables
+- [Architecture](architecture.md) — STIX data flow through the system

@@ -281,7 +281,7 @@ export default function CitadelOSMobilePage() {
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 800,
             }}>CitadelOS Mobile</strong>{' '}
             &mdash; Part of the <Link to="/" style={{ color: '#00f0ff' }}>SIN</Link> ecosystem.
-            &middot; <Link to="/citadelos" style={{ color: '#8892a8' }}>Desktop Edition</Link>
+            &middot; Mobile Edition
           </p>
         </footer>
       </div>

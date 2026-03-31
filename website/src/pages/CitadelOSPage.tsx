@@ -286,6 +286,7 @@ export default function CitadelOSPage() {
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 800,
             }}>CitadelOS</strong>{' '}
             &mdash; Part of the <Link to="/" style={{ color: '#00f0ff' }}>SIN</Link> ecosystem.
+            &middot; Desktop Edition
           </p>
         </footer>
       </div>

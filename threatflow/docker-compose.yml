@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+  threatflow-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8091:8091"
+    environment:
+      THREATFLOW_PORT: "8091"
+      THREATFLOW_DB_URL: "postgres://threatflow:threatflow@postgres:5432/threatflow?sslmode=disable"
+      THREATFLOW_LOG_LEVEL: "info"
+      THREATFLOW_LOG_FORMAT: "json"
+      THREATFLOW_CITADEL_API_URL: ""
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - backend
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: threatflow
+      POSTGRES_PASSWORD: threatflow
+      POSTGRES_DB: threatflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U threatflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - backend
+
+volumes:
+  pgdata:
+
+networks:
+  backend:
+    driver: bridge

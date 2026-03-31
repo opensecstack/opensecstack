@@ -676,6 +676,25 @@ impl NIS2CompassClient {
         ];
         self.get_json("audit", Some(q)).await
     }
+
+    // ---------- public API — health ----------
+
+    /// Basic health check. Does **not** require authentication.
+    pub async fn get_health(&self) -> Result<HealthStatus> {
+        let url = format!("{}/api/v1/health", self.base_url);
+        let resp = self.http.get(&url).send().await?;
+        Self::check_response(resp).await
+    }
+
+    /// Detailed health check (includes DB/Redis status). Requires authentication.
+    pub async fn get_health_detail(&self) -> Result<HealthStatus> {
+        self.get_json("health/detail", None).await
+    }
+
+    /// Retrieve a single audit entry by UUID string.
+    pub async fn get_audit_entry(&self, entry_id: &str) -> Result<NIS2AuditEntry> {
+        self.get_json(&format!("audit/{entry_id}"), None).await
+    }
 }
 
 // ---------- builder ----------

@@ -1,8 +1,8 @@
 # =============================================================================
-# Staging overrides for the opensecstack Helm chart.
+# EXAMPLE — Staging overrides for the opensecstack Helm chart.
 #
-# Staging mirrors production topology with real TLS and the same image tags
-# but uses smaller resources and Let's Encrypt staging to avoid rate limits.
+# Copy this file to values.staging.yaml and fill in the <REPLACE-*> placeholders.
+# DO NOT commit values.staging.yaml — it is in .gitignore.
 #
 # Apply on top of values.yaml:
 #   helm upgrade --install opensecstack-staging ./deploy/helm/opensecstack \
@@ -11,17 +11,11 @@
 #     -n opensecstack-staging
 # =============================================================================
 
-# ---------------------------------------------------------------------------
-# Global — staging always pulls to catch new builds immediately
-# ---------------------------------------------------------------------------
 global:
-  imagePullPolicy: Always              # always pull so new pushes are picked up
+  imagePullPolicy: Always
 
 namespace: opensecstack-staging
 
-# ---------------------------------------------------------------------------
-# Pod Security Context — same policy as prod to catch permission issues early
-# ---------------------------------------------------------------------------
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 1000
@@ -33,9 +27,9 @@ podSecurityContext:
 apiguard:
   image:
     repository: ghcr.io/opensecstack/apiguard
-    tag: latest                        # staging tracks latest builds
+    tag: latest
 
-  replicas: 1                          # single replica is sufficient for staging
+  replicas: 1
 
   resources:
     requests:
@@ -50,33 +44,29 @@ apiguard:
 
   ingress:
     enabled: true
-    host: api.staging.opensecstack.io
+    host: "<REPLACE-APIGUARD-STAGING-DOMAIN>"  # e.g. api.staging.yourcompany.com
     tlsSecret: apiguard-staging-tls
 
-  # Prometheus monitoring — validate scraping works before prod
   podAnnotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "8080"
     prometheus.io/path: "/metrics"
 
-  # CORS — allow staging domains plus localhost for developer testing
   cors:
     allowedOrigins:
-      - "https://api.staging.opensecstack.io"
-      - "https://compass.staging.opensecstack.io"
-      - "https://citadel.staging.opensecstack.io"
+      - "https://<REPLACE-APIGUARD-STAGING-DOMAIN>"
+      - "https://<REPLACE-NIS2COMPASS-STAGING-DOMAIN>"
+      - "https://<REPLACE-CITADEL-STAGING-DOMAIN>"
       - "http://localhost:3000"
       - "http://localhost:8080"
 
-  # Rate limiting — more relaxed than prod for testing
   rateLimit:
     global: 500
     auth: 100
 
-  # Debug and profiling endpoints enabled for staging troubleshooting
   debug:
     enabled: true
-    profiling: true                    # exposes /debug/pprof (Go) or equivalent
+    profiling: true
 
 # ---------------------------------------------------------------------------
 # NIS2 Compass
@@ -101,7 +91,7 @@ nis2compass:
 
   ingress:
     enabled: true
-    host: compass.staging.opensecstack.io
+    host: "<REPLACE-NIS2COMPASS-STAGING-DOMAIN>"
     tlsSecret: nis2compass-staging-tls
 
   podAnnotations:
@@ -111,9 +101,9 @@ nis2compass:
 
   cors:
     allowedOrigins:
-      - "https://api.staging.opensecstack.io"
-      - "https://compass.staging.opensecstack.io"
-      - "https://citadel.staging.opensecstack.io"
+      - "https://<REPLACE-APIGUARD-STAGING-DOMAIN>"
+      - "https://<REPLACE-NIS2COMPASS-STAGING-DOMAIN>"
+      - "https://<REPLACE-CITADEL-STAGING-DOMAIN>"
       - "http://localhost:3000"
       - "http://localhost:8090"
 
@@ -149,9 +139,9 @@ citadel:
 
   cors:
     allowedOrigins:
-      - "https://api.staging.opensecstack.io"
-      - "https://compass.staging.opensecstack.io"
-      - "https://citadel.staging.opensecstack.io"
+      - "https://<REPLACE-APIGUARD-STAGING-DOMAIN>"
+      - "https://<REPLACE-NIS2COMPASS-STAGING-DOMAIN>"
+      - "https://<REPLACE-CITADEL-STAGING-DOMAIN>"
       - "http://localhost:3000"
       - "http://localhost:8070"
 
@@ -163,7 +153,7 @@ citadel:
 # PostgreSQL — enabled in staging as an in-cluster deployment
 # ---------------------------------------------------------------------------
 postgres:
-  enabled: true                        # run Postgres inside the cluster
+  enabled: true
   image: postgres:16-alpine
 
   resources:
@@ -176,13 +166,13 @@ postgres:
 
   persistence:
     size: 10Gi
-    storageClass: ""                   # use cluster default in staging
+    storageClass: ""
 
 # ---------------------------------------------------------------------------
 # Redis — enabled in staging as an in-cluster deployment
 # ---------------------------------------------------------------------------
 redis:
-  enabled: true                        # run Redis inside the cluster
+  enabled: true
   image: redis:7-alpine
 
   resources:
@@ -197,32 +187,31 @@ redis:
 # Application config
 # ---------------------------------------------------------------------------
 config:
-  logLevel: info                       # verbose enough to catch issues before prod
-  postgresHost: postgres-service       # in-cluster service name
+  logLevel: info
+  postgresHost: postgres-service
   postgresPort: "5432"
   postgresUser: apiguard
   apiguardDbName: apiguard
   nis2DbName: nis2compass
-  redisHost: redis-service             # in-cluster service name
+  redisHost: redis-service
   redisPort: "6379"
 
 # ---------------------------------------------------------------------------
-# HPA — enabled to validate autoscaling behavior before prod
+# HPA
 # ---------------------------------------------------------------------------
 hpa:
   enabled: true
-  minReplicas: 1                       # staging can scale down to 1
-  maxReplicas: 5                       # keep costs low
-  cpuThreshold: 75                     # slightly higher threshold than prod
+  minReplicas: 1
+  maxReplicas: 5
+  cpuThreshold: 75
 
 # ---------------------------------------------------------------------------
-# cert-manager — Let's Encrypt STAGING avoids rate limits during testing
-# Browsers will warn about untrusted certs; this is expected.
+# cert-manager — Let's Encrypt STAGING (fake certs, no rate limits)
 # ---------------------------------------------------------------------------
 certManager:
   enabled: true
-  email: "admin@opensecstack.io"
-  issuerType: letsencrypt-staging      # staging ACME endpoint (fake certs)
+  email: "<REPLACE-OPS-EMAIL>"
+  issuerType: letsencrypt-staging
 
 # ---------------------------------------------------------------------------
 # Network Policies — disabled in staging for easier debugging

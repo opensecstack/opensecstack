@@ -1139,8 +1139,152 @@ class AsyncAPIGuardClient:
             async for chunk in resp.aiter_bytes(chunk_size):
                 dest.write(chunk)
 
-    # Additional methods (delete_scan, get_report, list_findings, patch_finding,
-    # get_audit_log, upload_spec, refresh_token) follow the same pattern:
-    # replace self._session.request(...) with await self._http.request(...)
-    # and self._request(...) with await self._request(...).  Streaming methods
-    # use async with self._http.stream(...) as shown in stream_report above.
+    async def delete_scan(self, scan_id: str) -> None:
+        """
+        Delete a scan by UUID (async).
+
+        Issues ``DELETE /api/v1/scans/{scan_id}``.  Returns None on success.
+        """
+        await self._request("DELETE", f"scans/{scan_id}")
+
+    async def list_findings(
+        self,
+        page: int = 1,
+        per_page: int = 20,
+        scan_id: Optional[str] = None,
+    ) -> dict:
+        """
+        Return a paginated list of findings across all scans (async).
+
+        Issues ``GET /api/v1/findings``.  Supply ``scan_id`` to filter by scan.
+        Returns the envelope dict with keys ``items`` (or ``data``), ``total``,
+        ``page``, ``per_page``.
+        """
+        params: dict = {"page": page, "per_page": per_page}
+        if scan_id is not None:
+            params["scan_id"] = scan_id
+        resp = await self._request("GET", "findings", params=params)
+        return resp.json()
+
+    async def get_finding(self, finding_id: str) -> dict:
+        """Return a single finding by UUID (async)."""
+        resp = await self._request("GET", f"findings/{finding_id}")
+        return resp.json()
+
+    async def patch_finding(
+        self,
+        finding_id: str,
+        status: str,
+        note: Optional[str] = None,
+    ) -> dict:
+        """
+        Triage a finding by updating its status (async).
+
+        Parameters
+        ----------
+        finding_id: UUID of the finding to update.
+        status:     One of ``open``, ``confirmed``, ``false_positive``,
+                    ``accepted``, ``fixed``.
+        note:       Optional free-text triage note.  Pass an empty string
+                    ``""`` to explicitly clear an existing note; omit (or
+                    pass ``None``) to leave any existing note unchanged.
+        """
+        body: dict = {"status": status}
+        if note is not None:
+            body["note"] = note
+        resp = await self._request("PATCH", f"findings/{finding_id}", json=body)
+        return resp.json()
+
+    async def get_report(self, scan_id: str, format: str = "json") -> bytes:
+        """
+        Fetch the scan report in the requested format (async).
+
+        Issues ``GET /api/v1/scans/{id}/report?format={format}`` and
+        returns the raw response bytes.  The caller is responsible for
+        writing the bytes to a file or forwarding them.
+
+        Parameters
+        ----------
+        scan_id: UUID of the completed scan.
+        format:  Report format — one of ``json`` (default), ``sarif``,
+                 ``html``, ``pdf``.
+        """
+        resp = await self._request("GET", f"scans/{scan_id}/report", params={"format": format})
+        expected_types = {
+            'json': 'application/json',
+            'sarif': 'application/json',
+            'html': 'text/html',
+            'pdf': 'application/pdf',
+            'text': 'text/plain',
+        }
+        ct = resp.headers.get('Content-Type', '')
+        expected = expected_types.get(format, '')
+        if expected and not ct.lower().startswith(expected):
+            raise APIError(resp.status_code, f"Unexpected Content-Type: {ct!r}, expected {expected!r}")
+        return resp.content
+
+    async def upload_spec(self, spec_path: str) -> dict:
+        """
+        Upload a local OpenAPI spec file to the server (async).
+
+        The server stores the file content-addressed and returns a
+        ``spec_path`` (server-side absolute path) that can be passed to
+        ``create_scan``.
+
+        Returns a dict with keys ``spec_path``, ``spec_hash``, ``size``.
+        """
+        spec_path = os.path.expanduser(spec_path)
+        with open(spec_path, "rb") as fh:
+            resp = await self._request(
+                "POST",
+                "specs/upload",
+                files={"spec": (os.path.basename(spec_path), fh)},
+            )
+        return resp.json()
+
+    async def refresh_token(self, refresh_token: str) -> dict:
+        """
+        Exchange a refresh token for a new access token (async).
+
+        Issues ``POST /api/v1/auth/refresh`` directly (without requiring
+        a valid JWT). Updates the internal JWT on success.
+
+        Returns the full response dict (access_token, refresh_token, etc.).
+        """
+        resp = await self._http.post(
+            self._url("auth/refresh"),
+            json={"refresh_token": refresh_token},
+            timeout=self._timeout,
+        )
+        if resp.status_code == 401:
+            raise AuthenticationError("Refresh token is invalid or expired")
+        if resp.status_code >= 400:
+            raise APIError(resp.status_code, resp.text)
+        data = resp.json()
+        token = data.get("access_token") or data.get("token")
+        if token:
+            self._jwt = token
+            self._http.headers["Authorization"] = f"Bearer {self._jwt}"
+        return data
+
+    async def get_audit_log(self, limit: int = 50, page: Optional[int] = None) -> list[dict]:
+        """
+        Return audit log entries (async, default 50, up to 100 per page).
+
+        Parameters
+        ----------
+        limit: Number of entries to return per page (capped at 100 by the API).
+        page:  1-based page number.  When omitted the API returns the first page.
+
+        Entries are ordered newest-first.
+        """
+        params: dict = {"per_page": min(limit, 100)}
+        if page is not None:
+            params["page"] = page
+        resp = await self._request("GET", "audit", params=params)
+        payload = resp.json()
+        if isinstance(payload, list):
+            return payload
+        if isinstance(payload, dict) and "data" in payload:
+            return payload["data"]
+        return payload

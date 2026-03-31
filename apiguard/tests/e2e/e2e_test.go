@@ -190,20 +190,185 @@ func TestUnauthenticatedRequestsAreRejected(t *testing.T) {
 	}
 }
 
-// TestFullScanWorkflow is a stub for an end-to-end scan test that requires a
-// live target service and a configured API key. Run with:
+// TestFullScanWorkflow exercises the complete scan lifecycle against a live
+// APIGuard instance. It requires two environment variables:
 //
-//	APIGUARD_TEST_URL=http://... APIGUARD_API_KEY=... go test -tags e2e ./tests/e2e/...
+//	APIGUARD_E2E_URL     — base URL of the APIGuard instance (e.g. http://localhost:8080)
+//	APIGUARD_E2E_API_KEY — a valid pre-shared API key configured on the instance
+//
+// Run:
+//
+//	APIGUARD_E2E_URL=http://... APIGUARD_E2E_API_KEY=... go test -tags e2e -run TestFullScanWorkflow ./tests/e2e/...
 func TestFullScanWorkflow(t *testing.T) {
-	t.Skip("requires live scan target: set APIGUARD_TEST_URL and APIGUARD_API_KEY")
+	e2eURL := os.Getenv("APIGUARD_E2E_URL")
+	apiKey := os.Getenv("APIGUARD_E2E_API_KEY")
+	if e2eURL == "" || apiKey == "" {
+		t.Skip("skipping: set APIGUARD_E2E_URL and APIGUARD_E2E_API_KEY to run full scan E2E")
+	}
 
-	// TODO: implement full workflow:
-	//   1. Exchange APIGUARD_API_KEY for a JWT via POST /api/v1/auth/token
-	//   2. POST /api/v1/scans with a target URL to create a scan
-	//   3. Poll GET /api/v1/scans/{id} until status is "completed" or timeout
-	//   4. GET /api/v1/scans/{id}/findings and assert expected findings count
-	//   5. GET /api/v1/scans/{id}/report and assert report format
-	//   6. DELETE /api/v1/scans/{id} and assert 204
+	// ── Step 1: Authenticate ─────────────────────────────────────────────
+	t.Log("Step 1: exchanging API key for JWT")
+	authBody := fmt.Sprintf(`{"api_key":%q}`, apiKey)
+	authResp, err := httpClient.Post(
+		e2eURL+"/api/v1/auth/token",
+		"application/json",
+		strings.NewReader(authBody),
+	)
+	if err != nil {
+		t.Fatalf("auth request failed: %v", err)
+	}
+	authRaw := readBody(t, authResp)
+	assertStatus(t, authResp, http.StatusOK)
+
+	var tokenResp struct {
+		Token     string `json:"token"`
+		ExpiresIn int64  `json:"expires_in"`
+		TokenType string `json:"token_type"`
+	}
+	if err := json.Unmarshal(authRaw, &tokenResp); err != nil {
+		t.Fatalf("auth response is not valid JSON: %v\nbody: %s", err, authRaw)
+	}
+	if tokenResp.Token == "" {
+		t.Fatal("auth response has empty token")
+	}
+	bearer := "Bearer " + tokenResp.Token
+
+	// authedReq is a helper that creates an HTTP request with the Bearer token.
+	authedReq := func(method, path string, body io.Reader) *http.Request {
+		t.Helper()
+		req, err := http.NewRequest(method, e2eURL+path, body)
+		if err != nil {
+			t.Fatalf("building %s %s request: %v", method, path, err)
+		}
+		req.Header.Set("Authorization", bearer)
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		return req
+	}
+
+	// ── Step 2: Create scan ──────────────────────────────────────────────
+	t.Log("Step 2: creating scan")
+	// Use the health endpoint of the same instance as the scan target — it is
+	// always reachable and returns a valid JSON response.
+	scanTarget := e2eURL
+	scanPayload := fmt.Sprintf(`{"spec_url":%q,"target":%q}`,
+		e2eURL+"/api/v1/openapi.json", scanTarget)
+
+	createResp, err := httpClient.Do(authedReq(http.MethodPost, "/api/v1/scans", strings.NewReader(scanPayload)))
+	if err != nil {
+		t.Fatalf("create scan request failed: %v", err)
+	}
+	createRaw := readBody(t, createResp)
+	if createResp.StatusCode != http.StatusCreated && createResp.StatusCode != http.StatusOK {
+		t.Fatalf("create scan: got HTTP %d, want 200 or 201\nbody: %s", createResp.StatusCode, createRaw)
+	}
+
+	var scan struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(createRaw, &scan); err != nil {
+		t.Fatalf("create scan response is not valid JSON: %v\nbody: %s", err, createRaw)
+	}
+	if scan.ID == "" {
+		t.Fatalf("create scan response has empty ID; body: %s", createRaw)
+	}
+	scanID := scan.ID
+	t.Logf("  scan created: id=%s status=%s", scanID, scan.Status)
+
+	// ── Step 3: Poll until completed or timeout ──────────────────────────
+	t.Log("Step 3: polling scan status")
+	deadline := time.Now().Add(2 * time.Minute)
+	for {
+		if time.Now().After(deadline) {
+			t.Fatalf("scan %s did not complete within 2 minutes (last status: %s)", scanID, scan.Status)
+		}
+		time.Sleep(2 * time.Second)
+
+		pollResp, err := httpClient.Do(authedReq(http.MethodGet, "/api/v1/scans/"+scanID, nil))
+		if err != nil {
+			t.Fatalf("poll scan request failed: %v", err)
+		}
+		pollRaw := readBody(t, pollResp)
+		assertStatus(t, pollResp, http.StatusOK)
+
+		if err := json.Unmarshal(pollRaw, &scan); err != nil {
+			t.Fatalf("poll response is not valid JSON: %v\nbody: %s", err, pollRaw)
+		}
+		t.Logf("  poll: status=%s", scan.Status)
+
+		switch scan.Status {
+		case "completed", "done":
+			goto scanDone
+		case "failed", "error":
+			t.Fatalf("scan %s failed; body: %s", scanID, pollRaw)
+		}
+	}
+scanDone:
+
+	// ── Step 4: Get findings ─────────────────────────────────────────────
+	t.Log("Step 4: fetching findings")
+	findingsResp, err := httpClient.Do(authedReq(http.MethodGet, "/api/v1/scans/"+scanID+"/findings", nil))
+	if err != nil {
+		t.Fatalf("get findings request failed: %v", err)
+	}
+	findingsRaw := readBody(t, findingsResp)
+	assertStatus(t, findingsResp, http.StatusOK)
+	assertContentType(t, findingsResp, "application/json")
+
+	var findingsPayload map[string]interface{}
+	if err := json.Unmarshal(findingsRaw, &findingsPayload); err != nil {
+		// Try array format
+		var arr []interface{}
+		if err2 := json.Unmarshal(findingsRaw, &arr); err2 != nil {
+			t.Fatalf("findings response is neither JSON object nor array: %v\nbody: %s", err, findingsRaw)
+		}
+		t.Logf("  findings: %d items (array format)", len(arr))
+	} else {
+		t.Logf("  findings: keys=%v", keys(findingsPayload))
+	}
+
+	// ── Step 5: Get report ───────────────────────────────────────────────
+	t.Log("Step 5: fetching SARIF report")
+	reportResp, err := httpClient.Do(authedReq(http.MethodGet, "/api/v1/scans/"+scanID+"/report?format=sarif", nil))
+	if err != nil {
+		t.Fatalf("get report request failed: %v", err)
+	}
+	reportRaw := readBody(t, reportResp)
+	assertStatus(t, reportResp, http.StatusOK)
+
+	var sarifDoc map[string]interface{}
+	if err := json.Unmarshal(reportRaw, &sarifDoc); err != nil {
+		t.Fatalf("SARIF report is not valid JSON: %v\nbody excerpt: %.500s", err, reportRaw)
+	}
+	// SARIF documents must have a "$schema" or "version" field.
+	if _, ok := sarifDoc["$schema"]; !ok {
+		if _, ok := sarifDoc["version"]; !ok {
+			t.Errorf("SARIF report missing \"$schema\" and \"version\" fields; got keys: %v", keys(sarifDoc))
+		}
+	}
+	t.Logf("  report: SARIF document received (%d bytes)", len(reportRaw))
+
+	// ── Step 6: Delete scan ──────────────────────────────────────────────
+	t.Log("Step 6: deleting scan")
+	deleteResp, err := httpClient.Do(authedReq(http.MethodDelete, "/api/v1/scans/"+scanID, nil))
+	if err != nil {
+		t.Fatalf("delete scan request failed: %v", err)
+	}
+	readBody(t, deleteResp)
+	assertStatus(t, deleteResp, http.StatusNoContent)
+	t.Logf("  scan %s deleted successfully", scanID)
+
+	// Verify scan is actually gone.
+	verifyResp, err := httpClient.Do(authedReq(http.MethodGet, "/api/v1/scans/"+scanID, nil))
+	if err != nil {
+		t.Fatalf("verify deletion request failed: %v", err)
+	}
+	readBody(t, verifyResp)
+	if verifyResp.StatusCode != http.StatusNotFound {
+		t.Errorf("scan %s still exists after deletion: got HTTP %d, want 404", scanID, verifyResp.StatusCode)
+	}
 }
 
 // keys returns the keys of a map[string]interface{} for use in error messages.

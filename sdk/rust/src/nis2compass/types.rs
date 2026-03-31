@@ -233,3 +233,16 @@ pub struct NIS2AuditEntry {
     pub chain_hash: String,
     pub created_at: DateTime<Utc>,
 }
+
+// ---------- health ----------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct HealthStatus {
+    pub status: String,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub db: Option<String>,
+    #[serde(default)]
+    pub redis: Option<String>,
+}

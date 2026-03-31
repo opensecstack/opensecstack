@@ -72,7 +72,7 @@ func main() {
 	})
 
 	// --- NIS2 Compass: assessment completed ---------------------------------
-	router.On(opensecstack.EventNIS2AssessmentComplete, func(ctx context.Context, e opensecstack.WebhookEvent) error {
+	router.On(opensecstack.EventNIS2AssessmentCompleted, func(ctx context.Context, e opensecstack.WebhookEvent) error {
 		var payload struct {
 			OrgID        string `json:"org_id"`
 			AssessmentID string `json:"assessment_id"`

@@ -19,7 +19,7 @@ const (
 	EventAPIScanFailed          = "apiguard.scan.failed"
 	EventAPIFindingCritical     = "apiguard.finding.critical"
 	EventNIS2ControlUpdated     = "nis2compass.control.updated"
-	EventNIS2AssessmentComplete = "nis2compass.assessment.completed"
+	EventNIS2AssessmentCompleted = "nis2compass.assessment.completed"
 	EventCITADELHardStop        = "citadel.hard_stop"
 	EventCITADELVigilRed        = "citadel.vigil_red"
 	EventCITADELVigilAmber      = "citadel.vigil_amber"

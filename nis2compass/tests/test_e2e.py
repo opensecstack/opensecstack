@@ -1,928 +1,757 @@
 """
 End-to-end tests for NIS2 Compass.
 
-These tests exercise the *live* NIS2 Compass HTTP service through the
-official Python SDK.  They are skipped automatically when the required
-environment variables are absent so they never block CI unless explicitly
-wired to a running instance.
+These tests exercise full user journeys through the Flask test client,
+chaining multiple API calls to simulate real workflows.  Each test is
+self-contained and creates its own test data.
 
-Required environment variables
--------------------------------
-    NIS2_E2E_URL      Base URL of the service  (e.g. http://localhost:8090)
-    NIS2_E2E_API_KEY  A valid read_write API key
-
-Optional
---------
-    NIS2_E2E_SKIP_REPORT  Set to '1' to skip SARIF/JSON report streaming
-                          (useful when WeasyPrint / font dependencies are absent)
+Requires a live PostgreSQL test database (NIS2_TEST_DB_URL).
 
 Run
 ---
-    NIS2_E2E_URL=http://localhost:8090 \\
-    NIS2_E2E_API_KEY=my-api-key        \\
-    pytest tests/test_e2e.py -v -m e2e
+    pytest tests/test_e2e.py -v
 """
 
 import hashlib
 import io
-import os
-import threading
 import uuid
 
 import pytest
 
-try:
-    from opensecstack.nis2compass import NIS2CompassClient
-    from opensecstack.exceptions import APIError, AuthenticationError, NotFoundError
+# ------------------------------------------------------------------ #
+# URL constants                                                       #
+# ------------------------------------------------------------------ #
 
-    _SDK_AVAILABLE = True
-except ImportError:
-    _SDK_AVAILABLE = False
-
-# ---------------------------------------------------------------------------
-# Skip guards
-# ---------------------------------------------------------------------------
-
-_E2E_URL = os.getenv("NIS2_E2E_URL", "").rstrip("/")
-_E2E_API_KEY = os.getenv("NIS2_E2E_API_KEY", "")
-_SKIP_REPORT = os.getenv("NIS2_E2E_SKIP_REPORT", "0") == "1"
-
-pytestmark = [
-    pytest.mark.e2e,
-    pytest.mark.skipif(
-        not (_E2E_URL and _E2E_API_KEY and _SDK_AVAILABLE),
-        reason=(
-            "E2E tests require NIS2_E2E_URL, NIS2_E2E_API_KEY, "
-            "and the opensecstack SDK to be importable."
-        ),
-    ),
-]
+ORG_BASE = '/api/v1/organisations'
+ASSESS_BASE = '/api/v1/assessments'
+ARTIFACT_BASE = '/api/v1/artifacts'
+AUDIT_BASE = '/api/v1/audit'
+API_KEYS_BASE = '/api/v1/api-keys'
+AUTH_BASE = '/api/v1/auth/token'
+HEALTH_BASE = '/health'
 
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------ #
+# Helpers                                                             #
+# ------------------------------------------------------------------ #
 
-
-@pytest.fixture(scope="session")
-def client():
-    return NIS2CompassClient(base_url=_E2E_URL, api_key=_E2E_API_KEY)
-
-
-@pytest.fixture()
-def org(client):
-    """Create a throw-away organisation; delete it (and all children) after."""
-    unique = uuid.uuid4().hex[:8]
-    created = client.create_organisation(
-        name=f"E2E-Org-{unique}",
-        industry="Energy",
-        country="DE",
-        size="medium",
-        entity_type="important",
-        contact_email=f"e2e-{unique}@example.test",
+def _create_org(client, auth_headers, name=None, **extra):
+    """POST a new organisation and return the parsed JSON body."""
+    if name is None:
+        name = f'E2E-Org-{uuid.uuid4().hex[:8]}'
+    payload = {'name': name, 'industry': 'Energy', 'country': 'DE', **extra}
+    resp = client.post(ORG_BASE, json=payload, headers=auth_headers)
+    assert resp.status_code == 201, (
+        f'Organisation creation failed ({resp.status_code}): {resp.get_json()}'
     )
-    yield created
-    try:
-        client.delete_organisation(created["id"])
-    except Exception:
-        pass
+    return resp.get_json()
 
 
-@pytest.fixture()
-def assessment(client, org):
-    """Create a throw-away assessment under `org`."""
-    unique = uuid.uuid4().hex[:8]
-    created = client.create_assessment(
-        org_id=org["id"],
-        title=f"E2E Assessment {unique}",
+def _create_assessment(client, auth_headers, org_id, title=None):
+    """POST a new assessment under the given org and return parsed JSON."""
+    if title is None:
+        title = f'E2E Assessment {uuid.uuid4().hex[:8]}'
+    resp = client.post(
+        f'{ORG_BASE}/{org_id}/assessments',
+        json={'title': title},
+        headers=auth_headers,
     )
-    yield created
-    try:
-        client.delete_assessment(created["id"])
-    except Exception:
-        pass
-
-
-# ---------------------------------------------------------------------------
-# Health
-# ---------------------------------------------------------------------------
-
-
-class TestHealthE2E:
-    def test_public_health_returns_ok(self, client):
-        data = client.get_health()
-        assert data["status"] == "ok"
-
-    def test_public_health_no_internal_details(self, client):
-        data = client.get_health()
-        assert "db" not in data
-        assert "version" not in data
-
-    def test_detailed_health_with_auth(self, client):
-        data = client.get_health_detail()
-        assert data["status"] == "ok"
-        assert "db" in data
-        assert "version" in data
-
-    def test_detailed_health_rejects_bad_key(self):
-        bad = NIS2CompassClient(base_url=_E2E_URL, api_key="bad-key-xyz-e2e")
-        with pytest.raises((APIError, AuthenticationError)):
-            bad.get_health_detail()
-
-
-# ---------------------------------------------------------------------------
-# Authentication
-# ---------------------------------------------------------------------------
-
-
-class TestAuthE2E:
-    def test_invalid_api_key_rejected(self):
-        bad = NIS2CompassClient(base_url=_E2E_URL, api_key="not-a-real-key-e2e")
-        with pytest.raises((APIError, AuthenticationError)):
-            bad.get_organisations()
-
-    def test_sequential_calls_reuse_token(self, client):
-        # Two calls must both succeed; the SDK must not re-authenticate
-        # between them for a fresh token.
-        h1 = client.get_health()
-        h2 = client.get_health()
-        assert h1["status"] == h2["status"] == "ok"
-
-
-# ---------------------------------------------------------------------------
-# Organisations
-# ---------------------------------------------------------------------------
-
-
-class TestOrganisationsE2E:
-    def test_create_returns_expected_fields(self, client):
-        unique = uuid.uuid4().hex[:8]
-        org = client.create_organisation(
-            name=f"E2E-Fields-{unique}",
-            industry="Finance",
-            country="FR",
-            size="large",
-            entity_type="essential",
-            registration_number=f"REG-{unique}",
-            contact_email=f"fields-{unique}@example.test",
-        )
-        try:
-            assert org["country"] == "FR"
-            assert org["size"] == "large"
-            assert org["entity_type"] == "essential"
-            assert org["registration_number"] == f"REG-{unique}"
-            assert "id" in org
-            assert "created_at" in org
-        finally:
-            client.delete_organisation(org["id"])
-
-    def test_get_matches_create(self, client, org):
-        fetched = client.get_organisation(org["id"])
-        assert fetched["id"] == org["id"]
-        assert fetched["name"] == org["name"]
-        assert fetched["country"] == org["country"]
-
-    def test_list_includes_created_org(self, client, org):
-        orgs = client.get_organisations(per_page=100)
-        ids = [o["id"] for o in orgs]
-        assert org["id"] in ids
-
-    def test_patch_persists(self, client, org):
-        new_name = f"Updated-{uuid.uuid4().hex[:6]}"
-        updated = client.patch_organisation(org["id"], name=new_name)
-        assert updated["name"] == new_name
-        # Verify the change was actually written to the DB
-        fetched = client.get_organisation(org["id"])
-        assert fetched["name"] == new_name
-
-    def test_delete_makes_org_unreachable(self, client):
-        unique = uuid.uuid4().hex[:8]
-        org = client.create_organisation(
-            name=f"E2E-Delete-{unique}",
-            industry="Transport",
-            country="ES",
-        )
-        client.delete_organisation(org["id"])
-        with pytest.raises((APIError, NotFoundError)):
-            client.get_organisation(org["id"])
-
-    def test_invalid_country_code_rejected(self, client):
-        with pytest.raises((APIError, Exception)):
-            client.create_organisation(
-                name=f"BadCountry-{uuid.uuid4().hex[:6]}",
-                industry="Energy",
-                country="ZZZ",  # not a valid ISO 3166-1 alpha-2 code
-            )
-
-    def test_get_nonexistent_org_returns_404(self, client):
-        with pytest.raises((APIError, NotFoundError)):
-            client.get_organisation("00000000-0000-0000-0000-000000000000")
-
-    def test_pagination_page_size_respected(self, client):
-        # Create three orgs so there is guaranteed data, then ask for page of 1
-        created = []
-        for _ in range(3):
-            o = client.create_organisation(
-                name=f"E2E-Page-{uuid.uuid4().hex[:6]}",
-                industry="Health",
-                country="AT",
-            )
-            created.append(o["id"])
-        try:
-            page = client.get_organisations(page=1, per_page=1)
-            assert len(page) == 1
-            page2 = client.get_organisations(page=2, per_page=1)
-            assert len(page2) == 1
-            # Two pages of 1 must not return the same item
-            assert page[0]["id"] != page2[0]["id"]
-        finally:
-            for oid in created:
-                try:
-                    client.delete_organisation(oid)
-                except Exception:
-                    pass
-
-
-# ---------------------------------------------------------------------------
-# Assessments
-# ---------------------------------------------------------------------------
-
-
-class TestAssessmentsE2E:
-    def test_create_assessment_defaults(self, client, assessment):
-        assert assessment["status"] == "draft"
-        assert "id" in assessment
-        assert "created_at" in assessment
-
-    def test_get_assessment_has_stats(self, client, assessment):
-        fetched = client.get_assessment(assessment["id"])
-        assert fetched["id"] == assessment["id"]
-        # Stats block (or equivalent) must be present
-        has_stats = (
-            "stats" in fetched
-            or "total_controls" in fetched
-            or "controls" in fetched
-        )
-        assert has_stats
-
-    def test_list_assessments_for_org(self, client, assessment, org):
-        assessments = client.list_assessments(org["id"])
-        ids = [a["id"] for a in assessments]
-        assert assessment["id"] in ids
-
-    def test_state_machine_full_path(self, client, org):
-        """draft → in_progress → under_review → completed → archived"""
-        unique = uuid.uuid4().hex[:8]
-        a = client.create_assessment(org_id=org["id"], title=f"StateMachine-{unique}")
-        aid = a["id"]
-        try:
-            assert a["status"] == "draft"
-            a = client.patch_assessment(aid, status="in_progress")
-            assert a["status"] == "in_progress"
-            a = client.patch_assessment(aid, status="under_review")
-            assert a["status"] == "under_review"
-            a = client.patch_assessment(aid, status="completed")
-            assert a["status"] == "completed"
-            a = client.patch_assessment(aid, status="archived")
-            assert a["status"] == "archived"
-        finally:
-            try:
-                client.delete_assessment(aid)
-            except Exception:
-                pass
-
-    def test_invalid_state_transition_rejected(self, client, org):
-        """draft → completed (skipping steps) must be rejected."""
-        unique = uuid.uuid4().hex[:8]
-        a = client.create_assessment(org_id=org["id"], title=f"BadTransition-{unique}")
-        try:
-            with pytest.raises((APIError, Exception)):
-                client.patch_assessment(a["id"], status="completed")
-        finally:
-            try:
-                client.delete_assessment(a["id"])
-            except Exception:
-                pass
-
-    def test_delete_assessment_removes_it(self, client, org):
-        unique = uuid.uuid4().hex[:8]
-        a = client.create_assessment(org_id=org["id"], title=f"DeleteMe-{unique}")
-        client.delete_assessment(a["id"])
-        with pytest.raises((APIError, NotFoundError)):
-            client.get_assessment(a["id"])
-
-
-# ---------------------------------------------------------------------------
-# Controls
-# ---------------------------------------------------------------------------
-
-
-class TestControlsE2E:
-    def test_new_assessment_has_ten_controls(self, client, assessment):
-        controls = client.list_controls(assessment["id"])
-        assert len(controls) == 10
-
-    def test_controls_cover_all_nis2_measures(self, client, assessment):
-        controls = client.list_controls(assessment["id"])
-        measure_refs = {c["measure_ref"] for c in controls}
-        assert measure_refs == set("abcdefghij")
-
-    def test_controls_default_to_not_assessed(self, client, assessment):
-        controls = client.list_controls(assessment["id"])
-        assert all(c["status"] == "not_assessed" for c in controls)
-
-    def test_get_single_control(self, client, assessment):
-        ctrl = client.get_control(assessment["id"], "a")
-        assert ctrl["measure_ref"] == "a"
-        assert ctrl["status"] == "not_assessed"
-
-    def test_patch_control_status_persists(self, client, assessment):
-        client.patch_control(assessment["id"], "a", status="compliant")
-        fetched = client.get_control(assessment["id"], "a")
-        assert fetched["status"] == "compliant"
-
-    def test_patch_control_risk_score(self, client, assessment):
-        updated = client.patch_control(assessment["id"], "b", risk_score=7.5)
-        assert float(updated["risk_score"]) == pytest.approx(7.5)
-
-    def test_patch_control_risk_score_out_of_range_rejected(self, client, assessment):
-        with pytest.raises((APIError, Exception)):
-            client.patch_control(assessment["id"], "c", risk_score=11.0)
-
-    def test_filter_controls_by_status(self, client, assessment):
-        client.patch_control(assessment["id"], "d", status="non_compliant")
-        non_compliant = client.list_controls(assessment["id"], status="non_compliant")
-        assert any(c["measure_ref"] == "d" for c in non_compliant)
-        # The filtered list must not contain controls in other statuses
-        assert all(c["status"] == "non_compliant" for c in non_compliant)
-
-    def test_remediation_fields_persist(self, client, assessment):
-        updated = client.patch_control(
-            assessment["id"],
-            "e",
-            status="partially_compliant",
-            gap_description="Missing encryption at rest.",
-            remediation_plan="Enable AES-256 on all storage.",
-        )
-        assert updated["gap_description"] == "Missing encryption at rest."
-        assert updated["remediation_plan"] == "Enable AES-256 on all storage."
-
-
-# ---------------------------------------------------------------------------
-# Artifacts
-# ---------------------------------------------------------------------------
-
-
-class TestArtifactsE2E:
-    def test_upload_and_list(self, client, assessment, tmp_path):
-        pdf = tmp_path / "evidence.pdf"
-        pdf.write_bytes(b"%PDF-1.4 minimal pdf content for E2E testing")
-
-        artifact = client.upload_artifact(
-            assessment_id=assessment["id"],
-            file_path=str(pdf),
-            artifact_type="evidence",
-            description="E2E evidence document",
-        )
-        try:
-            assert "id" in artifact
-            assert artifact["filename"] == "evidence.pdf"
-            assert "hash" in artifact
-
-            listed = client.list_artifacts(assessment["id"])
-            ids = [a["id"] for a in listed]
-            assert artifact["id"] in ids
-        finally:
-            try:
-                client.delete_artifact(artifact["id"])
-            except Exception:
-                pass
-
-    def test_sha256_hash_matches_upload(self, client, assessment, tmp_path):
-        content = b"integrity-check-" + uuid.uuid4().bytes
-        f = tmp_path / "integrity.txt"
-        f.write_bytes(content)
-        expected = hashlib.sha256(content).hexdigest()
-
-        artifact = client.upload_artifact(
-            assessment_id=assessment["id"],
-            file_path=str(f),
-            artifact_type="evidence",
-        )
-        try:
-            assert artifact["hash"] == expected
-        finally:
-            try:
-                client.delete_artifact(artifact["id"])
-            except Exception:
-                pass
-
-    def test_download_roundtrip(self, client, assessment, tmp_path):
-        content = b"roundtrip-download-" + uuid.uuid4().bytes
-        src = tmp_path / "upload.txt"
-        src.write_bytes(content)
-
-        artifact = client.upload_artifact(
-            assessment_id=assessment["id"],
-            file_path=str(src),
-            artifact_type="policy",
-        )
-        try:
-            dest = tmp_path / "downloaded.txt"
-            client.download_artifact(artifact["id"], str(dest))
-            assert dest.read_bytes() == content
-        finally:
-            try:
-                client.delete_artifact(artifact["id"])
-            except Exception:
-                pass
-
-    def test_delete_artifact_makes_it_unreachable(self, client, assessment, tmp_path):
-        f = tmp_path / "delete_me.txt"
-        f.write_text("delete test content")
-
-        artifact = client.upload_artifact(
-            assessment_id=assessment["id"],
-            file_path=str(f),
-            artifact_type="log",
-        )
-        client.delete_artifact(artifact["id"])
-        with pytest.raises((APIError, NotFoundError)):
-            client.get_artifact(artifact["id"])
-
-    def test_unsupported_mime_type_rejected(self, client, assessment, tmp_path):
-        exe = tmp_path / "binary.exe"
-        exe.write_bytes(b"MZ\x90\x00" + b"\x00" * 100)  # PE magic bytes
-        with pytest.raises((APIError, Exception)):
-            client.upload_artifact(
-                assessment_id=assessment["id"],
-                file_path=str(exe),
-                artifact_type="evidence",
-            )
-
-    def test_get_artifact_metadata(self, client, assessment, tmp_path):
-        f = tmp_path / "meta.txt"
-        f.write_bytes(b"metadata test")
-        artifact = client.upload_artifact(
-            assessment_id=assessment["id"],
-            file_path=str(f),
-            artifact_type="procedure",
-        )
-        try:
-            meta = client.get_artifact(artifact["id"])
-            assert meta["id"] == artifact["id"]
-            assert meta["filename"] == "meta.txt"
-            assert "size_bytes" in meta
-            assert "created_at" in meta
-        finally:
-            try:
-                client.delete_artifact(artifact["id"])
-            except Exception:
-                pass
-
-
-# ---------------------------------------------------------------------------
-# Report streaming
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.skipif(_SKIP_REPORT, reason="NIS2_E2E_SKIP_REPORT=1")
-class TestReportStreamingE2E:
-    def _completed_assessment(self, client, org):
-        """Helper: create and fast-path an assessment to 'completed' status."""
-        unique = uuid.uuid4().hex[:8]
-        a = client.create_assessment(org_id=org["id"], title=f"Report-{unique}")
-        client.patch_assessment(a["id"], status="in_progress")
-        for ctrl in client.list_controls(a["id"]):
-            client.patch_control(a["id"], ctrl["measure_ref"], status="compliant")
-        client.patch_assessment(a["id"], status="under_review")
-        client.patch_assessment(a["id"], status="completed")
-        return a
-
-    def test_sarif_report_non_empty(self, client, org):
-        a = self._completed_assessment(client, org)
-        try:
-            buf = io.BytesIO()
-            client.stream_report(a["id"], format="sarif", dest=buf)
-            assert buf.tell() > 0
-            buf.seek(0)
-            import json
-            sarif = json.load(buf)
-            assert sarif.get("version") == "2.1.0"
-        finally:
-            try:
-                client.delete_assessment(a["id"])
-            except Exception:
-                pass
-
-    def test_json_report_non_empty(self, client, org):
-        a = self._completed_assessment(client, org)
-        try:
-            buf = io.BytesIO()
-            client.stream_report(a["id"], format="json", dest=buf)
-            assert buf.tell() > 0
-            buf.seek(0)
-            import json
-            report = json.load(buf)
-            assert "assessment" in report or "controls" in report
-        finally:
-            try:
-                client.delete_assessment(a["id"])
-            except Exception:
-                pass
-
-
-# ---------------------------------------------------------------------------
-# Full golden-path workflow
-# ---------------------------------------------------------------------------
-
-
-class TestFullWorkflowE2E:
+    assert resp.status_code == 201, (
+        f'Assessment creation failed ({resp.status_code}): {resp.get_json()}'
+    )
+    return resp.get_json()
+
+
+def _upload_artifact(client, auth_headers, assessment_id,
+                     content=b'%PDF-1.4 fake content',
+                     filename='test.pdf',
+                     mime_type='application/pdf',
+                     artifact_type='evidence',
+                     description=None):
+    """Upload a file artifact and return the response object."""
+    form_data = {
+        'file': (io.BytesIO(content), filename, mime_type),
+        'type': artifact_type,
+    }
+    if description:
+        form_data['description'] = description
+    return client.post(
+        f'{ASSESS_BASE}/{assessment_id}/artifacts',
+        data=form_data,
+        content_type='multipart/form-data',
+        headers=auth_headers,
+    )
+
+
+# ------------------------------------------------------------------ #
+# 1. Full assessment lifecycle                                        #
+# ------------------------------------------------------------------ #
+
+class TestE2EFullAssessmentLifecycle:
     """
-    Single test that walks the entire NIS2 assessment lifecycle
-    as a real user would:
-
-        create org → create assessment → assess all controls →
-        upload artifact → advance to completed → stream report → archive
+    Create org -> Create assessment -> List assessments -> Get assessment
+    -> Update assessment -> Delete assessment -> Verify deleted (404).
     """
 
-    def test_nis2_assessment_golden_path(self, client, tmp_path):
-        unique = uuid.uuid4().hex[:8]
-        org_id = None
-        assessment_id = None
+    def test_e2e_full_assessment_lifecycle(self, client, auth_headers):
+        # Step 1: Create organisation
+        org = _create_org(client, auth_headers, name=f'Lifecycle-Org-{uuid.uuid4().hex[:8]}')
+        org_id = org['id']
 
-        try:
-            # 1. Organisation
-            org = client.create_organisation(
-                name=f"E2E-Full-{unique}",
-                industry="Digital Infrastructure",
-                country="NL",
-                size="large",
-                entity_type="essential",
-            )
-            org_id = org["id"]
+        # Step 2: Create assessment
+        title = f'Lifecycle Assessment {uuid.uuid4().hex[:8]}'
+        assessment = _create_assessment(client, auth_headers, org_id, title=title)
+        assessment_id = assessment['id']
+        assert assessment['status'] == 'draft', 'New assessment should start in draft status'
+        assert assessment['org_id'] == org_id, 'Assessment should belong to the created org'
 
-            # 2. Assessment
-            a = client.create_assessment(
-                org_id=org_id,
-                title=f"Golden Path {unique}",
-                scope="Corporate IT systems",
-                assessor="E2E Automated Bot",
-            )
-            assessment_id = a["id"]
-            assert a["status"] == "draft"
-
-            # 3. Start assessment
-            a = client.patch_assessment(assessment_id, status="in_progress")
-            assert a["status"] == "in_progress"
-
-            # 4. Assess all 10 NIS2 controls
-            controls = client.list_controls(assessment_id)
-            assert len(controls) == 10
-            for ctrl in controls:
-                client.patch_control(
-                    assessment_id,
-                    ctrl["measure_ref"],
-                    status="compliant",
-                    risk_score=1.5,
-                    gap_description="No gaps.",
-                )
-
-            # 5. Verify all controls are now compliant
-            assessed = client.list_controls(assessment_id, status="compliant")
-            assert len(assessed) == 10
-
-            # 6. Upload a policy artifact
-            policy = tmp_path / "security_policy.pdf"
-            policy.write_bytes(b"%PDF-1.4 Corporate Security Policy v1.0")
-            artifact = client.upload_artifact(
-                assessment_id=assessment_id,
-                file_path=str(policy),
-                artifact_type="policy",
-                description="Main corporate security policy",
-            )
-            assert artifact["filename"] == "security_policy.pdf"
-
-            # 7. Advance to completed
-            client.patch_assessment(assessment_id, status="under_review")
-            a = client.patch_assessment(assessment_id, status="completed")
-            assert a["status"] == "completed"
-
-            # 8. Stream SARIF report (skip if report generation is disabled)
-            if not _SKIP_REPORT:
-                buf = io.BytesIO()
-                client.stream_report(assessment_id, format="sarif", dest=buf)
-                assert buf.tell() > 0
-
-            # 9. Archive
-            a = client.patch_assessment(assessment_id, status="archived")
-            assert a["status"] == "archived"
-
-        finally:
-            if assessment_id:
-                try:
-                    client.delete_assessment(assessment_id)
-                except Exception:
-                    pass
-            if org_id:
-                try:
-                    client.delete_organisation(org_id)
-                except Exception:
-                    pass
-
-
-# ---------------------------------------------------------------------------
-# API key management
-# ---------------------------------------------------------------------------
-
-
-class TestAPIKeysE2E:
-    def test_list_returns_at_least_one_key(self, client):
-        # The key used to authenticate must appear in the list.
-        keys = client.list_api_keys()
-        assert isinstance(keys, list)
-        assert len(keys) >= 1
-
-    def test_create_key_returns_plaintext(self, client):
-        key = client.create_api_key(label="e2e-test-key", scope="read_write")
-        try:
-            assert "id" in key
-            # The plaintext secret must be present exactly once in the response.
-            assert "key" in key
-            assert len(key["key"]) > 16
-        finally:
-            try:
-                client.revoke_api_key(key["id"])
-            except Exception:
-                pass
-
-    def test_revoked_key_absent_from_list(self, client):
-        key = client.create_api_key(label="e2e-revoke-test")
-        client.revoke_api_key(key["id"])
-        keys = client.list_api_keys()
-        ids = [k["id"] for k in keys]
-        assert key["id"] not in ids
-
-    def test_revoked_key_cannot_authenticate(self):
-        # Create a dedicated client, issue a new key, revoke it, then
-        # confirm a fresh client using that key cannot reach the API.
-        privileged = NIS2CompassClient(base_url=_E2E_URL, api_key=_E2E_API_KEY)
-        new_key = privileged.create_api_key(label="e2e-revoke-auth-test")
-        try:
-            # Revoke immediately.
-            privileged.revoke_api_key(new_key["id"])
-            # A new client backed by the now-revoked key must fail auth.
-            revoked_client = NIS2CompassClient(
-                base_url=_E2E_URL, api_key=new_key["key"]
-            )
-            with pytest.raises((APIError, AuthenticationError)):
-                revoked_client.get_organisations()
-        except Exception:
-            # If create_api_key itself fails (e.g. feature not yet live),
-            # skip this assertion to avoid a false failure.
-            pytest.skip("create_api_key not available on this instance")
-
-    def test_read_scoped_key_cannot_write(self):
-        privileged = NIS2CompassClient(base_url=_E2E_URL, api_key=_E2E_API_KEY)
-        try:
-            ro_key = privileged.create_api_key(label="e2e-read-only", scope="read")
-        except Exception:
-            pytest.skip("read-only scope not supported on this instance")
-        try:
-            ro_client = NIS2CompassClient(base_url=_E2E_URL, api_key=ro_key["key"])
-            with pytest.raises((APIError, Exception)):
-                ro_client.create_organisation(
-                    name=f"ReadOnly-{uuid.uuid4().hex[:6]}",
-                    industry="Energy",
-                    country="DE",
-                )
-        finally:
-            try:
-                privileged.revoke_api_key(ro_key["id"])
-            except Exception:
-                pass
-
-
-# ---------------------------------------------------------------------------
-# Audit log
-# ---------------------------------------------------------------------------
-
-
-class TestAuditLogE2E:
-    def test_create_org_appears_in_audit(self, client):
-        unique = uuid.uuid4().hex[:8]
-        org = client.create_organisation(
-            name=f"E2E-Audit-{unique}",
-            industry="Finance",
-            country="DE",
+        # Step 3: List assessments for the org -- should include the new one
+        list_resp = client.get(
+            f'{ORG_BASE}/{org_id}/assessments',
+            headers=auth_headers,
         )
-        try:
-            log = client.get_audit_log(limit=50)
-            actions = [e["action"] for e in log]
-            assert any("organisation" in a for a in actions)
-        finally:
-            try:
-                client.delete_organisation(org["id"])
-            except Exception:
-                pass
+        assert list_resp.status_code == 200, 'Listing assessments should return 200'
+        list_body = list_resp.get_json()
+        listed_ids = [a['id'] for a in list_body['data']]
+        assert assessment_id in listed_ids, 'Created assessment should appear in the list'
 
-    def test_control_patch_appears_in_audit(self, client, assessment):
-        client.patch_control(assessment["id"], "a", status="compliant")
-        log = client.get_audit_log(limit=50)
-        actions = [e["action"] for e in log]
-        assert any("control" in a for a in actions)
-
-    def test_get_audit_entry_by_id(self, client, assessment):
-        client.patch_control(assessment["id"], "b", status="non_compliant")
-        log = client.get_audit_log(limit=10)
-        assert len(log) >= 1
-        entry_id = log[0]["id"]
-        entry = client.get_audit_entry(entry_id)
-        assert entry["id"] == entry_id
-        assert "action" in entry
-        assert "actor" in entry
-        assert "created_at" in entry
-
-    def test_audit_pagination(self, client, org):
-        # Generate a burst of events so there is enough data to paginate.
-        for i in range(3):
-            a = client.create_assessment(
-                org_id=org["id"], title=f"AuditPage-{uuid.uuid4().hex[:6]}"
-            )
-            try:
-                client.delete_assessment(a["id"])
-            except Exception:
-                pass
-
-        page1 = client.get_audit_log(limit=2, page=1)
-        page2 = client.get_audit_log(limit=2, page=2)
-        assert len(page1) <= 2
-        # Pages must not overlap.
-        ids1 = {e["id"] for e in page1}
-        ids2 = {e["id"] for e in page2}
-        assert ids1.isdisjoint(ids2), "Audit log pages must not share entries"
-
-    def test_audit_entries_ordered_newest_first(self, client, org):
-        for _ in range(2):
-            a = client.create_assessment(
-                org_id=org["id"], title=f"Order-{uuid.uuid4().hex[:6]}"
-            )
-            try:
-                client.delete_assessment(a["id"])
-            except Exception:
-                pass
-
-        log = client.get_audit_log(limit=10)
-        if len(log) >= 2:
-            # created_at strings are ISO-8601; lexicographic comparison is valid.
-            assert log[0]["created_at"] >= log[1]["created_at"]
-
-
-# ---------------------------------------------------------------------------
-# PDF report (generate_report — saves to disk)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.skipif(_SKIP_REPORT, reason="NIS2_E2E_SKIP_REPORT=1")
-class TestGenerateReportE2E:
-    def _completed_assessment(self, client, org):
-        unique = uuid.uuid4().hex[:8]
-        a = client.create_assessment(org_id=org["id"], title=f"PDFReport-{unique}")
-        client.patch_assessment(a["id"], status="in_progress")
-        for ctrl in client.list_controls(a["id"]):
-            client.patch_control(a["id"], ctrl["measure_ref"], status="compliant")
-        client.patch_assessment(a["id"], status="under_review")
-        client.patch_assessment(a["id"], status="completed")
-        return a
-
-    def test_generate_report_creates_file(self, client, org, tmp_path):
-        a = self._completed_assessment(client, org)
-        try:
-            dest = tmp_path / "report.pdf"
-            client.generate_report(a["id"], str(dest))
-            assert dest.exists()
-            assert dest.stat().st_size > 0
-        finally:
-            try:
-                client.delete_assessment(a["id"])
-            except Exception:
-                pass
-
-    def test_generate_report_is_valid_pdf(self, client, org, tmp_path):
-        a = self._completed_assessment(client, org)
-        try:
-            dest = tmp_path / "report_valid.pdf"
-            client.generate_report(a["id"], str(dest))
-            header = dest.read_bytes()[:5]
-            assert header == b"%PDF-", f"File does not start with PDF magic: {header!r}"
-        finally:
-            try:
-                client.delete_assessment(a["id"])
-            except Exception:
-                pass
-
-    def test_generate_report_nonexistent_assessment_raises(self, client, tmp_path):
-        with pytest.raises((APIError, NotFoundError)):
-            client.generate_report(
-                "00000000-0000-0000-0000-000000000000",
-                str(tmp_path / "ghost.pdf"),
-            )
-
-
-# ---------------------------------------------------------------------------
-# Control filters (measure_ref and nist_category)
-# ---------------------------------------------------------------------------
-
-
-class TestControlFiltersE2E:
-    def test_filter_by_measure_ref(self, client, assessment):
-        controls = client.list_controls(assessment["id"], measure_ref="c")
-        assert len(controls) == 1
-        assert controls[0]["measure_ref"] == "c"
-
-    def test_filter_by_nist_category(self, client, assessment):
-        # At least one control must be mapped to a NIST CSF category.
-        controls = client.list_controls(assessment["id"])
-        categories = {c.get("nist_category") for c in controls if c.get("nist_category")}
-        if not categories:
-            pytest.skip("Controls have no nist_category; skipping filter test")
-        target = next(iter(categories))
-        filtered = client.list_controls(assessment["id"], nist_category=target)
-        assert len(filtered) >= 1
-        assert all(c["nist_category"] == target for c in filtered)
-
-    def test_filter_status_and_measure_ref_combined(self, client, assessment):
-        client.patch_control(assessment["id"], "f", status="non_compliant")
-        # Filter for the specific measure and status together.
-        filtered = client.list_controls(
-            assessment["id"], measure_ref="f", status="non_compliant"
+        # Step 4: Get the assessment by ID
+        get_resp = client.get(
+            f'{ASSESS_BASE}/{assessment_id}',
+            headers=auth_headers,
         )
-        assert len(filtered) == 1
-        assert filtered[0]["measure_ref"] == "f"
-        assert filtered[0]["status"] == "non_compliant"
+        assert get_resp.status_code == 200, 'Getting assessment by ID should return 200'
+        fetched = get_resp.get_json()
+        assert fetched['id'] == assessment_id, 'Fetched assessment ID should match'
+        assert fetched['title'] == title, 'Fetched assessment title should match'
 
-    def test_unknown_measure_ref_returns_empty_or_404(self, client, assessment):
-        try:
-            result = client.list_controls(assessment["id"], measure_ref="z")
-            assert result == []
-        except (APIError, NotFoundError):
-            pass  # Both responses are acceptable
+        # Step 5: Update the assessment (title and transition to in_progress)
+        new_title = f'Updated Lifecycle {uuid.uuid4().hex[:6]}'
+        patch_resp = client.patch(
+            f'{ASSESS_BASE}/{assessment_id}',
+            json={'title': new_title, 'status': 'in_progress'},
+            headers=auth_headers,
+        )
+        assert patch_resp.status_code == 200, 'Patching assessment should return 200'
+        updated = patch_resp.get_json()
+        assert updated['title'] == new_title, 'Title should be updated'
+        assert updated['status'] == 'in_progress', 'Status should transition to in_progress'
+
+        # Step 6: Delete the assessment
+        del_resp = client.delete(
+            f'{ASSESS_BASE}/{assessment_id}',
+            headers=auth_headers,
+        )
+        assert del_resp.status_code == 204, 'Deleting assessment should return 204'
+
+        # Step 7: Verify deleted -- should return 404
+        verify_resp = client.get(
+            f'{ASSESS_BASE}/{assessment_id}',
+            headers=auth_headers,
+        )
+        assert verify_resp.status_code == 404, 'Deleted assessment should return 404'
 
 
-# ---------------------------------------------------------------------------
-# Concurrency — parallel read requests must all succeed
-# ---------------------------------------------------------------------------
+# ------------------------------------------------------------------ #
+# 2. Control management                                               #
+# ------------------------------------------------------------------ #
+
+class TestE2EControlManagement:
+    """
+    Create org -> Create assessment -> List controls -> Patch control
+    (update status/evidence) -> Get control -> Verify updated fields.
+    """
+
+    def test_e2e_control_management(self, client, auth_headers):
+        # Step 1: Create org and assessment
+        org = _create_org(client, auth_headers, name=f'CtrlMgmt-Org-{uuid.uuid4().hex[:8]}')
+        assessment = _create_assessment(client, auth_headers, org['id'])
+        assessment_id = assessment['id']
+
+        # Step 2: List controls -- should have 10 NIS2 controls
+        list_resp = client.get(
+            f'{ASSESS_BASE}/{assessment_id}/controls',
+            headers=auth_headers,
+        )
+        assert list_resp.status_code == 200, 'Listing controls should return 200'
+        controls_body = list_resp.get_json()
+        controls = controls_body['data']
+        assert len(controls) == 10, 'New assessment should have exactly 10 controls'
+        measure_refs = sorted(c['measure_ref'] for c in controls)
+        assert measure_refs == list('abcdefghij'), 'Controls should cover measure refs a-j'
+
+        # Step 3: Patch control 'a' -- update status and evidence
+        patch_resp = client.patch(
+            f'{ASSESS_BASE}/{assessment_id}/controls/a',
+            json={
+                'status': 'compliant',
+                'evidence': {'documents': ['security-policy.pdf'], 'notes': 'Verified by audit'},
+                'gap_description': 'No gaps identified.',
+                'remediation_plan': 'N/A - fully compliant.',
+                'risk_score': 2.0,
+            },
+            headers=auth_headers,
+        )
+        assert patch_resp.status_code == 200, 'Patching control should return 200'
+        patched = patch_resp.get_json()
+        assert patched['status'] == 'compliant', 'Control status should be updated to compliant'
+        assert patched['evidence']['documents'] == ['security-policy.pdf'], (
+            'Evidence documents should be persisted'
+        )
+        assert patched['gap_description'] == 'No gaps identified.', (
+            'Gap description should be persisted'
+        )
+        assert patched['remediation_plan'] == 'N/A - fully compliant.', (
+            'Remediation plan should be persisted'
+        )
+        assert float(patched['risk_score']) == pytest.approx(2.0), (
+            'Risk score should be persisted'
+        )
+
+        # Step 4: Get the same control and verify fields match
+        get_resp = client.get(
+            f'{ASSESS_BASE}/{assessment_id}/controls/a',
+            headers=auth_headers,
+        )
+        assert get_resp.status_code == 200, 'Getting control by measure_ref should return 200'
+        fetched = get_resp.get_json()
+        assert fetched['status'] == 'compliant', 'Fetched control status should match patch'
+        assert fetched['evidence']['notes'] == 'Verified by audit', (
+            'Fetched evidence notes should match patch'
+        )
+        assert float(fetched['risk_score']) == pytest.approx(2.0), (
+            'Fetched risk score should match patch'
+        )
 
 
-class TestConcurrencyE2E:
-    def test_parallel_get_organisations(self, client):
-        """Ten concurrent GET /organisations calls must all succeed."""
-        errors: list[Exception] = []
-        results: list[list] = []
+# ------------------------------------------------------------------ #
+# 3. Artifact upload and download                                     #
+# ------------------------------------------------------------------ #
 
-        def _fetch():
-            try:
-                results.append(client.get_organisations())
-            except Exception as exc:  # noqa: BLE001
-                errors.append(exc)
+class TestE2EArtifactUploadDownload:
+    """
+    Create org -> Create assessment -> Upload artifact (in-memory file)
+    -> List artifacts -> Download artifact -> Verify content matches
+    -> Delete artifact.
+    """
 
-        threads = [threading.Thread(target=_fetch) for _ in range(10)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join(timeout=30)
+    def test_e2e_artifact_upload_download(self, client, auth_headers):
+        # Step 1: Create org and assessment
+        org = _create_org(client, auth_headers, name=f'Artifact-Org-{uuid.uuid4().hex[:8]}')
+        assessment = _create_assessment(client, auth_headers, org['id'])
+        assessment_id = assessment['id']
 
-        assert not errors, f"Concurrent requests failed: {errors}"
-        assert len(results) == 10
+        # Step 2: Upload an artifact using an in-memory file
+        file_content = b'%PDF-1.4 E2E artifact test content ' + uuid.uuid4().bytes
+        expected_hash = hashlib.sha256(file_content).hexdigest()
 
-    def test_parallel_patch_different_controls(self, client, assessment):
-        """Patch all 10 controls concurrently; every write must succeed."""
-        errors: list[Exception] = []
+        upload_resp = _upload_artifact(
+            client, auth_headers, assessment_id,
+            content=file_content,
+            filename='e2e-evidence.pdf',
+            mime_type='application/pdf',
+            artifact_type='evidence',
+            description='E2E test evidence document',
+        )
+        assert upload_resp.status_code == 201, (
+            f'Artifact upload should return 201, got {upload_resp.status_code}: '
+            f'{upload_resp.get_json()}'
+        )
+        artifact = upload_resp.get_json()
+        artifact_id = artifact['id']
+        assert artifact['filename'] == 'e2e-evidence.pdf', 'Filename should match upload'
+        assert artifact['hash'] == expected_hash, 'SHA-256 hash should match uploaded content'
+        assert artifact['description'] == 'E2E test evidence document', (
+            'Description should match upload'
+        )
 
-        def _patch(ref: str):
-            try:
-                client.patch_control(
-                    assessment["id"], ref,
-                    status="compliant",
-                    notes=f"concurrent-patch-{ref}",
-                )
-            except Exception as exc:  # noqa: BLE001
-                errors.append(exc)
+        # Step 3: List artifacts -- should include the uploaded one
+        list_resp = client.get(
+            f'{ASSESS_BASE}/{assessment_id}/artifacts',
+            headers=auth_headers,
+        )
+        assert list_resp.status_code == 200, 'Listing artifacts should return 200'
+        listed_ids = [a['id'] for a in list_resp.get_json()['data']]
+        assert artifact_id in listed_ids, 'Uploaded artifact should appear in the list'
 
-        threads = [
-            threading.Thread(target=_patch, args=(ref,))
-            for ref in "abcdefghij"
+        # Step 4: Download artifact and verify content matches
+        download_resp = client.get(
+            f'{ARTIFACT_BASE}/{artifact_id}/download',
+            headers=auth_headers,
+        )
+        assert download_resp.status_code == 200, 'Downloading artifact should return 200'
+        assert download_resp.data == file_content, (
+            'Downloaded content should exactly match uploaded content'
+        )
+
+        # Step 5: Delete artifact
+        del_resp = client.delete(
+            f'{ARTIFACT_BASE}/{artifact_id}',
+            headers=auth_headers,
+        )
+        assert del_resp.status_code == 204, 'Deleting artifact should return 204'
+
+        # Step 6: Verify artifact is gone
+        verify_resp = client.get(
+            f'{ARTIFACT_BASE}/{artifact_id}',
+            headers=auth_headers,
+        )
+        assert verify_resp.status_code == 404, 'Deleted artifact should return 404'
+
+
+# ------------------------------------------------------------------ #
+# 4. Audit trail                                                      #
+# ------------------------------------------------------------------ #
+
+class TestE2EAuditTrail:
+    """
+    Create org -> Create assessment -> Patch control -> List audit log
+    -> Verify audit entries exist for the actions performed.
+    """
+
+    def test_e2e_audit_trail(self, client, auth_headers):
+        # Step 1: Create org
+        org = _create_org(client, auth_headers, name=f'Audit-Org-{uuid.uuid4().hex[:8]}')
+        org_id = org['id']
+
+        # Step 2: Create assessment
+        assessment = _create_assessment(client, auth_headers, org_id)
+        assessment_id = assessment['id']
+
+        # Step 3: Patch a control
+        patch_resp = client.patch(
+            f'{ASSESS_BASE}/{assessment_id}/controls/a',
+            json={'status': 'non_compliant', 'gap_description': 'Encryption missing'},
+            headers=auth_headers,
+        )
+        assert patch_resp.status_code == 200, 'Patching control should return 200'
+
+        # Step 4: List audit log entries
+        audit_resp = client.get(
+            f'{AUDIT_BASE}?per_page=100',
+            headers=auth_headers,
+        )
+        assert audit_resp.status_code == 200, 'Listing audit log should return 200'
+        audit_body = audit_resp.get_json()
+        assert 'data' in audit_body, 'Audit response should contain data field'
+        entries = audit_body['data']
+
+        # Step 5: Verify that audit entries exist for the performed actions
+        actions = [e['action'] for e in entries]
+
+        # Organisation creation should be in the audit trail
+        assert any('organisation' in a for a in actions), (
+            'Audit log should contain an organisation-related entry'
+        )
+
+        # Assessment creation should be in the audit trail
+        assert any('assessment' in a for a in actions), (
+            'Audit log should contain an assessment-related entry'
+        )
+
+        # Control patch should be in the audit trail
+        assert any('control' in a for a in actions), (
+            'Audit log should contain a control-related entry'
+        )
+
+        # Verify audit entries have the expected structure
+        for entry in entries:
+            assert 'id' in entry, 'Each audit entry should have an id'
+            assert 'action' in entry, 'Each audit entry should have an action'
+            assert 'actor' in entry, 'Each audit entry should have an actor'
+            assert 'timestamp' in entry, 'Each audit entry should have a timestamp'
+
+
+# ------------------------------------------------------------------ #
+# 5. API key lifecycle                                                #
+# ------------------------------------------------------------------ #
+
+class TestE2EApiKeyLifecycle:
+    """
+    Create API key -> List API keys -> Use the key to authenticate
+    -> Revoke API key -> Verify revoked key is rejected.
+    """
+
+    def test_e2e_api_key_lifecycle(self, client, auth_headers):
+        # Step 1: Create a new API key
+        create_resp = client.post(
+            API_KEYS_BASE,
+            json={'label': 'e2e-lifecycle-key', 'scope': 'read_write'},
+            headers=auth_headers,
+        )
+        assert create_resp.status_code == 201, (
+            f'API key creation should return 201, got {create_resp.status_code}: '
+            f'{create_resp.get_json()}'
+        )
+        key_data = create_resp.get_json()
+        key_id = key_data['id']
+        plaintext_key = key_data['key']
+        assert plaintext_key.startswith('nis2_'), 'Plaintext key should start with nis2_ prefix'
+        assert len(plaintext_key) > 16, 'Plaintext key should be sufficiently long'
+
+        # Step 2: List API keys -- should include the new one
+        list_resp = client.get(API_KEYS_BASE, headers=auth_headers)
+        assert list_resp.status_code == 200, 'Listing API keys should return 200'
+        listed_ids = [k['id'] for k in list_resp.get_json()['data']]
+        assert key_id in listed_ids, 'Created API key should appear in the list'
+
+        # Step 3: Use the new key to obtain a JWT and make an authenticated request
+        token_resp = client.post(
+            AUTH_BASE,
+            json={'api_key': plaintext_key},
+        )
+        assert token_resp.status_code == 200, (
+            'Token exchange with new API key should return 200'
+        )
+        new_token = token_resp.get_json()['token']
+        new_headers = {'Authorization': f'Bearer {new_token}'}
+
+        # Use the new token to hit a protected endpoint
+        health_resp = client.get('/health/detail', headers=new_headers)
+        assert health_resp.status_code == 200, (
+            'Authenticated request with new key token should succeed'
+        )
+
+        # Step 4: Revoke the API key
+        revoke_resp = client.delete(
+            f'{API_KEYS_BASE}/{key_id}',
+            headers=auth_headers,
+        )
+        assert revoke_resp.status_code == 204, 'Revoking API key should return 204'
+
+        # Step 5: Verify revoked key cannot authenticate
+        revoked_token_resp = client.post(
+            AUTH_BASE,
+            json={'api_key': plaintext_key},
+        )
+        assert revoked_token_resp.status_code == 401, (
+            'Token exchange with revoked API key should return 401'
+        )
+
+
+# ------------------------------------------------------------------ #
+# 6. Multi-org isolation                                              #
+# ------------------------------------------------------------------ #
+
+class TestE2EMultiOrgIsolation:
+    """
+    Create org A -> Create org B -> Create assessment in org A
+    -> Create assessment in org B -> List assessments for org A
+    -> Verify org B's assessment is not included.
+    """
+
+    def test_e2e_multi_org_isolation(self, client, auth_headers):
+        # Step 1: Create two separate organisations
+        org_a = _create_org(client, auth_headers, name=f'Isolation-OrgA-{uuid.uuid4().hex[:8]}')
+        org_b = _create_org(client, auth_headers, name=f'Isolation-OrgB-{uuid.uuid4().hex[:8]}')
+
+        # Step 2: Create assessment in each org
+        assessment_a = _create_assessment(
+            client, auth_headers, org_a['id'],
+            title=f'Assessment-A-{uuid.uuid4().hex[:6]}',
+        )
+        assessment_b = _create_assessment(
+            client, auth_headers, org_b['id'],
+            title=f'Assessment-B-{uuid.uuid4().hex[:6]}',
+        )
+
+        # Step 3: List assessments for org A
+        list_a_resp = client.get(
+            f'{ORG_BASE}/{org_a["id"]}/assessments',
+            headers=auth_headers,
+        )
+        assert list_a_resp.status_code == 200, 'Listing org A assessments should return 200'
+        org_a_assessment_ids = [a['id'] for a in list_a_resp.get_json()['data']]
+
+        # Step 4: Verify org A's list contains only org A's assessment
+        assert assessment_a['id'] in org_a_assessment_ids, (
+            "Org A's assessment should appear in org A's listing"
+        )
+        assert assessment_b['id'] not in org_a_assessment_ids, (
+            "Org B's assessment must NOT appear in org A's listing"
+        )
+
+        # Step 5: Also verify the reverse -- org B listing
+        list_b_resp = client.get(
+            f'{ORG_BASE}/{org_b["id"]}/assessments',
+            headers=auth_headers,
+        )
+        assert list_b_resp.status_code == 200, 'Listing org B assessments should return 200'
+        org_b_assessment_ids = [a['id'] for a in list_b_resp.get_json()['data']]
+        assert assessment_b['id'] in org_b_assessment_ids, (
+            "Org B's assessment should appear in org B's listing"
+        )
+        assert assessment_a['id'] not in org_b_assessment_ids, (
+            "Org A's assessment must NOT appear in org B's listing"
+        )
+
+
+# ------------------------------------------------------------------ #
+# 7. Assessment with PDF report                                       #
+# ------------------------------------------------------------------ #
+
+class TestE2EAssessmentWithPdfReport:
+    """
+    Create org -> Create assessment -> Patch several controls
+    -> Generate PDF report -> Verify response is PDF content-type.
+    """
+
+    def test_e2e_assessment_with_pdf_report(self, client, auth_headers):
+        # Step 1: Create org and assessment
+        org = _create_org(
+            client, auth_headers,
+            name=f'PDFReport-Org-{uuid.uuid4().hex[:8]}',
+            industry='Finance',
+            country='IE',
+        )
+        assessment = _create_assessment(
+            client, auth_headers, org['id'],
+            title=f'PDF Report Assessment {uuid.uuid4().hex[:6]}',
+        )
+        assessment_id = assessment['id']
+
+        # Step 2: Patch several controls with different statuses
+        statuses = [
+            ('a', 'compliant'),
+            ('b', 'compliant'),
+            ('c', 'non_compliant'),
+            ('d', 'partially_compliant'),
+            ('e', 'compliant'),
         ]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join(timeout=30)
-
-        assert not errors, f"Concurrent PATCH controls failed: {errors}"
-
-        # Verify every control was actually updated.
-        for ref in "abcdefghij":
-            ctrl = client.get_control(assessment["id"], ref)
-            assert ctrl["status"] == "compliant", (
-                f"control {ref!r} not updated: {ctrl['status']!r}"
+        for ref, status in statuses:
+            resp = client.patch(
+                f'{ASSESS_BASE}/{assessment_id}/controls/{ref}',
+                json={'status': status},
+                headers=auth_headers,
             )
+            assert resp.status_code == 200, (
+                f'Patching control {ref} to {status} should return 200, '
+                f'got {resp.status_code}: {resp.get_json()}'
+            )
+
+        # Step 3: Generate PDF report
+        report_resp = client.post(
+            f'{ASSESS_BASE}/{assessment_id}/report',
+            headers=auth_headers,
+        )
+        assert report_resp.status_code == 200, (
+            f'Generating PDF report should return 200, got {report_resp.status_code}: '
+            f'{report_resp.data[:200]}'
+        )
+
+        # Step 4: Verify response is PDF content-type
+        assert 'application/pdf' in report_resp.content_type, (
+            f'Report content-type should be application/pdf, got {report_resp.content_type}'
+        )
+
+        # Step 5: Verify the response body starts with PDF magic bytes
+        assert report_resp.data[:5] == b'%PDF-', (
+            f'Report should start with PDF magic bytes, got {report_resp.data[:10]!r}'
+        )
+
+        # Step 6: Verify the PDF has meaningful size
+        assert len(report_resp.data) > 100, (
+            'PDF report should have meaningful content (>100 bytes)'
+        )
+
+
+# ------------------------------------------------------------------ #
+# 8. Pagination                                                       #
+# ------------------------------------------------------------------ #
+
+class TestE2EPagination:
+    """
+    Create org -> Create multiple assessments (5+) -> List with
+    page=1&per_page=2 -> Verify pagination metadata -> Get page 2
+    -> Verify different results.
+    """
+
+    def test_e2e_pagination(self, client, auth_headers):
+        # Step 1: Create org
+        org = _create_org(client, auth_headers, name=f'Pagination-Org-{uuid.uuid4().hex[:8]}')
+        org_id = org['id']
+
+        # Step 2: Create 5 assessments
+        created_ids = []
+        for i in range(5):
+            a = _create_assessment(
+                client, auth_headers, org_id,
+                title=f'Pagination Assessment {i+1} {uuid.uuid4().hex[:6]}',
+            )
+            created_ids.append(a['id'])
+
+        # Step 3: List page 1 with per_page=2
+        page1_resp = client.get(
+            f'{ORG_BASE}/{org_id}/assessments?page=1&per_page=2',
+            headers=auth_headers,
+        )
+        assert page1_resp.status_code == 200, 'Listing page 1 should return 200'
+        page1_body = page1_resp.get_json()
+
+        # Verify pagination metadata
+        assert page1_body['total'] == 5, 'Total should be 5 assessments'
+        assert page1_body['page'] == 1, 'Page number should be 1'
+        assert page1_body['per_page'] == 2, 'Per page should be 2'
+        assert len(page1_body['data']) == 2, 'Page 1 should contain exactly 2 items'
+
+        # Verify X-Total-Count header
+        assert 'X-Total-Count' in page1_resp.headers, (
+            'X-Total-Count header should be present'
+        )
+        assert int(page1_resp.headers['X-Total-Count']) == 5, (
+            'X-Total-Count should equal total count'
+        )
+
+        # Step 4: Get page 2
+        page2_resp = client.get(
+            f'{ORG_BASE}/{org_id}/assessments?page=2&per_page=2',
+            headers=auth_headers,
+        )
+        assert page2_resp.status_code == 200, 'Listing page 2 should return 200'
+        page2_body = page2_resp.get_json()
+        assert len(page2_body['data']) == 2, 'Page 2 should contain exactly 2 items'
+        assert page2_body['page'] == 2, 'Page number should be 2'
+
+        # Step 5: Verify pages contain different assessments
+        page1_ids = {a['id'] for a in page1_body['data']}
+        page2_ids = {a['id'] for a in page2_body['data']}
+        assert page1_ids.isdisjoint(page2_ids), (
+            'Page 1 and page 2 should contain different assessments'
+        )
+
+        # Step 6: Verify page 3 has the remaining 1 item
+        page3_resp = client.get(
+            f'{ORG_BASE}/{org_id}/assessments?page=3&per_page=2',
+            headers=auth_headers,
+        )
+        assert page3_resp.status_code == 200, 'Listing page 3 should return 200'
+        page3_body = page3_resp.get_json()
+        assert len(page3_body['data']) == 1, 'Page 3 should contain exactly 1 item'
+
+        # Verify all pages together cover all created assessments
+        all_listed_ids = page1_ids | page2_ids | {a['id'] for a in page3_body['data']}
+        assert all_listed_ids == set(created_ids), (
+            'All pages together should cover all created assessments'
+        )
+
+
+# ------------------------------------------------------------------ #
+# 9. Health endpoint                                                  #
+# ------------------------------------------------------------------ #
+
+class TestE2EHealthEndpoint:
+    """
+    Hit GET /health -> Verify 200 with status field -> Hit
+    GET /health/detail with auth -> Verify detailed response.
+    """
+
+    def test_e2e_health_endpoint(self, client, auth_headers):
+        # Step 1: Public health endpoint (no auth required)
+        health_resp = client.get(HEALTH_BASE)
+        assert health_resp.status_code == 200, 'Public health endpoint should return 200'
+        health_data = health_resp.get_json()
+        assert 'status' in health_data, 'Health response should contain a status field'
+        assert health_data['status'] == 'ok', 'Health status should be ok'
+
+        # Verify public endpoint does NOT leak internal details
+        assert 'db' not in health_data, 'Public health should not expose db details'
+        assert 'version' not in health_data, 'Public health should not expose version'
+
+        # Step 2: Detailed health endpoint (auth required)
+        detail_resp = client.get(f'{HEALTH_BASE}/detail', headers=auth_headers)
+        assert detail_resp.status_code == 200, 'Detailed health endpoint should return 200'
+        detail_data = detail_resp.get_json()
+        assert detail_data['status'] == 'ok', 'Detailed health status should be ok'
+        assert 'db' in detail_data, 'Detailed health should include db status'
+        assert 'version' in detail_data, 'Detailed health should include version'
+
+        # Step 3: Detailed health endpoint WITHOUT auth should fail
+        noauth_resp = client.get(f'{HEALTH_BASE}/detail')
+        assert noauth_resp.status_code == 401, (
+            'Detailed health without auth should return 401'
+        )
+
+
+# ------------------------------------------------------------------ #
+# 10. Error handling                                                  #
+# ------------------------------------------------------------------ #
+
+class TestE2EErrorHandling:
+    """
+    Get non-existent org (404) -> Create assessment with invalid data (400)
+    -> Access protected endpoint without auth (401) -> Verify proper error
+    response format.
+    """
+
+    def test_e2e_error_handling(self, client, auth_headers):
+        # Step 1: Get a non-existent organisation -- should return 404
+        fake_org_id = '00000000-0000-0000-0000-000000000000'
+        resp_404 = client.get(
+            f'{ORG_BASE}/{fake_org_id}',
+            headers=auth_headers,
+        )
+        assert resp_404.status_code == 404, (
+            f'Non-existent org should return 404, got {resp_404.status_code}'
+        )
+
+        # Step 2: Create an assessment with invalid data -- missing title (400)
+        org = _create_org(client, auth_headers, name=f'ErrorTest-Org-{uuid.uuid4().hex[:8]}')
+        resp_400 = client.post(
+            f'{ORG_BASE}/{org["id"]}/assessments',
+            json={},  # missing required 'title' field
+            headers=auth_headers,
+        )
+        assert resp_400.status_code == 400, (
+            f'Assessment without title should return 400, got {resp_400.status_code}'
+        )
+        error_body = resp_400.get_json()
+        assert 'error' in error_body, 'Error response should contain an error field'
+        assert 'code' in error_body, 'Error response should contain a code field'
+        assert error_body['code'] == 'INVALID_INPUT', (
+            'Missing title error code should be INVALID_INPUT'
+        )
+
+        # Step 3: Access protected endpoint without auth -- should return 401
+        resp_401 = client.get(ORG_BASE)
+        assert resp_401.status_code == 401, (
+            f'Protected endpoint without auth should return 401, got {resp_401.status_code}'
+        )
+        unauth_body = resp_401.get_json()
+        assert 'error' in unauth_body, '401 response should contain an error field'
+        assert 'code' in unauth_body, '401 response should contain a code field'
+        assert unauth_body['code'] == 'UNAUTHORIZED', (
+            'Unauthenticated error code should be UNAUTHORIZED'
+        )
+
+        # Step 4: Invalid state transition -- draft -> completed (skipping steps)
+        assessment = _create_assessment(client, auth_headers, org['id'])
+        resp_bad_transition = client.patch(
+            f'{ASSESS_BASE}/{assessment["id"]}',
+            json={'status': 'completed'},
+            headers=auth_headers,
+        )
+        assert resp_bad_transition.status_code == 400, (
+            f'Invalid state transition should return 400, got {resp_bad_transition.status_code}'
+        )
+        transition_body = resp_bad_transition.get_json()
+        assert 'error' in transition_body, 'Transition error should contain an error field'
+        assert 'code' in transition_body, 'Transition error should contain a code field'
+
+        # Step 5: Invalid risk score (out of range)
+        resp_bad_score = client.patch(
+            f'{ASSESS_BASE}/{assessment["id"]}/controls/a',
+            json={'risk_score': 11.0},
+            headers=auth_headers,
+        )
+        assert resp_bad_score.status_code == 400, (
+            f'Out-of-range risk score should return 400, got {resp_bad_score.status_code}'
+        )
+
+        # Step 6: Access with invalid token
+        resp_bad_token = client.get(
+            ORG_BASE,
+            headers={'Authorization': 'Bearer invalid-token-garbage'},
+        )
+        assert resp_bad_token.status_code == 401, (
+            f'Invalid token should return 401, got {resp_bad_token.status_code}'
+        )

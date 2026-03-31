@@ -92,6 +92,11 @@ lcov.info
 sdk/dist/
 sdk/pkg/
 
+# Helm environment overrides (contain real hostnames, endpoints, tuning)
+# Commit only *.example files; keep actual values local.
+deploy/helm/opensecstack/values.prod.yaml
+deploy/helm/opensecstack/values.staging.yaml
+
 # Website build output
 website/.next/
 website/out/

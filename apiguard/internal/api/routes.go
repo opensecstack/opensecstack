@@ -24,6 +24,7 @@ func RegisterRoutes(
 	specs *handlers.Specs,
 	audit *handlers.Audit,
 	apiKeys *handlers.APIKeys,
+	inventory *handlers.Inventory,
 	metrics *middleware.MetricsCollector,
 	cfg *config.Config,
 	authLimiter *middleware.RateLimiter,
@@ -88,6 +89,10 @@ func RegisterRoutes(
 
 			// Audit log.
 			r.Get("/audit", audit.List)
+
+			// API Inventory.
+			r.Get("/inventory", inventory.List)
+			r.Get("/inventory/{id}/history", inventory.GetHistory)
 
 			// API key management.
 			r.Route("/api-keys", func(r chi.Router) {

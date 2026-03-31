@@ -344,7 +344,55 @@ jobs:
           name: citadel-coverage
           path: .citadel/coverage.out
 
-  # 3b. Citadel — lint
+  # 3b. Citadel — WORM chain verification (runs after unit tests pass)
+  test-citadel-worm:
+    needs: [test-citadel]
+    if: needs.changes.outputs.citadel == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .citadel
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: citadel_worm_test
+          POSTGRES_USER: citadel
+          POSTGRES_PASSWORD: citadel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: .citadel/go.sum
+
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgres://citadel:citadel@localhost:5432/citadel_worm_test?sslmode=disable
+        run: |
+          go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+          migrate -path db/migrations -database "$DATABASE_URL" up
+
+      - name: WORM chain writer + verifier tests
+        env:
+          DATABASE_URL: postgres://citadel:citadel@localhost:5432/citadel_worm_test?sslmode=disable
+        run: go test ./internal/worm/... -v -count=1 -timeout 120s
+
+      - name: WORM immutability constraint tests
+        env:
+          DATABASE_URL: postgres://citadel:citadel@localhost:5432/citadel_worm_test?sslmode=disable
+        run: |
+          echo "Verify that UPDATE/DELETE on worm_log is rejected by the DB trigger"
+          go test ./internal/worm/... -v -count=1 -run TestImmut -timeout 60s
+
+  # 3d. Citadel — lint
   lint-citadel:
     needs: changes
     if: needs.changes.outputs.citadel == 'true' || github.event_name == 'push'
@@ -361,7 +409,7 @@ jobs:
           version: v1.57
           working-directory: .citadel
 
-  # 3c. Citadel — security
+  # 3e. Citadel — security
   security-citadel:
     needs: [test-citadel]
     if: needs.changes.outputs.citadel == 'true' || github.event_name == 'push'
@@ -557,6 +605,7 @@ jobs:
       - security-nis2compass
       - test-nis2compass-web
       - test-citadel
+      - test-citadel-worm
       - lint-citadel
       - security-citadel
       - test-vantage-hash

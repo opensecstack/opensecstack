@@ -137,6 +137,31 @@ try:
         chain_hash: Optional[str] = None  # computed by CITADEL on ingest
         payload: dict[str, Any] = Field(default_factory=dict)
 
+    class HealthStatus(BaseModel):
+        status: str
+        version: Optional[str] = None
+        db: Optional[str] = None
+        redis: Optional[str] = None
+
+    class Artifact(BaseModel):
+        id: str
+        assessment_id: str
+        filename: str
+        type: str  # policy, procedure, evidence, report, etc.
+        hash: Optional[str] = None
+        size_bytes: Optional[int] = None
+        control_id: Optional[str] = None
+        description: Optional[str] = None
+        created_at: Optional[str] = None
+
+    class APIKey(BaseModel):
+        id: str
+        label: Optional[str] = None
+        scope: str = "read_write"
+        key: Optional[str] = None  # only present on creation
+        created_at: Optional[str] = None
+        expires_at: Optional[str] = None
+
 except ImportError:
     # Fallback: plain dataclasses when pydantic is not installed.
     from dataclasses import dataclass, field
@@ -264,6 +289,34 @@ except ImportError:
         chain_hash: Optional[str] = None
         payload: dict[str, Any] = field(default_factory=dict)
 
+    @dataclass
+    class HealthStatus:
+        status: str
+        version: Optional[str] = None
+        db: Optional[str] = None
+        redis: Optional[str] = None
+
+    @dataclass
+    class Artifact:
+        id: str
+        assessment_id: str
+        filename: str
+        type: str  # policy, procedure, evidence, report, etc.
+        hash: Optional[str] = None
+        size_bytes: Optional[int] = None
+        control_id: Optional[str] = None
+        description: Optional[str] = None
+        created_at: Optional[str] = None
+
+    @dataclass
+    class APIKey:
+        id: str
+        scope: str = "read_write"
+        label: Optional[str] = None
+        key: Optional[str] = None  # only present on creation
+        created_at: Optional[str] = None
+        expires_at: Optional[str] = None
+
 
 __all__ = [
     "Organisation",
@@ -273,4 +326,7 @@ __all__ = [
     "Finding",
     "AuditEntry",
     "CitadelEvent",
+    "HealthStatus",
+    "Artifact",
+    "APIKey",
 ]

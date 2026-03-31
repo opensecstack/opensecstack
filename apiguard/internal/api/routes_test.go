@@ -31,6 +31,7 @@ func newTestRouter(t *testing.T) (http.Handler, func()) {
 	specsH := handlers.NewSpecs(logger, "")
 	auditH := handlers.NewAudit(logger, nil)
 	apiKeysH := handlers.NewAPIKeys(logger, nil, nil, cfg)
+	inventoryH := handlers.NewInventory(logger, nil)
 
 	authLimiter := middleware.NewRateLimiter(100)
 	scanLimiter := middleware.NewRateLimiter(100)
@@ -50,6 +51,7 @@ func newTestRouter(t *testing.T) (http.Handler, func()) {
 		specsH,
 		auditH,
 		apiKeysH,
+		inventoryH,
 		metrics,
 		cfg,
 		authLimiter,

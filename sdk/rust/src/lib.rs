@@ -70,6 +70,6 @@ pub use citadel::types::{GetEventsOptions as CitadelGetEventsOptions, SecurityEv
 pub use nis2compass::types::{
     APIKey, APIKeyScope, Artifact, ArtifactType, Assessment, AssessmentStats, AssessmentStatus,
     Control, ControlStatus, CreateAPIKeyRequest, CreateAssessmentRequest,
-    CreateOrganisationRequest, NIS2AuditEntry, Organisation, OrganisationSize,
+    CreateOrganisationRequest, HealthStatus, NIS2AuditEntry, Organisation, OrganisationSize,
     PatchAssessmentRequest, PatchControlRequest, PatchOrganisationRequest,
 };

@@ -1,4 +1,5 @@
 import { HttpClient } from "./http.js";
+import { parseJWTExp } from "./jwt.js";
 import type {
   Organisation,
   CreateOrganisationRequest,
@@ -18,6 +19,12 @@ import type {
   HealthStatus,
 } from "./types.js";
 
+/** Number of seconds before token expiry at which we proactively refresh. */
+const TOKEN_REFRESH_BUFFER_SECS = 30;
+
+/** Fallback token lifetime (seconds) when the JWT exp claim cannot be parsed. */
+const FALLBACK_TOKEN_LIFETIME_SECS = 5 * 60;
+
 export interface NIS2CompassClientOptions {
   baseURL: string;
   apiKey: string;
@@ -29,14 +36,27 @@ export interface NIS2CompassClientOptions {
 export class NIS2CompassClient {
   private readonly http: HttpClient;
   private readonly httpPublic: HttpClient;
+  private readonly apiKey: string;
+  private readonly baseURL: string;
+  private readonly timeout: number;
+
+  /** Cached JWT obtained from the auth/token endpoint. */
+  private jwt: string | null = null;
+  /** Token expiry as a Unix timestamp (seconds since epoch). */
+  private tokenExpiry: number | null = null;
+  /** Serialises concurrent authenticate() calls so only one HTTP round-trip fires. */
+  private authPromise: Promise<void> | null = null;
 
   constructor(opts: NIS2CompassClientOptions) {
+    this.apiKey = opts.apiKey;
+    this.baseURL = opts.baseURL.replace(/\/+$/, "");
+    this.timeout = opts.timeout ?? 30_000;
     this.http = new HttpClient({
       baseURL: opts.baseURL,
       timeout: opts.timeout,
       maxRetries: opts.maxRetries,
       retryWaitBase: opts.retryWaitBase,
-      headers: { Authorization: `Bearer ${opts.apiKey}` },
+      // No static Authorization header — we set it dynamically after auth.
     });
     this.httpPublic = new HttpClient({
       baseURL: opts.baseURL,
@@ -46,29 +66,160 @@ export class NIS2CompassClient {
     });
   }
 
+  // ------------------------------------------------------------------
+  // Auth helpers (matches Go/Python two-step JWT flow)
+  // ------------------------------------------------------------------
+
+  /**
+   * Exchange the API key for a short-lived JWT and cache it.
+   *
+   * Uses a shared promise so concurrent calls coalesce into a single
+   * HTTP request (analogous to Go's sync.Mutex / Python's threading.Lock).
+   */
+  private async authenticate(): Promise<void> {
+    // Fast path: token is still valid.
+    if (this.jwt && this.tokenExpiry != null) {
+      const now = Math.floor(Date.now() / 1000);
+      if (now + TOKEN_REFRESH_BUFFER_SECS < this.tokenExpiry) {
+        return;
+      }
+    }
+
+    // Coalesce concurrent callers behind one in-flight request.
+    if (this.authPromise) {
+      return this.authPromise;
+    }
+
+    this.authPromise = this.doAuthenticate();
+    try {
+      await this.authPromise;
+    } finally {
+      this.authPromise = null;
+    }
+  }
+
+  private async doAuthenticate(): Promise<void> {
+    const url = `${this.baseURL}/api/v1/auth/token`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ api_key: this.apiKey }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      if (resp.status === 401) {
+        throw new Error("Authentication failed: invalid API key");
+      }
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`Auth error HTTP ${resp.status}: ${text}`);
+      }
+
+      const data = (await resp.json()) as Record<string, unknown>;
+      const token =
+        (data.token as string) || (data.access_token as string) || "";
+      if (!token) {
+        throw new Error("No token in auth/token response");
+      }
+
+      const exp = parseJWTExp(token);
+      this.jwt = token;
+      this.tokenExpiry =
+        exp ?? Math.floor(Date.now() / 1000) + FALLBACK_TOKEN_LIFETIME_SECS;
+      this.http.setHeader("Authorization", `Bearer ${token}`);
+    } catch (err) {
+      clearTimeout(timer);
+      throw err;
+    }
+  }
+
+  /**
+   * Ensure the token is still valid, refreshing proactively if it expires
+   * within TOKEN_REFRESH_BUFFER_SECS. Called before every API request.
+   */
+  private async ensureAuthenticated(): Promise<void> {
+    if (this.jwt && this.tokenExpiry != null) {
+      const now = Math.floor(Date.now() / 1000);
+      if (now + TOKEN_REFRESH_BUFFER_SECS >= this.tokenExpiry) {
+        // Token is expiring soon — clear and re-authenticate.
+        this.jwt = null;
+        this.tokenExpiry = null;
+      }
+    }
+    await this.authenticate();
+  }
+
+  /**
+   * Execute an authenticated request with automatic re-auth on 401.
+   */
+  private async authenticatedRequest<T>(
+    method: string,
+    path: string,
+    options?: {
+      body?: unknown;
+      params?: Record<string, string | number | undefined>;
+      headers?: Record<string, string>;
+      raw?: boolean;
+    },
+  ): Promise<T> {
+    await this.ensureAuthenticated();
+
+    try {
+      return await this.http.request<T>(method, path, options);
+    } catch (err: unknown) {
+      // Reactive fallback: if the server returned 401 despite our
+      // proactive check (e.g. token revoked server-side), re-auth once.
+      if (
+        err instanceof Error &&
+        "statusCode" in err &&
+        (err as { statusCode: number }).statusCode === 401
+      ) {
+        this.jwt = null;
+        this.tokenExpiry = null;
+        await this.authenticate();
+        return this.http.request<T>(method, path, options);
+      }
+      throw err;
+    }
+  }
+
   // ─── Organisations ───
 
   async getOrganisations(
     opts?: GetOrganisationsOptions,
   ): Promise<Organisation[]> {
-    return this.http.request<Organisation[]>("GET", "/api/v1/organisations", {
-      params: {
-        page: opts?.page,
-        per_page: opts?.per_page,
+    return this.authenticatedRequest<Organisation[]>(
+      "GET",
+      "/api/v1/organisations",
+      {
+        params: {
+          page: opts?.page,
+          per_page: opts?.per_page,
+        },
       },
-    });
+    );
   }
 
   async createOrganisation(
     req: CreateOrganisationRequest,
   ): Promise<Organisation> {
-    return this.http.request<Organisation>("POST", "/api/v1/organisations", {
-      body: req,
-    });
+    return this.authenticatedRequest<Organisation>(
+      "POST",
+      "/api/v1/organisations",
+      { body: req },
+    );
   }
 
   async getOrganisation(id: string): Promise<Organisation> {
-    return this.http.request<Organisation>(
+    return this.authenticatedRequest<Organisation>(
       "GET",
       `/api/v1/organisations/${id}`,
     );
@@ -78,7 +229,7 @@ export class NIS2CompassClient {
     id: string,
     req: PatchOrganisationRequest,
   ): Promise<Organisation> {
-    return this.http.request<Organisation>(
+    return this.authenticatedRequest<Organisation>(
       "PATCH",
       `/api/v1/organisations/${id}`,
       { body: req },
@@ -86,7 +237,10 @@ export class NIS2CompassClient {
   }
 
   async deleteOrganisation(id: string): Promise<void> {
-    return this.http.request<void>("DELETE", `/api/v1/organisations/${id}`);
+    return this.authenticatedRequest<void>(
+      "DELETE",
+      `/api/v1/organisations/${id}`,
+    );
   }
 
   // ─── Assessments ───
@@ -95,7 +249,7 @@ export class NIS2CompassClient {
     orgID: string,
     opts?: GetAssessmentsOptions,
   ): Promise<Assessment[]> {
-    return this.http.request<Assessment[]>(
+    return this.authenticatedRequest<Assessment[]>(
       "GET",
       `/api/v1/organisations/${orgID}/assessments`,
       {
@@ -112,7 +266,7 @@ export class NIS2CompassClient {
     orgID: string,
     req: CreateAssessmentRequest,
   ): Promise<Assessment> {
-    return this.http.request<Assessment>(
+    return this.authenticatedRequest<Assessment>(
       "POST",
       `/api/v1/organisations/${orgID}/assessments`,
       { body: req },
@@ -120,14 +274,17 @@ export class NIS2CompassClient {
   }
 
   async getAssessment(id: string): Promise<Assessment> {
-    return this.http.request<Assessment>("GET", `/api/v1/assessments/${id}`);
+    return this.authenticatedRequest<Assessment>(
+      "GET",
+      `/api/v1/assessments/${id}`,
+    );
   }
 
   async patchAssessment(
     id: string,
     req: PatchAssessmentRequest,
   ): Promise<Assessment> {
-    return this.http.request<Assessment>(
+    return this.authenticatedRequest<Assessment>(
       "PATCH",
       `/api/v1/assessments/${id}`,
       { body: req },
@@ -135,7 +292,10 @@ export class NIS2CompassClient {
   }
 
   async deleteAssessment(id: string): Promise<void> {
-    return this.http.request<void>("DELETE", `/api/v1/assessments/${id}`);
+    return this.authenticatedRequest<void>(
+      "DELETE",
+      `/api/v1/assessments/${id}`,
+    );
   }
 
   // ─── Controls ───
@@ -145,7 +305,7 @@ export class NIS2CompassClient {
     assessmentID: string,
     opts?: ListControlsOptions,
   ): Promise<Control[]> {
-    return this.http.request<Control[]>(
+    return this.authenticatedRequest<Control[]>(
       "GET",
       `/api/v1/assessments/${assessmentID}/controls`,
       {
@@ -160,7 +320,7 @@ export class NIS2CompassClient {
 
   /** Return all controls for an assessment without any filters. */
   async getControls(assessmentID: string): Promise<Control[]> {
-    return this.http.request<Control[]>(
+    return this.authenticatedRequest<Control[]>(
       "GET",
       `/api/v1/assessments/${assessmentID}/controls`,
     );
@@ -170,7 +330,7 @@ export class NIS2CompassClient {
     assessmentID: string,
     measureRef: string,
   ): Promise<Control> {
-    return this.http.request<Control>(
+    return this.authenticatedRequest<Control>(
       "GET",
       `/api/v1/assessments/${assessmentID}/controls/${measureRef}`,
     );
@@ -181,7 +341,7 @@ export class NIS2CompassClient {
     measureRef: string,
     req: PatchControlRequest,
   ): Promise<Control> {
-    return this.http.request<Control>(
+    return this.authenticatedRequest<Control>(
       "PATCH",
       `/api/v1/assessments/${assessmentID}/controls/${measureRef}`,
       { body: req },
@@ -204,7 +364,7 @@ export class NIS2CompassClient {
    */
 
   async listArtifacts(assessmentID: string): Promise<Artifact[]> {
-    return this.http.request<Artifact[]>(
+    return this.authenticatedRequest<Artifact[]>(
       "GET",
       `/api/v1/assessments/${assessmentID}/artifacts`,
     );
@@ -229,7 +389,7 @@ export class NIS2CompassClient {
       formData.append("description", opts.description);
     }
 
-    return this.http.request<Artifact>(
+    return this.authenticatedRequest<Artifact>(
       "POST",
       `/api/v1/assessments/${assessmentID}/artifacts`,
       { body: formData },
@@ -237,14 +397,14 @@ export class NIS2CompassClient {
   }
 
   async getArtifact(artifactID: string): Promise<Artifact> {
-    return this.http.request<Artifact>(
+    return this.authenticatedRequest<Artifact>(
       "GET",
       `/api/v1/artifacts/${artifactID}`,
     );
   }
 
   async downloadArtifact(artifactID: string): Promise<ArrayBuffer> {
-    const resp = await this.http.request<Response>(
+    const resp = await this.authenticatedRequest<Response>(
       "GET",
       `/api/v1/artifacts/${artifactID}/download`,
       { raw: true },
@@ -253,7 +413,7 @@ export class NIS2CompassClient {
   }
 
   async deleteArtifact(artifactID: string): Promise<void> {
-    return this.http.request<void>(
+    return this.authenticatedRequest<void>(
       "DELETE",
       `/api/v1/artifacts/${artifactID}`,
     );
@@ -262,17 +422,20 @@ export class NIS2CompassClient {
   // ─── API Keys ───
 
   async listAPIKeys(): Promise<APIKey[]> {
-    return this.http.request<APIKey[]>("GET", "/api/v1/api-keys");
+    return this.authenticatedRequest<APIKey[]>("GET", "/api/v1/api-keys");
   }
 
   async createAPIKey(req: CreateAPIKeyRequest): Promise<APIKey> {
-    return this.http.request<APIKey>("POST", "/api/v1/api-keys", {
+    return this.authenticatedRequest<APIKey>("POST", "/api/v1/api-keys", {
       body: req,
     });
   }
 
   async revokeAPIKey(keyID: string): Promise<void> {
-    return this.http.request<void>("DELETE", `/api/v1/api-keys/${keyID}`);
+    return this.authenticatedRequest<void>(
+      "DELETE",
+      `/api/v1/api-keys/${keyID}`,
+    );
   }
 
   // ─── Reports ───
@@ -283,7 +446,7 @@ export class NIS2CompassClient {
    * {@link getReportStream} which avoids buffering the entire body.
    */
   async generateReport(assessmentID: string): Promise<ArrayBuffer> {
-    const resp = await this.http.request<Response>(
+    const resp = await this.authenticatedRequest<Response>(
       "POST",
       `/api/v1/assessments/${assessmentID}/report`,
       {
@@ -313,7 +476,7 @@ export class NIS2CompassClient {
     assessmentID: string,
     format: string = "pdf",
   ): Promise<ReadableStream<Uint8Array>> {
-    const resp = await this.http.request<Response>(
+    const resp = await this.authenticatedRequest<Response>(
       "POST",
       `/api/v1/assessments/${assessmentID}/report`,
       {
@@ -333,13 +496,15 @@ export class NIS2CompassClient {
     limit?: number,
     page?: number,
   ): Promise<NIS2AuditEntry[]> {
-    return this.http.request<NIS2AuditEntry[]>("GET", "/api/v1/audit", {
-      params: { limit, page },
-    });
+    return this.authenticatedRequest<NIS2AuditEntry[]>(
+      "GET",
+      "/api/v1/audit",
+      { params: { limit, page } },
+    );
   }
 
   async getAuditEntry(entryID: string): Promise<NIS2AuditEntry> {
-    return this.http.request<NIS2AuditEntry>(
+    return this.authenticatedRequest<NIS2AuditEntry>(
       "GET",
       `/api/v1/audit/${entryID}`,
     );
@@ -352,6 +517,6 @@ export class NIS2CompassClient {
   }
 
   async getHealthDetail(): Promise<HealthStatus> {
-    return this.http.request<HealthStatus>("GET", "/health/detail");
+    return this.authenticatedRequest<HealthStatus>("GET", "/health/detail");
   }
 }

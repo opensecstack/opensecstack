@@ -11,20 +11,12 @@ export default function CitadelFortress() {
   useFrame(() => {
     if (!ref.current) return
     ref.current.rotation.y += hovered ? 0.008 : 0.002
-
-    const target = hovered ? 1.15 : 1
-    ref.current.scale.lerp(new THREE.Vector3(target, target, target), 0.08)
+    const s = hovered ? 1.15 : 1
+    ref.current.scale.lerp(new THREE.Vector3(s, s, s), 0.08)
   })
 
-  const onOver = useCallback(() => {
-    setHovered(true)
-    document.body.style.cursor = 'pointer'
-  }, [])
-
-  const onOut = useCallback(() => {
-    setHovered(false)
-    document.body.style.cursor = 'auto'
-  }, [])
+  const onOver = useCallback(() => { setHovered(true); document.body.style.cursor = 'pointer' }, [])
+  const onOut = useCallback(() => { setHovered(false); document.body.style.cursor = 'auto' }, [])
 
   return (
     <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.3}>
@@ -70,20 +62,16 @@ export default function CitadelFortress() {
           <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
             Governance Engine
           </div>
-          <div style={{
-            marginTop: 10, display: 'flex', gap: 6, justifyContent: 'center',
-          }}>
+          <div style={{ marginTop: 10, display: 'flex', gap: 6, justifyContent: 'center' }}>
             {marshalGates.map(g => (
-              <div key={g.number} style={{
+              <div key={g.number} title={g.name} style={{
                 width: 28, height: 28, borderRadius: 6,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 background: 'rgba(0,240,255,0.1)',
                 border: '1px solid rgba(0,240,255,0.25)',
                 fontSize: 11, fontWeight: 600, color: '#00f0ff',
                 fontFamily: 'JetBrains Mono, monospace',
-              }}
-              title={g.name}
-              >
+              }}>
                 G{g.number}
               </div>
             ))}

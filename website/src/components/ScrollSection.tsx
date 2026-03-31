@@ -12,12 +12,13 @@ export default function ScrollSection({ id, children, className = '' }: Props) {
     <motion.section
       id={id}
       className={`section ${className}`}
-      initial={{ opacity: 0, y: 40 }}
+      initial={{ opacity: 0, y: 60 }}
       whileInView={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, ease: 'easeOut' }}
-      viewport={{ once: true, margin: '-80px' }}
+      transition={{ duration: 0.7, ease: [0.25, 0.1, 0.25, 1] }}
+      viewport={{ once: true, margin: '-100px' }}
     >
       {children}
+      <div className="glow-divider" />
     </motion.section>
   )
 }

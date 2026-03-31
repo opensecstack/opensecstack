@@ -4,7 +4,6 @@ import CitadelFortress from './CitadelFortress'
 import OrbitalRing from './OrbitalRing'
 import WormChainEdges from './WormChainEdges'
 import ParticleGrid from './ParticleGrid'
-import TechParticles from './TechParticles'
 import Effects from './postprocessing/Effects'
 
 export default function EcosystemScene() {
@@ -21,7 +20,6 @@ export default function EcosystemScene() {
 
         <Suspense fallback={null}>
           <ParticleGrid />
-          <TechParticles />
           <CitadelFortress />
           <OrbitalRing />
           <WormChainEdges />

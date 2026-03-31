@@ -13,7 +13,7 @@ export class HttpClient {
   private readonly timeout: number;
   private readonly maxRetries: number;
   private readonly retryWaitBase: number;
-  private readonly defaultHeaders: Record<string, string>;
+  private defaultHeaders: Record<string, string>;
 
   constructor(opts: HttpClientOptions) {
     this.baseURL = opts.baseURL.replace(/\/+$/, "");
@@ -21,6 +21,21 @@ export class HttpClient {
     this.maxRetries = opts.maxRetries ?? 3;
     this.retryWaitBase = opts.retryWaitBase ?? 500;
     this.defaultHeaders = opts.headers ?? {};
+  }
+
+  /**
+   * Update or add a default header. Used by clients to set the
+   * Authorization header after obtaining/refreshing a JWT.
+   */
+  setHeader(key: string, value: string): void {
+    this.defaultHeaders[key] = value;
+  }
+
+  /**
+   * Return the current value of a default header, or undefined.
+   */
+  getHeader(key: string): string | undefined {
+    return this.defaultHeaders[key];
   }
 
   async request<T>(

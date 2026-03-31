@@ -1,6 +1,8 @@
 export { APIGuardClient } from "./apiguard.js";
 export type { APIGuardClientOptions } from "./apiguard.js";
 
+export { parseJWTExp } from "./jwt.js";
+
 export { NIS2CompassClient } from "./nis2compass.js";
 export type { NIS2CompassClientOptions } from "./nis2compass.js";
 

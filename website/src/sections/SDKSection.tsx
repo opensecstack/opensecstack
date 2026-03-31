@@ -1,7 +1,7 @@
 import ScrollSection from '../components/ScrollSection'
 
 const sdks = [
-  { lang: 'Go', color: '#00ADD8', methods: 49, tests: 102, example: 'client := opensecstack.NewAPIGuardClient(url, key)\nscan, _ := client.CreateScan(ctx, specURL)' },
+  { lang: 'Go', color: '#00ADD8', methods: 49, tests: 102, example: 'client := sin.NewAPIGuardClient(url, key)\nscan, _ := client.CreateScan(ctx, specURL)' },
   { lang: 'Python', color: '#3776AB', methods: 47, tests: 67, example: 'client = APIGuardClient(url, api_key)\nscan = client.create_scan(spec_url=url)' },
   { lang: 'Rust', color: '#CE422B', methods: 40, tests: 75, example: 'let client = APIGuardClient::new(url, key);\nlet scan = client.create_scan(spec_url).await?;' },
 ]

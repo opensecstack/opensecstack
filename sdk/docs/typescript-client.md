@@ -134,21 +134,21 @@ const assessment = await nis2.createAssessment(org.id, {
 });
 
 const assessments = await nis2.getAssessments(org.id, { status: "in_progress" });
-await nis2.patchAssessment(org.id, assessment.id, { status: "completed" });
-await nis2.deleteAssessment(org.id, assessment.id);
+await nis2.patchAssessment(assessment.id, { status: "completed" });
+await nis2.deleteAssessment(assessment.id);
 ```
 
 ### Controls
 
 ```typescript
-const controls = await nis2.listControls(org.id, assessment.id, {
+const controls = await nis2.listControls(assessment.id, {
   status: "not_started",
   nist_category: "PR",
 });
 
-const control = await nis2.getControl(org.id, assessment.id, controls[0].id);
+const control = await nis2.getControl(assessment.id, controls[0].measure_ref);
 
-await nis2.patchControl(org.id, assessment.id, control.id, {
+await nis2.patchControl(assessment.id, control.measure_ref, {
   status: "implemented",
   notes: "Deployed firewall rules per NIS2 Article 21(2)(a)",
   risk_score: 2.5,
@@ -158,32 +158,30 @@ await nis2.patchControl(org.id, assessment.id, control.id, {
 ### Artifacts
 
 ```typescript
-const artifacts = await nis2.listArtifacts(org.id, assessment.id);
+const artifacts = await nis2.listArtifacts(assessment.id);
 
 const uploaded = await nis2.uploadArtifact(
-  org.id,
   assessment.id,
-  control.id,
   file,
-  "evidence.pdf",
-  "Firewall configuration evidence",
+  "evidence",
+  { control_id: control.measure_ref, description: "Firewall configuration evidence", filename: "evidence.pdf" },
 );
 
-const artifact = await nis2.getArtifact(org.id, assessment.id, uploaded.id);
-const blob = await nis2.downloadArtifact(org.id, assessment.id, uploaded.id);
-await nis2.deleteArtifact(org.id, assessment.id, uploaded.id);
+const artifact = await nis2.getArtifact(uploaded.id);
+const blob = await nis2.downloadArtifact(uploaded.id);
+await nis2.deleteArtifact(uploaded.id);
 ```
 
 ### API keys, reports, audit, health
 
 ```typescript
-const keys = await nis2.listAPIKeys(org.id);
-const key = await nis2.createAPIKey(org.id, { label: "CI/CD" });
-await nis2.revokeAPIKey(org.id, key.id);
+const keys = await nis2.listAPIKeys();
+const key = await nis2.createAPIKey({ label: "CI/CD" });
+await nis2.revokeAPIKey(key.id);
 
-const report = await nis2.generateReport(org.id, assessment.id, "pdf");
-const auditLog = await nis2.getAuditLog(org.id, { limit: 50 });
-const entry = await nis2.getAuditEntry(org.id, auditLog[0].id);
+const report = await nis2.generateReport(assessment.id);
+const auditLog = await nis2.getAuditLog(50, 1);
+const entry = await nis2.getAuditEntry(auditLog[0].id);
 
 const health = await nis2.getHealth();
 const detail = await nis2.getHealthDetail();
@@ -208,7 +206,7 @@ const citadel = new CITADELClient({
 ### Events
 
 ```typescript
-await citadel.sendEvent({
+citadel.sendEvent({
   event_type: "apiguard.scan.completed",
   source: "apiguard",
   actor_id: "system",

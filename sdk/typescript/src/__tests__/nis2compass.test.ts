@@ -8,6 +8,28 @@ vi.stubGlobal("fetch", mockFetch);
 // Suppress crypto.randomUUID for request IDs
 vi.stubGlobal("crypto", { randomUUID: () => "test-request-id" });
 
+// ---------------------------------------------------------------------------
+// JWT helper — build a minimal JWT with a given exp claim
+// ---------------------------------------------------------------------------
+
+function buildJWT(exp: number): string {
+  const header = Buffer.from(
+    JSON.stringify({ alg: "HS256", typ: "JWT" }),
+  ).toString("base64url");
+  const body = Buffer.from(
+    JSON.stringify({ sub: "test", exp }),
+  ).toString("base64url");
+  return `${header}.${body}.test-signature`;
+}
+
+/** A JWT that expires far in the future (valid for tests). */
+const FUTURE_JWT = buildJWT(Math.floor(Date.now() / 1000) + 3600);
+const API_KEY = "test-api-key-123";
+
+// ---------------------------------------------------------------------------
+// Response helpers
+// ---------------------------------------------------------------------------
+
 function jsonResponse(body: unknown, status = 200): Response {
   return {
     ok: status >= 200 && status < 300,
@@ -38,8 +60,12 @@ function binaryResponse(data: ArrayBuffer): Response {
   } as unknown as Response;
 }
 
+/** Mock a successful auth/token response returning a valid JWT. */
+function authResponse(jwt: string = FUTURE_JWT): Response {
+  return jsonResponse({ token: jwt });
+}
+
 const BASE_URL = "https://nis2.example.com";
-const API_KEY = "test-api-key-123";
 
 function createClient() {
   return new NIS2CompassClient({
@@ -47,6 +73,12 @@ function createClient() {
     apiKey: API_KEY,
     maxRetries: 0,
   });
+}
+
+/** Extract fetch call by index. */
+function fetchCall(n: number) {
+  const [url, init] = mockFetch.mock.calls[n]!;
+  return { url: url as string, init: init as RequestInit };
 }
 
 function lastFetchCall() {
@@ -77,6 +109,7 @@ describe("NIS2CompassClient", () => {
       created_at: "2026-01-01T00:00:00Z",
       updated_at: "2026-01-01T00:00:00Z",
     };
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(created, 201));
 
     const result = await client.createOrganisation({
@@ -85,7 +118,8 @@ describe("NIS2CompassClient", () => {
       country: "DE",
     });
 
-    const { url, init } = lastFetchCall();
+    // Call 0 is auth, call 1 is the API call
+    const { url, init } = fetchCall(1);
     expect(url).toContain("/api/v1/organisations");
     expect(init.method).toBe("POST");
     const body = JSON.parse(init.body as string);
@@ -100,6 +134,7 @@ describe("NIS2CompassClient", () => {
       { id: "org-1", name: "Acme" },
       { id: "org-2", name: "Beta" },
     ];
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(orgs));
 
     const result = await client.getOrganisations({ page: 2, per_page: 10 });
@@ -114,6 +149,7 @@ describe("NIS2CompassClient", () => {
 
   it("3. getOrganisation — GET by ID", async () => {
     const org = { id: "org-42", name: "Test Org" };
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(org));
 
     const result = await client.getOrganisation("org-42");
@@ -126,6 +162,7 @@ describe("NIS2CompassClient", () => {
 
   it("4. patchOrganisation — PATCH with partial fields", async () => {
     const patched = { id: "org-1", name: "Acme Updated", industry: "finance" };
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(patched));
 
     const result = await client.patchOrganisation("org-1", {
@@ -141,6 +178,7 @@ describe("NIS2CompassClient", () => {
   });
 
   it("5. deleteOrganisation — DELETE 204", async () => {
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(emptyResponse(204));
 
     const result = await client.deleteOrganisation("org-1");
@@ -167,6 +205,7 @@ describe("NIS2CompassClient", () => {
       created_at: "2026-01-01T00:00:00Z",
       updated_at: "2026-01-01T00:00:00Z",
     };
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(assessment, 201));
 
     const result = await client.createAssessment("org-1", {
@@ -185,6 +224,7 @@ describe("NIS2CompassClient", () => {
 
   it("7. getAssessments — GET with status filter", async () => {
     const assessments = [{ id: "asmt-1", status: "in_progress" }];
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(assessments));
 
     const result = await client.getAssessments("org-1", {
@@ -204,6 +244,7 @@ describe("NIS2CompassClient", () => {
 
   it("8. getAssessment — GET by ID", async () => {
     const assessment = { id: "asmt-99", title: "Full Audit" };
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(assessment));
 
     const result = await client.getAssessment("asmt-99");
@@ -216,6 +257,7 @@ describe("NIS2CompassClient", () => {
 
   it("9. patchAssessment — PATCH status transition", async () => {
     const patched = { id: "asmt-1", status: "completed" };
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(patched));
 
     const result = await client.patchAssessment("asmt-1", {
@@ -231,6 +273,7 @@ describe("NIS2CompassClient", () => {
   });
 
   it("10. deleteAssessment — DELETE 204", async () => {
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(emptyResponse(204));
 
     const result = await client.deleteAssessment("asmt-1");
@@ -247,6 +290,7 @@ describe("NIS2CompassClient", () => {
     const controls = [
       { id: "ctrl-1", measure_ref: "ART21.2a", status: "compliant" },
     ];
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(controls));
 
     const result = await client.listControls("asmt-1", {
@@ -269,6 +313,7 @@ describe("NIS2CompassClient", () => {
       measure_ref: "ART21.2a",
       title: "Risk analysis policies",
     };
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(control));
 
     const result = await client.getControl("asmt-1", "ART21.2a");
@@ -287,6 +332,7 @@ describe("NIS2CompassClient", () => {
       evidence: { doc: "risk-policy-v3.pdf" },
       risk_score: 7.5,
     };
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(patched));
 
     const result = await client.patchControl("asmt-1", "ART21.2a", {
@@ -311,6 +357,7 @@ describe("NIS2CompassClient", () => {
       { id: "art-1", filename: "policy.pdf", type: "policy" },
       { id: "art-2", filename: "scan.json", type: "scan_result" },
     ];
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(artifacts));
 
     const result = await client.listArtifacts("asmt-1");
@@ -328,6 +375,7 @@ describe("NIS2CompassClient", () => {
       type: "evidence",
       size_bytes: 102400,
     };
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(artifact));
 
     const result = await client.getArtifact("art-42");
@@ -341,6 +389,7 @@ describe("NIS2CompassClient", () => {
   it("16. downloadArtifact — returns ArrayBuffer", async () => {
     const binaryData = new ArrayBuffer(64);
     new Uint8Array(binaryData).fill(0xfe);
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(binaryResponse(binaryData));
 
     const result = await client.downloadArtifact("art-42");
@@ -353,6 +402,7 @@ describe("NIS2CompassClient", () => {
   });
 
   it("17. deleteArtifact — DELETE 204", async () => {
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(emptyResponse(204));
 
     const result = await client.deleteArtifact("art-42");
@@ -370,6 +420,7 @@ describe("NIS2CompassClient", () => {
       { id: "key-1", label: "CI pipeline", scope: "read", is_active: true },
       { id: "key-2", label: "Backup", scope: "admin", is_active: false },
     ];
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(keys));
 
     const result = await client.listAPIKeys();
@@ -389,6 +440,7 @@ describe("NIS2CompassClient", () => {
       key: "sk-live-abc123",
       warning: "Store this key securely. It will not be shown again.",
     };
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(key, 201));
 
     const result = await client.createAPIKey({
@@ -406,6 +458,7 @@ describe("NIS2CompassClient", () => {
   });
 
   it("20. revokeAPIKey — DELETE", async () => {
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(emptyResponse(204));
 
     const result = await client.revokeAPIKey("key-2");
@@ -421,6 +474,7 @@ describe("NIS2CompassClient", () => {
   it("21. generateReport — POST returns ArrayBuffer (PDF)", async () => {
     const pdfData = new ArrayBuffer(128);
     new Uint8Array(pdfData).set([0x25, 0x50, 0x44, 0x46]); // %PDF magic bytes
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(binaryResponse(pdfData));
 
     const result = await client.generateReport("asmt-1");
@@ -441,6 +495,7 @@ describe("NIS2CompassClient", () => {
         controller.close();
       },
     });
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -458,6 +513,7 @@ describe("NIS2CompassClient", () => {
   });
 
   it("21c. getReportStream — throws when body is null", async () => {
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -483,6 +539,7 @@ describe("NIS2CompassClient", () => {
         timestamp: "2026-01-01T00:00:00Z",
       },
     ];
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(entries));
 
     const result = await client.getAuditLog(50, 2);
@@ -504,6 +561,7 @@ describe("NIS2CompassClient", () => {
       resource_id: "ctrl-1",
       timestamp: "2026-03-15T10:30:00Z",
     };
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(entry));
 
     const result = await client.getAuditEntry("aud-99");
@@ -522,7 +580,9 @@ describe("NIS2CompassClient", () => {
     const result = await client.getHealth();
 
     expect(result.status).toBe("ok");
-    const [url, init] = mockFetch.mock.calls[0];
+    // getHealth uses httpPublic which has no auth — only 1 fetch call, no auth
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, init] = mockFetch.mock.calls[0]!;
     expect(url).toContain("/health");
     expect(url).not.toContain("/health/detail");
     expect(init.method).toBe("GET");
@@ -533,6 +593,7 @@ describe("NIS2CompassClient", () => {
 
   it("24. getHealthDetail — authenticated with detailed status", async () => {
     const health = { status: "ok", version: "0.1.0", db: "connected", redis: "connected" };
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(health));
 
     const result = await client.getHealthDetail();
@@ -540,9 +601,9 @@ describe("NIS2CompassClient", () => {
     const { url, init } = lastFetchCall();
     expect(url).toContain("/health/detail");
     expect(init.method).toBe("GET");
-    // Verify that auth header is present
+    // Verify that auth header is present (JWT from auth/token, not raw API key)
     const headers = init.headers as Record<string, string>;
-    expect(headers["Authorization"]).toBe(`Bearer ${API_KEY}`);
+    expect(headers["Authorization"]).toBe(`Bearer ${FUTURE_JWT}`);
     expect(result.version).toBe("0.1.0");
     expect(result.db).toBe("connected");
     expect(result.redis).toBe("connected");
@@ -552,6 +613,7 @@ describe("NIS2CompassClient", () => {
   // ─── Error handling ───
 
   it("25. 404 error — throws OpenSecStackError", async () => {
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(
       jsonResponse({ error: "Organisation not found" }, 404),
     );
@@ -560,10 +622,15 @@ describe("NIS2CompassClient", () => {
       OpenSecStackError,
     );
 
+    mockFetch.mockReset();
+    client = createClient();
+
+    mockFetch.mockResolvedValueOnce(authResponse());
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ error: "Organisation not found" }, 404),
+    );
+
     try {
-      mockFetch.mockResolvedValueOnce(
-        jsonResponse({ error: "Organisation not found" }, 404),
-      );
       await client.getOrganisation("nonexistent");
     } catch (err) {
       expect(err).toBeInstanceOf(OpenSecStackError);
@@ -575,6 +642,7 @@ describe("NIS2CompassClient", () => {
   });
 
   it("26. 400 validation error — throws with message", async () => {
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(
       jsonResponse(
         { error: "Validation failed: name is required", code: "VALIDATION_ERROR" },
@@ -590,6 +658,10 @@ describe("NIS2CompassClient", () => {
       }),
     ).rejects.toThrow(OpenSecStackError);
 
+    mockFetch.mockReset();
+    client = createClient();
+
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(
       jsonResponse(
         { error: "Validation failed: name is required", code: "VALIDATION_ERROR" },
@@ -615,17 +687,19 @@ describe("NIS2CompassClient", () => {
 
   // ─── Additional coverage ───
 
-  it("sends Authorization header on all requests", async () => {
+  it("sends JWT from auth/token as Authorization header on all requests", async () => {
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse([]));
 
     await client.getOrganisations();
 
     const { init } = lastFetchCall();
     const headers = init.headers as Record<string, string>;
-    expect(headers["Authorization"]).toBe("Bearer test-api-key-123");
+    expect(headers["Authorization"]).toBe(`Bearer ${FUTURE_JWT}`);
   });
 
   it("omits undefined query params", async () => {
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse([]));
 
     await client.getOrganisations({});
@@ -644,6 +718,7 @@ describe("NIS2CompassClient", () => {
       { measure_ref: "art21_a", status: "compliant" },
       { measure_ref: "art21_b", status: "partial" },
     ];
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(controls));
 
     const result = await client.getControls("asmt-1");
@@ -665,6 +740,7 @@ describe("NIS2CompassClient", () => {
       artifact_type: "evidence",
       filename: "report.pdf",
     };
+    mockFetch.mockResolvedValueOnce(authResponse());
     mockFetch.mockResolvedValueOnce(jsonResponse(artifact));
 
     const blob = new Blob(["pdf-content"], { type: "application/pdf" });
@@ -680,5 +756,20 @@ describe("NIS2CompassClient", () => {
     const headers = init.headers as Record<string, string>;
     expect(headers["Content-Type"]).toBeUndefined();
     expect(result).toEqual(artifact);
+  });
+
+  // ─── Token caching ───
+
+  it("caches JWT and reuses it across multiple calls", async () => {
+    mockFetch.mockResolvedValueOnce(authResponse());
+    mockFetch.mockResolvedValueOnce(jsonResponse([]));
+    mockFetch.mockResolvedValueOnce(jsonResponse([]));
+
+    await client.getOrganisations();
+    await client.getOrganisations();
+
+    // Only 1 auth call + 2 API calls = 3 total
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(fetchCall(0).url).toContain("/api/v1/auth/token");
   });
 });

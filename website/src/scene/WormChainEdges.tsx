@@ -1,33 +1,65 @@
-import { Line } from '@react-three/drei'
+import { useRef } from 'react'
+import { useFrame } from '@react-three/fiber'
+import * as THREE from 'three'
 import { platforms } from '../data/platforms'
 
 const RADIUS = 4.5
+const step = (Math.PI * 2) / platforms.length
 
+/**
+ * Animated lines from each orbital node to the fortress center.
+ * Positions are recomputed every frame using the same formula
+ * as OrbitalNode so the endpoints stay perfectly attached.
+ */
 export default function WormChainEdges() {
-  const step = (Math.PI * 2) / platforms.length
+  const linesRef = useRef<THREE.Group>(null)
+
+  useFrame(({ clock }) => {
+    if (!linesRef.current) return
+    const elapsed = clock.getElapsedTime()
+
+    for (let i = 0; i < platforms.length; i++) {
+      const line = linesRef.current.children[i] as THREE.Line
+      if (!line) continue
+
+      // Same formula as OrbitalNode.tsx useFrame
+      const t = elapsed * 0.08 + step * i
+      const x = Math.cos(t) * RADIUS
+      const z = Math.sin(t) * RADIUS
+      const y = Math.sin(t * 2) * 0.3
+
+      const positions = line.geometry.getAttribute('position')
+      if (!positions) continue
+
+      // Point 0: node position
+      positions.setXYZ(0, x, y, z)
+      // Point 1: fortress center
+      positions.setXYZ(1, 0, 0, 0)
+      positions.needsUpdate = true
+    }
+  })
 
   return (
-    <group>
-      {platforms.map((p, i) => {
-        const angle = step * i
-        const points: Array<[number, number, number]> = [
-          [Math.cos(angle) * RADIUS, 0, Math.sin(angle) * RADIUS],
-          [0, 0, 0],
-        ]
-        return (
-          <Line
-            key={p.id}
-            points={points}
+    <group ref={linesRef}>
+      {platforms.map((p) => (
+        <line key={p.id}>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              count={2}
+              array={new Float32Array([0, 0, 0, 0, 0, 0])}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineDashedMaterial
             color="#00f0ff"
-            lineWidth={1}
             transparent
             opacity={0.25}
-            dashed
             dashSize={0.3}
             gapSize={0.15}
           />
-        )
-      })}
+        </line>
+      ))}
     </group>
   )
 }

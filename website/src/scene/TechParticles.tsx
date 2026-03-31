@@ -1,165 +1,179 @@
-import { useRef, useMemo, useCallback } from 'react'
-import { useFrame, useThree } from '@react-three/fiber'
-import { Html } from '@react-three/drei'
+import { useRef, useMemo } from 'react'
+import { useFrame, useThree, useLoader } from '@react-three/fiber'
 import * as THREE from 'three'
 
 /**
- * Floating language/tech icon particles that drift gently and
- * repel away from the mouse pointer in 3D space.
+ * 3D interactive icon particles for the 5 core languages/tools.
+ * Each icon is a textured sprite (always faces camera) with physics:
+ *   - gentle orbit around a cluster center
+ *   - mouse attraction: icons drift toward cursor when nearby
+ *   - mouse repulsion ring: pushed away if too close
+ *   - spring return to orbit when mouse leaves
+ *
+ * Multiple copies of each icon create a cloud of ~30 particles.
  */
 
-interface TechIcon {
+interface TechDef {
   label: string
-  symbol: string
+  icon: string       // path in public/icons/
   color: string
+  glowColor: string
 }
 
-const techs: TechIcon[] = [
-  { label: 'Go',         symbol: 'Go',   color: '#00ADD8' },
-  { label: 'Rust',       symbol: 'Rs',   color: '#CE422B' },
-  { label: 'Python',     symbol: 'Py',   color: '#3776AB' },
-  { label: 'TypeScript', symbol: 'TS',   color: '#3178C6' },
-  { label: 'React',      symbol: 'Re',   color: '#61DAFB' },
-  { label: 'PostgreSQL', symbol: 'Pg',   color: '#4169E1' },
-  { label: 'Redis',      symbol: 'Rd',   color: '#DC382D' },
-  { label: 'Docker',     symbol: 'Dk',   color: '#2496ED' },
-  { label: 'gRPC',       symbol: 'gR',   color: '#244C5A' },
-  { label: 'OpenAPI',    symbol: 'OA',   color: '#6BA539' },
-  { label: 'SARIF',      symbol: 'SF',   color: '#8B5CF6' },
-  { label: 'Ed25519',    symbol: 'Ed',   color: '#F59E0B' },
-  { label: 'BLAKE3',     symbol: 'B3',   color: '#10B981' },
-  { label: 'SHA-256',    symbol: '#2',   color: '#06B6D4' },
-  { label: 'Vite',       symbol: 'Vi',   color: '#646CFF' },
-  { label: 'Flask',      symbol: 'Fl',   color: '#FFFFFF' },
-  { label: 'WORM',       symbol: 'WM',   color: '#00F0FF' },
-  { label: 'CVSS',       symbol: 'CV',   color: '#EF4444' },
+const techs: TechDef[] = [
+  { label: 'Go',         icon: '/icons/go.svg',         color: '#00ADD8', glowColor: '#00ADD8' },
+  { label: 'Rust',       icon: '/icons/rust.svg',       color: '#CE422B', glowColor: '#CE422B' },
+  { label: 'Python',     icon: '/icons/python.svg',     color: '#3776AB', glowColor: '#FFD43B' },
+  { label: 'TypeScript', icon: '/icons/typescript.svg', color: '#3178C6', glowColor: '#3178C6' },
+  { label: 'Terraform',  icon: '/icons/terraform.svg',  color: '#7B42BC', glowColor: '#5C4EE5' },
 ]
 
-const PARTICLE_COUNT = techs.length
-const SPREAD = 18
-const MOUSE_REPEL_RADIUS = 3
-const MOUSE_REPEL_STRENGTH = 0.04
-const DRIFT_SPEED = 0.15
-const RETURN_SPEED = 0.008
+// How many copies of each icon
+const COPIES_PER_ICON = 6
+const TOTAL = techs.length * COPIES_PER_ICON
 
-interface ParticleState {
+// Physics tuning
+const CLUSTER_CENTER = new THREE.Vector3(5.5, -0.5, -1)
+const ORBIT_RADIUS = 2.8
+const MOUSE_ATTRACT_RADIUS = 5
+const MOUSE_REPEL_RADIUS = 1.5
+const ATTRACT_STRENGTH = 0.015
+const REPEL_STRENGTH = 0.06
+const RETURN_STRENGTH = 0.006
+const DRIFT_SPEED = 0.25
+const DAMPING = 0.94
+const SPRITE_SIZE = 0.55
+
+interface Particle {
+  techIdx: number
   homePos: THREE.Vector3
-  currentPos: THREE.Vector3
-  velocity: THREE.Vector3
+  pos: THREE.Vector3
+  vel: THREE.Vector3
   phase: number
+  orbitSpeed: number
+  orbitRadius: number
+  yOffset: number
+  size: number
 }
 
 export default function TechParticles() {
   const groupRef = useRef<THREE.Group>(null)
-  const mouse3D = useRef(new THREE.Vector3(999, 999, 999))
   const { camera } = useThree()
 
-  const particles = useMemo<ParticleState[]>(() => {
-    return techs.map((_, i) => {
-      // Distribute in a wide shell around the scene
-      const theta = (i / PARTICLE_COUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.8
-      const phi = Math.acos(2 * Math.random() - 1)
-      const r = SPREAD * 0.4 + Math.random() * SPREAD * 0.6
-      const x = r * Math.sin(phi) * Math.cos(theta)
-      const y = (Math.random() - 0.5) * SPREAD * 0.5
-      const z = r * Math.sin(phi) * Math.sin(theta)
+  // Load all icon textures
+  const textures = useLoader(
+    THREE.TextureLoader,
+    techs.map(t => t.icon),
+  )
 
-      return {
-        homePos: new THREE.Vector3(x, y, z),
-        currentPos: new THREE.Vector3(x, y, z),
-        velocity: new THREE.Vector3(),
-        phase: Math.random() * Math.PI * 2,
+  // Initialize particle state
+  const particles = useMemo<Particle[]>(() => {
+    const result: Particle[] = []
+    for (let i = 0; i < techs.length; i++) {
+      for (let c = 0; c < COPIES_PER_ICON; c++) {
+        const angle = ((i * COPIES_PER_ICON + c) / TOTAL) * Math.PI * 2 + (Math.random() - 0.5) * 0.5
+        const r = ORBIT_RADIUS * (0.6 + Math.random() * 0.8)
+        const y = (Math.random() - 0.5) * 2.5
+        const home = new THREE.Vector3(
+          CLUSTER_CENTER.x + Math.cos(angle) * r,
+          CLUSTER_CENTER.y + y,
+          CLUSTER_CENTER.z + Math.sin(angle) * r,
+        )
+        result.push({
+          techIdx: i,
+          homePos: home.clone(),
+          pos: home.clone(),
+          vel: new THREE.Vector3(),
+          phase: Math.random() * Math.PI * 2,
+          orbitSpeed: 0.08 + Math.random() * 0.12,
+          orbitRadius: r,
+          yOffset: y,
+          size: SPRITE_SIZE * (0.7 + Math.random() * 0.6),
+        })
       }
-    })
-  }, [])
-
-  const onPointerMove = useCallback((e: THREE.Event & { point: THREE.Vector3 }) => {
-    mouse3D.current.copy(e.point)
+    }
+    return result
   }, [])
 
   useFrame(({ clock, pointer }) => {
     if (!groupRef.current) return
     const t = clock.getElapsedTime()
 
-    // Project mouse into 3D at z=0 plane
-    const mouseNDC = new THREE.Vector3(pointer.x, pointer.y, 0.5)
-    mouseNDC.unproject(camera)
-    const dir = mouseNDC.sub(camera.position).normalize()
-    const dist = -camera.position.z / dir.z
-    const mouseWorld = camera.position.clone().add(dir.multiplyScalar(dist))
+    // Project mouse into 3D at cluster z-plane
+    const ndcMouse = new THREE.Vector3(pointer.x, pointer.y, 0.5)
+    ndcMouse.unproject(camera)
+    const dir = ndcMouse.sub(camera.position).normalize()
+    const planeDist = (CLUSTER_CENTER.z - camera.position.z) / dir.z
+    const mouseWorld = camera.position.clone().add(dir.multiplyScalar(planeDist))
 
     const children = groupRef.current.children
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
+    for (let i = 0; i < TOTAL; i++) {
       const p = particles[i]
-      const child = children[i]
-      if (!child) continue
+      const sprite = children[i] as THREE.Sprite
+      if (!sprite) continue
 
-      // Gentle drift around home position
-      const driftX = Math.sin(t * DRIFT_SPEED + p.phase) * 0.5
-      const driftY = Math.cos(t * DRIFT_SPEED * 0.7 + p.phase * 1.3) * 0.3
-      const target = p.homePos.clone().add(new THREE.Vector3(driftX, driftY, 0))
+      // Orbit drift: home position slowly orbits around cluster center
+      const orbitAngle = t * p.orbitSpeed + p.phase
+      const driftHome = new THREE.Vector3(
+        CLUSTER_CENTER.x + Math.cos(orbitAngle) * p.orbitRadius,
+        CLUSTER_CENTER.y + p.yOffset + Math.sin(t * DRIFT_SPEED + p.phase) * 0.3,
+        CLUSTER_CENTER.z + Math.sin(orbitAngle) * p.orbitRadius,
+      )
 
-      // Mouse repulsion
-      const toMouse = p.currentPos.clone().sub(mouseWorld)
+      // Mouse interaction
+      const toMouse = mouseWorld.clone().sub(p.pos)
       const mouseDist = toMouse.length()
+
       if (mouseDist < MOUSE_REPEL_RADIUS) {
-        const force = (1 - mouseDist / MOUSE_REPEL_RADIUS) * MOUSE_REPEL_STRENGTH
-        p.velocity.add(toMouse.normalize().multiplyScalar(force))
+        // Too close — push away
+        const force = (1 - mouseDist / MOUSE_REPEL_RADIUS) * REPEL_STRENGTH
+        p.vel.add(toMouse.normalize().multiplyScalar(-force))
+      } else if (mouseDist < MOUSE_ATTRACT_RADIUS) {
+        // In attraction zone — gently pull toward mouse
+        const factor = 1 - (mouseDist - MOUSE_REPEL_RADIUS) / (MOUSE_ATTRACT_RADIUS - MOUSE_REPEL_RADIUS)
+        p.vel.add(toMouse.normalize().multiplyScalar(factor * ATTRACT_STRENGTH))
       }
 
-      // Return to home + drift
-      p.velocity.add(target.clone().sub(p.currentPos).multiplyScalar(RETURN_SPEED))
+      // Spring back toward drifting home
+      const toHome = driftHome.clone().sub(p.pos)
+      p.vel.add(toHome.multiplyScalar(RETURN_STRENGTH))
 
       // Damping
-      p.velocity.multiplyScalar(0.95)
+      p.vel.multiplyScalar(DAMPING)
 
-      // Apply
-      p.currentPos.add(p.velocity)
-      child.position.copy(p.currentPos)
+      // Integrate
+      p.pos.add(p.vel)
 
-      // Slow rotation
-      child.rotation.y = t * 0.2 + p.phase
+      // Apply to sprite
+      sprite.position.copy(p.pos)
+
+      // Scale pulse on mouse proximity
+      const proximity = Math.max(0, 1 - mouseDist / MOUSE_ATTRACT_RADIUS)
+      const scaleTarget = p.size * (1 + proximity * 0.5)
+      sprite.scale.lerp(new THREE.Vector3(scaleTarget, scaleTarget, 1), 0.08)
+
+      // Opacity: brighter when near mouse
+      const mat = sprite.material as THREE.SpriteMaterial
+      mat.opacity = 0.5 + proximity * 0.5
     }
   })
 
   return (
     <group ref={groupRef}>
-      {techs.map((tech, i) => (
-        <group key={tech.label} position={particles[i].homePos.toArray()}>
-          <Html
-            center
-            distanceFactor={15}
-            style={{ pointerEvents: 'none', userSelect: 'none' }}
-          >
-            <div style={{
-              width: 36,
-              height: 36,
-              borderRadius: 8,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: `${tech.color}18`,
-              border: `1px solid ${tech.color}40`,
-              color: tech.color,
-              fontSize: 12,
-              fontWeight: 700,
-              fontFamily: 'JetBrains Mono, monospace',
-              letterSpacing: '-0.02em',
-              boxShadow: `0 0 12px ${tech.color}22`,
-              opacity: 0.7,
-            }}
-            title={tech.label}
-            >
-              {tech.symbol}
-            </div>
-          </Html>
-        </group>
-      ))}
-      {/* Invisible plane to capture pointer move for mouse position */}
-      <mesh visible={false} onPointerMove={onPointerMove}>
-        <planeGeometry args={[100, 100]} />
-        <meshBasicMaterial transparent opacity={0} />
-      </mesh>
+      {particles.map((p, i) => {
+        const tex = textures[p.techIdx]
+        return (
+          <sprite key={i} position={p.pos.toArray()} scale={[p.size, p.size, 1]}>
+            <spriteMaterial
+              map={tex}
+              transparent
+              opacity={0.6}
+              depthWrite={false}
+              blending={THREE.AdditiveBlending}
+            />
+          </sprite>
+        )
+      })}
     </group>
   )
 }

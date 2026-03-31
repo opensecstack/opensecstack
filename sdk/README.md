@@ -27,7 +27,7 @@ The SDK provides typed contracts, event schemas, and client libraries that all o
 | Async / non-blocking | Yes (goroutines) | Yes (asyncio) | Yes (async/await) | Yes (tokio) |
 | Auto token refresh | Yes | Yes | Yes | Yes |
 | Redirect guard (SDK-M4) | Yes | Yes | Yes | Yes |
-| JWT exp parsing (SDK-M5) | Yes | Yes | — | Yes |
+| JWT exp parsing (SDK-M5) | Yes | Yes | Yes | Yes |
 | Report streaming | Yes | Yes | Yes | Yes |
 | Builder pattern | Yes | Yes | — | Yes |
 | Min runtime version | Go 1.24 | Python 3.11 | Node.js 18 | Rust 1.75 |

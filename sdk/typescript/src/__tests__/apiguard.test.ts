@@ -13,6 +13,27 @@ vi.stubGlobal("fetch", mockFetch);
 // crypto.randomUUID is used by HttpClient for X-Request-ID
 vi.stubGlobal("crypto", { randomUUID: () => "test-uuid-1234" });
 
+// ---------------------------------------------------------------------------
+// JWT helper — build a minimal JWT with a given exp claim
+// ---------------------------------------------------------------------------
+
+function buildJWT(exp: number): string {
+  const header = Buffer.from(
+    JSON.stringify({ alg: "HS256", typ: "JWT" }),
+  ).toString("base64url");
+  const body = Buffer.from(
+    JSON.stringify({ sub: "test", exp }),
+  ).toString("base64url");
+  return `${header}.${body}.test-signature`;
+}
+
+/** A JWT that expires far in the future (valid for tests). */
+const FUTURE_JWT = buildJWT(Math.floor(Date.now() / 1000) + 3600);
+
+// ---------------------------------------------------------------------------
+// Response helpers
+// ---------------------------------------------------------------------------
+
 function mockResponse(
   status: number,
   body: unknown,
@@ -26,6 +47,7 @@ function mockResponse(
       ...headers,
     }),
     json: async () => body,
+    text: async () => JSON.stringify(body),
     arrayBuffer: async () => new ArrayBuffer(8),
     body: null,
   };
@@ -49,9 +71,15 @@ function mockRawResponse(
       ...headers,
     }),
     json: async () => ({}),
+    text: async () => "",
     arrayBuffer: async () => new ArrayBuffer(8),
     body: stream,
   };
+}
+
+/** Mock a successful auth/token response returning a valid JWT. */
+function mockAuthResponse(jwt: string = FUTURE_JWT) {
+  return mockResponse(200, { access_token: jwt });
 }
 
 // ---------------------------------------------------------------------------
@@ -130,16 +158,24 @@ function createClient(): APIGuardClient {
   });
 }
 
+/** Extract the URL string from the Nth fetch call (0-based). */
+function fetchURL(n: number): string {
+  return mockFetch.mock.calls[n]![0];
+}
+
+/** Extract the init object from the Nth fetch call (0-based). */
+function fetchInit(n: number): RequestInit {
+  return mockFetch.mock.calls[n]![1];
+}
+
 /** Extract the URL string from the most recent fetch call. */
 function lastFetchURL(): string {
-  const [url] = mockFetch.mock.lastCall!;
-  return url;
+  return mockFetch.mock.calls[mockFetch.mock.calls.length - 1]![0];
 }
 
 /** Extract the init object from the most recent fetch call. */
 function lastFetchInit(): RequestInit {
-  const [, init] = mockFetch.mock.lastCall!;
-  return init;
+  return mockFetch.mock.calls[mockFetch.mock.calls.length - 1]![1];
 }
 
 // ---------------------------------------------------------------------------
@@ -154,25 +190,35 @@ describe("APIGuardClient", () => {
   // ─── 1. createScan ───
 
   it("createScan sends POST with spec_url body and returns Scan", async () => {
+    // First call: auth/token; second call: actual API request
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     mockFetch.mockResolvedValueOnce(mockResponse(200, sampleScan));
 
     const client = createClient();
     const result = await client.createScan("https://example.com/openapi.yaml");
 
     expect(result).toEqual(sampleScan);
+
+    // Verify auth call
+    expect(fetchURL(0)).toContain("/api/v1/auth/token");
+    const authBody = JSON.parse(fetchInit(0).body as string);
+    expect(authBody).toEqual({ api_key: API_KEY });
+
+    // Verify API call
     expect(lastFetchURL()).toContain("/api/v1/scans");
     expect(lastFetchInit().method).toBe("POST");
-
     const body = JSON.parse(lastFetchInit().body as string);
     expect(body).toEqual({ spec_url: "https://example.com/openapi.yaml" });
 
+    // Verify the JWT is used as the Bearer token (not the raw API key)
     const headers = lastFetchInit().headers as Record<string, string>;
-    expect(headers["Authorization"]).toBe(`Bearer ${API_KEY}`);
+    expect(headers["Authorization"]).toBe(`Bearer ${FUTURE_JWT}`);
   });
 
   // ─── 2. createScanFull ───
 
   it("createScanFull sends POST with full CreateScanOptions body", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     mockFetch.mockResolvedValueOnce(mockResponse(200, sampleScan));
 
     const client = createClient();
@@ -195,6 +241,7 @@ describe("APIGuardClient", () => {
   // ─── 3. getScan ───
 
   it("getScan sends GET /api/v1/scans/:id", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     mockFetch.mockResolvedValueOnce(mockResponse(200, sampleScan));
 
     const client = createClient();
@@ -209,6 +256,7 @@ describe("APIGuardClient", () => {
   // ─── 4. listScans with pagination ───
 
   it("listScans sends GET with pagination params", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     const scans = [sampleScan];
     mockFetch.mockResolvedValueOnce(mockResponse(200, scans));
 
@@ -227,6 +275,7 @@ describe("APIGuardClient", () => {
   // ─── 5. listScans with no params ───
 
   it("listScans with no params does not include query params", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     mockFetch.mockResolvedValueOnce(mockResponse(200, []));
 
     const client = createClient();
@@ -241,6 +290,7 @@ describe("APIGuardClient", () => {
   // ─── 6. deleteScan ───
 
   it("deleteScan sends DELETE and returns void", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 204,
@@ -259,6 +309,7 @@ describe("APIGuardClient", () => {
   // ─── 7. getFindings ───
 
   it("getFindings sends GET with scan ID and filter params", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     const findings = [sampleFinding];
     mockFetch.mockResolvedValueOnce(mockResponse(200, findings));
 
@@ -284,6 +335,7 @@ describe("APIGuardClient", () => {
   // ─── 8. listFindings ───
 
   it("listFindings sends GET /api/v1/findings with params", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     const findings = [sampleFinding];
     mockFetch.mockResolvedValueOnce(mockResponse(200, findings));
 
@@ -307,6 +359,7 @@ describe("APIGuardClient", () => {
   // ─── 9. getFinding ───
 
   it("getFinding sends GET /api/v1/findings/:id", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     mockFetch.mockResolvedValueOnce(mockResponse(200, sampleFinding));
 
     const client = createClient();
@@ -320,6 +373,7 @@ describe("APIGuardClient", () => {
   // ─── 10. patchFinding ───
 
   it("patchFinding sends PATCH with status and note", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     const patched: Finding = {
       ...sampleFinding,
       status: "confirmed",
@@ -349,6 +403,7 @@ describe("APIGuardClient", () => {
   // ─── 11. getReport ───
 
   it("getReport returns ArrayBuffer", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     mockFetch.mockResolvedValueOnce(mockRawResponse(200));
 
     const client = createClient();
@@ -365,6 +420,7 @@ describe("APIGuardClient", () => {
   // ─── 12. getAuditLog ───
 
   it("getAuditLog sends GET with limit and page params", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     const entries = [sampleAuditEntry];
     mockFetch.mockResolvedValueOnce(mockResponse(200, entries));
 
@@ -384,7 +440,7 @@ describe("APIGuardClient", () => {
 
   it("refreshToken sends POST with refresh_token body", async () => {
     const tokenResp: RefreshTokenResponse = {
-      access_token: "new-access-token",
+      access_token: FUTURE_JWT,
       refresh_token: "new-refresh-token",
       expires_in: 3600,
     };
@@ -404,6 +460,7 @@ describe("APIGuardClient", () => {
   // ─── 14. Server error (500) ───
 
   it("throws OpenSecStackError on 500 server error", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     mockFetch.mockResolvedValueOnce(
       mockResponse(500, { error: "Internal Server Error" }),
     );
@@ -411,14 +468,9 @@ describe("APIGuardClient", () => {
     const client = createClient();
     await expect(client.listScans()).rejects.toThrow(OpenSecStackError);
 
-    try {
-      await createClient().listScans();
-    } catch (err) {
-      // Reset mock for second call
-    }
-
     // Verify the error properties
     mockFetch.mockReset();
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     mockFetch.mockResolvedValueOnce(
       mockResponse(500, { error: "Internal Server Error" }),
     );
@@ -436,6 +488,7 @@ describe("APIGuardClient", () => {
   // ─── 15. Rate limit (429) ───
 
   it("throws RateLimitError on 429 response", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     mockFetch.mockResolvedValue(
       mockResponse(429, { error: "Too Many Requests" }, { "Retry-After": "30" }),
     );
@@ -454,6 +507,7 @@ describe("APIGuardClient", () => {
   // ─── 16. Not found (404) ───
 
   it("throws OpenSecStackError with 404 on not found", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     mockFetch.mockResolvedValueOnce(
       mockResponse(404, { error: "Scan not found" }),
     );
@@ -470,9 +524,10 @@ describe("APIGuardClient", () => {
     }
   });
 
-  // ─── 17. Authorization header is always present ───
+  // ─── 17. Authorization header uses JWT from auth/token ───
 
-  it("includes Authorization Bearer header on every request", async () => {
+  it("uses JWT from auth/token as Bearer token on API requests", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     mockFetch.mockResolvedValueOnce(mockResponse(200, []));
     mockFetch.mockResolvedValueOnce(mockResponse(200, sampleScan));
     mockFetch.mockResolvedValueOnce(mockResponse(200, []));
@@ -480,21 +535,27 @@ describe("APIGuardClient", () => {
     const client = createClient();
 
     await client.listScans();
-    let headers = mockFetch.mock.calls[0]![1].headers as Record<string, string>;
-    expect(headers["Authorization"]).toBe(`Bearer ${API_KEY}`);
+    // Call 0 is auth/token, call 1 is listScans
+    let headers = fetchInit(1).headers as Record<string, string>;
+    expect(headers["Authorization"]).toBe(`Bearer ${FUTURE_JWT}`);
 
+    // Subsequent calls should reuse the cached JWT without re-authenticating
     await client.getScan("scan-001");
-    headers = mockFetch.mock.calls[1]![1].headers as Record<string, string>;
-    expect(headers["Authorization"]).toBe(`Bearer ${API_KEY}`);
+    headers = fetchInit(2).headers as Record<string, string>;
+    expect(headers["Authorization"]).toBe(`Bearer ${FUTURE_JWT}`);
 
     await client.getAuditLog();
-    headers = mockFetch.mock.calls[2]![1].headers as Record<string, string>;
-    expect(headers["Authorization"]).toBe(`Bearer ${API_KEY}`);
+    headers = fetchInit(3).headers as Record<string, string>;
+    expect(headers["Authorization"]).toBe(`Bearer ${FUTURE_JWT}`);
+
+    // Total calls: 1 auth + 3 API = 4
+    expect(mockFetch).toHaveBeenCalledTimes(4);
   });
 
   // ─── 18. getAuditLog defaults ───
 
   it("getAuditLog uses default limit of 50 when called with no args", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     mockFetch.mockResolvedValueOnce(mockResponse(200, []));
 
     const client = createClient();
@@ -508,6 +569,7 @@ describe("APIGuardClient", () => {
   // ─── 19. uploadSpec sends FormData ───
 
   it("uploadSpec sends FormData", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     mockFetch.mockResolvedValueOnce(
       mockResponse(200, { spec_path: "/specs/test.yaml", spec_hash: "abc123", size: 1024 }),
     );
@@ -518,15 +580,17 @@ describe("APIGuardClient", () => {
 
     expect(result.spec_hash).toBe("abc123");
 
-    const [, init] = mockFetch.mock.calls[0];
+    // Call 0 is auth, call 1 is uploadSpec
+    const init = fetchInit(1);
     expect(init.body).toBeInstanceOf(FormData);
     // Content-Type should NOT be explicitly set (FormData sets it with boundary)
-    expect(init.headers["Content-Type"]).toBeUndefined();
+    expect((init.headers as Record<string, string>)["Content-Type"]).toBeUndefined();
   });
 
   // ─── 20. getReport default format ───
 
   it("getReport defaults to json format", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
     mockFetch.mockResolvedValueOnce(mockRawResponse(200));
 
     const client = createClient();
@@ -534,5 +598,40 @@ describe("APIGuardClient", () => {
 
     const url = lastFetchURL();
     expect(url).toContain("format=json");
+  });
+
+  // ─── 21. Token is reused across calls (no duplicate auth) ───
+
+  it("caches the JWT and reuses it across multiple calls", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
+    mockFetch.mockResolvedValueOnce(mockResponse(200, sampleScan));
+    mockFetch.mockResolvedValueOnce(mockResponse(200, sampleScan));
+
+    const client = createClient();
+    await client.getScan("scan-001");
+    await client.getScan("scan-002");
+
+    // Only 1 auth call + 2 API calls = 3 total fetch calls
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(fetchURL(0)).toContain("/api/v1/auth/token");
+    expect(fetchURL(1)).toContain("/api/v1/scans/scan-001");
+    expect(fetchURL(2)).toContain("/api/v1/scans/scan-002");
+  });
+
+  // ─── 22. Auth call sends API key in request body ───
+
+  it("auth/token call sends api_key in JSON body", async () => {
+    mockFetch.mockResolvedValueOnce(mockAuthResponse());
+    mockFetch.mockResolvedValueOnce(mockResponse(200, []));
+
+    const client = createClient();
+    await client.listScans();
+
+    const authInit = fetchInit(0);
+    expect(authInit.method).toBe("POST");
+    const authBody = JSON.parse(authInit.body as string);
+    expect(authBody).toEqual({ api_key: API_KEY });
+    const authHeaders = authInit.headers as Record<string, string>;
+    expect(authHeaders["Content-Type"]).toBe("application/json");
   });
 });

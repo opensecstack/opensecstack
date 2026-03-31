@@ -25,6 +25,7 @@ func RegisterRoutes(
 	audit *handlers.Audit,
 	apiKeys *handlers.APIKeys,
 	inventory *handlers.Inventory,
+	webhooks *handlers.Webhooks,
 	metrics *middleware.MetricsCollector,
 	cfg *config.Config,
 	authLimiter *middleware.RateLimiter,
@@ -66,6 +67,9 @@ func RegisterRoutes(
 		r.Get("/openapi.json", handlers.OpenAPI)
 		r.With(metricsLimiter.Middleware).Get("/metrics", metrics.Handler())
 		r.With(metricsLimiter.Middleware).Get("/metrics/prometheus", middleware.PrometheusHandler())
+
+		// ── Inbound webhooks (HMAC-authenticated, no JWT) ────────────────────
+		r.Post("/webhooks/citadel", webhooks.HandleCITADEL)
 
 		// ── Protected endpoints (Bearer JWT required) ────────────────────────
 		r.Group(func(r chi.Router) {

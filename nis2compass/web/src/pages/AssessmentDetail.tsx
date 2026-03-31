@@ -568,6 +568,15 @@ export default function AssessmentDetail() {
   const [downloadingPDF, setDownloadingPDF] = useState(false)
   const [pdfError, setPdfError] = useState<string | null>(null)
 
+  // Editable metadata
+  const [editing, setEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editAssessor, setEditAssessor] = useState('')
+  const [editDueDate, setEditDueDate] = useState('')
+  const [editScope, setEditScope] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -588,6 +597,36 @@ export default function AssessmentDetail() {
   useEffect(() => {
     load()
   }, [load])
+
+  function startEditMeta() {
+    if (!assessment) return
+    setEditTitle(assessment.title)
+    setEditAssessor(assessment.assessor ?? '')
+    setEditDueDate(assessment.due_date ?? '')
+    setEditScope(assessment.scope ?? '')
+    setEditError(null)
+    setEditing(true)
+  }
+
+  async function handleSaveMeta(e: React.FormEvent) {
+    e.preventDefault()
+    if (!assessment || !editTitle.trim()) return
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      const updated = await api.assessments.patch(assessment.id, {
+        assessor: editAssessor.trim() || undefined,
+        due_date: editDueDate || undefined,
+        scope: editScope.trim() || undefined,
+      })
+      setAssessment(updated)
+      setEditing(false)
+    } catch (err: unknown) {
+      setEditError(err instanceof Error ? err.message : 'Failed to update')
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   async function handleTransition() {
     if (!assessment) return
@@ -703,6 +742,9 @@ export default function AssessmentDetail() {
             {assessment.due_date && (
               <span className="muted" style={{ fontSize: 13 }}>Due: {assessment.due_date}</span>
             )}
+            <button className="btn-icon" onClick={startEditMeta} style={{ marginLeft: 4, padding: '2px 8px', fontSize: 12 }}>
+              Edit
+            </button>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
@@ -731,6 +773,38 @@ export default function AssessmentDetail() {
           </button>
         </div>
       </div>
+
+      {/* Edit metadata panel */}
+      {editing && (
+        <div className="card form-card" style={{ marginBottom: 16 }}>
+          <h3>Edit Assessment</h3>
+          {editError && <p className="error">{editError}</p>}
+          <form onSubmit={handleSaveMeta}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
+              <div className="form-row">
+                <label>Assessor</label>
+                <input value={editAssessor} onChange={e => setEditAssessor(e.target.value)} placeholder="j.smith@example.com" disabled={editSaving} />
+              </div>
+              <div className="form-row">
+                <label>Due Date</label>
+                <input type="date" value={editDueDate} onChange={e => setEditDueDate(e.target.value)} disabled={editSaving} />
+              </div>
+              <div className="form-row" style={{ gridColumn: '1 / -1' }}>
+                <label>Scope</label>
+                <input value={editScope} onChange={e => setEditScope(e.target.value)} placeholder="All NIS and information systems in scope..." disabled={editSaving} />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn-primary" type="submit" disabled={editSaving}>
+                {editSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button className="btn-secondary" type="button" onClick={() => setEditing(false)} disabled={editSaving}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {error && <p className="error">{error}</p>}
       {reportError && <p className="error">Report: {reportError}</p>}

@@ -88,6 +88,14 @@ const (
 	OutcomeHardStop = "HARD_STOP"
 )
 
+// VerifyResult is the response from CITADEL's chain verification endpoint.
+type VerifyResult struct {
+	Valid           bool   `json:"valid"`
+	EntriesVerified int    `json:"entries_verified"`
+	BreakAt         string `json:"break_at,omitempty"`
+	AnchorVerified  bool   `json:"anchor_verified"`
+}
+
 // NIS2Measure maps an OWASP API Security Top 10 ID (OWASP 2023 format,
 // e.g. "API1:2023") to the corresponding NIS2 Article 21(2) measure code (a–j).
 // Reference: OWASP API Top 10 2023 × NIS2 Article 21(2) mapping.

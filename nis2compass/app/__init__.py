@@ -1,10 +1,11 @@
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 from flask import Flask
 from .config import Config
 from .extensions import init_extensions
 from .metrics import init_metrics
 from .middleware import apply_middleware
+from .errors import register_error_handlers
 
 
 def create_app(config_class=Config):
@@ -35,6 +36,7 @@ def create_app(config_class=Config):
 
     init_extensions(app)
     apply_middleware(app)
+    register_error_handlers(app)
 
     from .api import register_blueprints
     register_blueprints(app)

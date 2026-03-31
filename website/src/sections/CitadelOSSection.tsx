@@ -25,6 +25,11 @@ export default function CitadelOSSection() {
               <span className="tech-tag">Rust</span>
               <span className="tech-tag">WebAssembly</span>
               <span className="tech-tag">Grid Sandbox</span>
+              <span className="tech-tag">Secure Boot</span>
+              <span className="tech-tag">TPM 2.0</span>
+              <span className="tech-tag">Capability ACL</span>
+              <span className="tech-tag">MARSHAL at Boot</span>
+              <span className="tech-tag">WORM Chain</span>
             </div>
           </div>
           <Link to="/citadelos" style={{

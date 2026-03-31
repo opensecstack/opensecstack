@@ -105,6 +105,8 @@ def update_control(assessment_id, measure_ref):
     err = _check_org_access(assessment.org_id)
     if err:
         return err
+    if getattr(assessment, 'locked', False):
+        return jsonify({'error': 'Assessment is locked', 'code': 'ASSESSMENT_LOCKED'}), 409
     if assessment.status == 'archived':
         return jsonify({'error': 'Archived assessments are read-only', 'code': 'INVALID_STATE'}), 409
 

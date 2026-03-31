@@ -253,6 +253,110 @@ function MVNOOrbitalNode({ node, index }: { node: MVNONodeDef; index: number }) 
   )
 }
 
+/** Animated packet sphere that travels: MVNO node → L3 center → L4 center → L3 center → next node */
+function MVNOFlowPacket() {
+  const meshRef = useRef<THREE.Mesh>(null)
+  const materialRef = useRef<THREE.MeshStandardMaterial>(null)
+  const TRIP_DURATION = 2 // seconds per node trip
+  const NODE_COUNT = MVNO_NODES.length
+  const TOTAL_CYCLE = TRIP_DURATION * NODE_COUNT
+
+  // Y positions relative to the MVNO group (which sits at mvnoY)
+  const L3_REL_Y = 0    // L3 center is the same as mvnoY
+  const L4_REL_Y = LAYER_HEIGHT + GAP // one layer up: getLayerY(3)+H/2 - mvnoY = 0.5
+
+  // Colors for each phase
+  const colorNode = new THREE.Color()
+  const colorMarshal = new THREE.Color('#3b82f6')
+  const colorExecute = new THREE.Color('#10b981')
+  const tempColor = new THREE.Color()
+
+  useFrame(({ clock }) => {
+    if (!meshRef.current || !materialRef.current) return
+    const t = clock.getElapsedTime()
+
+    // Which node trip are we on, and how far through it?
+    const cycleT = t % TOTAL_CYCLE
+    const nodeIndex = Math.floor(cycleT / TRIP_DURATION) % NODE_COUNT
+    const nextIndex = (nodeIndex + 1) % NODE_COUNT
+    const tripProgress = (cycleT % TRIP_DURATION) / TRIP_DURATION // 0..1
+
+    // Compute current MVNO node position (they orbit)
+    const baseAngleCur = (nodeIndex / NODE_COUNT) * Math.PI * 2
+    const angleCur = t * MVNO_SPEED + baseAngleCur
+    const nodeX = Math.cos(angleCur) * MVNO_RADIUS
+    const nodeZ = Math.sin(angleCur) * MVNO_RADIUS
+
+    // Compute next MVNO node position for the return leg
+    const baseAngleNext = (nextIndex / NODE_COUNT) * Math.PI * 2
+    const angleNext = t * MVNO_SPEED + baseAngleNext
+    const nextX = Math.cos(angleNext) * MVNO_RADIUS
+    const nextZ = Math.sin(angleNext) * MVNO_RADIUS
+
+    // Waypoints: node → L3 center → L4 center → L3 center → next node
+    // Phase 0: 0.00–0.25 node → L3 center
+    // Phase 1: 0.25–0.50 L3 center → L4 center
+    // Phase 2: 0.50–0.75 L4 center → L3 center
+    // Phase 3: 0.75–1.00 L3 center → next node
+    let px: number, py: number, pz: number
+
+    if (tripProgress < 0.25) {
+      const p = tripProgress / 0.25
+      const ease = p * p * (3 - 2 * p) // smoothstep
+      px = THREE.MathUtils.lerp(nodeX, 0, ease)
+      py = THREE.MathUtils.lerp(L3_REL_Y, L3_REL_Y, ease)
+      pz = THREE.MathUtils.lerp(nodeZ, 0, ease)
+      // Color: from node color toward marshal
+      colorNode.set(MVNO_NODES[nodeIndex].color)
+      tempColor.copy(colorNode).lerp(colorMarshal, ease)
+    } else if (tripProgress < 0.5) {
+      const p = (tripProgress - 0.25) / 0.25
+      const ease = p * p * (3 - 2 * p)
+      px = 0
+      py = THREE.MathUtils.lerp(L3_REL_Y, L4_REL_Y, ease)
+      pz = 0
+      // Color: marshal blue
+      tempColor.copy(colorMarshal)
+    } else if (tripProgress < 0.75) {
+      const p = (tripProgress - 0.5) / 0.25
+      const ease = p * p * (3 - 2 * p)
+      px = 0
+      py = THREE.MathUtils.lerp(L4_REL_Y, L3_REL_Y, ease)
+      pz = 0
+      // Color: marshal → execute green
+      tempColor.copy(colorMarshal).lerp(colorExecute, ease)
+    } else {
+      const p = (tripProgress - 0.75) / 0.25
+      const ease = p * p * (3 - 2 * p)
+      px = THREE.MathUtils.lerp(0, nextX, ease)
+      py = THREE.MathUtils.lerp(L3_REL_Y, L3_REL_Y, ease)
+      pz = THREE.MathUtils.lerp(0, nextZ, ease)
+      // Color: execute green → next node color
+      colorNode.set(MVNO_NODES[nextIndex].color)
+      tempColor.copy(colorExecute).lerp(colorNode, ease)
+    }
+
+    meshRef.current.position.set(px, py, pz)
+    materialRef.current.color.copy(tempColor)
+    materialRef.current.emissive.copy(tempColor)
+  })
+
+  return (
+    <mesh ref={meshRef}>
+      <sphereGeometry args={[0.06, 12, 12]} />
+      <meshStandardMaterial
+        ref={materialRef}
+        color="#00f0ff"
+        emissive="#00f0ff"
+        emissiveIntensity={1.2}
+        toneMapped={false}
+        transparent
+        opacity={0.9}
+      />
+    </mesh>
+  )
+}
+
 export default function MobileDevice() {
   const phoneRef = useRef<THREE.Group>(null)
   const pyramidRef = useRef<THREE.Group>(null)
@@ -338,6 +442,7 @@ export default function MobileDevice() {
               {MVNO_NODES.map((node, i) => (
                 <MVNOOrbitalNode key={node.label} node={node} index={i} />
               ))}
+              <MVNOFlowPacket />
             </group>
 
             {/* Central axis */}

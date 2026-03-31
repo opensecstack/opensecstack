@@ -46,6 +46,39 @@ body::after {
   );
 }
 
+/* ── Light mode overrides ── */
+
+body.light-mode {
+  --bg:         #f8fafc;
+  --bg-card:    rgba(255, 255, 255, 0.7);
+  --bg-glass:   rgba(255, 255, 255, 0.6);
+  --border:     rgba(0, 0, 0, 0.08);
+  --text:       #1e293b;
+  --text-muted: #64748b;
+  color-scheme: light;
+}
+
+body.light-mode::after {
+  display: none;
+}
+
+body.light-mode .glass-card:hover {
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+body.light-mode .section-title {
+  text-shadow: none;
+}
+
+body.light-mode .stat-item .stat-value {
+  text-shadow: none;
+}
+
+body.light-mode a:hover {
+  text-shadow: none;
+}
+
 a { color: var(--cyan); text-decoration: none; transition: color 0.2s; }
 a:hover { color: #66f7ff; text-shadow: 0 0 8px rgba(0,240,255,0.4); text-decoration: none; }
 

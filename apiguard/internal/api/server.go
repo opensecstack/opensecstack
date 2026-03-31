@@ -193,6 +193,7 @@ func (s *Server) registerRoutes() {
 	au := handlers.NewAudit(s.logger, s.db)
 	ak := handlers.NewAPIKeys(s.logger, s.db, s.citadel, s.config)
 	inv := handlers.NewInventory(s.logger, s.db)
+	wh := handlers.NewWebhooks(s.logger, s.config.Citadel.WebhookSecret)
 
 	// Create per-route limiters here so they can be stopped on shutdown.
 	s.authLimiter = middleware.NewRateLimiter(20)    // 20 req/min per IP on auth endpoints
@@ -201,5 +202,5 @@ func (s *Server) registerRoutes() {
 	s.refreshLimiter = middleware.NewRateLimiter(20) // 20 req/min per IP on refresh revocation
 	s.apiKeyLimiter = middleware.NewRateLimiter(5)   // 5 req/min per IP on API key creation
 
-	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, inv, s.metrics, s.config, s.authLimiter, s.scanLimiter, s.reportLimiter, s.refreshLimiter, s.apiKeyLimiter, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies))
+	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, inv, wh, s.metrics, s.config, s.authLimiter, s.scanLimiter, s.reportLimiter, s.refreshLimiter, s.apiKeyLimiter, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies))
 }

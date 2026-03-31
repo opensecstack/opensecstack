@@ -202,3 +202,13 @@ APIGuard supports dual JWT secrets for zero-downtime rotation:
 3. Deploy — both secrets are accepted
 4. Wait for all existing tokens to expire (default 1h)
 5. Remove `APIGUARD_AUTH_PREVIOUS_JWT_SECRET`
+
+---
+
+## See Also
+
+- [Load Testing](load-testing.md) — capacity planning and performance targets
+- [Disaster Recovery](disaster-recovery.md) — failover procedures and backup strategy
+- [Performance](performance.md) — scaling guidance and hardware recommendations
+- [Operator Handbook](operator-handbook.md) — production deployment checklist
+- [Security Audit](security-audit.md) — transport security and auth controls

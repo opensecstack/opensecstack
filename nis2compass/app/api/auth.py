@@ -14,7 +14,7 @@ def token():
     if not api_key:
         return jsonify({'error': 'api_key is required', 'code': 'INVALID_INPUT'}), 400
 
-    valid, scope = validate_api_key(api_key)
+    valid, scope, role = validate_api_key(api_key)
     if not valid:
         return jsonify({'error': 'Invalid API key', 'code': 'UNAUTHORIZED'}), 401
 
@@ -25,7 +25,7 @@ def token():
         identity = 'api_key:' + api_key_id
     else:
         identity = 'api_key:' + hashlib.sha256(api_key.encode()).hexdigest()[:16]
-    jwt_token, expires_at = issue_jwt(identity, scope=scope)
+    jwt_token, expires_at = issue_jwt(identity, scope=scope, role=role, api_key_id=api_key_id)
 
     return jsonify({
         'token': jwt_token,

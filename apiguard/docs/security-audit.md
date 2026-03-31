@@ -144,3 +144,12 @@ Generated via `syft` in the release workflow (`release.yml`):
 | NIS2 Article 21(2)(e) | Network security controls documented |
 | NIS2 Article 21(2)(h) | Cryptographic controls (SHA-256, HMAC, Ed25519) |
 | CWE Top 25 | Input validation covers CWE-79, CWE-89, CWE-918 (SSRF), CWE-22 (path traversal) |
+
+---
+
+## See Also
+
+- [Security Policy](security.md) — detailed security controls and trust model
+- [HA Deployment](ha-deployment.md) — production hardening and network isolation
+- [Operator Handbook](operator-handbook.md) — pre-flight checklist and secret management
+- [Disaster Recovery](disaster-recovery.md) — recovery procedures and backup strategy

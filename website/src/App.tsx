@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import ScrollToTop from './components/ScrollToTop'
 import { useWebGL } from './hooks/useWebGL'
+import { useThemeToggle } from './hooks/useThemeToggle'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import HeroSection from './sections/HeroSection'
@@ -25,6 +26,7 @@ const CitadelOSMobilePage = lazy(() => import('./pages/CitadelOSMobilePage'))
 
 function HomePage() {
   const webgl = useWebGL()
+  useThemeToggle() // initialize theme (body class + localStorage) on mount
 
   return (
     <>

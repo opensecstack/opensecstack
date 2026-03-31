@@ -62,6 +62,25 @@ class Assessment(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text('NOW()'))
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text('NOW()'))
 
+    # Compliance scoring
+    compliance_score = db.Column(db.Numeric(5, 2), nullable=True)
+
+    # Approval workflow
+    approval_state = db.Column(db.String(20), nullable=True, server_default='none')
+    approved_by = db.Column(db.String(255), nullable=True)
+    approved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    approval_notes = db.Column(db.Text, nullable=True)
+
+    # Locking
+    locked = db.Column(db.Boolean, nullable=False, server_default=text('false'))
+    locked_by = db.Column(db.String(255), nullable=True)
+    locked_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    lock_reason = db.Column(db.String(500), nullable=True)
+
+    # Gap analysis
+    gap_report = db.Column(JSONB, nullable=True)
+    gap_generated_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
     controls = db.relationship('Control', backref='assessment', cascade='all, delete-orphan', lazy='dynamic')
     artifacts = db.relationship('Artifact', backref='assessment', cascade='all, delete-orphan', lazy='dynamic')
 
@@ -79,6 +98,13 @@ class Assessment(db.Model):
             'created_by': self.created_by,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'compliance_score': float(self.compliance_score) if self.compliance_score is not None else None,
+            'approval_state': self.approval_state,
+            'approved_by': self.approved_by,
+            'approved_at': self.approved_at.isoformat() if self.approved_at else None,
+            'locked': self.locked,
+            'locked_by': self.locked_by,
+            'locked_at': self.locked_at.isoformat() if self.locked_at else None,
         }
         if include_stats:
             controls = list(self.controls)
@@ -172,6 +198,11 @@ class Artifact(db.Model):
     created_by = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text('NOW()'))
 
+    # Digital proof signature
+    signature = db.Column(db.String(128), nullable=True)
+    signed_by = db.Column(db.String(255), nullable=True)
+    signed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
     def to_dict(self):
         return {
             'id': str(self.id),
@@ -185,6 +216,9 @@ class Artifact(db.Model):
             'description': self.description,
             'created_by': self.created_by,
             'created_at': self.created_at.isoformat() if self.created_at else None,
+            'signature': self.signature,
+            'signed_by': self.signed_by,
+            'signed_at': self.signed_at.isoformat() if self.signed_at else None,
         }
 
 
@@ -232,6 +266,7 @@ class ApiKey(db.Model):
     key_hash = db.Column(db.String(64), nullable=False, unique=True)  # SHA-256 hex of plaintext key
     label = db.Column(db.String(100), nullable=True)
     scope = db.Column(db.String(20), nullable=False, server_default='read_write')
+    role = db.Column(db.String(20), nullable=False, server_default='assessor')  # admin | assessor | auditor | viewer
     is_active = db.Column(db.Boolean, nullable=False, default=True)
     created_by = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text('NOW()'))
@@ -243,6 +278,7 @@ class ApiKey(db.Model):
             'id': str(self.id),
             'label': self.label,
             'scope': self.scope,
+            'role': self.role,
             'is_active': self.is_active,
             'created_by': self.created_by,
             'created_at': self.created_at.isoformat() if self.created_at else None,

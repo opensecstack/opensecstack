@@ -1,4 +1,4 @@
-import type { Organisation, Assessment, Control, AuditEntry, Artifact } from './types'
+import type { Organisation, Assessment, Control, AuditEntry, Artifact, ApiKey } from './types'
 
 const BASE = '/api/v1'
 const TOKEN_KEY = 'nis2compass_token'
@@ -81,6 +81,24 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    patch: (
+      id: string,
+      data: Partial<{
+        name: string
+        industry: string
+        country: string
+        size: string
+        entity_type: string
+        registration_number: string
+        contact_email: string
+      }>,
+    ) =>
+      request<Organisation>(`/organisations/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      request<void>(`/organisations/${id}`, { method: 'DELETE' }),
   },
 
   assessments: {
@@ -215,6 +233,17 @@ export const api = {
     },
   },
 
+  apiKeys: {
+    list: () => request<ApiKey[]>('/api-keys'),
+    create: (data: { label: string; scope?: string }) =>
+      request<ApiKey>('/api-keys', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    revoke: (id: string) =>
+      request<void>(`/api-keys/${id}`, { method: 'DELETE' }),
+  },
+
   audit: {
     list: async (params?: {
       actor?: string
@@ -259,4 +288,41 @@ export async function downloadAssessmentPDF(id: string): Promise<Blob> {
     throw new Error(err.error ?? res.statusText)
   }
   return res.blob()
+}
+
+// ── Compliance Features ──────────────────────────────────────────────────────
+
+export const compliance = {
+  computeScore: (assessmentId: string) =>
+    request<any>(`/assessments/${assessmentId}/score`, { method: 'POST' }),
+
+  getScore: (assessmentId: string) =>
+    request<any>(`/assessments/${assessmentId}/score`),
+
+  approve: (assessmentId: string, action: 'approve' | 'reject', notes?: string) =>
+    request<any>(`/assessments/${assessmentId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ action, notes }),
+    }),
+
+  lock: (assessmentId: string, reason?: string) =>
+    request<any>(`/assessments/${assessmentId}/lock`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+
+  unlock: (assessmentId: string) =>
+    request<any>(`/assessments/${assessmentId}/unlock`, { method: 'POST' }),
+
+  signArtifact: (artifactId: string) =>
+    request<any>(`/artifacts/${artifactId}/sign`, { method: 'POST' }),
+
+  verifyArtifact: (artifactId: string) =>
+    request<any>(`/artifacts/${artifactId}/verify`),
+
+  analyzeGaps: (assessmentId: string) =>
+    request<any>(`/assessments/${assessmentId}/analyze-gaps`, { method: 'POST' }),
+
+  getGaps: (assessmentId: string) =>
+    request<any>(`/assessments/${assessmentId}/gaps`),
 }

@@ -163,3 +163,11 @@ curl http://localhost:8080/debug/pprof/goroutine?debug=2
 | Scan execution (large spec) | 5 min | 15 min | 500+ endpoints |
 | Finding write throughput | 100/s | — | Batch insert |
 | WORM event emission | < 50 ms | < 200 ms | Async, non-blocking |
+
+---
+
+## See Also
+
+- [Performance](performance.md) — detailed scan duration benchmarks and tuning guide
+- [HA Deployment](ha-deployment.md) — scaling guidelines and capacity planning
+- [Operator Handbook](operator-handbook.md) — Prometheus metrics and monitoring

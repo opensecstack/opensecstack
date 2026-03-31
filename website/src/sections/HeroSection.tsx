@@ -1,6 +1,9 @@
 import { motion } from 'framer-motion'
+import { useI18n } from '../i18n/useI18n'
 
 export default function HeroSection() {
+  const { t } = useI18n()
+
   return (
     <section className="section" id="hero" style={{ display: 'flex', alignItems: 'center', minHeight: '100vh' }}>
       <motion.div
@@ -19,7 +22,7 @@ export default function HeroSection() {
             fontSize: '0.8rem', fontFamily: 'var(--mono)', color: '#00f0ff', letterSpacing: '0.08em',
           }}
         >
-          EU Digital Decade Compliance
+          {t('hero.badge')}
         </motion.div>
 
         <h1 style={{
@@ -27,9 +30,9 @@ export default function HeroSection() {
           letterSpacing: '-0.04em', lineHeight: 1.05,
           textShadow: '0 0 60px rgba(0,240,255,0.1)',
         }}>
-          <span className="gradient-text">Open-Source</span><br />
-          Security &amp;<br />
-          Compliance
+          <span className="gradient-text">{t('hero.title.line1')}</span><br />
+          {t('hero.title.line2')}<br />
+          {t('hero.title.line3')}
         </h1>
 
         <motion.p
@@ -41,8 +44,8 @@ export default function HeroSection() {
             lineHeight: 1.7, maxWidth: 520,
           }}
         >
-          8 platforms. 3 SDKs. 1 immutable governance chain.<br />
-          Built for the EU Digital Decade.
+          {t('hero.subtitle')}<br />
+          {t('hero.subtitle2')}
         </motion.p>
 
         <motion.div
@@ -53,10 +56,10 @@ export default function HeroSection() {
           style={{ marginTop: '2.5rem' }}
         >
           {[
-            { v: '10/10', l: 'OWASP API Top 10' },
-            { v: '10', l: 'NIS2 Controls' },
-            { v: '5', l: 'MARSHAL Gates' },
-            { v: '4', l: 'SDKs' },
+            { v: '10/10', l: t('hero.stat.owasp') },
+            { v: '10', l: t('hero.stat.nis2') },
+            { v: '5', l: t('hero.stat.marshal') },
+            { v: '4', l: t('hero.stat.sdks') },
           ].map(s => (
             <div className="stat-item" key={s.l}>
               <div className="stat-value">{s.v}</div>
@@ -77,7 +80,7 @@ export default function HeroSection() {
             textDecoration: 'none', boxShadow: '0 0 30px rgba(0,240,255,0.2)',
             transition: 'box-shadow 0.3s',
           }}>
-            Explore Platforms
+            {t('hero.cta.platforms')}
           </a>
           <a href="https://github.com/opensecstack/opensecstack" target="_blank" rel="noopener noreferrer" style={{
             padding: '13px 30px', borderRadius: 11, fontWeight: 600, fontSize: '0.95rem',
@@ -85,7 +88,7 @@ export default function HeroSection() {
             textDecoration: 'none', backdropFilter: 'blur(8px)',
             transition: 'border-color 0.3s, box-shadow 0.3s',
           }}>
-            View on GitHub
+            {t('hero.cta.github')}
           </a>
         </motion.div>
       </motion.div>

@@ -151,7 +151,7 @@ If the entire Kubernetes cluster is lost:
 2. **Apply namespace and shared resources:**
    ```bash
    kubectl apply -f deploy/k8s/namespace.yaml
-   kubectl apply -f deploy/k8s/secrets.yaml
+   kubectl apply -f deploy/k8s/secrets.yaml  # copy from secrets.yaml.example first
    kubectl apply -f deploy/k8s/configmap.yaml
    ```
 3. **Restore PostgreSQL** from offsite backup (see Procedure 2c)
@@ -194,3 +194,12 @@ Run a DR test quarterly:
 5. Verify scan count, finding count, and audit log integrity
 6. Tear down the parallel environment
 7. Document results and any gaps found
+
+---
+
+## See Also
+
+- [HA Deployment](ha-deployment.md) — high-availability architecture and failover
+- [Operator Handbook](operator-handbook.md) — backup/restore procedures and upgrade guide
+- [Security Audit](security-audit.md) — data protection controls
+- [Load Testing](load-testing.md) — capacity verification after recovery

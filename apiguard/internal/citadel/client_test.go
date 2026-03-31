@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -199,11 +200,12 @@ func TestClient_EmitWORM_Success(t *testing.T) {
 }
 
 func TestClient_EmitWORM_ServerError_ReturnsError(t *testing.T) {
-	ch := make(chan capturedRequest, 1)
+	ch := make(chan capturedRequest, 4)
 	ts := newCaptureServer(t, http.StatusInternalServerError, `{}`, ch)
 	defer ts.Close()
 
 	c := New(ts.URL, "k", "s")
+	c.maxRetries = 0 // disable retries so this test stays fast
 	_, _, err := c.EmitWORM(context.Background(), "apiguard", "ev", "p", nil)
 	if err == nil {
 		t.Error("expected error on 500, got nil")
@@ -290,11 +292,12 @@ func TestClient_EvaluateScan_RefuseOutcome(t *testing.T) {
 }
 
 func TestClient_EvaluateScan_ServerError_ReturnsError(t *testing.T) {
-	ch := make(chan capturedRequest, 1)
+	ch := make(chan capturedRequest, 4)
 	ts := newCaptureServer(t, http.StatusInternalServerError, `{}`, ch)
 	defer ts.Close()
 
 	c := New(ts.URL, "k", "s")
+	c.maxRetries = 0 // disable retries so this test stays fast
 	k := &Kerkese{KerkeseVersion: "1.0", TsUTC: time.Now(), ProjectID: "p", ExecutionID: uuid.New()}
 
 	_, err := c.EvaluateScan(context.Background(), k)
@@ -329,11 +332,12 @@ func TestClient_LogEvent_RoutesToWORMEndpoint(t *testing.T) {
 }
 
 func TestClient_LogEvent_ServerError500_SilentlyDiscarded(t *testing.T) {
-	ch := make(chan capturedRequest, 1)
+	ch := make(chan capturedRequest, 4)
 	ts := newCaptureServer(t, http.StatusInternalServerError, `{}`, ch)
 	defer ts.Close()
 
 	c := New(ts.URL, "k", "s")
+	c.maxRetries = 0 // disable retries so this test stays fast
 	// LogEvent must not block or panic even when server returns 500.
 	c.LogEvent("scan.failed", "", "", "error", "apiguard", "scan-2", nil)
 
@@ -443,6 +447,141 @@ loop:
 }
 
 // ---------------------------------------------------------------------------
+// Retry logic
+// ---------------------------------------------------------------------------
+
+func TestClient_Retry_On5xx(t *testing.T) {
+	// Server returns 500 twice, then 200. Client should retry and succeed.
+	var callCount atomic.Int32
+	wormResp := `{"worm_entry_id":"` + uuid.New().String() + `","chain_hash":"ok"}`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := callCount.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		if n <= 2 {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{}`))
+		} else {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(wormResp))
+		}
+	}))
+	defer ts.Close()
+
+	c := New(ts.URL, "k", "s")
+	c.retryWaitBase = 10 * time.Millisecond // fast retries for tests
+
+	entryID, _, err := c.EmitWORM(context.Background(), "apiguard", "ev", "p", nil)
+	if err != nil {
+		t.Fatalf("expected success after retries, got error: %v", err)
+	}
+	if entryID == "" {
+		t.Error("expected non-empty entryID")
+	}
+
+	got := int(callCount.Load())
+	if got != 3 {
+		t.Errorf("expected 3 HTTP calls (2 failures + 1 success), got %d", got)
+	}
+}
+
+func TestClient_NoRetry_On4xx(t *testing.T) {
+	// Server returns 400. Client should NOT retry.
+	var callCount atomic.Int32
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer ts.Close()
+
+	c := New(ts.URL, "k", "s")
+	c.retryWaitBase = 10 * time.Millisecond
+
+	// EvaluateScan checks resp.StatusCode and returns an error for non-200.
+	k := &Kerkese{KerkeseVersion: "1.0", TsUTC: time.Now(), ProjectID: "p", ExecutionID: uuid.New()}
+	_, err := c.EvaluateScan(context.Background(), k)
+	if err == nil {
+		t.Error("expected error on 400, got nil")
+	}
+
+	got := int(callCount.Load())
+	if got != 1 {
+		t.Errorf("expected exactly 1 HTTP call (no retries on 4xx), got %d", got)
+	}
+}
+
+func TestClient_RetryExhausted(t *testing.T) {
+	// Server always returns 500. Client should fail after maxRetries.
+	var callCount atomic.Int32
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer ts.Close()
+
+	c := New(ts.URL, "k", "s")
+	c.maxRetries = 2
+	c.retryWaitBase = 10 * time.Millisecond // fast retries for tests
+
+	_, _, err := c.EmitWORM(context.Background(), "apiguard", "ev", "p", nil)
+	if err == nil {
+		t.Fatal("expected error after exhausting retries, got nil")
+	}
+	if !strings.Contains(err.Error(), "max retries") {
+		t.Errorf("error should mention max retries, got: %v", err)
+	}
+
+	// Expect 1 initial + 2 retries = 3 total calls.
+	got := int(callCount.Load())
+	if got != 3 {
+		t.Errorf("expected 3 HTTP calls (1 initial + 2 retries), got %d", got)
+	}
+}
+
+func TestClient_RetryRespectsContext(t *testing.T) {
+	// Server always returns 500. A cancelled context should stop retries immediately.
+	var callCount atomic.Int32
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer ts.Close()
+
+	c := New(ts.URL, "k", "s")
+	c.maxRetries = 10                        // many retries to prove context stops us
+	c.retryWaitBase = 500 * time.Millisecond // long enough that cancellation wins
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, _, err := c.EmitWORM(ctx, "apiguard", "ev", "p", nil)
+	if err == nil {
+		t.Fatal("expected error from cancelled context, got nil")
+	}
+
+	// Should complete quickly (context times out at 100ms), not wait for all 10 retries.
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Errorf("retry did not respect context cancellation; took %v", elapsed)
+	}
+
+	// Should have made very few calls (1 or 2), not all 11.
+	got := int(callCount.Load())
+	if got > 3 {
+		t.Errorf("expected at most 3 HTTP calls before context cancellation, got %d", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // NIS2 mapping
 // ---------------------------------------------------------------------------
 
@@ -470,5 +609,199 @@ func TestNIS2Measure_AllTenOWASPIDsPresent(t *testing.T) {
 		if _, ok := NIS2Measure[id]; !ok {
 			t.Errorf("NIS2Measure missing entry for %q", id)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// WORM chain anchor verification
+// ---------------------------------------------------------------------------
+
+// testLogger captures Printf calls for assertion in tests.
+type testLogger struct {
+	mu       sync.Mutex
+	messages []string
+}
+
+func (l *testLogger) Printf(format string, v ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.messages = append(l.messages, fmt.Sprintf(format, v...))
+}
+
+func (l *testLogger) Messages() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cp := make([]string, len(l.messages))
+	copy(cp, l.messages)
+	return cp
+}
+
+func TestClient_EmitWORM_TracksChainHash(t *testing.T) {
+	wantChainHash := "aabbccdd11223344"
+	wormResp := `{"worm_entry_id":"` + uuid.New().String() + `","chain_hash":"` + wantChainHash + `","prev_hash":"0000"}`
+
+	ch := make(chan capturedRequest, 1)
+	ts := newCaptureServer(t, http.StatusOK, wormResp, ch)
+	defer ts.Close()
+
+	c := New(ts.URL, "k", "s")
+	tl := &testLogger{}
+	c.logger = tl
+
+	_, chainHash, err := c.EmitWORM(context.Background(), "apiguard", "scan.completed", "proj-1", nil)
+	if err != nil {
+		t.Fatalf("EmitWORM error: %v", err)
+	}
+	if chainHash != wantChainHash {
+		t.Errorf("chainHash = %q, want %q", chainHash, wantChainHash)
+	}
+
+	c.mu.Lock()
+	got := c.lastChainHash
+	c.mu.Unlock()
+
+	if got != wantChainHash {
+		t.Errorf("lastChainHash = %q, want %q", got, wantChainHash)
+	}
+	<-ch // consume request
+}
+
+func TestClient_EmitWORM_DetectsChainBreak(t *testing.T) {
+	// First call — sets lastChainHash to "hash_1".
+	resp1 := `{"worm_entry_id":"` + uuid.New().String() + `","chain_hash":"hash_1","prev_hash":"genesis"}`
+	// Second call — prev_hash should be "hash_1" but we return "wrong_prev" to simulate a break.
+	resp2 := `{"worm_entry_id":"` + uuid.New().String() + `","chain_hash":"hash_2","prev_hash":"wrong_prev"}`
+
+	callCount := 0
+	var mu sync.Mutex
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		callCount++
+		n := callCount
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if n == 1 {
+			_, _ = w.Write([]byte(resp1))
+		} else {
+			_, _ = w.Write([]byte(resp2))
+		}
+	}))
+	defer ts.Close()
+
+	c := New(ts.URL, "k", "s")
+	tl := &testLogger{}
+	c.logger = tl
+
+	// First emit — no warning expected (no previous hash stored yet).
+	_, _, err := c.EmitWORM(context.Background(), "apiguard", "ev1", "p", nil)
+	if err != nil {
+		t.Fatalf("first EmitWORM error: %v", err)
+	}
+	if msgs := tl.Messages(); len(msgs) != 0 {
+		t.Errorf("expected no warnings after first emit, got %v", msgs)
+	}
+
+	// Second emit — prev_hash mismatch should trigger a warning.
+	_, _, err = c.EmitWORM(context.Background(), "apiguard", "ev2", "p", nil)
+	if err != nil {
+		t.Fatalf("second EmitWORM error: %v", err)
+	}
+
+	msgs := tl.Messages()
+	if len(msgs) == 0 {
+		t.Fatal("expected chain break warning, got none")
+	}
+	found := false
+	for _, m := range msgs {
+		if strings.Contains(m, "chain break detected") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected warning containing 'chain break detected', got %v", msgs)
+	}
+}
+
+func TestClient_VerifyChain_Success(t *testing.T) {
+	verifyResp := `{"valid":true,"entries_verified":42,"anchor_verified":true}`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/worm/verify" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Method != http.MethodGet {
+			t.Errorf("unexpected method: %s", r.Method)
+		}
+		// Verify query params are present.
+		if r.URL.Query().Get("from") == "" || r.URL.Query().Get("to") == "" {
+			t.Error("expected 'from' and 'to' query params")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(verifyResp))
+	}))
+	defer ts.Close()
+
+	c := New(ts.URL, "k", "s")
+	from := time.Now().Add(-10 * time.Minute)
+	to := time.Now()
+
+	result, err := c.VerifyChain(context.Background(), from, to)
+	if err != nil {
+		t.Fatalf("VerifyChain error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if !result.Valid {
+		t.Error("expected valid=true")
+	}
+	if result.EntriesVerified != 42 {
+		t.Errorf("entries_verified = %d, want 42", result.EntriesVerified)
+	}
+	if !result.AnchorVerified {
+		t.Error("expected anchor_verified=true")
+	}
+	if result.BreakAt != "" {
+		t.Errorf("expected empty break_at, got %q", result.BreakAt)
+	}
+}
+
+func TestClient_VerifyChain_BrokenChain(t *testing.T) {
+	breakID := uuid.New().String()
+	verifyResp := `{"valid":false,"entries_verified":7,"break_at":"` + breakID + `","anchor_verified":false}`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(verifyResp))
+	}))
+	defer ts.Close()
+
+	c := New(ts.URL, "k", "s")
+	from := time.Now().Add(-10 * time.Minute)
+	to := time.Now()
+
+	result, err := c.VerifyChain(context.Background(), from, to)
+	if err != nil {
+		t.Fatalf("VerifyChain error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.Valid {
+		t.Error("expected valid=false")
+	}
+	if result.EntriesVerified != 7 {
+		t.Errorf("entries_verified = %d, want 7", result.EntriesVerified)
+	}
+	if result.BreakAt != breakID {
+		t.Errorf("break_at = %q, want %q", result.BreakAt, breakID)
+	}
+	if result.AnchorVerified {
+		t.Error("expected anchor_verified=false")
 	}
 }

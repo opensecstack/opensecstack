@@ -1,9 +1,52 @@
 import hashlib
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import text
+
+# ---------------------------------------------------------------------------
+# PII redaction
+# ---------------------------------------------------------------------------
+
+_EMAIL_RE = re.compile(
+    r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+',
+)
+
+# Keys whose values are always redacted (case-insensitive match).
+_PII_KEYS = frozenset({
+    'email', 'contact_email', 'phone', 'phone_number',
+    'ssn', 'national_id', 'tax_id', 'iban',
+    'first_name', 'last_name', 'full_name',
+    'address', 'street', 'postal_code', 'zip_code',
+})
+
+
+def redact_pii(obj):
+    """Return a deep copy of *obj* with PII values replaced by '[REDACTED]'.
+
+    - Any dict key in ``_PII_KEYS`` has its value masked.
+    - Any string value matching the email regex is masked.
+    - Recurses into nested dicts and lists.
+    """
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            if k.lower() in _PII_KEYS:
+                out[k] = '[REDACTED]'
+            elif isinstance(v, str) and _EMAIL_RE.fullmatch(v):
+                out[k] = '[REDACTED]'
+            else:
+                out[k] = redact_pii(v)
+        return out
+    if isinstance(obj, list):
+        return [redact_pii(item) for item in obj]
+    if isinstance(obj, str) and _EMAIL_RE.fullmatch(obj):
+        return '[REDACTED]'
+    return obj
 
 # Advisory lock ID for serialising audit chain writes. Must not conflict with
 # any other pg_advisory_lock usage in this application.
@@ -153,7 +196,7 @@ def write_audit(
         resource_type=resource_type,
         resource_id=resource_id,
         risk_class=risk_class,
-        metadata_=metadata or {},
+        metadata_=redact_pii(metadata) if metadata else {},
         object_fingerprint=_compute_object_fingerprint(obj),
         prev_hash=prev_hash,
         chain_hash=chain_hash,

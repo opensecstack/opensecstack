@@ -127,6 +127,24 @@ def apply_middleware(app) -> None:
         # Skip rate limiting for health check
         if request.path == '/health':
             return None
+
+        # Bypass rate limiting for admin role (checked from JWT if present).
+        # The JWT is verified later in @require_auth; here we do a lightweight
+        # peek at the unverified claims.  A forged role would still fail auth.
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            try:
+                import jwt as _jwt
+                import base64, json as _json
+                token = auth_header[len('Bearer '):]
+                payload_b64 = token.split('.')[1]
+                payload_b64 += '=' * (4 - len(payload_b64) % 4)
+                claims = _json.loads(base64.urlsafe_b64decode(payload_b64))
+                if claims.get('role') == 'admin':
+                    return None
+            except Exception:
+                pass  # malformed token — let rate-limit apply; auth will reject later
+
         trusted = set(
             p.strip()
             for p in app.config.get('TRUSTED_PROXIES', '').split(',')

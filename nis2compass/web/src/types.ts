@@ -113,6 +113,18 @@ export interface ControlTemplate {
   guidance?: string | null
 }
 
+export interface ApiKey {
+  id: string
+  label: string
+  scope: string
+  is_active: boolean
+  created_by?: string | null
+  created_at: string
+  last_used_at?: string | null
+  expires_at?: string | null
+  key?: string // only present on creation response
+}
+
 export interface AuditEntry {
   id: string
   action: string

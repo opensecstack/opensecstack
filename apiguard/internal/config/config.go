@@ -123,6 +123,10 @@ type CitadelConfig struct {
 	// When true, CITADEL logs the decision but never blocks scans.
 	// Default: true (safe for initial rollout).
 	DryRun bool `mapstructure:"dry_run"`
+	// WebhookSecret is the HMAC-SHA256 shared secret used to verify inbound
+	// webhook events from CITADEL. Set via APIGUARD_CITADEL_WEBHOOK_SECRET.
+	// When empty, the webhook endpoint rejects all requests with 401.
+	WebhookSecret string `mapstructure:"webhook_secret" json:"-"`
 }
 
 // Load reads configuration from viper with defaults applied.
@@ -178,6 +182,7 @@ func Load() *Config {
 			KeySecret: viper.GetString("citadel.key_secret"),
 			ProjectID: viper.GetString("citadel.project_id"),
 			DryRun:    viper.GetBool("citadel.dry_run"),
+			WebhookSecret: viper.GetString("citadel.webhook_secret"),
 		},
 	}
 
@@ -245,6 +250,7 @@ func setDefaults() {
 	viper.SetDefault("citadel.key_id", "")
 	viper.SetDefault("citadel.key_secret", "")
 	viper.SetDefault("citadel.project_id", "apiguard")
+	viper.SetDefault("citadel.webhook_secret", "")
 	// dry_run=true by default — CITADEL logs decisions without blocking scans.
 	// Set APIGUARD_CITADEL_DRY_RUN=false to enable full governance enforcement.
 	viper.SetDefault("citadel.dry_run", true)

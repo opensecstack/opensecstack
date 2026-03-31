@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import Login from './pages/Login'
 import OrganisationList from './pages/OrganisationList'
 import AssessmentList from './pages/AssessmentList'
 import AssessmentDetail from './pages/AssessmentDetail'
 import AuditLog from './pages/AuditLog'
+import APIKeyManagement from './pages/APIKeyManagement'
 import './App.css'
 
 function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
@@ -22,6 +24,12 @@ function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
           Organisations
         </NavLink>
         <NavLink
+          to="/api-keys"
+          className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}
+        >
+          API Keys
+        </NavLink>
+        <NavLink
           to="/audit"
           className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}
         >
@@ -32,13 +40,16 @@ function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
         </button>
       </nav>
       <main className="main">
-        <Routes>
-          <Route path="/" element={<Navigate to="/organisations" replace />} />
-          <Route path="/organisations" element={<OrganisationList />} />
-          <Route path="/organisations/:orgId/assessments" element={<AssessmentList />} />
-          <Route path="/assessments/:id" element={<AssessmentDetail />} />
-          <Route path="/audit" element={<AuditLog />} />
-        </Routes>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<Navigate to="/organisations" replace />} />
+            <Route path="/organisations" element={<OrganisationList />} />
+            <Route path="/organisations/:orgId/assessments" element={<AssessmentList />} />
+            <Route path="/assessments/:id" element={<AssessmentDetail />} />
+            <Route path="/api-keys" element={<APIKeyManagement />} />
+            <Route path="/audit" element={<AuditLog />} />
+          </Routes>
+        </ErrorBoundary>
       </main>
     </div>
   )

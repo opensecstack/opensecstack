@@ -31,6 +31,7 @@ jobs:
       apiguard:        ${{ steps.filter.outputs.apiguard }}
       nis2compass:     ${{ steps.filter.outputs.nis2compass }}
       citadel:         ${{ steps.filter.outputs.citadel }}
+      irflow:          ${{ steps.filter.outputs.irflow }}
       sdk:             ${{ steps.filter.outputs.sdk }}
       typescript_sdk:  ${{ steps.filter.outputs.typescript_sdk }}
       vantage_hash:    ${{ steps.filter.outputs.vantage_hash }}
@@ -54,6 +55,8 @@ jobs:
               - 'sdk/typescript/**'
             vantage_hash:
               - 'sdk/vantage-hash/**'
+            irflow:
+              - 'irflow/**'
             deploy:
               - 'deploy/**'
 
@@ -395,6 +398,41 @@ jobs:
           echo "Verify that UPDATE/DELETE on worm_log is rejected by the DB trigger"
           go test ./internal/worm/... -v -count=1 -run TestImmut -timeout 60s
 
+  # ──────────────────────────────────────────────────────────────────────────
+  # 3c. IRFlow — Go tests (with Postgres)
+  # ──────────────────────────────────────────────────────────────────────────
+  test-irflow:
+    needs: changes
+    if: needs.changes.outputs.irflow == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: irflow
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: irflow_test
+          POSTGRES_USER: irflow
+          POSTGRES_PASSWORD: irflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: "1.24"
+          cache-dependency-path: irflow/go.sum
+      - name: Go tests (race detector)
+        env:
+          DATABASE_URL: postgres://irflow:irflow@localhost:5432/irflow_test?sslmode=disable
+        run: go test -race -count=1 ./...
+
   # 3d. Citadel — lint
   lint-citadel:
     needs: changes
@@ -530,6 +568,7 @@ jobs:
       - test-apiguard
       - test-nis2compass
       - test-citadel
+      - test-irflow
     # Run when any of the relevant jobs succeeded or were skipped (path filter)
     if: |
       always() &&
@@ -637,6 +676,7 @@ jobs:
       - test-citadel-worm
       - lint-citadel
       - security-citadel
+      - test-irflow
       - test-typescript-sdk
       - test-vantage-hash
       - docker-build

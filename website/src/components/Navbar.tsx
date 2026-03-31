@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 const links = [
   { label: 'Platforms', href: '#platforms' },
   { label: 'APIGuard', href: '#apiguard' },
@@ -35,6 +37,13 @@ export default function Navbar() {
           </a>
         ))}
       </div>
+      <Link to="/citadelos" style={{
+        padding: '7px 14px', borderRadius: 9, fontSize: '0.8rem', fontWeight: 600,
+        background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)',
+        color: '#ef4444', textDecoration: 'none', transition: 'all 0.2s',
+      }}>
+        CitadelOS
+      </Link>
       <a
         href="https://github.com/opensecstack/opensecstack"
         target="_blank"

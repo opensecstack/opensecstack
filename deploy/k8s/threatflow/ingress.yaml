@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: threatflow
+  namespace: opensecstack
+  labels:
+    app: threatflow
+    app.kubernetes.io/part-of: opensecstack
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rate-limit: "60"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - threatflow.opensecstack.io
+      secretName: threatflow-tls
+  rules:
+    - host: threatflow.opensecstack.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: threatflow
+                port:
+                  name: http

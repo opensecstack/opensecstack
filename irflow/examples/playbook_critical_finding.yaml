@@ -1,0 +1,67 @@
+name: Critical Finding Response
+description: Automated response when APIGuard detects a critical API vulnerability
+version: "1.0"
+trigger:
+  event_type: apiguard.finding.critical
+  severity: P1
+
+steps:
+  - id: create_incident
+    name: Create P1 Incident
+    type: action
+    config:
+      action_type: create_incident
+      severity: P1
+      title_template: "Critical API vulnerability: {{.finding.title}}"
+    on_success: notify_team
+
+  - id: notify_team
+    name: Notify Security Team
+    type: notify
+    config:
+      channel: security-incidents
+      message_template: "P1 incident created: {{.incident.title}}"
+    on_success: enrich_iocs
+
+  - id: enrich_iocs
+    name: Enrich with Threat Intelligence
+    type: enrich
+    config:
+      sources:
+        - threatflow
+      ioc_types:
+        - ip
+        - domain
+    on_success: contain_endpoint
+
+  - id: contain_endpoint
+    name: Contain Affected Endpoint
+    type: action
+    config:
+      action_type: contain
+      description: "Block affected API endpoint pending investigation"
+    on_success: rescan
+    on_failure: notify_escalation
+
+  - id: rescan
+    name: Trigger Verification Scan
+    type: scan
+    config:
+      target: "{{.incident.source_ref}}"
+      modules:
+        - owasp-api-top10
+    on_success: wait_scan
+
+  - id: wait_scan
+    name: Wait for Scan Results
+    type: wait
+    config:
+      condition: "scan.status == 'completed'"
+      timeout: 15m
+
+  - id: notify_escalation
+    name: Escalate to Incident Commander
+    type: notify
+    config:
+      channel: security-escalation
+      message_template: "Containment failed for {{.incident.title}} — manual intervention required"

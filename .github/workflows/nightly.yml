@@ -35,6 +35,10 @@ jobs:
             language: go
             working_dir: .citadel
             go_sum_path: .citadel/go.sum
+          - component: irflow
+            language: go
+            working_dir: irflow
+            go_sum_path: irflow/go.sum
           - component: nis2compass
             language: python
             working_dir: nis2compass
@@ -188,6 +192,10 @@ jobs:
 
       - name: govulncheck — citadel
         working-directory: .citadel
+        run: govulncheck ./...
+
+      - name: govulncheck — IRFlow
+        working-directory: irflow
         run: govulncheck ./...
 
       - name: govulncheck — Go SDK

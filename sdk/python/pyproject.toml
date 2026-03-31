@@ -42,6 +42,11 @@ dev = [
 Homepage = "https://github.com/opensecstack"
 Repository = "https://github.com/opensecstack/opensecstack"
 Issues = "https://github.com/opensecstack/opensecstack/issues"
+Documentation = "https://opensecstack.github.io/opensecstack/"
+Changelog = "https://github.com/opensecstack/opensecstack/blob/main/sdk/python/CHANGELOG.md"
+
+[tool.hatch.version]
+path = "opensecstack/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["opensecstack"]
@@ -49,9 +54,16 @@ packages = ["opensecstack"]
 [tool.setuptools.package-data]
 opensecstack = ["py.typed"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP"]
 
 [tool.mypy]
 python_version = "3.10"

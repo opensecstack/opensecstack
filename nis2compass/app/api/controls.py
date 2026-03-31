@@ -9,6 +9,14 @@ from .assessments import _check_org_access
 
 controls_bp = Blueprint('controls', __name__)
 
+
+@controls_bp.before_request
+def require_json_content_type():
+    if request.method in ('POST', 'PUT', 'PATCH'):
+        ct = request.content_type or ''
+        if ct and not ct.startswith('application/json'):
+            return jsonify({'error': 'Content-Type must be application/json', 'code': 'UNSUPPORTED_MEDIA_TYPE'}), 415
+
 VALID_STATUSES = {'not_assessed', 'compliant', 'partially_compliant', 'non_compliant', 'not_applicable'}
 VALID_MEASURE_REFS = set('abcdefghij')
 VALID_REMEDIATION_STATUSES = {'not_started', 'in_progress', 'blocked', 'completed'}
@@ -46,7 +54,7 @@ def list_controls(assessment_id):
     total = query.count()
     controls = query.order_by(Control.measure_ref).offset((page - 1) * per_page).limit(per_page).all()
     return jsonify({
-        'items': [c.to_dict() for c in controls],
+        'data': [c.to_dict() for c in controls],
         'total': total,
         'page': page,
         'per_page': per_page,

@@ -2,8 +2,25 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any
+
+# Maximum length for any user-supplied string embedded in a report (H11).
+_MAX_FIELD_LEN = 500
+
+# Strip ASCII control characters except TAB (0x09) and LF (0x0a) and CR (0x0d)
+# to prevent PDF/document injection via embedded control sequences (H11).
+_CTRL_CHAR_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+
+
+def _sanitise(s: object) -> str | None:
+    """Remove control characters and truncate to _MAX_FIELD_LEN chars (H11)."""
+    if s is None:
+        return None
+    text = str(s.value if hasattr(s, 'value') else s)
+    text = _CTRL_CHAR_RE.sub('', text)
+    return text[:_MAX_FIELD_LEN]
 
 
 def generate_json_report(assessment: Any, controls: list[Any], organisation: Any) -> bytes:
@@ -107,18 +124,18 @@ def generate_json_report(assessment: Any, controls: list[Any], organisation: Any
         "report_type": "nis2_compliance",
         "organisation": {
             "id": str(organisation.id),
-            "name": organisation.name,
-            "country": getattr(organisation, "country", None),
-            "sector": getattr(organisation, "sector", None),
-            "entity_type": _str(getattr(organisation, "entity_type", None)),
+            "name": _sanitise(organisation.name),
+            "country": _sanitise(getattr(organisation, "country", None)),
+            "sector": _sanitise(getattr(organisation, "sector", None)),
+            "entity_type": _sanitise(_str(getattr(organisation, "entity_type", None))),
         },
         "assessment": {
             "id": str(assessment.id),
-            "title": assessment.title,
-            "status": _str(assessment.status),
-            "framework_version": getattr(assessment, "framework_version", None),
-            "assessor": getattr(assessment, "assessor", None),
-            "scope": getattr(assessment, "scope", None),
+            "title": _sanitise(assessment.title),
+            "status": _sanitise(_str(assessment.status)),
+            "framework_version": _sanitise(getattr(assessment, "framework_version", None)),
+            "assessor": _sanitise(getattr(assessment, "assessor", None)),
+            "scope": _sanitise(getattr(assessment, "scope", None)),
             "due_date": _isoformat(getattr(assessment, "due_date", None)),
             "completed_at": _isoformat(getattr(assessment, "completed_at", None)),
             "created_at": _isoformat(assessment.created_at),
@@ -131,19 +148,19 @@ def generate_json_report(assessment: Any, controls: list[Any], organisation: Any
         },
         "controls": [
             {
-                "measure_ref": _str(c.measure_ref),
-                "title": getattr(c, "title", None),
-                "description": getattr(c, "description", None),
-                "nist_category": _str(getattr(c, "nist_category", None)),
-                "status": _str(c.status),
+                "measure_ref": _sanitise(_str(c.measure_ref)),
+                "title": _sanitise(getattr(c, "title", None)),
+                "description": _sanitise(getattr(c, "description", None)),
+                "nist_category": _sanitise(_str(getattr(c, "nist_category", None))),
+                "status": _sanitise(_str(c.status)),
                 "risk_score": getattr(c, "risk_score", None),
-                "gap_description": getattr(c, "gap_description", None),
-                "remediation_plan": getattr(c, "remediation_plan", None),
+                "gap_description": _sanitise(getattr(c, "gap_description", None)),
+                "remediation_plan": _sanitise(getattr(c, "remediation_plan", None)),
                 "remediation_due": _isoformat(getattr(c, "remediation_due", None)),
-                "remediation_owner": getattr(c, "remediation_owner", None),
-                "remediation_status": _str(getattr(c, "remediation_status", None)),
-                "external_ticket_url": getattr(c, "external_ticket_url", None),
-                "assessed_by": getattr(c, "assessed_by", None),
+                "remediation_owner": _sanitise(getattr(c, "remediation_owner", None)),
+                "remediation_status": _sanitise(_str(getattr(c, "remediation_status", None))),
+                "external_ticket_url": _sanitise(getattr(c, "external_ticket_url", None)),
+                "assessed_by": _sanitise(getattr(c, "assessed_by", None)),
                 "assessed_at": _isoformat(getattr(c, "assessed_at", None)),
                 "evidence": c.evidence if isinstance(c.evidence, dict) else None,
                 "artifact_count": len(getattr(c, "artifacts", []) or []),

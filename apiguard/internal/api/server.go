@@ -24,23 +24,24 @@ import (
 
 // Server is the APIGuard HTTP server.
 type Server struct {
-	router         chi.Router
-	logger         zerolog.Logger
-	port           int
-	config         *config.Config
-	db             *db.DB
-	scanner        *scanner.Scanner
-	citadel        *citadel.Client
-	globalLimiter  *middleware.RateLimiter
-	authLimiter    *middleware.RateLimiter
-	scanLimiter    *middleware.RateLimiter
-	reportLimiter  *middleware.RateLimiter
-	refreshLimiter *middleware.RateLimiter
-	apiKeyLimiter  *middleware.RateLimiter
-	metrics        *middleware.MetricsCollector
-	shutdownCtx    context.Context
-	shutdownCancel context.CancelFunc
-	scansHandler   *handlers.Scans // kept for WaitScans() on shutdown
+	router          chi.Router
+	logger          zerolog.Logger
+	port            int
+	config          *config.Config
+	db              *db.DB
+	scanner         *scanner.Scanner
+	citadel         *citadel.Client
+	globalLimiter   *middleware.RateLimiter
+	authLimiter     *middleware.RateLimiter
+	scanLimiter     *middleware.RateLimiter
+	reportLimiter   *middleware.RateLimiter
+	refreshLimiter  *middleware.RateLimiter
+	apiKeyLimiter   *middleware.RateLimiter
+	metrics         *middleware.MetricsCollector
+	shutdownCtx     context.Context
+	shutdownCancel  context.CancelFunc
+	scansHandler    *handlers.Scans // kept for WaitScans() on shutdown
+	stopAuditWorker func()          // M6: stops the background audit worker goroutine
 }
 
 // NewServer creates a new API server with routes registered.
@@ -71,6 +72,10 @@ func NewServer(cfg *config.Config, database *db.DB, sc *scanner.Scanner) *Server
 	s.metrics = middleware.NewMetricsCollector()
 	s.setupMiddleware()
 	s.registerRoutes()
+
+	// M6: start the background audit worker so all AppendAuditLog calls are
+	// processed asynchronously and FlushAuditLog can drain them on shutdown.
+	s.stopAuditWorker = db.StartAuditWorker(database.Pool)
 
 	return s
 }
@@ -130,8 +135,18 @@ func (s *Server) Start() error {
 		}
 		drainCtx, drainCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer drainCancel()
-		if err := s.citadel.Drain(drainCtx); err != nil {
-			s.logger.Warn().Err(err).Msg("CITADEL drain did not complete cleanly on shutdown")
+		s.citadel.Drain(drainCtx)
+		if drainCtx.Err() != nil {
+			s.logger.Warn().Msg("CITADEL drain timed out — some audit events may not have been forwarded")
+		}
+		// M6: flush any pending audit log entries before closing the DB pool.
+		flushCtx, flushCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer flushCancel()
+		if err := db.FlushAuditLog(flushCtx); err != nil {
+			s.logger.Warn().Err(err).Msg("audit log flush timed out on shutdown")
+		}
+		if s.stopAuditWorker != nil {
+			s.stopAuditWorker()
 		}
 		s.globalLimiter.Stop()
 		s.authLimiter.Stop()

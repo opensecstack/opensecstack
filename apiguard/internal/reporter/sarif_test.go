@@ -106,8 +106,8 @@ func parseSARIF(t *testing.T, result *domain.ScanResult) map[string]interface{} 
 	return out
 }
 
-// sarifRun extracts the single run object from a parsed SARIF document.
-func sarifRun(t *testing.T, doc map[string]interface{}) map[string]interface{} {
+// extractSarifRun extracts the single run object from a parsed SARIF document.
+func extractSarifRun(t *testing.T, doc map[string]interface{}) map[string]interface{} {
 	t.Helper()
 	runs, ok := doc["runs"].([]interface{})
 	if !ok || len(runs) == 0 {
@@ -168,7 +168,7 @@ func TestSARIFReporter_RunsArray(t *testing.T) {
 // TestSARIFReporter_DriverName checks the tool driver name is "APIGuard".
 func TestSARIFReporter_DriverName(t *testing.T) {
 	doc := parseSARIF(t, sarifScanResult())
-	run := sarifRun(t, doc)
+	run := extractSarifRun(t, doc)
 
 	tool := run["tool"].(map[string]interface{})
 	driver := tool["driver"].(map[string]interface{})
@@ -181,7 +181,7 @@ func TestSARIFReporter_DriverName(t *testing.T) {
 // TestSARIFReporter_DriverVersion checks that the driver version is non-empty.
 func TestSARIFReporter_DriverVersion(t *testing.T) {
 	doc := parseSARIF(t, sarifScanResult())
-	run := sarifRun(t, doc)
+	run := extractSarifRun(t, doc)
 
 	tool := run["tool"].(map[string]interface{})
 	driver := tool["driver"].(map[string]interface{})
@@ -195,7 +195,7 @@ func TestSARIFReporter_DriverVersion(t *testing.T) {
 // covering at least the default modules.
 func TestSARIFReporter_RulesArrayPresent(t *testing.T) {
 	doc := parseSARIF(t, sarifScanResult())
-	run := sarifRun(t, doc)
+	run := extractSarifRun(t, doc)
 
 	tool := run["tool"].(map[string]interface{})
 	driver := tool["driver"].(map[string]interface{})
@@ -212,7 +212,7 @@ func TestSARIFReporter_RulesArrayPresent(t *testing.T) {
 // TestSARIFReporter_RuleIDsNonEmpty ensures every rule has a non-empty id.
 func TestSARIFReporter_RuleIDsNonEmpty(t *testing.T) {
 	doc := parseSARIF(t, sarifScanResult())
-	run := sarifRun(t, doc)
+	run := extractSarifRun(t, doc)
 
 	tool := run["tool"].(map[string]interface{})
 	driver := tool["driver"].(map[string]interface{})
@@ -235,7 +235,7 @@ func TestSARIFReporter_RuleIDsNonEmpty(t *testing.T) {
 // produce the expected "apiguard/<slug>" rule IDs from sarifModuleMapping.
 func TestSARIFReporter_RuleIDsMatchMapping(t *testing.T) {
 	doc := parseSARIF(t, sarifScanResult())
-	run := sarifRun(t, doc)
+	run := extractSarifRun(t, doc)
 
 	tool := run["tool"].(map[string]interface{})
 	driver := tool["driver"].(map[string]interface{})
@@ -267,7 +267,7 @@ func TestSARIFReporter_RuleIDsMatchMapping(t *testing.T) {
 func TestSARIFReporter_ResultsCount(t *testing.T) {
 	result := sarifScanResult()
 	doc := parseSARIF(t, result)
-	run := sarifRun(t, doc)
+	run := extractSarifRun(t, doc)
 
 	results, ok := run["results"].([]interface{})
 	if !ok {
@@ -282,7 +282,7 @@ func TestSARIFReporter_ResultsCount(t *testing.T) {
 // mapping: critical -> error, high -> error, low -> note.
 func TestSARIFReporter_ResultLevelMapping(t *testing.T) {
 	doc := parseSARIF(t, sarifScanResult())
-	run := sarifRun(t, doc)
+	run := extractSarifRun(t, doc)
 	results := run["results"].([]interface{})
 
 	// Findings are in order: critical, high, low.
@@ -299,7 +299,7 @@ func TestSARIFReporter_ResultLevelMapping(t *testing.T) {
 // TestSARIFReporter_ResultRuleIDPresent ensures every result has a ruleId.
 func TestSARIFReporter_ResultRuleIDPresent(t *testing.T) {
 	doc := parseSARIF(t, sarifScanResult())
-	run := sarifRun(t, doc)
+	run := extractSarifRun(t, doc)
 	results := run["results"].([]interface{})
 
 	for i, item := range results {
@@ -320,7 +320,7 @@ func TestSARIFReporter_ResultRuleIDPresent(t *testing.T) {
 func TestSARIFReporter_LocationURIFormat(t *testing.T) {
 	result := sarifScanResult()
 	doc := parseSARIF(t, result)
-	run := sarifRun(t, doc)
+	run := extractSarifRun(t, doc)
 	results := run["results"].([]interface{})
 
 	for i, item := range results {
@@ -345,7 +345,7 @@ func TestSARIFReporter_LocationURIFormat(t *testing.T) {
 // TestSARIFReporter_LocationURIBaseID checks that uriBaseId is set to "API_ROOT".
 func TestSARIFReporter_LocationURIBaseID(t *testing.T) {
 	doc := parseSARIF(t, sarifScanResult())
-	run := sarifRun(t, doc)
+	run := extractSarifRun(t, doc)
 	results := run["results"].([]interface{})
 
 	for i, item := range results {
@@ -367,7 +367,7 @@ func TestSARIFReporter_LocationURIBaseID(t *testing.T) {
 func TestSARIFReporter_LocationMethodProperty(t *testing.T) {
 	result := sarifScanResult()
 	doc := parseSARIF(t, result)
-	run := sarifRun(t, doc)
+	run := extractSarifRun(t, doc)
 	results := run["results"].([]interface{})
 
 	for i, item := range results {
@@ -392,7 +392,7 @@ func TestSARIFReporter_LocationMethodProperty(t *testing.T) {
 func TestSARIFReporter_ResultCVSSProperties(t *testing.T) {
 	result := sarifScanResult()
 	doc := parseSARIF(t, result)
-	run := sarifRun(t, doc)
+	run := extractSarifRun(t, doc)
 	results := run["results"].([]interface{})
 
 	for i, item := range results {
@@ -415,7 +415,7 @@ func TestSARIFReporter_ResultCVSSProperties(t *testing.T) {
 // non-empty shortDescription.text.
 func TestSARIFReporter_RuleShortDescriptionPresent(t *testing.T) {
 	doc := parseSARIF(t, sarifScanResult())
-	run := sarifRun(t, doc)
+	run := extractSarifRun(t, doc)
 
 	tool := run["tool"].(map[string]interface{})
 	driver := tool["driver"].(map[string]interface{})
@@ -462,7 +462,7 @@ func TestSARIFReporter_InfoSeverityMapsToNote(t *testing.T) {
 	}
 
 	doc := parseSARIF(t, result)
-	run := sarifRun(t, doc)
+	run := extractSarifRun(t, doc)
 	results := run["results"].([]interface{})
 
 	if len(results) == 0 {
@@ -498,7 +498,7 @@ func TestSARIFReporter_MediumSeverityMapsToWarning(t *testing.T) {
 	}
 
 	doc := parseSARIF(t, result)
-	run := sarifRun(t, doc)
+	run := extractSarifRun(t, doc)
 	results := run["results"].([]interface{})
 
 	r := results[0].(map[string]interface{})
@@ -521,7 +521,7 @@ func TestSARIFReporter_EmptyFindings(t *testing.T) {
 	}
 
 	doc := parseSARIF(t, result)
-	run := sarifRun(t, doc)
+	run := extractSarifRun(t, doc)
 
 	results, ok := run["results"].([]interface{})
 	if !ok {

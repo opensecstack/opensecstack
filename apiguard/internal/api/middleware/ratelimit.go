@@ -106,6 +106,12 @@ func NewRateLimiterWithProxies(requestsPerMinute int, trustedProxyCIDRs []string
 					if newInterval > maxInterval {
 						newInterval = maxInterval
 					}
+					// M2: cap at 5 minutes regardless of maxInterval so stale
+					// visitor entries are never retained longer than 5 minutes
+					// under zero-traffic conditions.
+					if newInterval > 5*time.Minute {
+						newInterval = 5 * time.Minute
+					}
 				}
 				if newInterval != interval {
 					interval = newInterval

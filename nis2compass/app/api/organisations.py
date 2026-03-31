@@ -11,6 +11,14 @@ _EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 
 organisations_bp = Blueprint('organisations', __name__)
 
+
+@organisations_bp.before_request
+def require_json_content_type():
+    if request.method in ('POST', 'PUT', 'PATCH'):
+        ct = request.content_type or ''
+        if ct and not ct.startswith('application/json'):
+            return jsonify({'error': 'Content-Type must be application/json', 'code': 'UNSUPPORTED_MEDIA_TYPE'}), 415
+
 VALID_SIZES = {'micro', 'small', 'medium', 'large'}
 VALID_ENTITY_TYPES = {'essential', 'important'}
 
@@ -60,7 +68,12 @@ def list_organisations():
     )
     items, total = _paginate(query, page, per_page)
 
-    response = jsonify([o.to_dict() for o in items])
+    response = jsonify({
+        'data': [o.to_dict() for o in items],
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+    })
     response.headers['X-Total-Count'] = str(total)
     return response, 200
 
@@ -85,6 +98,8 @@ def create_organisation():
         return jsonify({'error': 'name must not exceed 255 characters', 'code': 'INVALID_INPUT'}), 400
     if not industry:
         return jsonify({'error': 'industry is required', 'code': 'INVALID_INPUT'}), 400
+    if len(industry) > 100:
+        return jsonify({'error': 'industry must not exceed 100 characters', 'code': 'INVALID_INPUT'}), 400
     if not country or len(country) != 2:
         return jsonify({'error': 'country must be a 2-letter ISO 3166-1 alpha-2 code', 'code': 'INVALID_INPUT'}), 400
     if country.upper() not in _ISO3166_ALPHA2:
@@ -188,6 +203,8 @@ def update_organisation(org_id):
         industry = data['industry'].strip()
         if not industry:
             return jsonify({'error': 'industry must not be empty', 'code': 'INVALID_INPUT'}), 400
+        if len(industry) > 100:
+            return jsonify({'error': 'industry must not exceed 100 characters', 'code': 'INVALID_INPUT'}), 400
         org.industry = industry
     if 'country' in data:
         c = data['country'].strip().upper()

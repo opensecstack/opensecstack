@@ -337,3 +337,191 @@ async def test_async_context_manager() -> None:
     # further requests would raise httpx.RuntimeError.
     with pytest.raises(Exception):
         await client.get_scan(scan_id)
+
+
+# ---------------------------------------------------------------------------
+# 11. test_async_nis2_list_assessments
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_nis2_list_assessments() -> None:
+    """GET /api/v1/organisations/{id}/assessments → 200: returns the list."""
+    token = _fresh_jwt()
+    org_id = "org-001"
+    assessments = [{"id": "asmt-001", "status": "in_progress"}, {"id": "asmt-002", "status": "draft"}]
+
+    respx.post(AUTH_URL).mock(return_value=httpx.Response(200, json={"token": token}))
+    respx.get(f"{BASE_URL}/api/v1/organisations/{org_id}/assessments").mock(
+        return_value=httpx.Response(200, json=assessments)
+    )
+
+    async with AsyncNIS2CompassClient(BASE_URL, CLIENT_ID, CLIENT_SECRET) as client:
+        result = await client.list_assessments(org_id, status="in_progress")
+
+    assert len(result) == 2
+    assert result[0]["id"] == "asmt-001"
+
+
+# ---------------------------------------------------------------------------
+# 12. test_async_nis2_patch_organisation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_nis2_patch_organisation() -> None:
+    """PATCH /api/v1/organisations/{id} → 200: returns updated org."""
+    token = _fresh_jwt()
+    org_id = "org-patch-001"
+    updated = {"id": org_id, "name": "NewName", "country": "FR"}
+
+    respx.post(AUTH_URL).mock(return_value=httpx.Response(200, json={"token": token}))
+    respx.patch(f"{BASE_URL}/api/v1/organisations/{org_id}").mock(
+        return_value=httpx.Response(200, json=updated)
+    )
+
+    async with AsyncNIS2CompassClient(BASE_URL, CLIENT_ID, CLIENT_SECRET) as client:
+        result = await client.patch_organisation(org_id, name="NewName", country="FR")
+
+    assert result["name"] == "NewName"
+    assert result["country"] == "FR"
+
+
+# ---------------------------------------------------------------------------
+# 13. test_async_nis2_delete_assessment
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_nis2_delete_assessment() -> None:
+    """DELETE /api/v1/assessments/{id} → 204: returns None."""
+    token = _fresh_jwt()
+    assessment_id = "asmt-del-001"
+
+    respx.post(AUTH_URL).mock(return_value=httpx.Response(200, json={"token": token}))
+    respx.delete(f"{BASE_URL}/api/v1/assessments/{assessment_id}").mock(
+        return_value=httpx.Response(204)
+    )
+
+    async with AsyncNIS2CompassClient(BASE_URL, CLIENT_ID, CLIENT_SECRET) as client:
+        result = await client.delete_assessment(assessment_id)
+
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# 14. test_async_nis2_patch_control
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_nis2_patch_control() -> None:
+    """PATCH /api/v1/assessments/{id}/controls/{ref} → 200: returns updated control."""
+    token = _fresh_jwt()
+    assessment_id = "asmt-001"
+    updated = {"measure_ref": "b", "status": "compliant", "risk_score": 2.5}
+
+    respx.post(AUTH_URL).mock(return_value=httpx.Response(200, json={"token": token}))
+    respx.patch(f"{BASE_URL}/api/v1/assessments/{assessment_id}/controls/b").mock(
+        return_value=httpx.Response(200, json=updated)
+    )
+
+    async with AsyncNIS2CompassClient(BASE_URL, CLIENT_ID, CLIENT_SECRET) as client:
+        result = await client.patch_control(assessment_id, "b", status="compliant", risk_score=2.5)
+
+    assert result["status"] == "compliant"
+    assert result["risk_score"] == 2.5
+
+
+# ---------------------------------------------------------------------------
+# 15. test_async_nis2_list_api_keys
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_nis2_list_api_keys() -> None:
+    """GET /api/v1/api-keys → 200: returns the list."""
+    token = _fresh_jwt()
+    keys = [{"id": "key-001", "label": "CI/CD", "scope": "read_write"}]
+
+    respx.post(AUTH_URL).mock(return_value=httpx.Response(200, json={"token": token}))
+    respx.get(f"{BASE_URL}/api/v1/api-keys").mock(
+        return_value=httpx.Response(200, json=keys)
+    )
+
+    async with AsyncNIS2CompassClient(BASE_URL, CLIENT_ID, CLIENT_SECRET) as client:
+        result = await client.list_api_keys()
+
+    assert result == keys
+    assert result[0]["label"] == "CI/CD"
+
+
+# ---------------------------------------------------------------------------
+# 16. test_async_nis2_get_audit_log
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_nis2_get_audit_log() -> None:
+    """GET /api/v1/audit → 200: returns entries list."""
+    token = _fresh_jwt()
+    entries = [{"id": "entry-001", "action": "assessment.created"}]
+
+    respx.post(AUTH_URL).mock(return_value=httpx.Response(200, json={"token": token}))
+    respx.get(f"{BASE_URL}/api/v1/audit").mock(
+        return_value=httpx.Response(200, json=entries)
+    )
+
+    async with AsyncNIS2CompassClient(BASE_URL, CLIENT_ID, CLIENT_SECRET) as client:
+        result = await client.get_audit_log(limit=25, page=1)
+
+    assert result == entries
+
+
+# ---------------------------------------------------------------------------
+# 17. test_async_nis2_get_health
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_nis2_get_health() -> None:
+    """GET /api/v1/health → 200: returns status without auth."""
+    respx.get(f"{BASE_URL}/api/v1/health").mock(
+        return_value=httpx.Response(200, json={"status": "ok"})
+    )
+
+    async with AsyncNIS2CompassClient(BASE_URL, CLIENT_ID, CLIENT_SECRET) as client:
+        result = await client.get_health()
+
+    assert result == {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# 18. test_async_nis2_get_health_detail
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_async_nis2_get_health_detail() -> None:
+    """GET /api/v1/health/detail → 200: returns detailed status with auth."""
+    token = _fresh_jwt()
+    detail = {"status": "ok", "version": "1.0.0", "db": "ok", "redis": "ok"}
+
+    respx.post(AUTH_URL).mock(return_value=httpx.Response(200, json={"token": token}))
+    respx.get(f"{BASE_URL}/api/v1/health/detail").mock(
+        return_value=httpx.Response(200, json=detail)
+    )
+
+    async with AsyncNIS2CompassClient(BASE_URL, CLIENT_ID, CLIENT_SECRET) as client:
+        result = await client.get_health_detail()
+
+    assert result["status"] == "ok"
+    assert result["db"] == "ok"

@@ -241,3 +241,22 @@ export const api = {
     },
   },
 }
+
+export async function downloadAssessmentPDF(id: string): Promise<Blob> {
+  const token = localStorage.getItem(TOKEN_KEY)
+  const res = await fetch(`${BASE}/assessments/${id}/report?format=pdf`, {
+    headers: {
+      Accept: 'application/pdf',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
+  if (!res.ok) {
+    if (res.status === 401) {
+      localStorage.removeItem(TOKEN_KEY)
+      window.location.reload()
+    }
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.error ?? res.statusText)
+  }
+  return res.blob()
+}

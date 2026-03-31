@@ -38,6 +38,10 @@ func RegisterRoutes(
 	metricsLimiter := middleware.NewRateLimiter(30)
 
 	r.Route("/api/v1", func(r chi.Router) {
+		// M3: enforce application/json Content-Type on all mutation requests
+		// within the API router. Health, metrics, and GET endpoints are unaffected.
+		r.Use(middleware.RequireJSONContentType)
+
 		// ── Public endpoints (no JWT required) ──────────────────────────────
 		r.Get("/health", health.Health)
 		r.Get("/version", health.Version)

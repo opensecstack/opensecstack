@@ -4,8 +4,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"mime"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -108,20 +112,17 @@ func TestDo_401Retry(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/auth/token" {
-			n := atomic.AddInt32(&authCalls, 1)
-			tok := staleToken
-			if n > 1 {
-				tok = freshToken
-			}
+			atomic.AddInt32(&authCalls, 1)
+			// Always return the fresh token so the retry after 401 succeeds.
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"token":%q}`, tok)
+			fmt.Fprintf(w, `{"token":%q}`, freshToken)
 			return
 		}
 		if r.URL.Path == "/api/v1/organisations" {
 			n := atomic.AddInt32(&reqCalls, 1)
 			auth := r.Header.Get("Authorization")
 			if n == 1 || auth != "Bearer "+freshToken {
-				// First request or still stale token: return 401.
+				// First request (stale token) or still stale: return 401.
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
@@ -419,5 +420,774 @@ func TestCreateOrganisation_Success(t *testing.T) {
 	}
 	if org.Name != "New Org" {
 		t.Errorf("expected Name 'New Org', got %q", org.Name)
+	}
+}
+
+// makeNIS2Server creates an httptest.Server that handles auth and delegates
+// everything else to handler, mirroring makeAPIGuardServer for NIS2 Compass.
+func makeNIS2Server(t *testing.T, token string, handler http.HandlerFunc) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/auth/token" && r.Method == http.MethodPost {
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"token":%q}`, token)
+			return
+		}
+		handler(w, r)
+	}))
+}
+
+// ----------------------------------------------------------------------------
+// TestGetOrganisation_Success
+// ----------------------------------------------------------------------------
+
+func TestGetOrganisation_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	want := Organisation{ID: "org-get-1", Name: "GetOrg", Industry: "tech", Country: "DE"}
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/organisations/org-get-1" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(want)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	got, err := c.GetOrganisation(t.Context(), "org-get-1")
+	if err != nil {
+		t.Fatalf("GetOrganisation: %v", err)
+	}
+	if got.ID != want.ID || got.Name != want.Name {
+		t.Errorf("unexpected org: %+v", got)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestPatchOrganisation_Success
+// ----------------------------------------------------------------------------
+
+func TestPatchOrganisation_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/organisations/org-patch-1" || r.Method != http.MethodPatch {
+			http.NotFound(w, r)
+			return
+		}
+		var req PatchOrganisationRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad body", http.StatusBadRequest)
+			return
+		}
+		updated := Organisation{ID: "org-patch-1", Name: req.Name, Industry: "tech", Country: "DE"}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(updated)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	got, err := c.PatchOrganisation(t.Context(), "org-patch-1", PatchOrganisationRequest{Name: "Renamed Org"})
+	if err != nil {
+		t.Fatalf("PatchOrganisation: %v", err)
+	}
+	if got.Name != "Renamed Org" {
+		t.Errorf("Name: got %q, want Renamed Org", got.Name)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestDeleteOrganisation_Success
+// ----------------------------------------------------------------------------
+
+func TestDeleteOrganisation_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	var called bool
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/organisations/org-del-1" && r.Method == http.MethodDelete {
+			called = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.NotFound(w, r)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	if err := c.DeleteOrganisation(t.Context(), "org-del-1"); err != nil {
+		t.Fatalf("DeleteOrganisation: %v", err)
+	}
+	if !called {
+		t.Error("DELETE endpoint was not called")
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestGetAssessments_Success
+// ----------------------------------------------------------------------------
+
+func TestGetAssessments_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	want := []Assessment{
+		{ID: "asmt-1", OrgID: "org-1", Title: "Q1 Assessment", Status: "draft"},
+	}
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/organisations/org-1/assessments" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(want)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	asmts, err := c.GetAssessments(t.Context(), "org-1", GetAssessmentsOptions{})
+	if err != nil {
+		t.Fatalf("GetAssessments: %v", err)
+	}
+	if len(asmts) != 1 || asmts[0].ID != "asmt-1" {
+		t.Errorf("unexpected assessments: %+v", asmts)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestCreateAssessment_Success
+// ----------------------------------------------------------------------------
+
+func TestCreateAssessment_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/organisations/org-2/assessments" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		var req CreateAssessmentRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad body", http.StatusBadRequest)
+			return
+		}
+		created := Assessment{ID: "asmt-new", OrgID: "org-2", Title: req.Title, Status: "draft"}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(created)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	asmt, err := c.CreateAssessment(t.Context(), "org-2", CreateAssessmentRequest{Title: "Annual NIS2"})
+	if err != nil {
+		t.Fatalf("CreateAssessment: %v", err)
+	}
+	if asmt.ID != "asmt-new" || asmt.Title != "Annual NIS2" {
+		t.Errorf("unexpected assessment: %+v", asmt)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestGetAssessment_Success
+// ----------------------------------------------------------------------------
+
+func TestGetAssessment_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	avg := 6.5
+	want := Assessment{
+		ID: "asmt-get-1", OrgID: "org-1", Title: "Get Me", Status: "in_progress",
+		Stats: &AssessmentStats{Total: 10, AvgRiskScore: &avg},
+	}
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/assessments/asmt-get-1" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(want)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	got, err := c.GetAssessment(t.Context(), "asmt-get-1")
+	if err != nil {
+		t.Fatalf("GetAssessment: %v", err)
+	}
+	if got.ID != want.ID || got.Stats == nil || got.Stats.Total != 10 {
+		t.Errorf("unexpected assessment: %+v", got)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestPatchAssessment_Success
+// ----------------------------------------------------------------------------
+
+func TestPatchAssessment_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/assessments/asmt-patch-1" || r.Method != http.MethodPatch {
+			http.NotFound(w, r)
+			return
+		}
+		var req PatchAssessmentRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad body", http.StatusBadRequest)
+			return
+		}
+		updated := Assessment{ID: "asmt-patch-1", OrgID: "org-1", Title: "Updated", Status: req.Status}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(updated)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	got, err := c.PatchAssessment(t.Context(), "asmt-patch-1", PatchAssessmentRequest{Status: "under_review"})
+	if err != nil {
+		t.Fatalf("PatchAssessment: %v", err)
+	}
+	if got.Status != "under_review" {
+		t.Errorf("Status: got %q, want under_review", got.Status)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestDeleteAssessment_Success
+// ----------------------------------------------------------------------------
+
+func TestDeleteAssessment_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	var called bool
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/assessments/asmt-del-1" && r.Method == http.MethodDelete {
+			called = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.NotFound(w, r)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	if err := c.DeleteAssessment(t.Context(), "asmt-del-1"); err != nil {
+		t.Fatalf("DeleteAssessment: %v", err)
+	}
+	if !called {
+		t.Error("DELETE endpoint was not called")
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestGetControls_Success
+// ----------------------------------------------------------------------------
+
+func TestGetControls_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	want := []Control{
+		{ID: "ctrl-a", AssessmentID: "asmt-1", MeasureRef: "a", Status: "compliant"},
+		{ID: "ctrl-b", AssessmentID: "asmt-1", MeasureRef: "b", Status: "non_compliant"},
+	}
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/assessments/asmt-1/controls" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(want)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	controls, err := c.GetControls(t.Context(), "asmt-1")
+	if err != nil {
+		t.Fatalf("GetControls: %v", err)
+	}
+	if len(controls) != 2 || controls[0].MeasureRef != "a" {
+		t.Errorf("unexpected controls: %+v", controls)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestListControls_WithFilters
+// ----------------------------------------------------------------------------
+
+func TestListControls_WithFilters(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/assessments/asmt-2/controls" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		q := r.URL.Query()
+		if q.Get("status") != "non_compliant" {
+			http.Error(w, "missing status filter", http.StatusBadRequest)
+			return
+		}
+		if q.Get("nist_category") != "protect" {
+			http.Error(w, "missing nist_category filter", http.StatusBadRequest)
+			return
+		}
+		want := []Control{{ID: "ctrl-c", MeasureRef: "c", Status: "non_compliant"}}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(want)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	controls, err := c.ListControls(t.Context(), "asmt-2", ListControlsOptions{
+		Status:       "non_compliant",
+		NistCategory: "protect",
+	})
+	if err != nil {
+		t.Fatalf("ListControls: %v", err)
+	}
+	if len(controls) != 1 || controls[0].MeasureRef != "c" {
+		t.Errorf("unexpected controls: %+v", controls)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestGetControl_Success
+// ----------------------------------------------------------------------------
+
+func TestGetControl_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	want := Control{ID: "ctrl-e", AssessmentID: "asmt-3", MeasureRef: "e", Status: "compliant"}
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/assessments/asmt-3/controls/e" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(want)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	got, err := c.GetControl(t.Context(), "asmt-3", "e")
+	if err != nil {
+		t.Fatalf("GetControl: %v", err)
+	}
+	if got.MeasureRef != "e" || got.Status != "compliant" {
+		t.Errorf("unexpected control: %+v", got)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestPatchControl_Success
+// ----------------------------------------------------------------------------
+
+func TestPatchControl_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/assessments/asmt-4/controls/f" || r.Method != http.MethodPatch {
+			http.NotFound(w, r)
+			return
+		}
+		var req PatchControlRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad body", http.StatusBadRequest)
+			return
+		}
+		updated := Control{ID: "ctrl-f", AssessmentID: "asmt-4", MeasureRef: "f", Status: req.Status, Notes: req.Notes}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(updated)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	got, err := c.PatchControl(t.Context(), "asmt-4", "f", PatchControlRequest{
+		Status: "compliant",
+		Notes:  "Reviewed and confirmed",
+	})
+	if err != nil {
+		t.Fatalf("PatchControl: %v", err)
+	}
+	if got.Status != "compliant" || got.Notes != "Reviewed and confirmed" {
+		t.Errorf("unexpected control: %+v", got)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestListArtifacts_Success
+// ----------------------------------------------------------------------------
+
+func TestListArtifacts_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	want := []Artifact{
+		{ID: "art-1", AssessmentID: "asmt-5", Filename: "policy.pdf", Type: "policy"},
+	}
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/assessments/asmt-5/artifacts" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(want)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	arts, err := c.ListArtifacts(t.Context(), "asmt-5")
+	if err != nil {
+		t.Fatalf("ListArtifacts: %v", err)
+	}
+	if len(arts) != 1 || arts[0].ID != "art-1" {
+		t.Errorf("unexpected artifacts: %+v", arts)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestUploadArtifact_Success
+// ----------------------------------------------------------------------------
+
+func TestUploadArtifact_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "evidence.txt")
+	if err := os.WriteFile(filePath, []byte("evidence content"), 0600); err != nil {
+		t.Fatalf("writing temp file: %v", err)
+	}
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/assessments/asmt-6/artifacts" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		ct := r.Header.Get("Content-Type")
+		mediaType, _, err := mime.ParseMediaType(ct)
+		if err != nil || mediaType != "multipart/form-data" {
+			http.Error(w, "expected multipart/form-data", http.StatusBadRequest)
+			return
+		}
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			http.Error(w, "parse multipart: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if r.FormValue("type") != "evidence" {
+			http.Error(w, "missing type field", http.StatusBadRequest)
+			return
+		}
+		art := Artifact{ID: "art-new", AssessmentID: "asmt-6", Type: "evidence", Filename: "evidence.txt"}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(art)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	got, err := c.UploadArtifact(t.Context(), "asmt-6", filePath, "evidence", "", "test evidence")
+	if err != nil {
+		t.Fatalf("UploadArtifact: %v", err)
+	}
+	if got.ID != "art-new" || got.Type != "evidence" {
+		t.Errorf("unexpected artifact: %+v", got)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestGetArtifact_Success
+// ----------------------------------------------------------------------------
+
+func TestGetArtifact_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	want := Artifact{ID: "art-get-1", AssessmentID: "asmt-7", Filename: "report.pdf", Type: "report"}
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/artifacts/art-get-1" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(want)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	got, err := c.GetArtifact(t.Context(), "art-get-1")
+	if err != nil {
+		t.Fatalf("GetArtifact: %v", err)
+	}
+	if got.ID != want.ID || got.Filename != want.Filename {
+		t.Errorf("unexpected artifact: %+v", got)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestDownloadArtifact_Success
+// ----------------------------------------------------------------------------
+
+func TestDownloadArtifact_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	content := []byte("PDF binary content here")
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/artifacts/art-dl-1/download" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Write(content)
+	})
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "downloaded.bin")
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	if err := c.DownloadArtifact(t.Context(), "art-dl-1", dest); err != nil {
+		t.Fatalf("DownloadArtifact: %v", err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("reading downloaded file: %v", err)
+	}
+	if string(got) != string(content) {
+		t.Errorf("content mismatch: got %q", string(got))
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestDeleteArtifact_Success
+// ----------------------------------------------------------------------------
+
+func TestDeleteArtifact_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	var called bool
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/artifacts/art-del-1" && r.Method == http.MethodDelete {
+			called = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.NotFound(w, r)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	if err := c.DeleteArtifact(t.Context(), "art-del-1"); err != nil {
+		t.Fatalf("DeleteArtifact: %v", err)
+	}
+	if !called {
+		t.Error("DELETE endpoint was not called")
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestListAPIKeys_Success
+// ----------------------------------------------------------------------------
+
+func TestListAPIKeys_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	want := []APIKey{
+		{ID: "key-1", Scope: "read", IsActive: true},
+		{ID: "key-2", Scope: "admin", IsActive: false},
+	}
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/api-keys" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(want)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	keys, err := c.ListAPIKeys(t.Context())
+	if err != nil {
+		t.Fatalf("ListAPIKeys: %v", err)
+	}
+	if len(keys) != 2 || keys[0].ID != "key-1" {
+		t.Errorf("unexpected keys: %+v", keys)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestCreateAPIKey_Success
+// ----------------------------------------------------------------------------
+
+func TestCreateAPIKey_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/api-keys" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		created := APIKey{ID: "key-new", Scope: "read", IsActive: true, Key: "plaintext-key-value"}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(created)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	got, err := c.CreateAPIKey(t.Context(), CreateAPIKeyRequest{Label: "ci-key", Scope: "read"})
+	if err != nil {
+		t.Fatalf("CreateAPIKey: %v", err)
+	}
+	if got.ID != "key-new" || got.Key == "" {
+		t.Errorf("unexpected key: %+v", got)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestRevokeAPIKey_Success
+// ----------------------------------------------------------------------------
+
+func TestRevokeAPIKey_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	var called bool
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/api-keys/key-rev-1" && r.Method == http.MethodDelete {
+			called = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.NotFound(w, r)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	if err := c.RevokeAPIKey(t.Context(), "key-rev-1"); err != nil {
+		t.Fatalf("RevokeAPIKey: %v", err)
+	}
+	if !called {
+		t.Error("DELETE endpoint was not called")
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestGenerateReport_Success
+// ----------------------------------------------------------------------------
+
+func TestGenerateReport_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	pdfData := []byte("%PDF-1.4 fake pdf content")
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/assessments/asmt-rpt-1/report" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Write(pdfData)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	got, err := c.GenerateReport(t.Context(), "asmt-rpt-1")
+	if err != nil {
+		t.Fatalf("GenerateReport: %v", err)
+	}
+	if string(got) != string(pdfData) {
+		t.Errorf("PDF data mismatch: got %q", string(got))
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestGetReportStream_NIS2_Success
+// ----------------------------------------------------------------------------
+
+func TestGetReportStream_NIS2_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	sarifData := `{"version":"2.1.0","runs":[]}`
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/assessments/asmt-stream-1/report" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Query().Get("format") != "sarif" {
+			http.Error(w, "unexpected format", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, sarifData)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	var buf strings.Builder
+	if err := c.GetReportStream(t.Context(), "asmt-stream-1", "sarif", &buf); err != nil {
+		t.Fatalf("GetReportStream: %v", err)
+	}
+	if buf.String() != sarifData {
+		t.Errorf("data mismatch: got %q", buf.String())
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestGetAuditLog_NIS2_Success
+// ----------------------------------------------------------------------------
+
+func TestGetAuditLog_NIS2_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	want := []NIS2AuditEntry{
+		{ID: "nis2-audit-1", Action: "organisation.created", Actor: "api_key:key-1"},
+		{ID: "nis2-audit-2", Action: "assessment.status_changed", Actor: "api_key:key-1"},
+	}
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/audit" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Query().Get("per_page") == "" || r.URL.Query().Get("page") == "" {
+			http.Error(w, "missing pagination", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(want)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	entries, err := c.GetAuditLog(t.Context(), 20, 1)
+	if err != nil {
+		t.Fatalf("GetAuditLog: %v", err)
+	}
+	if len(entries) != 2 || entries[0].ID != "nis2-audit-1" {
+		t.Errorf("unexpected entries: %+v", entries)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestGetAuditEntry_NIS2_Success
+// ----------------------------------------------------------------------------
+
+func TestGetAuditEntry_NIS2_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	want := NIS2AuditEntry{ID: "nis2-audit-42", Action: "control.patched", Actor: "api_key:key-2"}
+
+	srv := makeNIS2Server(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/audit/nis2-audit-42" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(want)
+	})
+	defer srv.Close()
+
+	c := NewNIS2CompassClient(srv.URL, "test-key")
+	got, err := c.GetAuditEntry(t.Context(), "nis2-audit-42")
+	if err != nil {
+		t.Fatalf("GetAuditEntry: %v", err)
+	}
+	if got.ID != want.ID || got.Action != want.Action {
+		t.Errorf("unexpected entry: %+v", got)
 	}
 }

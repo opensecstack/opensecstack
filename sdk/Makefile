@@ -1,4 +1,4 @@
-.PHONY: help test test-go test-python test-rust lint lint-go lint-python lint-rust fmt fmt-go fmt-python fmt-rust audit audit-go audit-python audit-rust clean
+.PHONY: help test test-go test-python test-rust lint lint-go lint-python lint-rust fmt fmt-go fmt-python fmt-rust audit audit-go audit-python audit-rust clean publish-python release-go changelog
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -49,5 +49,35 @@ audit-rust: ## Audit Rust dependencies
 
 clean: ## Remove build artifacts
 	cd go && rm -f coverage.out
-	cd python && rm -rf .pytest_cache __pycache__ htmlcov .coverage
+	cd python && rm -rf .pytest_cache __pycache__ htmlcov .coverage dist build *.egg-info
 	cd rust && cargo clean
+
+publish-python: ## Build and publish Python SDK to PyPI (requires PYPI_TOKEN env var)
+	@if [ -z "$(PYPI_TOKEN)" ]; then \
+		echo "ERROR: PYPI_TOKEN is not set. Export it before running this target."; \
+		exit 1; \
+	fi
+	cd python && pip install hatch && hatch build
+	cd python && HATCH_INDEX_AUTH="$(PYPI_TOKEN)" hatch publish --repo main dist/
+
+release-go: ## Create and push a Go SDK release tag (usage: make release-go VERSION=v0.2.0)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "ERROR: VERSION is not set. Usage: make release-go VERSION=v0.2.0"; \
+		exit 1; \
+	fi
+	@echo "Tagging Go SDK release sdk/go/$(VERSION)"
+	git tag sdk/go/$(VERSION)
+	git push origin sdk/go/$(VERSION)
+	@echo "Tag pushed. The sdk-go-publish workflow will run tests automatically."
+
+changelog: ## Remind developer to update CHANGELOG.md files before releasing
+	@echo "---------------------------------------------------------------"
+	@echo "  Pre-release checklist: update CHANGELOG.md"
+	@echo "---------------------------------------------------------------"
+	@echo "  Python SDK : sdk/python/CHANGELOG.md"
+	@echo "  Go SDK     : sdk/go/CHANGELOG.md"
+	@echo ""
+	@echo "  Commit the changelog, then run the appropriate release target:"
+	@echo "    make publish-python PYPI_TOKEN=<token>"
+	@echo "    make release-go VERSION=v0.2.0"
+	@echo "---------------------------------------------------------------"

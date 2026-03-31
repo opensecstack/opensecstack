@@ -178,7 +178,7 @@ func TestParseSeverity_Info(t *testing.T) {
 }
 
 func TestParseSeverity_UnknownDefaultsToInfo(t *testing.T) {
-	unknowns := []string{"extreme", "CRITICAL", "UNKNOWN", "", "n/a"}
+	unknowns := []string{"extreme", "UNKNOWN", "", "n/a"}
 	for _, s := range unknowns {
 		got := parseSeverity(s)
 		if got != domain.SeverityInfo {

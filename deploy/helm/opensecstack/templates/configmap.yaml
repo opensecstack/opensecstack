@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opensecstack-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "opensecstack.labels" . | nindent 4 }}
+data:
+  APIGUARD_DB_NAME: {{ .Values.config.apiguardDbName | quote }}
+  NIS2_DB_NAME:     {{ .Values.config.nis2DbName | quote }}
+  POSTGRES_HOST:    {{ .Values.config.postgresHost | quote }}
+  POSTGRES_PORT:    {{ .Values.config.postgresPort | quote }}
+  POSTGRES_USER:    {{ .Values.config.postgresUser | quote }}
+  REDIS_HOST:       {{ .Values.config.redisHost | quote }}
+  REDIS_PORT:       {{ .Values.config.redisPort | quote }}
+  LOG_LEVEL:        {{ .Values.config.logLevel | quote }}

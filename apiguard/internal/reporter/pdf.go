@@ -169,8 +169,10 @@ func center(s string, width int) string {
 	if l >= width {
 		return s
 	}
-	pad := (width - l) / 2
-	return strings.Repeat(" ", pad) + s
+	total := width - l
+	left := total / 2
+	right := total - left
+	return strings.Repeat(" ", left) + s + strings.Repeat(" ", right)
 }
 
 // truncate shortens s to at most n runes, appending "…" if truncated.

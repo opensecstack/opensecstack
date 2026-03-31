@@ -21,6 +21,14 @@ from ..reporters import generate_json_report, generate_sarif_report
 
 assessments_bp = Blueprint('assessments', __name__)
 
+
+@assessments_bp.before_request
+def require_json_content_type():
+    if request.method in ('POST', 'PUT', 'PATCH'):
+        ct = request.content_type or ''
+        if ct and not ct.startswith('application/json'):
+            return jsonify({'error': 'Content-Type must be application/json', 'code': 'UNSUPPORTED_MEDIA_TYPE'}), 415
+
 _VALID_FRAMEWORK_VERSIONS = frozenset({'NIS2-2022/0383'})
 
 # Per-user rate limit for PDF report generation.
@@ -227,7 +235,12 @@ def list_assessments(org_id):
     total = query.count()
     items = query.offset((page - 1) * per_page).limit(per_page).all()
 
-    response = jsonify([a.to_dict() for a in items])
+    response = jsonify({
+        'data': [a.to_dict() for a in items],
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+    })
     response.headers['X-Total-Count'] = str(total)
     return response, 200
 

@@ -1,0 +1,33 @@
+{{- if .Values.nis2compass.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "opensecstack.fullname" . }}-nis2compass
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: nis2compass
+    {{- include "opensecstack.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    {{- if .Values.certManager.enabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.certManager.issuerType | quote }}
+    {{- end }}
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ .Values.nis2compass.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "opensecstack.fullname" . }}-nis2compass
+                port:
+                  number: {{ .Values.nis2compass.service.port }}
+  tls:
+    - hosts:
+        - {{ .Values.nis2compass.ingress.host | quote }}
+      secretName: {{ .Values.nis2compass.ingress.tlsSecret | quote }}
+{{- end }}

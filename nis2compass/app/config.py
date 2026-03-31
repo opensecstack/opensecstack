@@ -43,6 +43,7 @@ class Config:
         'pool_size': int(os.getenv('NIS2_DB_POOL_SIZE', '10')),
         'pool_pre_ping': True,
         'pool_recycle': 300,
+        'connect_args': {'options': '-c statement_timeout=30000'},
     }
 
     # ------------------------------------------------------------------ #

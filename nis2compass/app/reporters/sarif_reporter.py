@@ -2,8 +2,24 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any
+
+# Maximum length for any user-supplied string embedded in a report (H11).
+_MAX_FIELD_LEN = 500
+
+# Strip ASCII control characters except TAB (0x09) and LF (0x0a) and CR (0x0d).
+_CTRL_CHAR_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+
+
+def _sanitise(s: object) -> str:
+    """Remove control characters and truncate to _MAX_FIELD_LEN chars (H11)."""
+    if s is None:
+        return ''
+    text = str(s.value if hasattr(s, 'value') else s)
+    text = _CTRL_CHAR_RE.sub('', text)
+    return text[:_MAX_FIELD_LEN]
 
 # Map NIS2 measure refs to SARIF rule IDs and metadata
 NIS2_RULES = {
@@ -41,9 +57,10 @@ def generate_sarif_report(assessment: Any, controls: list[Any], organisation: An
     Returns UTF-8 encoded JSON bytes.
     """
     def _str(val) -> str:
+        """Convert enum/str to plain string; sanitise for injection safety (H11)."""
         if val is None:
             return ""
-        return str(val.value if hasattr(val, "value") else val)
+        return _sanitise(val)
 
     rules = []
     for ref, meta in NIS2_RULES.items():
@@ -90,11 +107,11 @@ def generate_sarif_report(assessment: Any, controls: list[Any], organisation: An
             "properties": {
                 "status": status,
                 "risk_score": getattr(control, "risk_score", None),
-                "remediation_owner": getattr(control, "remediation_owner", None),
-                "remediation_due": str(getattr(control, "remediation_due", "") or ""),
-                "external_ticket_url": getattr(control, "external_ticket_url", None),
-                "organisation": organisation.name,
-                "assessment_title": assessment.title,
+                "remediation_owner": _sanitise(getattr(control, "remediation_owner", None)),
+                "remediation_due": _sanitise(str(getattr(control, "remediation_due", "") or "")),
+                "external_ticket_url": _sanitise(getattr(control, "external_ticket_url", None)),
+                "organisation": _sanitise(organisation.name),
+                "assessment_title": _sanitise(assessment.title),
             },
         }
         results.append(result)

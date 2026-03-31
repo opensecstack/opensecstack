@@ -176,9 +176,11 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 			// has not already refreshed the token while we waited.
 			c.mu.Lock()
 			if c.jwt == tok {
-				// Token is still the stale one — we must refresh. Unlock
-				// before making the HTTP call to avoid holding the mutex
-				// across the network round-trip.
+				// Token is still the stale one — clear it so that authenticate()
+				// is forced to make a fresh HTTP call even if the local expiry
+				// has not yet passed (the server rejected it as invalid).
+				c.jwt = ""
+				c.tokenExpiry = time.Time{}
 				c.mu.Unlock()
 				if authErr := c.authenticate(ctx); authErr != nil {
 					return nil, authErr
@@ -828,13 +830,23 @@ func (c *APIGuardClient) RefreshToken(ctx context.Context, refreshToken string) 
 		return nil, fmt.Errorf("RefreshToken: decoding response: %w", err)
 	}
 	if result.AccessToken != "" {
+		// Parse the expiry BEFORE acquiring the lock so we don't hold the
+		// mutex across any CPU-bound work.
 		expiry, err := parseJWTExpiry(result.AccessToken)
 		if err != nil {
 			expiry = time.Now().Add(5 * time.Minute)
 		}
+		// Re-acquire the write lock and perform a double-checked write: only
+		// store the new token if the currently cached token is absent or
+		// already stale.  This prevents a race where two concurrent callers
+		// both complete the HTTP round-trip and the second (possibly older)
+		// response silently overwrites a fresher token that was stored while
+		// the network I/O was in flight.
 		c.mu.Lock()
-		c.jwt = result.AccessToken
-		c.tokenExpiry = expiry
+		if c.jwt == "" || !time.Now().Add(60*time.Second).Before(c.tokenExpiry) {
+			c.jwt = result.AccessToken
+			c.tokenExpiry = expiry
+		}
 		c.mu.Unlock()
 	}
 	return &result, nil

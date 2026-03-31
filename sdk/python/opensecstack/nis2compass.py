@@ -275,7 +275,10 @@ class NIS2CompassClient:
             if resp.status_code == 401:
                 # Token expired — re-authenticate and retry once, using
                 # double-checked locking to avoid redundant refreshes.
+                # NOTE: _authenticate() must be called OUTSIDE the lock because
+                # it also acquires _auth_lock (threading.Lock is not reentrant).
                 logger.debug("Received 401 on %s %s; attempting token refresh", method.upper(), path)
+                _should_refresh = False
                 with self._auth_lock:
                     if self._session.headers.get("Authorization") != old_auth:
                         # Another thread already refreshed the token; just retry.
@@ -284,15 +287,17 @@ class NIS2CompassClient:
                         # Clear expiry so _authenticate() proceeds unconditionally.
                         self._token_expiry = None
                         self._session.headers.pop("Authorization", None)
-                        try:
-                            self._authenticate()
-                        except AuthenticationError:
-                            logger.warning(
-                                "%s %s — re-authentication failed after 401; "
-                                "API key may be invalid or revoked",
-                                method.upper(), path,
-                            )
-                            raise
+                        _should_refresh = True
+                if _should_refresh:
+                    try:
+                        self._authenticate()
+                    except AuthenticationError:
+                        logger.warning(
+                            "%s %s — re-authentication failed after 401; "
+                            "API key may be invalid or revoked",
+                            method.upper(), path,
+                        )
+                        raise
                 resp = getattr(self._session, method)(self._url(path), timeout=self._timeout, **kwargs)
             return resp
 
@@ -753,9 +758,12 @@ class NIS2CompassClient:
         """
         dest_path = os.path.expanduser(dest_path)
         # Ensure we have a valid token before the streamed request.
+        _needs_auth = False
         with self._auth_lock:
             if "Authorization" not in self._session.headers:
-                self._authenticate()
+                _needs_auth = True
+        if _needs_auth:
+            self._authenticate()
 
         def _stream() -> requests.Response:
             return self._session.get(
@@ -768,25 +776,30 @@ class NIS2CompassClient:
         old_auth = self._session.headers.get("Authorization")
         resp = _stream()
         if resp.status_code == 401:
+            _should_refresh = False
             with self._auth_lock:
                 if self._session.headers.get("Authorization") == old_auth:
-                    self._authenticate()
+                    self._session.headers.pop("Authorization", None)
+                    self._token_expiry = None
+                    _should_refresh = True
+            if _should_refresh:
+                self._authenticate()
             resp = _stream()
 
         self._raise_for_status(resp)
         content_type = resp.headers.get("Content-Type", "")
         if "application/pdf" not in content_type and "application/octet-stream" not in content_type:
+            resp.close()
             raise APIError(
                 resp.status_code,
                 f"Unexpected Content-Type for report: {content_type!r}",
             )
-        try:
+        # Use the response as a context manager so it is always closed, even
+        # when an exception occurs during streaming or writing (H12).
+        with resp:
             with open(dest_path, "wb") as fh:
                 for chunk in resp.iter_content(chunk_size=65536):
                     fh.write(chunk)
-        except Exception:
-            resp.close()
-            raise
 
     def delete_artifact(self, artifact_id: str) -> None:
         """
@@ -845,9 +858,13 @@ class NIS2CompassClient:
         The directory containing *output_path* must already exist.
         """
         # Ensure we have a valid token before the long-running streamed request.
+        # _authenticate() must be called outside any lock (Lock is not reentrant).
+        _needs_auth = False
         with self._auth_lock:
             if "Authorization" not in self._session.headers:
-                self._authenticate()
+                _needs_auth = True
+        if _needs_auth:
+            self._authenticate()
 
         report_timeout = max(self._timeout, 120)
 
@@ -862,12 +879,16 @@ class NIS2CompassClient:
         old_auth = self._session.headers.get("Authorization")
         resp = _stream_report()
         if resp.status_code == 401:
-            # Token expired — re-authenticate and retry once, using
-            # double-checked locking so concurrent threads don't all refresh.
+            # Token expired — re-authenticate and retry once.
             logger.debug("Received 401 on report generation for %s; refreshing token", assessment_id)
+            _should_refresh = False
             with self._auth_lock:
                 if self._session.headers.get("Authorization") == old_auth:
-                    self._authenticate()
+                    self._session.headers.pop("Authorization", None)
+                    self._token_expiry = None
+                    _should_refresh = True
+            if _should_refresh:
+                self._authenticate()
             resp = _stream_report()
 
         self._raise_for_status(resp)
@@ -878,7 +899,7 @@ class NIS2CompassClient:
                 f"Unexpected Content-Type for report: {content_type!r}",
             )
         output_path = os.path.expanduser(output_path)
-        with open(output_path, "wb") as fh:
+        with resp, open(output_path, "wb") as fh:
             for chunk in resp.iter_content(chunk_size=65536):
                 fh.write(chunk)
 
@@ -900,19 +921,16 @@ class NIS2CompassClient:
         dest:          Writable file-like object (binary mode)
         chunk_size:    Streaming chunk size in bytes
         """
-        self._ensure_authenticated()
-        url = self._api_url(f"assessments/{assessment_id}/report")
-        resp = self._request_with_retry(
-            "POST", url,
+        resp = self._request(
+            "post",
+            f"assessments/{assessment_id}/report",
             params={"format": format},
-            headers={"Authorization": self._session.headers.get("Authorization", "")},
             stream=True,
         )
-        if resp.status_code != 200:
-            raise APIError(resp.status_code, resp.text)
-        for chunk in resp.iter_content(chunk_size=chunk_size):
-            if chunk:
-                dest.write(chunk)
+        with resp:
+            for chunk in resp.iter_content(chunk_size=chunk_size):
+                if chunk:
+                    dest.write(chunk)
 
     # ------------------------------------------------------------------
     # Audit log
@@ -944,6 +962,33 @@ class NIS2CompassClient:
         entry_id: UUID of the audit log entry.
         """
         return self._get(f"audit/{entry_id}").json()
+
+    # ------------------------------------------------------------------
+    # Health
+    # ------------------------------------------------------------------
+
+    def get_health(self) -> dict:
+        """
+        Return the aggregate platform health status.
+
+        Does not require authentication.  Returns ``{"status": "ok"}`` on
+        success or ``{"status": "degraded"}`` with HTTP 503 when a dependency
+        is unhealthy.
+        """
+        resp = self._session.get(self._url("health"), timeout=self._timeout)
+        self._raise_for_status(resp)
+        return resp.json()
+
+    def get_health_detail(self) -> dict:
+        """
+        Return detailed health information including per-dependency status.
+
+        Requires a valid Bearer JWT (calls ``_ensure_authenticated`` first).
+        Returns a dict with ``status``, ``version``, ``db``, and ``redis``
+        keys.
+        """
+        resp = self._request("get", "health/detail")
+        return resp.json()
 
 
 # ---------------------------------------------------------------------------
@@ -1384,8 +1429,320 @@ class AsyncNIS2CompassClient:
             async for chunk in resp.aiter_bytes(chunk_size):
                 dest.write(chunk)
 
-    # Additional methods (patch_organisation, delete_organisation,
-    # list_assessments, patch_assessment, delete_assessment, list_controls,
-    # patch_control, upload_artifact, get_audit_log, etc.) follow the same
-    # pattern: replace self._request(...) with await self._request(...)
-    # and self._session.* calls with self._http.* equivalents.
+    async def get_organisations(self, page: int = 1, per_page: int = 20) -> list[dict]:
+        """Return a list of organisations (async)."""
+        resp = await self._request("GET", "organisations", params={"page": page, "per_page": per_page})
+        return resp.json()
+
+    async def patch_organisation(
+        self,
+        org_id: str,
+        name: Optional[str] = None,
+        industry: Optional[str] = None,
+        country: Optional[str] = None,
+        size: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        registration_number: Optional[str] = None,
+        contact_email: Optional[str] = None,
+    ) -> dict:
+        """Update an existing organisation (partial update, async)."""
+        body: dict = {}
+        if name is not None:
+            body["name"] = name
+        if industry is not None:
+            body["industry"] = industry
+        if country is not None:
+            body["country"] = country
+        if size is not None:
+            body["size"] = size
+        if entity_type is not None:
+            body["entity_type"] = entity_type
+        if registration_number is not None:
+            body["registration_number"] = registration_number
+        if contact_email is not None:
+            body["contact_email"] = contact_email
+        resp = await self._request("PATCH", f"organisations/{org_id}", json=body)
+        return resp.json()
+
+    async def delete_organisation(self, org_id: str) -> None:
+        """Permanently delete an organisation and all its assessments (async)."""
+        await self._request("DELETE", f"organisations/{org_id}")
+
+    # ------------------------------------------------------------------
+    # Assessments
+    # ------------------------------------------------------------------
+
+    async def list_assessments(
+        self,
+        org_id: str,
+        *,
+        status: Optional[str] = None,
+        page: int = 1,
+        per_page: int = 20,
+    ) -> list[dict]:
+        """Return a list of assessments for an organisation (async)."""
+        params: dict = {"page": page, "per_page": per_page}
+        if status is not None:
+            params["status"] = status
+        resp = await self._request("GET", f"organisations/{org_id}/assessments", params=params)
+        return resp.json()
+
+    async def patch_assessment(
+        self,
+        assessment_id: str,
+        status: Optional[str] = None,
+        title: Optional[str] = None,
+        scope: Optional[str] = None,
+        assessor: Optional[str] = None,
+        due_date: Optional[str] = None,
+    ) -> dict:
+        """Update fields on an existing assessment (partial update, async)."""
+        body: dict = {}
+        if status is not None:
+            body["status"] = status
+        if title is not None:
+            body["title"] = title
+        if scope is not None:
+            body["scope"] = scope
+        if assessor is not None:
+            body["assessor"] = assessor
+        if due_date is not None:
+            body["due_date"] = due_date
+        resp = await self._request("PATCH", f"assessments/{assessment_id}", json=body)
+        return resp.json()
+
+    async def delete_assessment(self, assessment_id: str) -> None:
+        """Permanently delete an assessment and all its controls (async)."""
+        await self._request("DELETE", f"assessments/{assessment_id}")
+
+    # ------------------------------------------------------------------
+    # Controls
+    # ------------------------------------------------------------------
+
+    async def list_controls(
+        self,
+        assessment_id: str,
+        status: Optional[str] = None,
+        nist_category: Optional[str] = None,
+        measure_ref: Optional[str] = None,
+    ) -> list[dict]:
+        """Return all controls for an assessment (async)."""
+        params: dict = {}
+        if status is not None:
+            params["status"] = status
+        if nist_category is not None:
+            params["nist_category"] = nist_category
+        if measure_ref is not None:
+            params["measure_ref"] = measure_ref
+        resp = await self._request(
+            "GET", f"assessments/{assessment_id}/controls", params=params or None
+        )
+        return resp.json()
+
+    async def get_control(self, assessment_id: str, measure_ref: str) -> dict:
+        """Return a single control by its measure reference letter (async)."""
+        resp = await self._request("GET", f"assessments/{assessment_id}/controls/{measure_ref}")
+        return resp.json()
+
+    async def patch_control(
+        self,
+        assessment_id: str,
+        measure_ref: str,
+        status: Optional[str] = None,
+        notes: Optional[str] = None,
+        gap_description: Optional[str] = None,
+        remediation_plan: Optional[str] = None,
+        risk_score: Optional[float] = None,
+        evidence: Optional[dict] = None,
+        remediation_due: Optional[str] = None,
+        remediation_owner: Optional[str] = None,
+        remediation_status: Optional[str] = None,
+        external_ticket_url: Optional[str] = None,
+        remediation_notes: Optional[str] = None,
+    ) -> dict:
+        """Update a control within an assessment (partial update, async)."""
+        body: dict = {}
+        if status is not None:
+            body["status"] = status
+        if notes is not None:
+            body["notes"] = notes
+        if gap_description is not None:
+            body["gap_description"] = gap_description
+        if remediation_plan is not None:
+            body["remediation_plan"] = remediation_plan
+        if risk_score is not None:
+            body["risk_score"] = risk_score
+        if evidence is not None:
+            body["evidence"] = evidence
+        if remediation_due is not None:
+            body["remediation_due"] = remediation_due
+        if remediation_owner is not None:
+            body["remediation_owner"] = remediation_owner
+        if remediation_status is not None:
+            body["remediation_status"] = remediation_status
+        if external_ticket_url is not None:
+            body["external_ticket_url"] = external_ticket_url
+        if remediation_notes is not None:
+            body["remediation_notes"] = remediation_notes
+        resp = await self._request(
+            "PATCH", f"assessments/{assessment_id}/controls/{measure_ref}", json=body
+        )
+        return resp.json()
+
+    # ------------------------------------------------------------------
+    # Artifacts
+    # ------------------------------------------------------------------
+
+    async def list_artifacts(self, assessment_id: str) -> list[dict]:
+        """Return all artifacts attached to an assessment (async)."""
+        resp = await self._request("GET", f"assessments/{assessment_id}/artifacts")
+        return resp.json()
+
+    async def upload_artifact(
+        self,
+        assessment_id: str,
+        file_path: str,
+        artifact_type: str,
+        control_id: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> dict:
+        """Upload a file as an artifact attached to an assessment (async)."""
+        file_path = os.path.expanduser(file_path)
+        form_data: dict = {"type": artifact_type}
+        if control_id is not None:
+            form_data["control_id"] = control_id
+        if description is not None:
+            form_data["description"] = description
+        with open(file_path, "rb") as fh:
+            resp = await self._request(
+                "POST",
+                f"assessments/{assessment_id}/artifacts",
+                files={"file": (os.path.basename(file_path), fh)},
+                data=form_data,
+                headers={"Content-Type": None},
+            )
+        return resp.json()
+
+    async def get_artifact(self, artifact_id: str) -> dict:
+        """Return artifact metadata by UUID (async)."""
+        resp = await self._request("GET", f"artifacts/{artifact_id}")
+        return resp.json()
+
+    async def download_artifact(self, artifact_id: str, dest_path: str) -> None:
+        """Download an artifact's file content and save it to *dest_path* (async)."""
+        dest_path = os.path.expanduser(dest_path)
+        await self._ensure_authenticated()
+        url = self._url(f"artifacts/{artifact_id}/download")
+
+        async def _stream() -> httpx.Response:
+            return await self._http.get(url, timeout=self._timeout)
+
+        resp = await _stream()
+        if resp.status_code == 401:
+            await self.authenticate()
+            resp = await _stream()
+
+        self._raise_for_status(resp)
+        with open(dest_path, "wb") as fh:
+            fh.write(resp.content)
+
+    async def delete_artifact(self, artifact_id: str) -> None:
+        """Permanently delete an artifact and its stored file (async)."""
+        await self._request("DELETE", f"artifacts/{artifact_id}")
+
+    # ------------------------------------------------------------------
+    # API key management
+    # ------------------------------------------------------------------
+
+    async def list_api_keys(self) -> list[dict]:
+        """Return all API keys belonging to the current actor (async)."""
+        resp = await self._request("GET", "api-keys")
+        return resp.json()
+
+    async def create_api_key(self, label: Optional[str] = None, scope: str = "read_write") -> dict:
+        """Create a new API key (async)."""
+        body: dict = {"scope": scope}
+        if label is not None:
+            body["label"] = label
+        resp = await self._request("POST", "api-keys", json=body)
+        return resp.json()
+
+    async def revoke_api_key(self, key_id: str) -> None:
+        """Revoke (deactivate) an API key (async)."""
+        await self._request("DELETE", f"api-keys/{key_id}")
+
+    # ------------------------------------------------------------------
+    # Reports
+    # ------------------------------------------------------------------
+
+    async def generate_report(self, assessment_id: str, output_path: str) -> None:
+        """
+        Download the PDF compliance report for an assessment and save it
+        to *output_path* on the local filesystem (async).
+        """
+        output_path = os.path.expanduser(output_path)
+        await self._ensure_authenticated()
+        url = self._url(f"assessments/{assessment_id}/report")
+
+        async with self._http.stream(
+            "POST", url, timeout=max(self._timeout, 120)
+        ) as resp:
+            if resp.status_code == 401:
+                await self.authenticate()
+                async with self._http.stream(
+                    "POST", url, timeout=max(self._timeout, 120)
+                ) as resp2:
+                    if resp2.status_code != 200:
+                        await resp2.aread()
+                        raise APIError(resp2.status_code, resp2.text)
+                    with open(output_path, "wb") as fh:
+                        async for chunk in resp2.aiter_bytes(65536):
+                            fh.write(chunk)
+                return
+
+            if resp.status_code != 200:
+                await resp.aread()
+                self._raise_for_status(resp)
+
+            with open(output_path, "wb") as fh:
+                async for chunk in resp.aiter_bytes(65536):
+                    fh.write(chunk)
+
+    # ------------------------------------------------------------------
+    # Audit log
+    # ------------------------------------------------------------------
+
+    async def get_audit_log(self, limit: int = 50, page: int = 1) -> list[dict]:
+        """Return audit log entries (async). Entries are ordered newest-first."""
+        resp = await self._request(
+            "GET", "audit", params={"per_page": min(limit, 100), "page": page}
+        )
+        return resp.json()
+
+    async def get_audit_entry(self, entry_id: str) -> dict:
+        """Return a single audit log entry by UUID (async)."""
+        resp = await self._request("GET", f"audit/{entry_id}")
+        return resp.json()
+
+    # ------------------------------------------------------------------
+    # Health
+    # ------------------------------------------------------------------
+
+    async def get_health(self) -> dict:
+        """
+        Return the aggregate platform health status (async).
+
+        Does not require authentication.
+        """
+        resp = await self._http.get(self._url("health"), timeout=self._timeout)
+        self._raise_for_status(resp)
+        return resp.json()
+
+    async def get_health_detail(self) -> dict:
+        """
+        Return detailed health information including per-dependency status (async).
+
+        Requires a valid Bearer JWT.
+        """
+        resp = await self._request("GET", "health/detail")
+        return resp.json()

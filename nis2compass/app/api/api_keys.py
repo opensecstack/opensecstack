@@ -9,6 +9,14 @@ from ..audit import write_audit
 
 api_keys_bp = Blueprint('api_keys', __name__)
 
+
+@api_keys_bp.before_request
+def require_json_content_type():
+    if request.method in ('POST', 'PUT', 'PATCH'):
+        ct = request.content_type or ''
+        if ct and not ct.startswith('application/json'):
+            return jsonify({'error': 'Content-Type must be application/json', 'code': 'UNSUPPORTED_MEDIA_TYPE'}), 415
+
 VALID_SCOPES = {'read', 'read_write'}
 
 

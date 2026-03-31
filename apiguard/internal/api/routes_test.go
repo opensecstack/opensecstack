@@ -38,6 +38,8 @@ func newTestRouter(t *testing.T) (http.Handler, func()) {
 	refreshLimiter := middleware.NewRateLimiter(100)
 	apiKeyLimiter := middleware.NewRateLimiter(100)
 
+	metrics := middleware.NewMetricsCollector()
+
 	r := chi.NewRouter()
 	RegisterRoutes(
 		r,
@@ -48,6 +50,7 @@ func newTestRouter(t *testing.T) (http.Handler, func()) {
 		specsH,
 		auditH,
 		apiKeysH,
+		metrics,
 		cfg,
 		authLimiter,
 		scanLimiter,

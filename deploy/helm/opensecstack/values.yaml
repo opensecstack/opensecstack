@@ -1,0 +1,137 @@
+# Default values for the opensecstack Helm chart.
+# Override these in a values file or with --set flags.
+
+# ---------------------------------------------------------------------------
+# Global
+# ---------------------------------------------------------------------------
+global:
+  # Prefix prepended to every image repository when non-empty.
+  # E.g. "registry.example.com/myorg" → "registry.example.com/myorg/apiguard:latest"
+  imageRegistry: ""
+  imagePullPolicy: IfNotPresent
+
+namespace: opensecstack
+
+# ---------------------------------------------------------------------------
+# APIGuard
+# ---------------------------------------------------------------------------
+apiguard:
+  image:
+    repository: ghcr.io/opensecstack/apiguard
+    tag: latest
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  service:
+    port: 8080
+  ingress:
+    enabled: true
+    host: apiguard.example.com
+    tlsSecret: apiguard-tls
+
+# ---------------------------------------------------------------------------
+# NIS2 Compass
+# ---------------------------------------------------------------------------
+nis2compass:
+  image:
+    repository: ghcr.io/opensecstack/nis2compass
+    tag: latest
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  service:
+    port: 8090
+  ingress:
+    enabled: true
+    host: nis2compass.example.com
+    tlsSecret: nis2compass-tls
+
+# ---------------------------------------------------------------------------
+# CITADEL
+# ---------------------------------------------------------------------------
+citadel:
+  image:
+    repository: ghcr.io/opensecstack/citadel
+    tag: latest
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  service:
+    port: 8070
+
+# ---------------------------------------------------------------------------
+# PostgreSQL
+# ---------------------------------------------------------------------------
+postgres:
+  image: postgres:16-alpine
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  persistence:
+    size: 10Gi
+    storageClass: ""   # "" uses the cluster default StorageClass
+
+# ---------------------------------------------------------------------------
+# Redis
+# ---------------------------------------------------------------------------
+redis:
+  image: redis:7-alpine
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+# ---------------------------------------------------------------------------
+# Shared application config (non-secret)
+# ---------------------------------------------------------------------------
+config:
+  logLevel: info
+  postgresHost: postgres-service
+  postgresPort: "5432"
+  postgresUser: apiguard
+  apiguardDbName: apiguard
+  nis2DbName: nis2compass
+  redisHost: redis-service
+  redisPort: "6379"
+
+# ---------------------------------------------------------------------------
+# HorizontalPodAutoscaler (applies to apiguard and nis2compass)
+# ---------------------------------------------------------------------------
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  cpuThreshold: 70
+
+# ---------------------------------------------------------------------------
+# cert-manager
+# ---------------------------------------------------------------------------
+certManager:
+  enabled: true
+  # Email address for Let's Encrypt registration and expiry notices
+  email: "admin@example.com"
+  # issuerType controls which ACME endpoint is used.
+  # Valid values: letsencrypt-staging | letsencrypt-prod
+  issuerType: letsencrypt-staging

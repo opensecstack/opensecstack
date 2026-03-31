@@ -11,6 +11,9 @@ import (
 
 // CreateScan inserts a new scan record and populates the generated fields.
 func (d *DB) CreateScan(ctx context.Context, scan *Scan) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	query := `
 		INSERT INTO scans (spec_url, spec_hash, target_url, status, modules, config_json, auth_type)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -29,6 +32,9 @@ func (d *DB) CreateScan(ctx context.Context, scan *Scan) error {
 
 // GetScan retrieves a scan by ID.
 func (d *DB) GetScan(ctx context.Context, id uuid.UUID) (*Scan, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	query := `
 		SELECT id, spec_url, spec_hash, target_url, status, modules,
 		       started_at, completed_at, created_at, updated_at,
@@ -57,6 +63,9 @@ func (d *DB) GetScan(ctx context.Context, id uuid.UUID) (*Scan, error) {
 // statusFilter, when non-empty, restricts results to scans with that exact status value.
 // It returns the scans, the total count matching the filter, and any error.
 func (d *DB) ListScans(ctx context.Context, limit, offset int, statusFilter string) ([]Scan, int, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	const maxPageSize = 100
 	if limit <= 0 || limit > maxPageSize {
 		limit = maxPageSize

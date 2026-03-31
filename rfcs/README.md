@@ -23,4 +23,6 @@ Request for Comments (RFCs) for significant changes to the opensecstack ecosyste
 
 | RFC | Title | Status |
 |-----|-------|--------|
-| RFC-0001 | APIGuard Plugin Architecture | Proposed |
+| [RFC-0001](RFC-0001.md) | CITADEL Governance Protocol — MARSHAL, WORM, and VIGIL | Accepted |
+| [RFC-0002](RFC-0002.md) | AUGUR Threat Advisory Engine | Draft |
+| [RFC-0003](RFC-0003.md) | WORM Long-Term Archival and Cold Storage | Draft |

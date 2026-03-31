@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "opensecstack.fullname" . }}-apiguard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: apiguard
+    {{- include "opensecstack.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app: apiguard
+  ports:
+    - name: http
+      port: {{ .Values.apiguard.service.port }}
+      targetPort: {{ .Values.apiguard.service.port }}
+      protocol: TCP

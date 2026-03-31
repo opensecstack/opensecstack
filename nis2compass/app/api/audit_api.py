@@ -44,7 +44,12 @@ def list_audit():
     total = query.count()
     items = query.offset((page - 1) * per_page).limit(per_page).all()
 
-    response = jsonify([e.to_dict() for e in items])
+    response = jsonify({
+        'data': [e.to_dict() for e in items],
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+    })
     response.headers['X-Total-Count'] = str(total)
     return response, 200
 

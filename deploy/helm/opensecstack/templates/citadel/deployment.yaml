@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "opensecstack.fullname" . }}-citadel
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: citadel
+    {{- include "opensecstack.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.citadel.replicas }}
+  selector:
+    matchLabels:
+      app: citadel
+  template:
+    metadata:
+      labels:
+        app: citadel
+    spec:
+      containers:
+        - name: citadel
+          image: {{ include "opensecstack.image" (dict "repository" .Values.citadel.image.repository "tag" .Values.citadel.image.tag "global" .Values.global) }}
+          imagePullPolicy: {{ include "opensecstack.pullPolicy" (dict "global" .Values.global "pullPolicy" "") }}
+          ports:
+            - containerPort: {{ .Values.citadel.service.port }}
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: opensecstack-db-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: opensecstack-config
+                  key: POSTGRES_HOST
+            - name: POSTGRES_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: opensecstack-config
+                  key: POSTGRES_PORT
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: opensecstack-config
+                  key: LOG_LEVEL
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.citadel.service.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.citadel.service.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.citadel.resources | nindent 12 }}

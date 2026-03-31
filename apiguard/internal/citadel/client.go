@@ -25,6 +25,7 @@ type Client struct {
 	secret  string
 	http    *http.Client
 	wg      sync.WaitGroup
+	sem     chan struct{} // bounded concurrency for LogEvent goroutines
 }
 
 // New creates a CITADEL client.
@@ -36,6 +37,7 @@ func New(baseURL, keyID, secret string) *Client {
 		keyID:   keyID,
 		secret:  secret,
 		http:    &http.Client{Timeout: 10 * time.Second},
+		sem:     make(chan struct{}, 64),
 	}
 }
 
@@ -125,13 +127,19 @@ func (c *Client) LogEvent(
 	for k, v := range metadata {
 		payload[k] = v
 	}
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_, _, _ = c.EmitWORM(ctx, systemModule, actionType, "apiguard", payload)
-	}()
+	select {
+	case c.sem <- struct{}{}:
+		c.wg.Add(1)
+		go func() {
+			defer c.wg.Done()
+			defer func() { <-c.sem }()
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_, _, _ = c.EmitWORM(ctx, systemModule, actionType, "apiguard", payload)
+		}()
+	default:
+		// semaphore full — drop event (best-effort, bounded goroutine count)
+	}
 }
 
 // Drain waits for all in-flight LogEvent goroutines to finish, or until ctx

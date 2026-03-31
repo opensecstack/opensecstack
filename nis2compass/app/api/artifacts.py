@@ -23,6 +23,14 @@ _SKIP_MAGIC_CHECK: frozenset = frozenset({
 
 artifacts_bp = Blueprint('artifacts', __name__)
 
+
+@artifacts_bp.before_request
+def require_json_content_type():
+    if request.method in ('POST', 'PUT', 'PATCH'):
+        ct = request.content_type or ''
+        if ct and not ct.startswith('application/json') and not ct.startswith('multipart/form-data'):
+            return jsonify({'error': 'Content-Type must be application/json', 'code': 'UNSUPPORTED_MEDIA_TYPE'}), 415
+
 VALID_TYPES = {'policy', 'procedure', 'evidence', 'report', 'screenshot', 'log', 'certificate', 'contract'}
 
 ALLOWED_MIME_TYPES = {
@@ -96,7 +104,7 @@ def list_artifacts(assessment_id):
     total = query.count()
     items = query.offset((page - 1) * per_page).limit(per_page).all()
     return jsonify({
-        'items': [a.to_dict() for a in items],
+        'data': [a.to_dict() for a in items],
         'total': total,
         'page': page,
         'per_page': per_page,
@@ -248,9 +256,21 @@ def download_artifact(artifact_id):
     if not artifact.file_path or not os.path.isfile(artifact.file_path):
         return jsonify({'error': 'File no longer available', 'code': 'FILE_NOT_FOUND'}), 410
 
+    # Reject symlinks immediately before the path-containment check to close
+    # the TOCTOU window: an attacker who can create symlinks could otherwise
+    # swap the file between the isfile() check above and the open() inside
+    # send_file (H9).
+    if os.path.islink(artifact.file_path):
+        return jsonify({'error': 'Forbidden', 'code': 'FORBIDDEN'}), 403
+
     upload_dir = os.path.realpath(current_app.config['UPLOAD_DIR'])
     real_path = os.path.realpath(artifact.file_path)
     if not real_path.startswith(upload_dir + os.sep) and real_path != upload_dir:
+        return jsonify({'error': 'Forbidden', 'code': 'FORBIDDEN'}), 403
+
+    # Re-check for symlinks on the resolved path in case the stored path
+    # itself was not a link but an intermediate directory component was.
+    if os.path.islink(real_path):
         return jsonify({'error': 'Forbidden', 'code': 'FORBIDDEN'}), 403
 
     write_audit(

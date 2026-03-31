@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -212,4 +213,144 @@ func keys(m map[string]interface{}) []string {
 		ks = append(ks, k)
 	}
 	return ks
+}
+
+// post is a convenience wrapper that performs a POST request with a JSON body
+// and returns the response. The caller is responsible for closing resp.Body.
+func post(t *testing.T, path string, body io.Reader) *http.Response {
+	t.Helper()
+	url := fmt.Sprintf("%s%s", baseURL(), path)
+	resp, err := httpClient.Post(url, "application/json", body)
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	return resp
+}
+
+// TestCreateScan_InvalidSpecURL verifies that submitting a scan request whose
+// spec_url resolves to a private IP address is rejected with HTTP 422 as part
+// of SSRF protection.
+func TestCreateScan_InvalidSpecURL(t *testing.T) {
+	payload := `{"spec_url":"http://192.168.1.1/openapi.json","target":"http://192.168.1.1"}`
+	resp := post(t, "/api/v1/scans", strings.NewReader(payload))
+	readBody(t, resp)
+
+	assertStatus(t, resp, http.StatusUnprocessableEntity)
+}
+
+// TestCreateScan_MissingTarget verifies that a scan creation request that
+// includes a spec_url but omits the required target field is rejected with
+// HTTP 422.
+func TestCreateScan_MissingTarget(t *testing.T) {
+	payload := `{"spec_url":"https://example.com/openapi.json"}`
+	resp := post(t, "/api/v1/scans", strings.NewReader(payload))
+	readBody(t, resp)
+
+	assertStatus(t, resp, http.StatusUnprocessableEntity)
+}
+
+// TestListScans_Pagination verifies that the scan list endpoint accepts
+// pagination query parameters and returns a response body with both a "data"
+// array and a "total" field.
+func TestListScans_Pagination(t *testing.T) {
+	resp := get(t, "/api/v1/scans?page=1&per_page=5")
+	body := readBody(t, resp)
+
+	assertStatus(t, resp, http.StatusOK)
+	assertContentType(t, resp, "application/json")
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatalf("response is not valid JSON: %v\nbody: %s", err, body)
+	}
+
+	if _, ok := payload["data"]; !ok {
+		t.Errorf("pagination response missing \"data\" field; got keys: %v", keys(payload))
+	}
+	if _, ok := payload["total"]; !ok {
+		t.Errorf("pagination response missing \"total\" field; got keys: %v", keys(payload))
+	}
+}
+
+// TestGetScan_NotFound verifies that requesting a scan by a random UUID that
+// does not exist returns HTTP 404.
+func TestGetScan_NotFound(t *testing.T) {
+	resp := get(t, "/api/v1/scans/00000000-0000-0000-0000-000000000000")
+	readBody(t, resp)
+
+	assertStatus(t, resp, http.StatusNotFound)
+}
+
+// TestFindings_RequiresAuth verifies that the findings endpoint rejects
+// requests that do not carry a Bearer token with HTTP 401.
+func TestFindings_RequiresAuth(t *testing.T) {
+	url := fmt.Sprintf("%s/api/v1/findings", baseURL())
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("building request: %v", err)
+	}
+	// Deliberately omit Authorization header.
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("GET /api/v1/findings without auth: got %d, want %d",
+			resp.StatusCode, http.StatusUnauthorized)
+	}
+}
+
+// TestMetrics_Endpoint verifies that the Prometheus metrics endpoint is
+// reachable and returns a response body in the standard text exposition format
+// (lines beginning with "# HELP" or "# TYPE").
+func TestMetrics_Endpoint(t *testing.T) {
+	resp := get(t, "/metrics")
+	body := readBody(t, resp)
+
+	assertStatus(t, resp, http.StatusOK)
+
+	bodyStr := string(body)
+	if !strings.Contains(bodyStr, "# HELP") && !strings.Contains(bodyStr, "# TYPE") {
+		t.Errorf("metrics body does not look like Prometheus text format (missing \"# HELP\" / \"# TYPE\")\nbody excerpt: %.200s", bodyStr)
+	}
+}
+
+// TestAuditLog_RequiresAuth verifies that the audit log endpoint rejects
+// requests that do not carry a Bearer token with HTTP 401.
+func TestAuditLog_RequiresAuth(t *testing.T) {
+	url := fmt.Sprintf("%s/api/v1/audit", baseURL())
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("building request: %v", err)
+	}
+	// Deliberately omit Authorization header.
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("GET /api/v1/audit without auth: got %d, want %d",
+			resp.StatusCode, http.StatusUnauthorized)
+	}
+}
+
+// TestAPIVersion_Header verifies that every response from the API carries an
+// X-API-Version header so that clients can detect version skew.
+func TestAPIVersion_Header(t *testing.T) {
+	resp := get(t, "/api/v1/health")
+	readBody(t, resp)
+
+	header := resp.Header.Get("X-API-Version")
+	if header == "" {
+		// Also check the lowercase variant in case the server uses a different
+		// canonical form.
+		header = resp.Header.Get("X-Api-Version")
+	}
+	if header == "" {
+		t.Errorf("response is missing X-API-Version header")
+	}
 }

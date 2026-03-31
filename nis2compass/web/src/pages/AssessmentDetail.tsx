@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api } from '../api'
+import { api, downloadAssessmentPDF } from '../api'
 import type {
   Assessment,
   Control,
@@ -565,6 +565,8 @@ export default function AssessmentDetail() {
   const [transitioning, setTransitioning] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [reportError, setReportError] = useState<string | null>(null)
+  const [downloadingPDF, setDownloadingPDF] = useState(false)
+  const [pdfError, setPdfError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -621,6 +623,27 @@ export default function AssessmentDetail() {
       setReportError(err instanceof Error ? err.message : 'Report generation failed')
     } finally {
       setGenerating(false)
+    }
+  }
+
+  async function handleDownloadPDF() {
+    if (!assessment) return
+    setDownloadingPDF(true)
+    setPdfError(null)
+    try {
+      const blob = await downloadAssessmentPDF(assessment.id)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `nis2-assessment-${assessment.id.slice(0, 8)}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err: unknown) {
+      setPdfError(err instanceof Error ? err.message : 'PDF download failed')
+    } finally {
+      setDownloadingPDF(false)
     }
   }
 
@@ -699,11 +722,19 @@ export default function AssessmentDetail() {
           >
             {generating ? 'Generating...' : 'Generate Report'}
           </button>
+          <button
+            className="btn-secondary"
+            onClick={handleDownloadPDF}
+            disabled={downloadingPDF}
+          >
+            {downloadingPDF ? '⏳ Downloading...' : 'Download PDF Report'}
+          </button>
         </div>
       </div>
 
       {error && <p className="error">{error}</p>}
       {reportError && <p className="error">Report: {reportError}</p>}
+      {pdfError && <p className="error">PDF: {pdfError}</p>}
 
       {/* Summary stats */}
       {summary && (

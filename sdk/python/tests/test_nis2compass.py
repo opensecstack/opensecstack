@@ -296,3 +296,136 @@ def test_get_audit_log_page_parameter(client: NIS2CompassClient) -> None:
     audit_call = next(c for c in rsps_lib.calls if "/audit" in c.request.url)
     assert "page=3" in audit_call.request.url
     assert "per_page=10" in audit_call.request.url
+
+
+# ---------------------------------------------------------------------------
+# 12. get_health — no auth required, returns aggregate status
+# ---------------------------------------------------------------------------
+
+@rsps_lib.activate
+def test_get_health(client: NIS2CompassClient) -> None:
+    rsps_lib.add(rsps_lib.GET, f"{BASE_URL}/api/v1/health", json={"status": "ok"}, status=200)
+
+    result = client.get_health()
+
+    assert result == {"status": "ok"}
+    # No auth call should have been made.
+    auth_calls = [c for c in rsps_lib.calls if "/auth/token" in c.request.url]
+    assert len(auth_calls) == 0
+
+
+# ---------------------------------------------------------------------------
+# 13. get_health_detail — requires auth, returns detailed status
+# ---------------------------------------------------------------------------
+
+@rsps_lib.activate
+def test_get_health_detail(client: NIS2CompassClient) -> None:
+    token = _fresh_jwt()
+    detail = {"status": "ok", "version": "1.0.0", "db": "ok", "redis": "ok"}
+    rsps_lib.add(rsps_lib.POST, AUTH_URL, json={"token": token}, status=200)
+    rsps_lib.add(rsps_lib.GET, f"{BASE_URL}/api/v1/health/detail", json=detail, status=200)
+
+    result = client.get_health_detail()
+
+    assert result["status"] == "ok"
+    assert result["db"] == "ok"
+    assert result["redis"] == "ok"
+
+
+# ---------------------------------------------------------------------------
+# 14. patch_assessment — PATCH body forwarded correctly
+# ---------------------------------------------------------------------------
+
+@rsps_lib.activate
+def test_patch_assessment(client: NIS2CompassClient) -> None:
+    token = _fresh_jwt()
+    updated = {"id": "asmt-001", "status": "in_progress", "title": "Updated Title"}
+    rsps_lib.add(rsps_lib.POST, AUTH_URL, json={"token": token}, status=200)
+    rsps_lib.add(rsps_lib.PATCH, f"{BASE_URL}/api/v1/assessments/asmt-001", json=updated, status=200)
+
+    result = client.patch_assessment("asmt-001", status="in_progress", title="Updated Title")
+
+    assert result["status"] == "in_progress"
+    assert result["title"] == "Updated Title"
+
+
+# ---------------------------------------------------------------------------
+# 15. list_controls — query params forwarded correctly
+# ---------------------------------------------------------------------------
+
+@rsps_lib.activate
+def test_list_controls(client: NIS2CompassClient) -> None:
+    token = _fresh_jwt()
+    controls = [{"measure_ref": "a", "status": "non_compliant"}]
+    rsps_lib.add(rsps_lib.POST, AUTH_URL, json={"token": token}, status=200)
+    rsps_lib.add(
+        rsps_lib.GET,
+        f"{BASE_URL}/api/v1/assessments/asmt-001/controls",
+        json=controls,
+        status=200,
+    )
+
+    result = client.list_controls("asmt-001", status="non_compliant")
+
+    assert result == controls
+    ctrl_call = next(c for c in rsps_lib.calls if "/controls" in c.request.url)
+    assert "status=non_compliant" in ctrl_call.request.url
+
+
+# ---------------------------------------------------------------------------
+# 16. generate_report — saves streamed PDF to disk
+# ---------------------------------------------------------------------------
+
+@rsps_lib.activate
+def test_generate_report(client: NIS2CompassClient, tmp_path) -> None:
+    token = _fresh_jwt()
+    pdf_bytes = b"%PDF-1.4 fake content"
+    rsps_lib.add(rsps_lib.POST, AUTH_URL, json={"token": token}, status=200)
+    rsps_lib.add(
+        rsps_lib.POST,
+        f"{BASE_URL}/api/v1/assessments/asmt-001/report",
+        body=pdf_bytes,
+        status=200,
+        headers={"Content-Type": "application/pdf"},
+    )
+
+    output = tmp_path / "report.pdf"
+    client.generate_report("asmt-001", str(output))
+
+    assert output.read_bytes() == pdf_bytes
+
+
+# ---------------------------------------------------------------------------
+# 17. list_artifacts — returns artifact list
+# ---------------------------------------------------------------------------
+
+@rsps_lib.activate
+def test_list_artifacts(client: NIS2CompassClient) -> None:
+    token = _fresh_jwt()
+    artifacts = [{"id": "art-001", "type": "evidence", "filename": "doc.pdf"}]
+    rsps_lib.add(rsps_lib.POST, AUTH_URL, json={"token": token}, status=200)
+    rsps_lib.add(
+        rsps_lib.GET,
+        f"{BASE_URL}/api/v1/assessments/asmt-001/artifacts",
+        json=artifacts,
+        status=200,
+    )
+
+    result = client.list_artifacts("asmt-001")
+
+    assert result == artifacts
+
+
+# ---------------------------------------------------------------------------
+# 18. revoke_api_key — issues DELETE and returns None
+# ---------------------------------------------------------------------------
+
+@rsps_lib.activate
+def test_revoke_api_key(client: NIS2CompassClient) -> None:
+    token = _fresh_jwt()
+    rsps_lib.add(rsps_lib.POST, AUTH_URL, json={"token": token}, status=200)
+    rsps_lib.add(rsps_lib.DELETE, f"{BASE_URL}/api/v1/api-keys/key-001", status=204)
+
+    result = client.revoke_api_key("key-001")
+
+    assert result is None

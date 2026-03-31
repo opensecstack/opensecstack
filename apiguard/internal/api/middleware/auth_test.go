@@ -26,6 +26,7 @@ func makeJWT(secret, sub string, exp, iat int64) string {
 		"iat": iat,
 		"iss": "apiguard",
 		"aud": "apiguard",
+		"typ": "access",
 	}
 	if exp != 0 {
 		payload["exp"] = exp

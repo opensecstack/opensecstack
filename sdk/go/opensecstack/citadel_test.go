@@ -422,6 +422,63 @@ func TestCITADELClient_VerifyChain_BrokenLink(t *testing.T) {
 // signBody
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Drain — flushes buffered events and waits for in-flight deliveries
+// ---------------------------------------------------------------------------
+
+func TestCITADELClient_Drain_WaitsForDelivery(t *testing.T) {
+	var deliveredCount int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/events" && r.Method == http.MethodPost {
+			atomic.AddInt32(&deliveredCount, 1)
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	c := NewCITADELClient(CITADELClientOptions{
+		BaseURL:       srv.URL,
+		SharedSecret:  "drain-secret",
+		RetryWaitBase: 1 * time.Millisecond,
+	})
+
+	const numEvents = 5
+	for i := 0; i < numEvents; i++ {
+		event := SecurityEvent{
+			ID:        fmt.Sprintf("drain-e-%d", i),
+			EventType: "test.drain",
+			ChainHash: "h",
+			Timestamp: time.Now(),
+			Payload:   json.RawMessage(`{}`),
+		}
+		if err := c.SendEvent(context.Background(), event); err != nil {
+			t.Fatalf("SendEvent %d: %v", i, err)
+		}
+	}
+
+	// Give the background worker time to pick up events from the channel
+	// before we call Drain. Without this pause, Drain could see an empty
+	// WaitGroup (counter=0) before wg.Add(1) is called for each event.
+	time.Sleep(50 * time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := c.Drain(ctx); err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+
+	if got := atomic.LoadInt32(&deliveredCount); got != numEvents {
+		t.Errorf("expected %d delivered events after Drain, got %d", numEvents, got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// signBody
+// ---------------------------------------------------------------------------
+
 func TestCITADELClient_SignBody(t *testing.T) {
 	c := NewCITADELClient(CITADELClientOptions{
 		BaseURL:      "http://unused",

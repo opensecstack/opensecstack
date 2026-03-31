@@ -60,6 +60,9 @@ func (d *DB) CreateFinding(ctx context.Context, finding *Finding) error {
 
 // CreateFindings inserts multiple findings in a single batch operation.
 func (d *DB) CreateFindings(ctx context.Context, findings []Finding) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	if len(findings) == 0 {
 		return nil
 	}
@@ -120,6 +123,9 @@ func (d *DB) GetFinding(ctx context.Context, id uuid.UUID) (*Finding, error) {
 // ListFindings returns a filtered, paginated list of findings.
 // It returns the findings, the total count matching the filters, and any error.
 func (d *DB) ListFindings(ctx context.Context, filters FindingFilters, limit, offset int) ([]Finding, int, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	const maxPageSize = 100
 	if limit <= 0 || limit > maxPageSize {
 		limit = maxPageSize

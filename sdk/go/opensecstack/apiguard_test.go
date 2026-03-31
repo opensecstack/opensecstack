@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -337,5 +339,301 @@ func TestNoRetryOn4xx(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&callCount); got != 1 {
 		t.Errorf("expected exactly 1 call (no retry on 4xx), got %d", got)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestRefreshToken_Concurrent
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// TestCreateScanFull_Success
+// ----------------------------------------------------------------------------
+
+func TestCreateScanFull_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+
+	srv := makeAPIGuardServer(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/scans" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		var req createScanRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		scan := Scan{ID: "new-scan-id", SpecURL: req.SpecURL, Status: ScanStatusPending}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(scan)
+	})
+	defer srv.Close()
+
+	c := NewAPIGuardClient(srv.URL, "test-key")
+	scan, err := c.CreateScanFull(t.Context(), CreateScanOptions{
+		SpecURL: "https://api.example.com/openapi.json",
+		Modules: []string{"bola", "broken_auth"},
+	})
+	if err != nil {
+		t.Fatalf("CreateScanFull: %v", err)
+	}
+	if scan.ID != "new-scan-id" {
+		t.Errorf("unexpected scan ID: %q", scan.ID)
+	}
+	if scan.Status != ScanStatusPending {
+		t.Errorf("unexpected status: %q", scan.Status)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestDeleteScan_Success
+// ----------------------------------------------------------------------------
+
+func TestDeleteScan_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	var deleteCalled bool
+
+	srv := makeAPIGuardServer(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/scans/scan-to-delete" && r.Method == http.MethodDelete {
+			deleteCalled = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.NotFound(w, r)
+	})
+	defer srv.Close()
+
+	c := NewAPIGuardClient(srv.URL, "test-key")
+	if err := c.DeleteScan(t.Context(), "scan-to-delete"); err != nil {
+		t.Fatalf("DeleteScan: %v", err)
+	}
+	if !deleteCalled {
+		t.Error("DELETE endpoint was not called")
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestPatchFinding_Success
+// ----------------------------------------------------------------------------
+
+func TestPatchFinding_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	want := Finding{ID: "finding-123", Status: FindingStatusConfirmed}
+
+	srv := makeAPIGuardServer(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/findings/finding-123" || r.Method != http.MethodPatch {
+			http.NotFound(w, r)
+			return
+		}
+		var req PatchFindingRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		want.TriageNote = req.Note
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(want)
+	})
+	defer srv.Close()
+
+	c := NewAPIGuardClient(srv.URL, "test-key")
+	got, err := c.PatchFinding(t.Context(), "finding-123", PatchFindingRequest{
+		Status: string(FindingStatusConfirmed),
+		Note:   "verified in staging",
+	})
+	if err != nil {
+		t.Fatalf("PatchFinding: %v", err)
+	}
+	if got.ID != "finding-123" {
+		t.Errorf("ID: got %q, want finding-123", got.ID)
+	}
+	if got.Status != FindingStatusConfirmed {
+		t.Errorf("Status: got %q, want confirmed", got.Status)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestGetAuditLog_APIGuard_Success
+// ----------------------------------------------------------------------------
+
+func TestGetAuditLog_APIGuard_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	wantEntries := []AuditEntry{
+		{ID: "audit-1", Action: "scan.created", ResourceType: "scan"},
+		{ID: "audit-2", Action: "finding.triaged", ResourceType: "finding"},
+	}
+
+	srv := makeAPIGuardServer(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/audit" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Query().Get("per_page") == "" || r.URL.Query().Get("page") == "" {
+			http.Error(w, "missing pagination params", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(wantEntries)
+	})
+	defer srv.Close()
+
+	c := NewAPIGuardClient(srv.URL, "test-key")
+	entries, err := c.GetAuditLog(t.Context(), 10, 1)
+	if err != nil {
+		t.Fatalf("GetAuditLog: %v", err)
+	}
+	if len(entries) != 2 || entries[0].ID != "audit-1" {
+		t.Errorf("unexpected entries: %+v", entries)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestListFindings_Success
+// ----------------------------------------------------------------------------
+
+func TestListFindings_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	wantFindings := []Finding{{ID: "lf-1", Severity: FindingSeverityHigh, Status: FindingStatusOpen}}
+
+	srv := makeAPIGuardServer(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/findings" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Query().Get("scan_id") != "scan-abc" {
+			http.Error(w, "missing scan_id filter", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(wantFindings)
+	})
+	defer srv.Close()
+
+	c := NewAPIGuardClient(srv.URL, "test-key")
+	findings, err := c.ListFindings(t.Context(), ListFindingsOptions{ScanID: "scan-abc"})
+	if err != nil {
+		t.Fatalf("ListFindings: %v", err)
+	}
+	if len(findings) != 1 || findings[0].ID != "lf-1" {
+		t.Errorf("unexpected findings: %+v", findings)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestGetFinding_Success
+// ----------------------------------------------------------------------------
+
+func TestGetFinding_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	want := Finding{ID: "f-uuid-001", Severity: FindingSeverityCritical, Status: FindingStatusOpen}
+
+	srv := makeAPIGuardServer(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/findings/f-uuid-001" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(want)
+	})
+	defer srv.Close()
+
+	c := NewAPIGuardClient(srv.URL, "test-key")
+	got, err := c.GetFinding(t.Context(), "f-uuid-001")
+	if err != nil {
+		t.Fatalf("GetFinding: %v", err)
+	}
+	if got.ID != want.ID || got.Severity != FindingSeverityCritical {
+		t.Errorf("unexpected finding: %+v", got)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestGetReportStream_APIGuard_Success
+// ----------------------------------------------------------------------------
+
+func TestGetReportStream_APIGuard_Success(t *testing.T) {
+	token := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+	reportData := `{"findings":[],"summary":"clean"}`
+
+	srv := makeAPIGuardServer(t, token, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/scans/stream-scan/report" || r.Method != http.MethodGet {
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Query().Get("format") != "sarif" {
+			http.Error(w, "unexpected format", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, reportData)
+	})
+	defer srv.Close()
+
+	c := NewAPIGuardClient(srv.URL, "test-key")
+	var buf strings.Builder
+	if err := c.GetReportStream(t.Context(), "stream-scan", "sarif", &buf); err != nil {
+		t.Fatalf("GetReportStream: %v", err)
+	}
+	if buf.String() != reportData {
+		t.Errorf("report data mismatch: got %q", buf.String())
+	}
+}
+
+// ----------------------------------------------------------------------------
+// TestRefreshToken_Concurrent verifies that 10 goroutines calling RefreshToken
+// concurrently do not cause a data race on the cached jwt / tokenExpiry fields.
+// Run with: go test -race -run TestRefreshToken_Concurrent ./...
+func TestRefreshToken_Concurrent(t *testing.T) {
+	newToken := makeTestJWT(time.Now().Add(1 * time.Hour).Unix())
+
+	var refreshCalls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/auth/refresh" && r.Method == http.MethodPost {
+			atomic.AddInt32(&refreshCalls, 1)
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"access_token":%q,"refresh_token":"ref2","expires_in":3600}`, newToken)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	c := NewAPIGuardClient(srv.URL, "test-key")
+
+	const goroutines = 10
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	errs := make([]error, goroutines)
+
+	for i := 0; i < goroutines; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			_, errs[i] = c.RefreshToken(t.Context(), "old-refresh-token")
+		}()
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("goroutine %d: RefreshToken returned error: %v", i, err)
+		}
+	}
+
+	// After all goroutines complete, the cached token must equal the one
+	// returned by the server.
+	c.mu.RLock()
+	cachedJWT := c.jwt
+	c.mu.RUnlock()
+
+	if cachedJWT != newToken {
+		t.Errorf("cached jwt = %q, want %q", cachedJWT, newToken)
+	}
+
+	if got := atomic.LoadInt32(&refreshCalls); got != goroutines {
+		// Each goroutine issues its own HTTP call (RefreshToken is not
+		// deduplicated like authenticate).  All calls must have been made.
+		t.Errorf("expected %d refresh calls, got %d", goroutines, got)
 	}
 }

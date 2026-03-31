@@ -135,6 +135,11 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024) // 1 MB
 	var req createScanRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
 		s.logger.Error().Err(err).Msg("JSON decode error")
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
@@ -389,7 +394,7 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 
 			// Emit one WORM event per CRITICAL finding with NIS2 measure code.
 			for _, f := range result.Findings {
-				if strings.EqualFold(f.Severity, "critical") {
+				if strings.EqualFold(string(f.Severity), "critical") {
 					nis2Code := citadel.NIS2Measure[f.OWASPId]
 					_, _, wormErr := s.citadel.EmitWORM(bgCtx, "apiguard", "scan.critical_finding", projectID, map[string]any{
 						"scan_id":      scanID.String(),

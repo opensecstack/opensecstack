@@ -226,9 +226,11 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 			// has not already refreshed the token while we waited.
 			c.mu.Lock()
 			if c.jwt == tok {
-				// Token is still the stale one — we must refresh. Unlock
-				// before making the HTTP call to avoid holding the mutex
-				// across the network round-trip.
+				// Token is still the stale one — clear it so that authenticate()
+				// is forced to make a fresh HTTP call even if the local expiry
+				// has not yet passed (the server rejected it as invalid).
+				c.jwt = ""
+				c.tokenExpiry = time.Time{}
 				c.mu.Unlock()
 				if authErr := c.authenticate(ctx); authErr != nil {
 					return nil, authErr

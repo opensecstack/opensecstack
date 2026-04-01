@@ -1,4 +1,4 @@
-# opensecstack
+# SIN (Security Intelligence Network)
 
 > Open-source cybersecurity ecosystem for Europe and beyond.
 
@@ -9,7 +9,7 @@ Built for NIS2 compliance, API security, incident response, threat intelligence,
 
 ## Table of Contents
 
-- [Why opensecstack](#why-opensecstack)
+- [Why SIN](#why-SIN)
 - [The Ecosystem](#the-ecosystem)
 - [Architecture](#architecture)
 - [Active Platforms](#active-platforms)
@@ -29,7 +29,7 @@ Built for NIS2 compliance, API security, incident response, threat intelligence,
 
 ---
 
-## Why opensecstack
+## Why SIN
 
 European organisations face a growing regulatory and threat landscape:
 
@@ -37,7 +37,7 @@ European organisations face a growing regulatory and threat landscape:
 - **API-first architectures** expose new attack surfaces not covered by traditional WAFs.
 - **Fragmented tooling** means security teams operate across disconnected products with no unified audit trail.
 
-opensecstack provides a **cohesive, open-source alternative**: every platform shares the same SDK contracts, every action flows into the same governance layer, and every deployment can be self-hosted with zero vendor lock-in.
+SIN provides a **cohesive, open-source alternative**: every platform shares the same SDK contracts, every action flows into the same governance layer, and every deployment can be self-hosted with zero vendor lock-in.
 
 ---
 
@@ -54,7 +54,7 @@ opensecstack provides a **cohesive, open-source alternative**: every platform sh
 | **SecureLab** | Attack simulation and detection rule validation | Python + Rust | Apache 2.0 | Planned |
 | **OpenCSIRT** | National/sector CSIRT operations and advisory management | Go + Python | AGPL-3.0 | Planned |
 
-**Governance:** [**CITADEL**](.citadel/) — immutable audit trail, SHA-256 chain anchors, MARSHAL authorisation engine, BEACON risk scoring, PATROL anomaly detection, separation of duties enforcement. Built by Security Intelligence Group (SIG).
+**Governance:** [**CITADEL**](.citadel/) — immutable audit trail, SHA-256 chain anchors, MARSHAL authorisation engine, BEACON risk scoring, PATROL anomaly detection, separation of duties enforcement. Built by Security Intelligence Network(SIN).
 
 ---
 
@@ -62,7 +62,7 @@ opensecstack provides a **cohesive, open-source alternative**: every platform sh
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        opensecstack ecosystem                        │
+│                        SIN ecosystem                        │
 │                                                                      │
 │  ┌──────────┐  ┌───────────┐  ┌────────────┐  ┌────────────────┐  │
 │  │ APIGuard │  │NIS2Compass│  │ ThreatFlow │  │    IRFlow      │  │
@@ -72,7 +72,7 @@ opensecstack provides a **cohesive, open-source alternative**: every platform sh
 │       │              │              │                  │            │
 │       └──────────────┴──────────────┴──────────────────┘            │
 │                              │                                       │
-│                    opensecstack/sdk                                  │
+│                    SIN/sdk                                  │
 │               (typed contracts, event schemas)                       │
 │                              │                                       │
 │       ┌───────────────────────────────────────────────┐             │
@@ -83,7 +83,7 @@ opensecstack provides a **cohesive, open-source alternative**: every platform sh
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-All platforms communicate through the [opensecstack SDK](sdk/) using **typed JSON contracts**. Supported event schemas:
+All platforms communicate through the [SIN SDK](sdk/) using **typed JSON contracts**. Supported event schemas:
 
 | Contract | Format | Producers → Consumers |
 |----------|--------|-----------------------|
@@ -167,9 +167,9 @@ See [nis2compass/README.md](nis2compass/README.md) for the full reference.
 
 ### CITADEL
 
-**Governance layer for the opensecstack ecosystem.**
+**Governance layer for the SIN ecosystem.**
 
-CITADEL is built and maintained by Security Intelligence Group (SIG). It provides:
+CITADEL is built and maintained by Security Intelligence Network(SIN). It provides:
 
 - **MARSHAL** — authorisation engine with policy-based access control
 - **BEACON** — real-time risk scoring engine
@@ -202,18 +202,18 @@ See [ROADMAP.md](ROADMAP.md) for phase timelines and deliverables.
 
 ## SDK
 
-The [opensecstack SDK](sdk/) provides typed clients in **Go, Python, TypeScript, and Rust** — the same clients used internally between platforms.
+The [SIN SDK](sdk/) provides typed clients in **Go, Python, TypeScript, and Rust** — the same clients used internally between platforms.
 
 ### Go SDK
 
 Zero external dependencies. Requires Go 1.21+.
 
 ```go
-import "github.com/opensecstack/opensecstack/sdk/go/opensecstack"
+import "github.com/SIN/SIN/sdk/go/SIN"
 
-client := opensecstack.NewAPIGuardClient("https://apiguard.example.com", "your-api-key")
+client := SIN.NewAPIGuardClient("https://apiguard.example.com", "your-api-key")
 scan, err := client.CreateScan(ctx, "https://api.example.com/openapi.json")
-findings, err := client.GetFindings(ctx, scan.ID, opensecstack.GetFindingsOptions{
+findings, err := client.GetFindings(ctx, scan.ID, SIN.GetFindingsOptions{
     PerPage: 100,
     Severity: "critical",
 })
@@ -224,7 +224,7 @@ findings, err := client.GetFindings(ctx, scan.ID, opensecstack.GetFindingsOption
 Requires Python 3.10+ and `requests >= 2.31`.
 
 ```python
-from opensecstack import APIGuardClient
+from SIN import APIGuardClient
 
 client = APIGuardClient("https://apiguard.example.com", api_key="your-api-key")
 scan = client.create_scan(spec_url="https://api.example.com/openapi.json")
@@ -233,10 +233,10 @@ findings = client.get_findings(scan["id"])
 
 ### TypeScript SDK
 
-Zero external dependencies. Requires Node.js 18+. Published as `@opensecstack/sdk` on npm.
+Zero external dependencies. Requires Node.js 18+. Published as `@SIN/sdk` on npm.
 
 ```typescript
-import { APIGuardClient } from "@opensecstack/sdk";
+import { APIGuardClient } from "@SIN/sdk";
 
 const client = new APIGuardClient({
   baseURL: "https://apiguard.example.com",
@@ -251,7 +251,7 @@ const findings = await client.getFindings(scan.id);
 Async-first with tokio + reqwest. Requires Rust 1.75+.
 
 ```rust
-use opensecstack::APIGuardClient;
+use SIN::APIGuardClient;
 
 let client = APIGuardClient::new("https://apiguard.example.com", "your-api-key");
 let scan = client.create_scan("https://api.example.com/openapi.json").await?;
@@ -269,8 +269,8 @@ See [sdk/README.md](sdk/README.md) · [sdk/go/](sdk/go/) · [sdk/python/](sdk/py
 ### Full Ecosystem (Docker Compose)
 
 ```bash
-git clone https://github.com/opensecstack/opensecstack
-cd opensecstack
+git clone https://github.com/SIN/SIN
+cd SIN
 
 # Copy and fill in secrets
 cp deploy/.env.example deploy/.env
@@ -464,6 +464,6 @@ We welcome contributions to every platform — code, tests, documentation, trans
 |----------|---------|-----------|
 | Tool platforms | [Apache 2.0](LICENSE) | APIGuard, ThreatFlow, OpenScrub, CyberPath, SecureLab |
 | Governance platforms | AGPL-3.0 | IRFlow, NIS2 Compass, OpenCSIRT, CITADEL |
-| SDK | Apache 2.0 | opensecstack/sdk |
+| SDK | Apache 2.0 | SIN/sdk |
 
 **Why two licences?** Tool platforms are permissive so they can be embedded in CI/CD pipelines and commercial workflows. Governance platforms are copyleft so any modifications to the audit trail, compliance reporting, or CSIRT operations must remain open source. See [ECOSYSTEM.md](ECOSYSTEM.md) for the full rationale.

@@ -1,7 +1,8 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
-import type { Organisation } from '../types'
+import type { Organisation, Role } from '../types'
+import { hasRole } from '../auth'
 import './Page.css'
 
 const INDUSTRIES = [
@@ -23,7 +24,7 @@ function validateCountry(v: string): string | null {
   return /^[A-Z]{2}$/.test(v.toUpperCase()) ? null : 'Must be a 2-letter ISO code (e.g. DE)'
 }
 
-export default function OrganisationList() {
+export default function OrganisationList({ role }: { role: Role }) {
   const [orgs, setOrgs] = useState<Organisation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -164,12 +165,14 @@ export default function OrganisationList() {
     <div>
       <div className="page-header">
         <h1 className="page-title">Organisations</h1>
-        <button className="btn-primary" onClick={() => setShowForm(v => !v)}>
-          {showForm ? 'Cancel' : '+ New Organisation'}
-        </button>
+        {hasRole(role, 'assessor') && (
+          <button className="btn-primary" onClick={() => setShowForm(v => !v)}>
+            {showForm ? 'Cancel' : '+ New Organisation'}
+          </button>
+        )}
       </div>
 
-      {showForm && (
+      {showForm && hasRole(role, 'assessor') && (
         <div className="card form-card" style={{ marginBottom: 24 }}>
           <h3>New Organisation</h3>
           {formError && <p className="error">{formError}</p>}
@@ -316,7 +319,11 @@ export default function OrganisationList() {
                 </tr>
               ) : (
                 <tr key={org.id} style={{ opacity: deleting === org.id ? 0.5 : 1 }}>
-                  <td style={{ fontWeight: 500 }}>{org.name}</td>
+                  <td style={{ fontWeight: 500 }}>
+                    <Link to={`/organisations/${org.id}`} style={{ color: 'var(--text)' }}>
+                      {org.name}
+                    </Link>
+                  </td>
                   <td className="muted">{org.industry}</td>
                   <td className="muted">{org.country}</td>
                   <td className="muted">{org.size}</td>
@@ -326,10 +333,14 @@ export default function OrganisationList() {
                     <Link to={`/organisations/${org.id}/assessments`} className="btn-primary" style={{ padding: '4px 12px', fontSize: 13, marginRight: 6 }}>
                       Assessments
                     </Link>
-                    <button className="btn-icon" style={{ marginRight: 6 }} onClick={() => startEdit(org)}>Edit</button>
-                    <button className="btn-danger" onClick={() => handleDelete(org)} disabled={deleting === org.id}>
-                      {deleting === org.id ? '...' : 'Delete'}
-                    </button>
+                    {hasRole(role, 'assessor') && (
+                      <>
+                        <button className="btn-icon" style={{ marginRight: 6 }} onClick={() => startEdit(org)}>Edit</button>
+                        <button className="btn-danger" onClick={() => handleDelete(org)} disabled={deleting === org.id}>
+                          {deleting === org.id ? '...' : 'Delete'}
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}

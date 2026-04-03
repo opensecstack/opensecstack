@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from .extensions import db
@@ -54,6 +55,7 @@ class Assessment(db.Model):
         nullable=False, server_default='draft',
     )
     framework_version = db.Column(db.String(20), nullable=False, server_default='NIS2-2022/0383')
+    framework = db.Column(db.String(32), nullable=False, server_default='nis2')
     scope = db.Column(db.Text, nullable=True)
     assessor = db.Column(db.String(255), nullable=True)
     due_date = db.Column(db.Date, nullable=True)
@@ -91,6 +93,7 @@ class Assessment(db.Model):
             'title': self.title,
             'status': self.status,
             'framework_version': self.framework_version,
+            'framework': self.framework,
             'scope': self.scope,
             'assessor': self.assessor,
             'due_date': self.due_date.isoformat() if self.due_date else None,
@@ -186,7 +189,7 @@ class Artifact(db.Model):
     assessment_id = db.Column(UUID(as_uuid=True), db.ForeignKey('assessments.id', ondelete='CASCADE'), nullable=False)
     control_id = db.Column(UUID(as_uuid=True), db.ForeignKey('controls.id', ondelete='SET NULL'), nullable=True)
     type = db.Column(
-        db.Enum('policy', 'procedure', 'evidence', 'report', 'screenshot', 'log', 'certificate', 'contract', name='artifact_type'),
+        db.Enum('policy', 'procedure', 'evidence', 'report', 'screenshot', 'log', 'certificate', 'contract', 'pentest', name='artifact_type'),
         nullable=False,
     )
     filename = db.Column(db.String(255), nullable=False)
@@ -219,6 +222,31 @@ class Artifact(db.Model):
             'signature': self.signature,
             'signed_by': self.signed_by,
             'signed_at': self.signed_at.isoformat() if self.signed_at else None,
+        }
+
+
+class ComplianceSnapshot(db.Model):
+    __tablename__ = 'compliance_snapshots'
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text('gen_random_uuid()'))
+    assessment_id = db.Column(UUID(as_uuid=True), db.ForeignKey('assessments.id', ondelete='CASCADE'), nullable=False)
+    score = db.Column(db.Float, nullable=True)
+    total_controls = db.Column(db.Integer, nullable=False)
+    compliant_controls = db.Column(db.Integer, nullable=False)
+    partially_compliant_controls = db.Column(db.Integer, nullable=False)
+    non_compliant_controls = db.Column(db.Integer, nullable=False)
+    snapshot_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': str(self.id),
+            'assessment_id': str(self.assessment_id),
+            'score': self.score,
+            'total_controls': self.total_controls,
+            'compliant_controls': self.compliant_controls,
+            'partially_compliant_controls': self.partially_compliant_controls,
+            'non_compliant_controls': self.non_compliant_controls,
+            'snapshot_at': self.snapshot_at.isoformat() if self.snapshot_at else None,
         }
 
 
@@ -287,16 +315,30 @@ class ApiKey(db.Model):
         }
 
 
+class RevokedToken(db.Model):
+    """DB fallback store for revoked JTIs when Redis is unavailable."""
+    __tablename__ = 'revoked_tokens'
+
+    jti = db.Column(db.String(36), primary_key=True)
+    revoked_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text('NOW()'))
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+
+
 class ControlTemplate(db.Model):
     __tablename__ = 'control_templates'
 
+    __table_args__ = (
+        db.UniqueConstraint('measure_ref', 'framework', name='uq_control_templates_measure_ref_framework'),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
-    measure_ref = db.Column(db.String(1), nullable=False, unique=True)
+    measure_ref = db.Column(db.String(20), nullable=False)
     article_ref = db.Column(db.String(20), nullable=False)
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=False)
     nist_category = db.Column(db.String(20), nullable=False)
     guidance = db.Column(db.Text, nullable=True)
+    framework = db.Column(db.String(32), nullable=False, default='nis2', index=True)
 
     def to_dict(self):
         return {
@@ -307,4 +349,5 @@ class ControlTemplate(db.Model):
             'description': self.description,
             'nist_category': self.nist_category,
             'guidance': self.guidance,
+            'framework': self.framework,
         }

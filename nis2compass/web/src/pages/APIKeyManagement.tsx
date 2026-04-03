@@ -1,9 +1,10 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { api } from '../api'
-import type { ApiKey } from '../types'
+import type { ApiKey, Role } from '../types'
+import { hasRole } from '../auth'
 import './Page.css'
 
-export default function APIKeyManagement() {
+export default function APIKeyManagement({ role }: { role: Role }) {
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -77,6 +78,10 @@ export default function APIKeyManagement() {
     }
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  if (!hasRole(role, 'admin')) {
+    return <p className="error">Access denied — admin role required.</p>
   }
 
   return (

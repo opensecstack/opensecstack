@@ -1,0 +1,86 @@
+---
+# ── Deployment ───────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nis2compass-redis
+  namespace: nis2compass
+  labels:
+    app: nis2compass-redis
+    app.kubernetes.io/part-of: nis2compass
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nis2compass-redis
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: nis2compass-redis
+        app.kubernetes.io/part-of: nis2compass
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          # Pass --requirepass via env-var substitution so the password is
+          # sourced from the secret rather than hardcoded in the spec.
+          command:
+            - sh
+            - -c
+            - exec redis-server --requirepass "$REDIS_PASSWORD"
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nis2compass-secrets
+                  key: REDIS_PASSWORD
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli -a "$REDIS_PASSWORD" ping | grep -q PONG
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - redis-cli -a "$REDIS_PASSWORD" ping | grep -q PONG
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+
+---
+# ── Service ──────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: nis2compass-redis-service
+  namespace: nis2compass
+  labels:
+    app: nis2compass-redis
+    app.kubernetes.io/part-of: nis2compass
+spec:
+  type: ClusterIP
+  selector:
+    app: nis2compass-redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+      protocol: TCP

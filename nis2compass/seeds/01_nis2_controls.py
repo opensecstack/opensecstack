@@ -242,10 +242,10 @@ CONTROLS = [
 
 UPSERT_SQL = """
 INSERT INTO control_templates
-    (measure_ref, article_ref, title, description, nist_category, guidance)
+    (measure_ref, article_ref, title, description, nist_category, guidance, framework)
 VALUES
-    (%(measure_ref)s, %(article_ref)s, %(title)s, %(description)s, %(nist_category)s, %(guidance)s)
-ON CONFLICT (measure_ref) DO UPDATE SET
+    (%(measure_ref)s, %(article_ref)s, %(title)s, %(description)s, %(nist_category)s, %(guidance)s, 'nis2')
+ON CONFLICT (measure_ref, framework) DO UPDATE SET
     article_ref   = EXCLUDED.article_ref,
     title         = EXCLUDED.title,
     description   = EXCLUDED.description,

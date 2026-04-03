@@ -1,4 +1,5 @@
 import hmac
+import uuid
 import jwt
 from datetime import datetime, timezone, timedelta
 from functools import wraps
@@ -111,13 +112,161 @@ def decode_jwt(token: str) -> dict | None:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Access / refresh token pair
+# ---------------------------------------------------------------------------
+
+def create_access_token(subject: str, role: str) -> tuple[str, datetime]:
+    """Sign and return a short-lived access JWT plus its expiry datetime."""
+    secret = current_app.config['JWT_SECRET']
+    ttl_minutes = current_app.config.get('JWT_ACCESS_TTL_MINUTES', 15)
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(minutes=ttl_minutes)
+    payload = {
+        'sub': subject,
+        'role': role,
+        'type': 'access',
+        'jti': str(uuid.uuid4()),
+        'iat': now,
+        'exp': expires_at,
+    }
+    token = jwt.encode(payload, secret, algorithm='HS256')
+    return token, expires_at
+
+
+def create_refresh_token(subject: str, role: str) -> tuple[str, datetime]:
+    """Sign and return a long-lived refresh JWT plus its expiry datetime."""
+    secret = current_app.config['JWT_SECRET']
+    ttl_days = current_app.config.get('JWT_REFRESH_TTL_DAYS', 7)
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(days=ttl_days)
+    payload = {
+        'sub': subject,
+        'role': role,
+        'type': 'refresh',
+        'jti': str(uuid.uuid4()),
+        'iat': now,
+        'exp': expires_at,
+    }
+    token = jwt.encode(payload, secret, algorithm='HS256')
+    return token, expires_at
+
+
+def verify_token(token: str, expected_type: str) -> dict:
+    """Validate a JWT's signature, expiry, type claim, and revocation state.
+
+    Returns the decoded payload on success.
+    Raises ``jwt.InvalidTokenError`` subclasses on failure so callers can
+    convert them to appropriate HTTP responses.
+    """
+    from .extensions import redis_client
+
+    secret = current_app.config['JWT_SECRET']
+    try:
+        payload = jwt.decode(token, secret, algorithms=['HS256'])
+    except jwt.ExpiredSignatureError:
+        raise jwt.ExpiredSignatureError('Token has expired')
+    except jwt.InvalidTokenError:
+        raise
+
+    # Enforce token type
+    if payload.get('type') != expected_type:
+        raise jwt.InvalidTokenError(
+            f'Expected token type {expected_type!r}, got {payload.get("type")!r}'
+        )
+
+    # Check revocation via Redis (primary store)
+    jti = payload.get('jti')
+    if jti:
+        revoked = False
+        if redis_client is not None:
+            try:
+                revoked = redis_client.exists(f'revoked_jti:{jti}') > 0
+            except Exception as exc:
+                current_app.logger.warning(
+                    'Redis unavailable during token revocation check — falling back to DB: %s', exc
+                )
+                revoked = _db_is_revoked(jti)
+        else:
+            revoked = _db_is_revoked(jti)
+
+        if revoked:
+            raise jwt.InvalidTokenError('Token has been revoked')
+
+    return payload
+
+
+def _db_is_revoked(jti: str) -> bool:
+    """Fallback: check the DB revoked_tokens table when Redis is unavailable."""
+    try:
+        from .models import RevokedToken
+        from .extensions import db
+        record = db.session.get(RevokedToken, jti)
+        if record is None:
+            return False
+        # Honour expires_at so we match the Redis TTL semantics:
+        # a revoked record is only active while its TTL has not elapsed.
+        return record.expires_at > datetime.now(timezone.utc)
+    except Exception:
+        # Cannot confirm revocation — fail open (consistent with existing
+        # DB-unavailable behaviour in validate_api_key for non-prod)
+        return False
+
+
+def revoke_token(jti: str, exp: datetime) -> None:
+    """Store jti in the revocation set with TTL = seconds until exp.
+
+    Primary store is Redis; DB table is used as fallback.
+    Logs a warning and continues if neither store is available.
+    """
+    from .extensions import redis_client
+
+    now = datetime.now(timezone.utc)
+    # Guard against already-expired tokens — nothing to revoke
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    ttl_seconds = int((exp - now).total_seconds())
+    if ttl_seconds <= 0:
+        return
+
+    # Try Redis first
+    redis_ok = False
+    if redis_client is not None:
+        try:
+            redis_client.setex(f'revoked_jti:{jti}', ttl_seconds, '1')
+            redis_ok = True
+        except Exception as exc:
+            current_app.logger.warning(
+                'Redis unavailable during token revocation — falling back to DB: %s', exc
+            )
+
+    # DB fallback
+    if not redis_ok:
+        try:
+            from .models import RevokedToken
+            from .extensions import db
+            record = RevokedToken(
+                jti=jti,
+                revoked_at=now,
+                expires_at=exp,
+            )
+            db.session.merge(record)
+            db.session.commit()
+        except Exception as exc:
+            current_app.logger.warning(
+                'DB fallback for token revocation also failed — token %s not revoked: %s',
+                jti, exc,
+            )
+
+
 def require_auth(f):
     """Decorator that enforces Bearer JWT authentication on a route.
 
-    After decoding the JWT it also verifies that the originating API key
-    (stored as ``kid`` in the JWT claims) has not been revoked or expired
-    since the token was issued.  This closes the window where a revoked
-    key could continue to operate until the JWT's own ``exp`` elapsed.
+    Validates the token as an access token (type claim, expiry, revocation).
+    After decoding it also verifies that the originating API key (stored as
+    ``kid`` in the JWT claims) has not been revoked or expired since the token
+    was issued.  This closes the window where a revoked key could continue to
+    operate until the JWT's own ``exp`` elapsed.
     """
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -125,9 +274,17 @@ def require_auth(f):
         if not auth_header.startswith('Bearer '):
             return jsonify({'error': 'Missing or invalid Authorization header', 'code': 'UNAUTHORIZED'}), 401
         token = auth_header[len('Bearer '):]
-        payload = decode_jwt(token)
-        if payload is None:
-            return jsonify({'error': 'Token is invalid or expired', 'code': 'UNAUTHORIZED'}), 401
+
+        try:
+            payload = verify_token(token, 'access')
+        except jwt.ExpiredSignatureError:
+            return jsonify({'error': 'Token has expired', 'code': 'UNAUTHORIZED'}), 401
+        except jwt.InvalidTokenError:
+            # Legacy tokens (no type claim) issued before this change are
+            # decoded the old way so existing integrations are not broken.
+            payload = decode_jwt(token)
+            if payload is None:
+                return jsonify({'error': 'Token is invalid or expired', 'code': 'UNAUTHORIZED'}), 401
 
         # Check that the originating API key is still active + not expired
         kid = payload.get('kid')

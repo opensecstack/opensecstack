@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react'
 import { api } from '../api'
-import type { AuditEntry } from '../types'
+import type { AuditEntry, Role } from '../types'
+import { hasRole } from '../auth'
 import { StatusBadge } from '../components/StatusBadge'
 import './Page.css'
 
 const PER_PAGE = 25
 
-export default function AuditLog() {
+export default function AuditLog({ role }: { role: Role }) {
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -32,6 +33,10 @@ export default function AuditLog() {
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
+
+  if (!hasRole(role, 'auditor')) {
+    return <p className="error">Access denied — auditor role or above required.</p>
+  }
 
   return (
     <div>

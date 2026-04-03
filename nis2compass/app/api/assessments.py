@@ -17,7 +17,8 @@ from ..extensions import db
 from ..models import Assessment, Artifact, Control, ControlTemplate, Organisation
 from ..auth import require_auth, require_scope
 from ..audit import write_audit
-from ..reporters import generate_json_report, generate_sarif_report
+from ..reporters import generate_json_report, generate_sarif_report, generate_nca_report
+from ..notifications import notify_assessment_status_change
 
 assessments_bp = Blueprint('assessments', __name__)
 
@@ -30,6 +31,7 @@ def require_json_content_type():
             return jsonify({'error': 'Content-Type must be application/json', 'code': 'UNSUPPORTED_MEDIA_TYPE'}), 415
 
 _VALID_FRAMEWORK_VERSIONS = frozenset({'NIS2-2022/0383'})
+_VALID_FRAMEWORKS = frozenset({'nis2', 'soc2', 'iso27001'})
 
 # Per-user rate limit for PDF report generation.
 _REPORT_RATE_LIMIT_WINDOW = 60   # seconds
@@ -167,15 +169,23 @@ NIST_MAP = {
 }
 
 
-def _create_controls_from_templates(assessment_id, db_session):
-    """Populate 10 control rows from control_templates (or fallback NIST_MAP).
+def _create_controls_from_templates(assessment_id, db_session, framework='nis2'):
+    """Populate control rows from control_templates filtered by framework.
+
+    For the legacy 'nis2' framework falls back to NIST_MAP when a template
+    row is missing so the function remains backward-compatible.  For other
+    frameworks (soc2, iso27001) only seeded templates are used.
 
     Skips any measure_ref that already has a control for this assessment so
     the function is safe to call even if some rows were already inserted.
-    Returns True on success, False if a duplicate-control IntegrityError
-    occurs and the caller should return 409.
+    Returns True on success.
     """
-    templates = db_session.query(ControlTemplate).order_by(ControlTemplate.measure_ref).all()
+    templates = (
+        db_session.query(ControlTemplate)
+        .filter(ControlTemplate.framework == framework)
+        .order_by(ControlTemplate.measure_ref)
+        .all()
+    )
     template_map = {t.measure_ref: t for t in templates}
 
     # Build set of measure_refs that already exist for this assessment
@@ -186,7 +196,12 @@ def _create_controls_from_templates(assessment_id, db_session):
         .all()
     }
 
-    for ref in 'abcdefghij':
+    if framework == 'nis2':
+        refs = list('abcdefghij')
+    else:
+        refs = sorted(template_map.keys())
+
+    for ref in refs:
         if ref in existing_refs:
             continue  # already present — skip to avoid violating the UNIQUE constraint
 
@@ -195,9 +210,11 @@ def _create_controls_from_templates(assessment_id, db_session):
             nist_cat = t.nist_category
             title = t.title
             article_ref = t.article_ref
-        else:
+        elif framework == 'nis2':
             nist_cat, title = NIST_MAP[ref]
             article_ref = f'Art.21(2)({ref})'
+        else:
+            continue  # no template found for this framework — skip
 
         control = Control(
             assessment_id=assessment_id,
@@ -283,10 +300,18 @@ def create_assessment(org_id):
     if framework_version not in _VALID_FRAMEWORK_VERSIONS:
         return jsonify({'error': f'unsupported framework_version: {framework_version}', 'code': 'INVALID_INPUT'}), 400
 
+    framework = data.get('framework', 'nis2')
+    if framework not in _VALID_FRAMEWORKS:
+        return jsonify({
+            'error': f'unsupported framework: {framework!r}. Must be one of: nis2, soc2, iso27001',
+            'code': 'INVALID_INPUT',
+        }), 400
+
     assessment = Assessment(
         org_id=org_id,
         title=title,
         framework_version=framework_version,
+        framework=framework,
         scope=data.get('scope'),
         assessor=assessor,
         due_date=due_date,
@@ -296,7 +321,7 @@ def create_assessment(org_id):
     db.session.flush()  # get id before creating controls
 
     try:
-        _create_controls_from_templates(assessment.id, db.session)
+        _create_controls_from_templates(assessment.id, db.session, framework=framework)
         write_audit(
             db.session,
             action='assessment_created',
@@ -404,6 +429,10 @@ def update_assessment(assessment_id):
         metadata={'before': before, 'after': assessment.to_dict()},
     )
     db.session.commit()
+
+    if status_changed:
+        notify_assessment_status_change(assessment, before['status'], assessment.status)
+
     return jsonify(assessment.to_dict(include_stats=True)), 200
 
 
@@ -756,8 +785,8 @@ def generate_report(assessment_id):
         return jsonify({'error': 'Rate limit exceeded', 'code': 'RATE_LIMITED'}), 429
 
     fmt = request.args.get('format', 'pdf').lower()
-    if fmt not in ('pdf', 'json', 'sarif'):
-        return jsonify({'error': "format must be one of: pdf, json, sarif", 'code': 'INVALID_INPUT'}), 400
+    if fmt not in ('pdf', 'json', 'sarif', 'nca'):
+        return jsonify({'error': "format must be one of: pdf, json, sarif, nca", 'code': 'INVALID_INPUT'}), 400
 
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
@@ -828,6 +857,33 @@ def generate_report(assessment_id):
             mimetype='application/sarif+json',
             headers={
                 'Content-Disposition': f'attachment; filename="report-{assessment_id}.sarif"',
+            },
+        )
+
+    if fmt == 'nca':
+        try:
+            report_bytes = generate_nca_report(assessment, controls, org)
+        except Exception as exc:
+            current_app.logger.error('NCA report generation failed for assessment %s: %s', assessment_id, exc)
+            return jsonify({'error': 'Report generation failed', 'code': 'REPORT_ERROR'}), 500
+
+        write_audit(
+            db.session,
+            action='report_generated',
+            actor=g.actor,
+            resource_type='assessment',
+            resource_id=assessment.id,
+            risk_class='INFO',
+            metadata={'format': 'nca'},
+        )
+        db.session.commit()
+
+        from flask import Response
+        return Response(
+            report_bytes,
+            mimetype='application/xml',
+            headers={
+                'Content-Disposition': f'attachment; filename="report-{assessment_id}.xml"',
             },
         )
 

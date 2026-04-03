@@ -9,6 +9,14 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- Compliance score history: `ComplianceSnapshot` model records a snapshot every time a score is computed; new `GET /api/v1/assessments/<id>/history` endpoint returns all snapshots ordered by time
+- NCA export format: `app/reporters/nca_reporter.py` generates a structured XML report for submission to National Competent Authorities; available via `POST /api/v1/assessments/<id>/report?format=nca`
+- Alembic migration 014: creates `compliance_snapshots` table
+- Artifact type `pentest`: pentest reports can now be uploaded as evidence artifacts
+- Notification system: `app/notifications.py` dispatches webhook POSTs on assessment status changes and control overdue events; optional SMTP email support via `NIS2_SMTP_*` env vars
+
 ---
 
 ## [1.0.0] — 2026-03-31
@@ -27,7 +35,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - CORS: configurable allowed origins, deny-all default in production
 - OpenAPI spec endpoint: machine-readable API contract at `/api/v1/openapi.json`
 - React web dashboard: organisation list, assessment detail, control assessment, audit log viewer
-- Alembic migrations: versioned schema migrations (001–012)
+- Alembic migrations: versioned schema migrations (001–013)
 - NIS2 control seeds: Article 21(2) measures a–j with NIST CSF mapping
 - Kubernetes manifests: deployment, service, and ingress for NIS2 Compass and its dependencies
 - Docker Compose stacks: development and production configurations

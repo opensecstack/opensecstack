@@ -1,3 +1,7 @@
+export type Role = 'viewer' | 'auditor' | 'assessor' | 'admin'
+
+export type Framework = 'nis2' | 'soc2' | 'iso27001'
+
 export type OrgSize = 'micro' | 'small' | 'medium' | 'large' | 'enterprise'
 export type EntityType = 'essential' | 'important'
 
@@ -43,6 +47,7 @@ export interface Assessment {
   title: string
   status: AssessmentStatus
   framework_version: string
+  framework?: Framework
   scope?: string | null
   assessor?: string | null
   due_date?: string | null

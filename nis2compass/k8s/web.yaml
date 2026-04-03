@@ -1,0 +1,83 @@
+---
+# ── Deployment ───────────────────────────────────────────────────────────────
+# The web image is nginx:alpine running as the 'nginx' user (uid 101).
+# It serves the React build from /usr/share/nginx/html on port 3000
+# (as defined in web/Dockerfile).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nis2compass-web
+  namespace: nis2compass
+  labels:
+    app: nis2compass-web
+    app.kubernetes.io/part-of: nis2compass
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nis2compass-web
+  template:
+    metadata:
+      labels:
+        app: nis2compass-web
+        app.kubernetes.io/part-of: nis2compass
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101        # nginx user in nginx:alpine
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nis2compass-web
+          image: ghcr.io/opensecstack/nis2compass-web:1.0.0
+          ports:
+            - name: http
+              containerPort: 3000
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false  # nginx writes tmp files at runtime
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+
+---
+# ── Service ──────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: nis2compass-web-service
+  namespace: nis2compass
+  labels:
+    app: nis2compass-web
+    app.kubernetes.io/part-of: nis2compass
+spec:
+  type: ClusterIP
+  selector:
+    app: nis2compass-web
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP

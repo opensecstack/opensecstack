@@ -56,6 +56,8 @@ class Config:
     # ------------------------------------------------------------------ #
     JWT_SECRET = os.getenv('NIS2_JWT_SECRET', '')
     JWT_TTL = int(os.getenv('NIS2_JWT_TTL', '3600'))
+    JWT_ACCESS_TTL_MINUTES = int(os.getenv('NIS2_JWT_ACCESS_TTL_MINUTES', '15'))
+    JWT_REFRESH_TTL_DAYS = int(os.getenv('NIS2_JWT_REFRESH_TTL_DAYS', '7'))
 
     # Comma-separated list of accepted plaintext API keys.
     # In production, generate with: openssl rand -hex 32
@@ -134,3 +136,13 @@ class Config:
     # ------------------------------------------------------------------ #
     CITADEL_API_URL = os.environ.get('CITADEL_API_URL', '')
     CITADEL_API_KEY = os.environ.get('CITADEL_API_KEY', '')
+
+    # ------------------------------------------------------------------ #
+    # Notifications (optional)                                             #
+    # ------------------------------------------------------------------ #
+    NOTIFICATION_WEBHOOK_URL = os.environ.get('NIS2_NOTIFICATION_WEBHOOK_URL') or None
+    SMTP_HOST = os.environ.get('NIS2_SMTP_HOST') or None
+    SMTP_PORT = os.environ.get('NIS2_SMTP_PORT', '587')
+    SMTP_USER = os.environ.get('NIS2_SMTP_USER') or None
+    SMTP_PASSWORD = os.environ.get('NIS2_SMTP_PASSWORD') or None
+    SMTP_FROM = os.environ.get('NIS2_SMTP_FROM') or None

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { api, downloadAssessmentPDF } from '../api'
+import { api, compliance, downloadAssessmentPDF } from '../api'
 import type {
   Assessment,
   Control,
@@ -10,7 +10,9 @@ import type {
   Artifact,
   ArtifactType,
   RemediationStatus,
+  Role,
 } from '../types'
+import { hasRole } from '../auth'
 import { StatusBadge } from '../components/StatusBadge'
 import './Page.css'
 
@@ -141,9 +143,10 @@ interface ControlRowProps {
   control: Control
   onPatch: PatchFn
   colSpan: number
+  role: Role
 }
 
-function ControlRow({ control, onPatch, colSpan }: ControlRowProps) {
+function ControlRow({ control, onPatch, colSpan, role }: ControlRowProps) {
   // --- main row state ---
   const [notes, setNotes] = useState(control.notes ?? '')
   const debouncedNotes = useDebounce(notes, 800)
@@ -226,27 +229,35 @@ function ControlRow({ control, onPatch, colSpan }: ControlRowProps) {
         </td>
         <td><NistBadge category={control.nist_category} /></td>
         <td>
-          <select
-            className="inline-select"
-            value={control.status}
-            onChange={e => handleStatusChange(e.target.value as ControlStatus)}
-            disabled={saving}
-          >
-            {CONTROL_STATUSES.map(s => (
-              <option key={s} value={s}>
-                {s.replace(/_/g, ' ')}
-              </option>
-            ))}
-          </select>
+          {hasRole(role, 'assessor') ? (
+            <select
+              className="inline-select"
+              value={control.status}
+              onChange={e => handleStatusChange(e.target.value as ControlStatus)}
+              disabled={saving}
+            >
+              {CONTROL_STATUSES.map(s => (
+                <option key={s} value={s}>
+                  {s.replace(/_/g, ' ')}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <StatusBadge status={control.status} />
+          )}
         </td>
         <td style={{ minWidth: 200 }}>
-          <input
-            className="inline-input"
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            placeholder="Add notes..."
-            disabled={saving}
-          />
+          {hasRole(role, 'assessor') ? (
+            <input
+              className="inline-input"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="Add notes..."
+              disabled={saving}
+            />
+          ) : (
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{notes || '—'}</span>
+          )}
         </td>
         <td style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
           {evidenceCount > 0 ? (
@@ -335,9 +346,10 @@ function ControlRow({ control, onPatch, colSpan }: ControlRowProps) {
 
 interface EvidenceSectionProps {
   assessmentId: string
+  role: Role
 }
 
-function EvidenceSection({ assessmentId }: EvidenceSectionProps) {
+function EvidenceSection({ assessmentId, role }: EvidenceSectionProps) {
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
   const [loadingArtifacts, setLoadingArtifacts] = useState(true)
   const [artifactError, setArtifactError] = useState<string | null>(null)
@@ -353,6 +365,9 @@ function EvidenceSection({ assessmentId }: EvidenceSectionProps) {
   // Per-artifact action state
   const [downloading, setDownloading] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [signing, setSigning] = useState<string | null>(null)
+  const [verifying, setVerifying] = useState<string | null>(null)
+  const [artifactActionMsg, setArtifactActionMsg] = useState<{ id: string; msg: string } | null>(null)
 
   const loadArtifacts = useCallback(async () => {
     setLoadingArtifacts(true)
@@ -422,19 +437,48 @@ function EvidenceSection({ assessmentId }: EvidenceSectionProps) {
     }
   }
 
+  async function handleSign(artifact: Artifact) {
+    setSigning(artifact.id)
+    setArtifactActionMsg(null)
+    try {
+      await compliance.signArtifact(artifact.id)
+      setArtifactActionMsg({ id: artifact.id, msg: 'Signed successfully' })
+    } catch (err: unknown) {
+      setArtifactError(err instanceof Error ? err.message : 'Sign failed')
+    } finally {
+      setSigning(null)
+    }
+  }
+
+  async function handleVerify(artifact: Artifact) {
+    setVerifying(artifact.id)
+    setArtifactActionMsg(null)
+    try {
+      const result = await compliance.verifyArtifact(artifact.id)
+      const msg = result?.valid === false ? 'Verification failed: signature invalid' : 'Signature verified'
+      setArtifactActionMsg({ id: artifact.id, msg })
+    } catch (err: unknown) {
+      setArtifactError(err instanceof Error ? err.message : 'Verify failed')
+    } finally {
+      setVerifying(null)
+    }
+  }
+
   return (
     <div className="evidence-section">
       <div className="evidence-header">
         <h2>Evidence Files</h2>
-        <button
-          className="btn-secondary"
-          onClick={() => setShowUpload(v => !v)}
-        >
-          {showUpload ? 'Cancel' : 'Upload File'}
-        </button>
+        {hasRole(role, 'assessor') && (
+          <button
+            className="btn-secondary"
+            onClick={() => setShowUpload(v => !v)}
+          >
+            {showUpload ? 'Cancel' : 'Upload File'}
+          </button>
+        )}
       </div>
 
-      {showUpload && (
+      {showUpload && hasRole(role, 'assessor') && (
         <form className="upload-form" onSubmit={handleUpload}>
           <div className="upload-form-field">
             <label>File</label>
@@ -510,6 +554,11 @@ function EvidenceSection({ assessmentId }: EvidenceSectionProps) {
                         {artifact.description}
                       </div>
                     )}
+                    {artifactActionMsg?.id === artifact.id && (
+                      <div style={{ fontSize: 12, color: '#4ade80', marginTop: 2 }}>
+                        {artifactActionMsg.msg}
+                      </div>
+                    )}
                   </td>
                   <td>
                     <span className="artifact-type-badge">{artifact.type}</span>
@@ -524,6 +573,24 @@ function EvidenceSection({ assessmentId }: EvidenceSectionProps) {
                     {formatDate(artifact.created_at)}
                   </td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {hasRole(role, 'auditor') && (
+                      <button
+                        className="btn-icon"
+                        style={{ marginRight: 6 }}
+                        onClick={() => handleSign(artifact)}
+                        disabled={signing === artifact.id}
+                      >
+                        {signing === artifact.id ? 'Signing...' : 'Sign'}
+                      </button>
+                    )}
+                    <button
+                      className="btn-icon"
+                      style={{ marginRight: 6 }}
+                      onClick={() => handleVerify(artifact)}
+                      disabled={verifying === artifact.id}
+                    >
+                      {verifying === artifact.id ? 'Verifying...' : 'Verify'}
+                    </button>
                     <button
                       className="btn-icon"
                       style={{ marginRight: 6 }}
@@ -554,7 +621,7 @@ function EvidenceSection({ assessmentId }: EvidenceSectionProps) {
 // AssessmentDetail (page)
 // ---------------------------------------------------------------------------
 
-export default function AssessmentDetail() {
+export default function AssessmentDetail({ role }: { role: Role }) {
   const { id } = useParams<{ id: string }>()
 
   const [assessment, setAssessment] = useState<Assessment | null>(null)
@@ -576,6 +643,22 @@ export default function AssessmentDetail() {
   const [editScope, setEditScope] = useState('')
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState<string | null>(null)
+
+  // Approve / Reject
+  const [approving, setApproving] = useState(false)
+  const [rejectComment, setRejectComment] = useState('')
+  const [showRejectInput, setShowRejectInput] = useState(false)
+  const [approveError, setApproveError] = useState<string | null>(null)
+
+  // Lock / Unlock
+  const [locking, setLocking] = useState(false)
+  const [isLocked, setIsLocked] = useState(false)
+  const [lockError, setLockError] = useState<string | null>(null)
+
+  // Compliance score
+  const [score, setScore] = useState<number | null>(null)
+  const [scoreFetching, setScoreFetching] = useState(false)
+  const [scoreError, setScoreError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -708,6 +791,80 @@ export default function AssessmentDetail() {
     [id],
   )
 
+  async function handleApprove() {
+    setApproving(true)
+    setApproveError(null)
+    try {
+      await compliance.approve(id!, 'approve')
+      const updated = await api.assessments.get(id!)
+      setAssessment(updated)
+    } catch (err: unknown) {
+      setApproveError(err instanceof Error ? err.message : 'Approve failed')
+    } finally {
+      setApproving(false)
+    }
+  }
+
+  async function handleReject() {
+    if (!rejectComment.trim()) {
+      setShowRejectInput(true)
+      return
+    }
+    setApproving(true)
+    setApproveError(null)
+    try {
+      await compliance.approve(id!, 'reject', rejectComment.trim())
+      const updated = await api.assessments.get(id!)
+      setAssessment(updated)
+      setShowRejectInput(false)
+      setRejectComment('')
+    } catch (err: unknown) {
+      setApproveError(err instanceof Error ? err.message : 'Reject failed')
+    } finally {
+      setApproving(false)
+    }
+  }
+
+  async function handleToggleLock() {
+    setLocking(true)
+    setLockError(null)
+    try {
+      if (isLocked) {
+        await compliance.unlock(id!)
+        setIsLocked(false)
+      } else {
+        await compliance.lock(id!)
+        setIsLocked(true)
+      }
+    } catch (err: unknown) {
+      setLockError(err instanceof Error ? err.message : 'Lock/unlock failed')
+    } finally {
+      setLocking(false)
+    }
+  }
+
+  async function handleFetchScore() {
+    setScoreFetching(true)
+    setScoreError(null)
+    try {
+      await compliance.computeScore(id!)
+      const result = await compliance.getScore(id!)
+      const pct: number =
+        typeof result?.score === 'number'
+          ? result.score
+          : typeof result?.percentage === 'number'
+          ? result.percentage
+          : typeof result?.compliance_score === 'number'
+          ? result.compliance_score
+          : null
+      setScore(pct)
+    } catch (err: unknown) {
+      setScoreError(err instanceof Error ? err.message : 'Score calculation failed')
+    } finally {
+      setScoreFetching(false)
+    }
+  }
+
   if (loading) return <p className="loading">Loading assessment...</p>
   if (!assessment) return <p className="error">{error ?? 'Assessment not found'}</p>
 
@@ -717,6 +874,12 @@ export default function AssessmentDetail() {
   // Total columns in the controls table (used for remediation row colSpan)
   const TABLE_COLS = 7
 
+  function scoreColor(pct: number): string {
+    if (pct >= 80) return '#4ade80'
+    if (pct >= 50) return '#fcd34d'
+    return '#f87171'
+  }
+
   return (
     <div>
       <div className="breadcrumb">
@@ -724,7 +887,7 @@ export default function AssessmentDetail() {
         {org && (
           <>
             {' '}&rsaquo;{' '}
-            <Link to={`/organisations/${org.id}/assessments`}>{org.name}</Link>
+            <Link to={`/organisations/${org.id}`}>{org.name}</Link>
           </>
         )}
         {' '}&rsaquo; Assessment
@@ -742,9 +905,11 @@ export default function AssessmentDetail() {
             {assessment.due_date && (
               <span className="muted" style={{ fontSize: 13 }}>Due: {assessment.due_date}</span>
             )}
-            <button className="btn-icon" onClick={startEditMeta} style={{ marginLeft: 4, padding: '2px 8px', fontSize: 12 }}>
-              Edit
-            </button>
+            {hasRole(role, 'assessor') && (
+              <button className="btn-icon" onClick={startEditMeta} style={{ marginLeft: 4, padding: '2px 8px', fontSize: 12 }}>
+                Edit
+              </button>
+            )}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
@@ -755,6 +920,16 @@ export default function AssessmentDetail() {
               disabled={transitioning}
             >
               {transitioning ? 'Updating...' : transition.label}
+            </button>
+          )}
+          {hasRole(role, 'admin') && (
+            <button
+              className={isLocked ? 'btn-secondary' : 'btn-icon'}
+              onClick={handleToggleLock}
+              disabled={locking}
+              style={isLocked ? { borderColor: '#fcd34d44', color: '#fcd34d' } : {}}
+            >
+              {locking ? '...' : isLocked ? 'Unlock' : 'Lock'}
             </button>
           )}
           <button
@@ -769,13 +944,20 @@ export default function AssessmentDetail() {
             onClick={handleDownloadPDF}
             disabled={downloadingPDF}
           >
-            {downloadingPDF ? '⏳ Downloading...' : 'Download PDF Report'}
+            {downloadingPDF ? 'Downloading...' : 'Download PDF Report'}
           </button>
+          <Link
+            to={`/assessments/${id}/gaps`}
+            className="btn-secondary"
+            style={{ display: 'inline-flex', alignItems: 'center' }}
+          >
+            View Gap Analysis
+          </Link>
         </div>
       </div>
 
       {/* Edit metadata panel */}
-      {editing && (
+      {editing && hasRole(role, 'assessor') && (
         <div className="card form-card" style={{ marginBottom: 16 }}>
           <h3>Edit Assessment</h3>
           {editError && <p className="error">{editError}</p>}
@@ -809,6 +991,94 @@ export default function AssessmentDetail() {
       {error && <p className="error">{error}</p>}
       {reportError && <p className="error">Report: {reportError}</p>}
       {pdfError && <p className="error">PDF: {pdfError}</p>}
+      {lockError && <p className="error">Lock: {lockError}</p>}
+
+      {/* Approve / Reject panel — only shown when status is submitted / under_review and user is admin */}
+      {assessment.status === 'under_review' && hasRole(role, 'admin') && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 600, fontSize: 14, marginRight: 4 }}>Review Decision</span>
+            <button
+              className="btn-primary"
+              onClick={handleApprove}
+              disabled={approving}
+            >
+              {approving ? 'Processing...' : 'Approve'}
+            </button>
+            <button
+              className="btn-danger"
+              style={{ padding: '8px 16px', fontSize: 14 }}
+              onClick={() => setShowRejectInput(v => !v)}
+              disabled={approving}
+            >
+              Reject
+            </button>
+          </div>
+          {showRejectInput && (
+            <div style={{ marginTop: 12, display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div className="form-row" style={{ flex: 1, minWidth: 260, marginBottom: 0 }}>
+                <label>Rejection Comment *</label>
+                <input
+                  value={rejectComment}
+                  onChange={e => setRejectComment(e.target.value)}
+                  placeholder="Reason for rejection..."
+                  disabled={approving}
+                />
+              </div>
+              <button
+                className="btn-danger"
+                style={{ padding: '8px 16px', fontSize: 14 }}
+                onClick={handleReject}
+                disabled={approving || !rejectComment.trim()}
+              >
+                {approving ? 'Rejecting...' : 'Confirm Reject'}
+              </button>
+              <button
+                className="btn-secondary"
+                onClick={() => { setShowRejectInput(false); setRejectComment('') }}
+                disabled={approving}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {approveError && <p className="error" style={{ marginTop: 8, marginBottom: 0 }}>{approveError}</p>}
+        </div>
+      )}
+
+      {/* Compliance Score panel */}
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 600, fontSize: 14 }}>Compliance Score</span>
+          {score !== null && (
+            <span
+              style={{
+                fontSize: 28,
+                fontWeight: 700,
+                color: scoreColor(score),
+                lineHeight: 1,
+              }}
+            >
+              {score.toFixed(1)}%
+            </span>
+          )}
+          {hasRole(role, 'assessor') && (
+            <button
+              className="btn-secondary"
+              onClick={handleFetchScore}
+              disabled={scoreFetching}
+            >
+              {scoreFetching ? 'Calculating...' : score !== null ? 'Recalculate' : 'Calculate Score'}
+            </button>
+          )}
+          {score !== null && (
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              {score >= 80 ? 'Good standing' : score >= 50 ? 'Needs improvement' : 'Critical attention required'}
+            </span>
+          )}
+        </div>
+        {scoreError && <p className="error" style={{ marginTop: 8, marginBottom: 0 }}>{scoreError}</p>}
+      </div>
 
       {/* Summary stats */}
       {summary && (
@@ -868,6 +1138,7 @@ export default function AssessmentDetail() {
                     control={control}
                     onPatch={handlePatchControl}
                     colSpan={TABLE_COLS}
+                    role={role}
                   />
                 ))
             )}
@@ -876,7 +1147,7 @@ export default function AssessmentDetail() {
       </div>
 
       {/* Evidence section */}
-      <EvidenceSection assessmentId={id!} />
+      <EvidenceSection assessmentId={id!} role={role} />
 
       {/* Scope / metadata card */}
       {(assessment.scope || assessment.framework_version) && (

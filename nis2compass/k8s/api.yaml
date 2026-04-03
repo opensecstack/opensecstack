@@ -1,0 +1,261 @@
+---
+# ── Deployment ───────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nis2compass-api
+  namespace: nis2compass
+  labels:
+    app: nis2compass-api
+    app.kubernetes.io/part-of: nis2compass
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nis2compass-api
+  template:
+    metadata:
+      labels:
+        app: nis2compass-api
+        app.kubernetes.io/part-of: nis2compass
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999        # matches the 'nis2' system user created in the Dockerfile
+        runAsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nis2compass-api
+          image: ghcr.io/opensecstack/nis2compass:1.0.0
+          ports:
+            - name: http
+              containerPort: 8090
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false  # /app/uploads must be writable
+            capabilities:
+              drop:
+                - ALL
+          env:
+            # ── DB connection ────────────────────────────────────────────
+            # Build NIS2_DB_URL from individual components using Kubernetes
+            # $(VAR_NAME) substitution so the password stays in the secret.
+            - name: NIS2_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nis2compass-secrets
+                  key: NIS2_DB_PASSWORD
+            - name: NIS2_DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_DB_HOST
+            - name: NIS2_DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_DB_PORT
+            - name: NIS2_DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_DB_USER
+            - name: NIS2_DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_DB_NAME
+            - name: NIS2_DB_URL
+              value: "postgresql+psycopg2://$(NIS2_DB_USER):$(NIS2_DB_PASSWORD)@$(NIS2_DB_HOST):$(NIS2_DB_PORT)/$(NIS2_DB_NAME)"
+            - name: NIS2_DB_POOL_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_DB_POOL_SIZE
+
+            # ── Redis connection ─────────────────────────────────────────
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nis2compass-secrets
+                  key: REDIS_PASSWORD
+            - name: NIS2_REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_REDIS_HOST
+            - name: NIS2_REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_REDIS_PORT
+            - name: NIS2_REDIS_URL
+              value: "redis://:$(REDIS_PASSWORD)@$(NIS2_REDIS_HOST):$(NIS2_REDIS_PORT)/0"
+
+            # ── Secrets ──────────────────────────────────────────────────
+            - name: NIS2_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nis2compass-secrets
+                  key: NIS2_SECRET_KEY
+            - name: NIS2_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: nis2compass-secrets
+                  key: NIS2_JWT_SECRET
+            - name: NIS2_API_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: nis2compass-secrets
+                  key: NIS2_API_KEYS
+            - name: NIS2_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: nis2compass-secrets
+                  key: NIS2_WEBHOOK_SECRET
+            - name: CITADEL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nis2compass-secrets
+                  key: CITADEL_API_KEY
+
+            # ── Non-secret config ────────────────────────────────────────
+            - name: NIS2_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_ENV
+            - name: NIS2_DEBUG
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_DEBUG
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: LOG_LEVEL
+            - name: NIS2_CORS_ORIGINS
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_CORS_ORIGINS
+            - name: NIS2_RATE_LIMIT
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_RATE_LIMIT
+            - name: NIS2_TRUSTED_PROXIES
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_TRUSTED_PROXIES
+            - name: NIS2_MAX_UPLOAD_BYTES
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_MAX_UPLOAD_BYTES
+            - name: NIS2_JWT_TTL
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_JWT_TTL
+            - name: CITADEL_API_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: CITADEL_API_URL
+            - name: NIS2_WEBHOOK_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_WEBHOOK_URL
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8090
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+---
+# ── Service ──────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: nis2compass-api-service
+  namespace: nis2compass
+  labels:
+    app: nis2compass-api
+    app.kubernetes.io/part-of: nis2compass
+spec:
+  type: ClusterIP
+  selector:
+    app: nis2compass-api
+  ports:
+    - name: http
+      port: 8090
+      targetPort: 8090
+      protocol: TCP
+
+---
+# ── HorizontalPodAutoscaler ──────────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: nis2compass-api-hpa
+  namespace: nis2compass
+  labels:
+    app: nis2compass-api
+    app.kubernetes.io/part-of: nis2compass
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: nis2compass-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60

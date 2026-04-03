@@ -11,7 +11,7 @@ from decimal import Decimal
 
 from flask import Blueprint, request, jsonify, g, current_app
 from ..extensions import db
-from ..models import Assessment, Artifact, Control
+from ..models import Assessment, Artifact, Control, ComplianceSnapshot
 from ..auth import require_auth, require_scope
 from ..audit import write_audit
 from .assessments import _check_org_access
@@ -68,9 +68,18 @@ def compute_score(assessment_id):
     score = _compute_compliance_score(controls)
     assessment.compliance_score = score
     assessment.updated_at = datetime.now(timezone.utc)
-    db.session.commit()
 
     scored = [c for c in controls if c.status != 'not_applicable']
+    snapshot = ComplianceSnapshot(
+        assessment_id=assessment.id,
+        score=float(score) if score is not None else None,
+        total_controls=len(controls),
+        compliant_controls=sum(1 for c in controls if c.status == 'compliant'),
+        partially_compliant_controls=sum(1 for c in controls if c.status == 'partially_compliant'),
+        non_compliant_controls=sum(1 for c in controls if c.status == 'non_compliant'),
+    )
+    db.session.add(snapshot)
+    db.session.commit()
     breakdown = {}
     for c in controls:
         breakdown[c.measure_ref] = {
@@ -380,3 +389,26 @@ def get_gaps(assessment_id):
         return jsonify({'error': 'No gap analysis has been run yet', 'code': 'NO_DATA'}), 404
 
     return jsonify(assessment.gap_report)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 6. COMPLIANCE HISTORY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@compliance_bp.get('/assessments/<uuid:assessment_id>/history')
+@require_auth
+def get_compliance_history(assessment_id):
+    """Return all compliance snapshots for the assessment ordered by snapshot_at asc."""
+    assessment = db.session.get(Assessment, assessment_id)
+    if not assessment:
+        return jsonify({'error': 'Assessment not found', 'code': 'NOT_FOUND'}), 404
+    _check_org_access(assessment.org_id)
+
+    snapshots = (
+        db.session.query(ComplianceSnapshot)
+        .filter(ComplianceSnapshot.assessment_id == assessment_id)
+        .order_by(ComplianceSnapshot.snapshot_at.asc())
+        .all()
+    )
+
+    return jsonify([s.to_dict() for s in snapshots])

@@ -1,4 +1,4 @@
-# opensecstack Architecture
+# SIN Architecture
 
 High-level architecture of the opensecstack platform ecosystem.
 

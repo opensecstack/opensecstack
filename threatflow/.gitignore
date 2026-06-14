@@ -1,0 +1,30 @@
+# Binaries
+bin/
+threatflow
+*.exe
+*.test
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+vendor/
+coverage.out
+coverage.html
+
+# Temp
+tmp/
+*.tmp

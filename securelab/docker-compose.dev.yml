@@ -1,0 +1,76 @@
+# SecureLab — Development Docker Compose
+# Usage: docker compose -f docker-compose.dev.yml up
+#
+# Mounts source code and uses Air for hot reload.
+# SECURELAB_CITADEL_DRY_RUN=true and SECURELAB_DEV_MODE=true are enforced.
+
+version: "3.9"
+
+networks:
+  securelab-dev-net:
+    driver: bridge
+
+volumes:
+  securelab-dev-db:
+
+services:
+
+  # ── SecureLab API (dev, hot-reload via Air) ────────────────────────────────
+  securelab-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: securelab-api-dev
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SECURELAB_HTTP_ADDR: "0.0.0.0:8080"
+      SECURELAB_DEV_MODE: "true"
+      SECURELAB_DB_URL: "postgres://securelab:securelab@securelab-db:5432/securelab?sslmode=disable"
+      SECURELAB_JWT_SECRET: "dev-jwt-secret-not-for-production-use"
+      SECURELAB_CITADEL_DRY_RUN: "true"
+      SECURELAB_CITADEL_URL: "${SECURELAB_CITADEL_URL:-}"
+      SECURELAB_CITADEL_HMAC_SECRET: "${SECURELAB_CITADEL_HMAC_SECRET:-}"
+      SECURELAB_OPENSCRUB_URL: "${SECURELAB_OPENSCRUB_URL:-}"
+      SECURELAB_OPENSCRUB_API_KEY: "${SECURELAB_OPENSCRUB_API_KEY:-}"
+      SECURELAB_APIGUARD_URL: "${SECURELAB_APIGUARD_URL:-}"
+      SECURELAB_APIGUARD_API_KEY: "${SECURELAB_APIGUARD_API_KEY:-}"
+      SECURELAB_THREATFLOW_URL: "${SECURELAB_THREATFLOW_URL:-}"
+      SECURELAB_THREATFLOW_API_KEY: "${SECURELAB_THREATFLOW_API_KEY:-}"
+    volumes:
+      - .:/app
+      - /app/web/node_modules
+    depends_on:
+      securelab-db:
+        condition: service_healthy
+    networks:
+      - securelab-dev-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── PostgreSQL (dev) ───────────────────────────────────────────────────────
+  securelab-db:
+    image: postgres:16-alpine
+    container_name: securelab-db-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: securelab
+      POSTGRES_USER: securelab
+      POSTGRES_PASSWORD: securelab
+    volumes:
+      - securelab-dev-db:/var/lib/postgresql/data
+    ports:
+      # Exposed to localhost for local DB tooling
+      - "127.0.0.1:5432:5432"
+    networks:
+      - securelab-dev-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U securelab"]
+      interval: 5s
+      timeout: 5s
+      retries: 10

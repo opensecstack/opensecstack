@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: openscrub-api
+    metrics_path: /api/v1/metrics
+    # Scraper must present a JWT — the metrics endpoint is auth-gated
+    # because counters leak operational state (rule counts, IOC pull
+    # cadence, CITADEL queue depth). Generate a long-lived "readonly"
+    # JWT for Prometheus and load it from a file.
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/openscrub_token
+    static_configs:
+      - targets: ["openscrub-api:8087"]

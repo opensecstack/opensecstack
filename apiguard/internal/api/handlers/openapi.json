@@ -1,0 +1,632 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "APIGuard",
+    "description": "OWASP API Top 10 security testing framework REST API.",
+    "version": "1.0.0",
+    "license": {
+      "name": "Apache 2.0",
+      "url": "https://www.apache.org/licenses/LICENSE-2.0"
+    }
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "Default server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "HS256 JWT obtained from POST /api/v1/auth/token"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { "type": "string", "example": "Bad Request" },
+          "message": { "type": "string", "example": "spec_url or spec_path is required" }
+        },
+        "required": ["error", "message"]
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "ok" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "uptime": { "type": "string", "example": "3h14m15s" }
+        }
+      },
+      "VersionResponse": {
+        "type": "object",
+        "properties": {
+          "version": { "type": "string", "example": "0.1.0" },
+          "git_commit": { "type": "string", "example": "abc1234" },
+          "build_date": { "type": "string", "example": "2026-03-25T00:00:00Z" },
+          "go_version": { "type": "string", "example": "go1.22.0" },
+          "os": { "type": "string", "example": "linux" },
+          "arch": { "type": "string", "example": "amd64" }
+        }
+      },
+      "AuthPingResponse": {
+        "type": "object",
+        "properties": {
+          "configured": { "type": "boolean" },
+          "hint": { "type": "string" },
+          "token_type": { "type": "string", "example": "HS256 JWT" },
+          "algorithms": {
+            "type": "array",
+            "items": { "type": "string" },
+            "example": ["HS256"]
+          }
+        }
+      },
+      "TokenRequest": {
+        "type": "object",
+        "required": ["api_key"],
+        "properties": {
+          "api_key": { "type": "string", "description": "Pre-shared API key." }
+        }
+      },
+      "TokenResponse": {
+        "type": "object",
+        "properties": {
+          "token": { "type": "string", "description": "Signed HS256 JWT." },
+          "expires_in": { "type": "integer", "description": "Token lifetime in seconds.", "example": 86400 },
+          "token_type": { "type": "string", "example": "Bearer" }
+        }
+      },
+      "CreateScanRequest": {
+        "type": "object",
+        "properties": {
+          "spec_url": { "type": "string", "format": "uri", "description": "Remote URL of the OpenAPI spec." },
+          "spec_path": { "type": "string", "description": "Server-side path to an already-uploaded spec file." },
+          "target": { "type": "string", "format": "uri", "description": "Base URL of the API under test.", "example": "https://api.example.com" },
+          "modules": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "OWASP module IDs to run. Omit to run all.",
+            "example": ["api1", "api2"]
+          },
+          "auth_type": { "type": "string", "description": "Authentication type for target API requests.", "example": "bearer" },
+          "auth_token": { "type": "string", "description": "Token for target API authentication." },
+          "auth_header": { "type": "string", "description": "Custom auth header name.", "example": "X-API-Key" }
+        }
+      },
+      "CreateScanResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "status": { "type": "string", "example": "pending" }
+        }
+      },
+      "Scan": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "spec_url": { "type": "object", "description": "Nullable spec URL." },
+          "spec_hash": { "type": "object", "description": "Nullable SHA-256 hash of the spec." },
+          "target_url": { "type": "string", "format": "uri" },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "running", "completed", "failed", "cancelled"]
+          },
+          "modules": { "type": "array", "items": { "type": "string" } },
+          "started_at": { "type": "object", "description": "Nullable start timestamp." },
+          "completed_at": { "type": "object", "description": "Nullable completion timestamp." },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "total_findings": { "type": "integer" },
+          "critical_count": { "type": "integer" },
+          "high_count": { "type": "integer" },
+          "medium_count": { "type": "integer" },
+          "low_count": { "type": "integer" },
+          "info_count": { "type": "integer" },
+          "auth_type": { "type": "object", "description": "Nullable auth type." },
+          "error_message": { "type": "object", "description": "Nullable error message if scan failed." }
+        }
+      },
+      "ScanListResponse": {
+        "type": "object",
+        "properties": {
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/Scan" } },
+          "total": { "type": "integer" },
+          "page": { "type": "integer" },
+          "per_page": { "type": "integer" }
+        }
+      },
+      "Finding": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "scan_id": { "type": "string", "format": "uuid" },
+          "owasp_id": { "type": "string", "example": "API1:2023" },
+          "module_id": { "type": "string", "example": "api1_bola" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "severity": {
+            "type": "string",
+            "enum": ["critical", "high", "medium", "low", "info"]
+          },
+          "cvss_score": { "type": "number", "format": "float", "example": 8.1 },
+          "cvss_vector": { "type": "object", "description": "Nullable CVSS 3.1 vector string." },
+          "endpoint_path": { "type": "string", "example": "/api/v1/users/{id}" },
+          "endpoint_method": { "type": "string", "example": "GET" },
+          "evidence_request": { "type": "object", "description": "Nullable raw HTTP request evidence." },
+          "evidence_response": { "type": "object", "description": "Nullable raw HTTP response evidence." },
+          "evidence_json": { "type": "object", "description": "Nullable structured evidence detail." },
+          "remediation": { "type": "object", "description": "Nullable remediation guidance." },
+          "status": {
+            "type": "string",
+            "enum": ["open", "confirmed", "false_positive", "accepted", "fixed"]
+          },
+          "triaged_by": { "type": "object", "description": "Nullable triage actor ID." },
+          "triaged_at": { "type": "object", "description": "Nullable triage timestamp." },
+          "triage_note": { "type": "object", "description": "Nullable triage note." },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "FindingListResponse": {
+        "type": "object",
+        "properties": {
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/Finding" } },
+          "total": { "type": "integer" },
+          "page": { "type": "integer" },
+          "per_page": { "type": "integer" }
+        }
+      },
+      "UpdateFindingRequest": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["open", "confirmed", "false_positive", "accepted", "fixed"]
+          },
+          "note": { "type": "string", "description": "Optional triage note." }
+        }
+      },
+      "UploadResponse": {
+        "type": "object",
+        "properties": {
+          "spec_path": { "type": "string", "description": "Absolute server-side path; pass as spec_path in POST /scans." },
+          "spec_hash": { "type": "string", "description": "SHA-256 hex of uploaded content." },
+          "size": { "type": "integer", "description": "Byte size of uploaded file." }
+        }
+      },
+      "AuditLog": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "actor_id": { "type": "string" },
+          "actor_type": { "type": "string" },
+          "action": {
+            "type": "string",
+            "enum": [
+              "scan_created", "scan_started", "scan_completed", "scan_failed",
+              "scan_deleted", "finding_triaged", "finding_status_changed",
+              "spec_uploaded", "spec_parsed", "report_generated", "report_exported"
+            ]
+          },
+          "resource_type": { "type": "string" },
+          "resource_id": { "type": "string", "format": "uuid", "nullable": true },
+          "ip_address": { "type": "object", "description": "Nullable remote IP address." },
+          "user_agent": { "type": "object", "description": "Nullable user-agent string." },
+          "metadata": { "type": "object" },
+          "prev_hash": { "type": "string", "nullable": true },
+          "chain_hash": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "operationId": "getHealth",
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "Server is healthy.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HealthResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/version": {
+      "get": {
+        "summary": "Server version",
+        "operationId": "getVersion",
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "Version information.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/VersionResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "OpenAPI specification",
+        "operationId": "getOpenAPI",
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "This OpenAPI 3.0 spec document.",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/token": {
+      "get": {
+        "summary": "Auth endpoint info",
+        "operationId": "getAuthToken",
+        "tags": ["Auth"],
+        "responses": {
+          "200": {
+            "description": "Auth endpoint metadata and usage hint.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuthPingResponse" }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Exchange API key for JWT",
+        "operationId": "postAuthToken",
+        "tags": ["Auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/TokenRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "JWT issued successfully.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TokenResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid API key.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          },
+          "422": {
+            "description": "api_key field is missing.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          }
+        }
+      }
+    },
+    "/scans": {
+      "post": {
+        "summary": "Create and start a scan",
+        "operationId": "createScan",
+        "tags": ["Scans"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateScanRequest" }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Scan accepted and queued.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CreateScanResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "422": {
+            "description": "Validation error (missing required fields).",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      },
+      "get": {
+        "summary": "List scans",
+        "operationId": "listScans",
+        "tags": ["Scans"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "per_page", "in": "query", "schema": { "type": "integer", "default": 20, "maximum": 100 } },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["pending", "running", "completed", "failed", "cancelled"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of scans.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ScanListResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          }
+        }
+      }
+    },
+    "/scans/{id}": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+      ],
+      "get": {
+        "summary": "Get a scan by ID",
+        "operationId": "getScan",
+        "tags": ["Scans"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Scan details.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Scan" } } }
+          },
+          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Scan not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "delete": {
+        "summary": "Delete a scan",
+        "operationId": "deleteScan",
+        "tags": ["Scans"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "204": { "description": "Scan deleted." },
+          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Scan not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/scans/{id}/findings": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+      ],
+      "get": {
+        "summary": "List findings for a scan",
+        "operationId": "getScanFindings",
+        "tags": ["Scans"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "per_page", "in": "query", "schema": { "type": "integer", "default": 20, "maximum": 100 } },
+          {
+            "name": "severity",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["critical", "high", "medium", "low", "info"] }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["open", "confirmed", "false_positive", "accepted", "fixed"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated findings for the scan.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FindingListResponse" } } }
+          },
+          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Scan not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/scans/{id}/report": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+      ],
+      "get": {
+        "summary": "Generate a scan report",
+        "operationId": "getScanReport",
+        "tags": ["Scans"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "description": "Report format.",
+            "schema": { "type": "string", "enum": ["json", "html", "sarif"], "default": "json" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Report in the requested format.",
+            "content": {
+              "application/json": { "schema": { "type": "object" } },
+              "text/html": { "schema": { "type": "string" } },
+              "application/sarif+json": { "schema": { "type": "object" } }
+            }
+          },
+          "400": { "description": "Unsupported format.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Scan not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/findings": {
+      "get": {
+        "summary": "List all findings",
+        "operationId": "listFindings",
+        "tags": ["Findings"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "per_page", "in": "query", "schema": { "type": "integer", "default": 20, "maximum": 100 } },
+          { "name": "scan_id", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "severity", "in": "query", "schema": { "type": "string", "enum": ["critical", "high", "medium", "low", "info"] } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["open", "confirmed", "false_positive", "accepted", "fixed"] } },
+          { "name": "owasp_id", "in": "query", "schema": { "type": "string" }, "description": "Filter by OWASP category, e.g. API1:2023." },
+          { "name": "module_id", "in": "query", "schema": { "type": "string" }, "description": "Filter by module ID." }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of findings.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FindingListResponse" } } }
+          },
+          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/findings/{id}": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+      ],
+      "get": {
+        "summary": "Get a finding by ID",
+        "operationId": "getFinding",
+        "tags": ["Findings"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Finding details.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Finding" } } }
+          },
+          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Finding not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      },
+      "patch": {
+        "summary": "Update finding triage status",
+        "operationId": "updateFinding",
+        "tags": ["Findings"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateFindingRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated finding.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Finding" } } }
+          },
+          "400": { "description": "Invalid body.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "404": { "description": "Finding not found.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "422": { "description": "Invalid status value.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/specs/upload": {
+      "post": {
+        "summary": "Upload an OpenAPI spec file",
+        "operationId": "uploadSpec",
+        "tags": ["Specs"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "spec": { "type": "string", "format": "binary", "description": "OpenAPI spec file (YAML or JSON)." }
+                },
+                "required": ["spec"]
+              }
+            },
+            "application/octet-stream": {
+              "schema": { "type": "string", "format": "binary" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Spec stored; use spec_path in POST /scans.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/UploadResponse" } } }
+          },
+          "400": { "description": "Invalid or missing file.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "422": { "description": "Empty spec content.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/audit": {
+      "get": {
+        "summary": "List audit log entries",
+        "operationId": "listAudit",
+        "tags": ["Audit"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "per_page", "in": "query", "schema": { "type": "integer", "default": 50 } },
+          { "name": "actor_id", "in": "query", "schema": { "type": "string" } },
+          { "name": "action", "in": "query", "schema": { "type": "string" }, "description": "Filter by audit action type." },
+          { "name": "resource_type", "in": "query", "schema": { "type": "string" }, "description": "Filter by resource type (e.g. scans, findings)." },
+          { "name": "resource_id", "in": "query", "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of audit log entries. Total count in X-Total-Count header.",
+            "headers": {
+              "X-Total-Count": { "schema": { "type": "integer" }, "description": "Total number of matching entries." }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/AuditLog" }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    }
+  }
+}

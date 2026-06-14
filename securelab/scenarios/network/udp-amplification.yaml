@@ -1,0 +1,14 @@
+name: udp-amplification
+description: "UDP flood simulation — high-volume UDP packet flood to validate volumetric DDoS detection"
+mitre_technique_ids: ["T1498.001"]
+tags: [network, dos, udp-flood]
+severity: high
+timeout: 2m
+steps:
+  - kind: udp_flood
+    params:
+      target_port: 53
+      packets_per_second: 50000
+      packet_size_bytes: 512
+      duration: 30s
+      payload_type: random

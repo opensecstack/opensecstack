@@ -1,0 +1,88 @@
+opensecstack has been deployed successfully!
+
+Release:   {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+Chart:     {{ .Chart.Name }}-{{ .Chart.Version }}
+
+─────────────────────────────────────────────────────────────────────────────
+Services
+─────────────────────────────────────────────────────────────────────────────
+
+  APIGuard
+  {{- if .Values.apiguard.ingress.enabled }}
+    URL:  https://{{ .Values.apiguard.ingress.host }}
+  {{- else }}
+    Ingress disabled. Access via port-forward:
+      kubectl port-forward -n {{ .Release.Namespace }} \
+        svc/{{ include "opensecstack.fullname" . }}-apiguard {{ .Values.apiguard.service.port }}:{{ .Values.apiguard.service.port }}
+    then open http://localhost:{{ .Values.apiguard.service.port }}
+  {{- end }}
+
+  NIS2 Compass
+  {{- if .Values.nis2compass.ingress.enabled }}
+    URL:  https://{{ .Values.nis2compass.ingress.host }}
+  {{- else }}
+    Ingress disabled. Access via port-forward:
+      kubectl port-forward -n {{ .Release.Namespace }} \
+        svc/{{ include "opensecstack.fullname" . }}-nis2compass {{ .Values.nis2compass.service.port }}:{{ .Values.nis2compass.service.port }}
+    then open http://localhost:{{ .Values.nis2compass.service.port }}
+  {{- end }}
+
+  CITADEL
+    Internal ClusterIP only — no Ingress configured.
+    Port-forward for local access:
+      kubectl port-forward -n {{ .Release.Namespace }} \
+        svc/{{ include "opensecstack.fullname" . }}-citadel {{ .Values.citadel.service.port }}:{{ .Values.citadel.service.port }}
+
+─────────────────────────────────────────────────────────────────────────────
+TLS / cert-manager
+─────────────────────────────────────────────────────────────────────────────
+{{- if .Values.certManager.enabled }}
+  ClusterIssuer:  {{ .Values.certManager.issuerType }}
+  Contact email:  {{ .Values.certManager.email }}
+
+  cert-manager must already be installed in the cluster:
+    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+
+  Check certificate status:
+    kubectl get certificate -n {{ .Release.Namespace }}
+    kubectl describe certificaterequest -n {{ .Release.Namespace }}
+
+  NOTE: if issuerType is "letsencrypt-staging", certificates will not be
+  trusted by browsers. Change to "letsencrypt-prod" once staging validates
+  successfully.
+{{- else }}
+  cert-manager is disabled (certManager.enabled=false).
+  TLS secrets must be provisioned manually.
+{{- end }}
+
+─────────────────────────────────────────────────────────────────────────────
+HorizontalPodAutoscaler
+─────────────────────────────────────────────────────────────────────────────
+{{- if .Values.hpa.enabled }}
+  HPAs are active for APIGuard and NIS2 Compass.
+    Min replicas:  {{ .Values.hpa.minReplicas }}
+    Max replicas:  {{ .Values.hpa.maxReplicas }}
+    CPU threshold: {{ .Values.hpa.cpuThreshold }}%
+
+  Check HPA status:
+    kubectl get hpa -n {{ .Release.Namespace }}
+{{- else }}
+  HPAs are disabled (hpa.enabled=false).
+  Deployments use fixed replica counts.
+{{- end }}
+
+─────────────────────────────────────────────────────────────────────────────
+Secrets (must be created before the first install)
+─────────────────────────────────────────────────────────────────────────────
+  kubectl create secret generic opensecstack-db-secrets \
+    --from-literal=POSTGRES_PASSWORD=<changeme> \
+    --from-literal=NIS2_DB_PASSWORD=<changeme> \
+    -n {{ .Release.Namespace }}
+
+  kubectl create secret generic opensecstack-app-secrets \
+    --from-literal=REDIS_PASSWORD=<changeme> \
+    --from-literal=APIGUARD_JWT_SECRET=<changeme> \
+    --from-literal=NIS2_SECRET_KEY=<changeme> \
+    --from-literal=NIS2_JWT_SECRET=<changeme> \
+    -n {{ .Release.Namespace }}

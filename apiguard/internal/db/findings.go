@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -60,6 +61,9 @@ func (d *DB) CreateFinding(ctx context.Context, finding *Finding) error {
 
 // CreateFindings inserts multiple findings in a single batch operation.
 func (d *DB) CreateFindings(ctx context.Context, findings []Finding) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	if len(findings) == 0 {
 		return nil
 	}
@@ -120,6 +124,9 @@ func (d *DB) GetFinding(ctx context.Context, id uuid.UUID) (*Finding, error) {
 // ListFindings returns a filtered, paginated list of findings.
 // It returns the findings, the total count matching the filters, and any error.
 func (d *DB) ListFindings(ctx context.Context, filters FindingFilters, limit, offset int) ([]Finding, int, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	const maxPageSize = 100
 	if limit <= 0 || limit > maxPageSize {
 		limit = maxPageSize
@@ -208,14 +215,14 @@ func (d *DB) ListFindings(ctx context.Context, filters FindingFilters, limit, of
 	return findings, total, nil
 }
 
-// UpdateFindingStatus updates the triage status and note on a finding.
-func (d *DB) UpdateFindingStatus(ctx context.Context, id uuid.UUID, status FindingStatus, note string) error {
+// UpdateFindingStatus updates the triage status, note, and actor on a finding.
+func (d *DB) UpdateFindingStatus(ctx context.Context, id uuid.UUID, status FindingStatus, note, actorID string) error {
 	query := `
 		UPDATE findings
-		SET status = $1, triage_note = $2, triaged_at = NOW(), updated_at = NOW()
-		WHERE id = $3`
+		SET status = $1, triage_note = $2, triaged_by = $3, triaged_at = NOW(), updated_at = NOW()
+		WHERE id = $4`
 
-	ct, err := d.Pool.Exec(ctx, query, status, note, id)
+	ct, err := d.Pool.Exec(ctx, query, status, note, actorID, id)
 	if err != nil {
 		return fmt.Errorf("updating finding status: %w", err)
 	}

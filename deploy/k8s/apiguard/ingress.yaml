@@ -1,0 +1,32 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: apiguard-ingress
+  namespace: opensecstack
+  labels:
+    app: apiguard
+    app.kubernetes.io/part-of: opensecstack
+  annotations:
+    # Allow larger request bodies for OpenAPI spec file uploads
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # cert-manager will provision and renew the TLS certificate automatically.
+    # Switch to letsencrypt-staging first to validate, then change to letsencrypt-prod.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: apiguard.opensecstack.local   # Replace with your actual hostname
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: apiguard-service
+                port:
+                  number: 8080
+  tls:
+    - hosts:
+        - apiguard.opensecstack.local     # Must match the host above
+      secretName: apiguard-tls            # cert-manager will create this secret

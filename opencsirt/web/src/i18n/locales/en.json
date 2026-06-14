@@ -1,0 +1,152 @@
+{
+  "common": {
+    "app_name": "OpenCSIRT",
+    "tagline": "National/sector CSIRT operations",
+    "nav": {
+      "constituencies": "Constituencies",
+      "incidents": "Incidents",
+      "advisories": "Advisories",
+      "peers": "Peers",
+      "metrics": "Metrics",
+      "logout": "Log out"
+    },
+    "actions": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "refresh": "Refresh",
+      "submit": "Submit",
+      "login": "Log in",
+      "create": "Create",
+      "publish": "Publish",
+      "withdraw": "Withdraw",
+      "handshake": "Handshake"
+    },
+    "labels": {
+      "username": "Username",
+      "password": "Password",
+      "loading": "Loading…",
+      "empty": "No results",
+      "error": "Error",
+      "page": "Page"
+    },
+    "footer": "OpenCSIRT v{{version}} · AGPL-3.0"
+  },
+  "constituencies": {
+    "title": "Constituency directory",
+    "add_title": "Add constituency entry",
+    "fields": {
+      "name": "Name",
+      "kind": "Kind",
+      "sector": "Sector",
+      "tlp_default": "Default TLP",
+      "primary_contact": "Primary contact",
+      "secondary_contact": "Secondary contact",
+      "created_at": "Created"
+    },
+    "kinds": {
+      "essential": "Essential entity",
+      "important": "Important entity",
+      "out_of_scope": "Out of scope"
+    }
+  },
+  "incidents": {
+    "title": "Incidents",
+    "fields": {
+      "id": "Incident ID",
+      "title": "Title",
+      "source": "Source",
+      "severity": "Severity",
+      "constituency": "Constituency",
+      "status": "Status",
+      "created_at": "Opened"
+    },
+    "statuses": {
+      "open": "Open",
+      "triaged": "Triaged",
+      "contained": "Contained",
+      "closed": "Closed"
+    },
+    "severities": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "critical": "Critical"
+    }
+  },
+  "advisories": {
+    "title": "Advisories",
+    "draft_title": "Draft advisory",
+    "fields": {
+      "id": "Advisory ID",
+      "title": "Title",
+      "csaf_id": "CSAF tracking id",
+      "tlp": "TLP",
+      "state": "State",
+      "version": "Version",
+      "published_at": "Published",
+      "withdrawn_at": "Withdrawn"
+    },
+    "states": {
+      "draft": "Draft",
+      "published": "Published",
+      "withdrawn": "Withdrawn"
+    },
+    "preview": "CSAF preview",
+    "publish_warning": "Publishing emits CITADEL evidence and pushes a STIX bundle to ThreatFlow. This action is logged and cannot be undone (only superseded by a new revision).",
+    "withdraw_warning": "Withdrawing marks the advisory as no longer valid. This action is logged and cannot be undone."
+  },
+  "peers": {
+    "title": "Peer CSIRTs",
+    "fields": {
+      "name": "Name",
+      "country": "Country",
+      "registry": "Registry",
+      "trust": "Trust",
+      "last_handshake": "Last handshake",
+      "fingerprint": "Ed25519 fingerprint"
+    },
+    "trust": {
+      "verified": "Verified",
+      "pending": "Pending",
+      "failed": "Failed",
+      "expired": "Expired"
+    }
+  },
+  "metrics": {
+    "title": "Metrics",
+    "source": "Source: GET /api/v1/metrics/snapshot. Prometheus exposition is on /api/v1/metrics (JWT-gated).",
+    "node": "Node",
+    "sections": {
+      "incidents": "Incidents",
+      "advisories": "Advisories",
+      "system": "System"
+    },
+    "incident_status": {
+      "open": "Open",
+      "triaged": "Triaged",
+      "contained": "Contained",
+      "closed": "Closed"
+    },
+    "advisory_state": {
+      "draft": "Draft",
+      "published": "Published",
+      "withdrawn": "Withdrawn"
+    },
+    "cards": {
+      "outbox_pending": "CITADEL queue (pending)",
+      "outbox_failed": "CITADEL queue (failed)",
+      "iocs_last_bundle_size": "Last IOC bundle",
+      "advisory_service_up": "Advisory subsystem"
+    },
+    "bool": {
+      "yes": "ok",
+      "no": "down"
+    }
+  },
+  "not_found": {
+    "title": "404",
+    "body": "Page not found.",
+    "back": "Back to incidents"
+  }
+}

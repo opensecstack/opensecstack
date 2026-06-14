@@ -26,7 +26,7 @@ The definitive reference for what APIGuard tests, how it tests it, what it canno
 | `a3_mass_assignment` | Enabled | |
 | `a4_rate_limiting` | Enabled | |
 | `a5_function_auth` | Enabled | Best results when schema tags admin endpoints |
-| `a6_business_flow` | **Disabled** | Requires manual configuration of sensitive endpoints |
+| `a6_sensitive_flows` | **Disabled** | Requires manual configuration of sensitive endpoints |
 | `a7_ssrf` | Enabled | Best with OAST/out-of-band detection configured |
 | `a8_misconfig` | Enabled | |
 | `a9_inventory` | Enabled | |

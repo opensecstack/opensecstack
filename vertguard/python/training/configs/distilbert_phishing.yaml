@@ -1,0 +1,14 @@
+# Binary phishing classifier (CLEAN vs malicious). Longer seq for full emails.
+model:
+  name: distilbert-base-uncased
+  num_labels: 2
+train:
+  lr: 2e-5
+  batch_size: 8
+  epochs: 3
+  weight_decay: 0.01
+  max_seq_len: 512
+  warmup_ratio: 0.1
+data:
+  corpus_path: ../../internal/prompt/corpus/corpus.jsonl
+  augment_factor: 2

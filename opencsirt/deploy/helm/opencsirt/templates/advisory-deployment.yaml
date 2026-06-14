@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "opencsirt.fullname" . }}-advisory
+  labels:
+    {{- include "opencsirt.labels" . | nindent 4 }}
+    app.kubernetes.io/component: advisory
+spec:
+  replicas: {{ .Values.advisory.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "opencsirt.name" . }}
+      app.kubernetes.io/component: advisory
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "opencsirt.name" . }}
+        app.kubernetes.io/component: advisory
+    spec:
+      containers:
+        - name: advisory
+          image: "{{ .Values.image.registry }}/{{ .Values.image.advisory.repository }}:{{ .Values.image.advisory.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.advisory.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.advisory.service.port }}
+          env:
+            # OPENCSIRT_PY_* match the Python service's pydantic-settings
+            # prefix (OPENCSIRT_PY_) defined in config.py.
+            - name: OPENCSIRT_PY_HOST
+              value: "0.0.0.0"
+            - name: OPENCSIRT_PY_PORT
+              value: "{{ .Values.advisory.service.port }}"
+            - name: OPENCSIRT_PY_LOG_LEVEL
+              value: {{ .Values.advisory.logLevel | default "INFO" | quote }}
+            - name: OPENCSIRT_PY_REDIS_URL
+              value: {{ .Values.advisory.redisUrl | default "redis://opencsirt-redis:6379/0" | quote }}
+            # Advisory subsystem validates tokens minted by the Go API.
+            - name: OPENCSIRT_PY_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "opencsirt.secretName" . }}
+                  key: jwtSecret
+            - name: OPENCSIRT_PY_JWT_ISSUER
+              value: "opencsirt"
+          resources:
+            {{- toYaml .Values.advisory.resources | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "opencsirt.fullname" . }}-advisory
+  labels:
+    {{- include "opencsirt.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.advisory.service.type }}
+  ports:
+    - port: {{ .Values.advisory.service.port }}
+      targetPort: http
+      name: http
+  selector:
+    app.kubernetes.io/name: {{ include "opencsirt.name" . }}
+    app.kubernetes.io/component: advisory
+{{- if .Values.networkPolicy.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opencsirt.fullname" . }}-advisory
+  labels:
+    {{- include "opencsirt.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "opencsirt.name" . }}
+      app.kubernetes.io/component: advisory
+  policyTypes: [Ingress]
+  # Loopback-only equivalent: only the api Pods may talk to the
+  # advisory subsystem. NIS2 / TLP:RED traffic must never traverse
+  # the cluster's public surface.
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ include "opencsirt.name" . }}
+              app.kubernetes.io/component: api
+      ports:
+        - protocol: TCP
+          port: {{ .Values.advisory.service.port }}
+{{- end }}

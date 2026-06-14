@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -20,8 +21,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/opensecstack/apiguard/internal/auth"
 	"github.com/opensecstack/apiguard/internal/config"
+	"github.com/opensecstack/apiguard/internal/customrules"
 	"github.com/opensecstack/apiguard/internal/domain"
+	"github.com/opensecstack/apiguard/internal/modules"
+	"github.com/opensecstack/apiguard/internal/testgen"
 )
 
 // Scanner performs API security scans.
@@ -43,6 +48,7 @@ type ScanRequest struct {
 	SpecPath      string
 	Target        string
 	AllowInternal bool
+	TLSSkipVerify bool
 	Modules       []string
 	Auth          AuthConfig
 }
@@ -331,7 +337,7 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 
 	// Store pinned transport for use by scan modules (prevents DNS rebinding).
 	if parsedURL, err := url.Parse(req.Target); err == nil && len(validatedIPs) > 0 {
-		s.transport = CreatePinnedTransport(parsedURL.Hostname(), validatedIPs, false)
+		s.transport = CreatePinnedTransport(parsedURL.Hostname(), validatedIPs, req.TLSSkipVerify)
 	}
 
 	// Validate and sanitize the spec file path (open-then-stat to avoid TOCTOU).
@@ -363,20 +369,176 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 		Int("endpoint_count", len(parsedSpec.Endpoints)).
 		Msg("spec parsed successfully")
 
-	// Step 3: Return stub results (real scan modules will be wired in later).
+	// Step 2b: Initialise the auth handler from the scan request credentials.
+	authCfg := auth.Config{
+		Type:  auth.TokenType(req.Auth.Type),
+		Token: req.Auth.Token,
+	}
+	authHandler, err := auth.NewHandler(authCfg, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create auth handler: %w", err)
+	}
+
+	// Step 3: Generate test cases from the parsed IR.
+	// The IR file path is the same temp file pattern used by parseSpec; we need to
+	// re-serialize the parsed spec to a temp file for the testgen to consume.
+	irTmpPath, err := s.writeIRToTempFile(parsedSpec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write IR for test generation: %w", err)
+	}
+	defer os.Remove(irTmpPath)
+
+	testGen := testgen.New(s.logger, req.Target, req.Modules)
+	suite, err := testGen.Generate(ctx, irTmpPath)
+	if err != nil {
+		return nil, fmt.Errorf("test generation failed: %w", err)
+	}
+	s.logger.Info().Int("test_cases", len(suite.TestCases)).Msg("test cases generated")
+
+	// Capture the spec hash from the test suite; fall back to computing it from the raw spec bytes.
+	specHash := suite.SpecHash
+	if specHash == "" {
+		sum := sha256.Sum256(specData)
+		specHash = fmt.Sprintf("%x", sum)
+	}
+
+	// Step 4: Execute scan modules against the test suite.
+
+	// Build the HTTP executor using the pinned transport (prevents DNS rebinding).
+	httpExec := modules.NewDefaultExecutor(s.transport, 30*time.Second)
+
+	// Build the auth config for modules from the scan request credentials.
+	// Generate a synthetic "other user" JWT so BOLA cross-user tests can run
+	// even when the caller didn't supply a second token explicitly.
+	authConfig := &modules.AuthConfig{
+		Type:  req.Auth.Type,
+		Token: req.Auth.Token,
+	}
+	if otherToken, genErr := authHandler.GenerateOtherUserToken("apiguard-probe-user-2"); genErr == nil {
+		authConfig.OtherTokens = []string{otherToken}
+	} else {
+		s.logger.Warn().Err(genErr).Msg("could not generate other-user token for BOLA cross-user tests")
+	}
+
+	// Convert testgen.TestSuite cases to modules.TestSuite cases.
+	modSuite := modules.TestSuite{Cases: make([]modules.TestCase, 0, len(suite.TestCases))}
+	for _, tc := range suite.TestCases {
+		// Flatten the first request's headers and body for use by modules.
+		var headers map[string]string
+		var body []byte
+		if len(tc.Requests) > 0 {
+			first := tc.Requests[0]
+			headers = make(map[string]string, len(first.Headers))
+			for _, h := range first.Headers {
+				if len(h) == 2 {
+					headers[h[0]] = h[1]
+				}
+			}
+			if len(first.Body) > 0 && string(first.Body) != "null" {
+				body = first.Body
+			}
+		}
+		modSuite.Cases = append(modSuite.Cases, modules.TestCase{
+			ID:       tc.ID,
+			Category: tc.Category,
+			Method:   tc.EndpointMethod,
+			Path:     tc.EndpointPath,
+			Headers:  headers,
+			Body:     body,
+		})
+	}
+
+	// Build an enabled-module set for fast lookup (empty = run all).
+	enabledModules := make(map[string]bool, len(req.Modules))
+	for _, id := range req.Modules {
+		enabledModules[id] = true
+	}
+
+	registry := modules.NewRegistry()
+
+	// Load and register custom rules if a directory has been configured.
+	if dir := s.config.CustomRulesDir; dir != "" {
+		rules, loadErr := customrules.LoadRulesFromDir(dir)
+		if loadErr != nil {
+			// Log the error but do not abort the scan — built-in modules still run.
+			s.logger.Warn().Err(loadErr).Str("custom_rules_dir", dir).Msg("errors loading custom rules")
+		}
+		if len(rules) > 0 {
+			validationErrs := customrules.Validate(rules)
+			for _, ve := range validationErrs {
+				s.logger.Warn().Err(ve).Msg("custom rule validation warning")
+			}
+			for _, rule := range rules {
+				if !rule.Enabled {
+					s.logger.Debug().Str("rule_id", rule.ID).Msg("skipping disabled custom rule")
+					continue
+				}
+				registry.Register(customrules.NewModule(rule))
+				s.logger.Info().Str("rule_id", rule.ID).Str("name", rule.Name).Msg("custom rule registered")
+			}
+		}
+	}
+
+	var allFindings []domain.Finding
+
+	moduleTimeout := 60 * time.Second
+	if n := len(registry.All()); n > 0 {
+		if t := s.config.Timeout / time.Duration(n); t > moduleTimeout {
+			moduleTimeout = t
+		}
+	}
+
+	for _, mod := range registry.All() {
+		if len(enabledModules) > 0 && !enabledModules[mod.ID()] {
+			continue
+		}
+
+		s.logger.Info().Str("module", mod.ID()).Msg("running module")
+
+		modCtx, modCancel := context.WithTimeout(ctx, moduleTimeout)
+		modFindings, modErr := mod.Run(modCtx, httpExec, modSuite, req.Target, authConfig)
+		modCancel()
+		if modErr != nil {
+			s.logger.Error().Err(modErr).Str("module", mod.ID()).Msg("module execution failed")
+			continue
+		}
+
+		s.logger.Info().
+			Str("module", mod.ID()).
+			Int("findings", len(modFindings)).
+			Msg("module completed")
+
+		allFindings = append(allFindings, modFindings...)
+	}
+
+	// Compute summary counts.
+	summary := domain.ScanSummary{TotalFindings: len(allFindings)}
+	for _, f := range allFindings {
+		switch f.Severity {
+		case domain.SeverityCritical:
+			summary.Critical++
+		case domain.SeverityHigh:
+			summary.High++
+		case domain.SeverityMedium:
+			summary.Medium++
+		case domain.SeverityLow:
+			summary.Low++
+		case domain.SeverityInfo:
+			summary.Info++
+		}
+	}
+
+	if allFindings == nil {
+		allFindings = []domain.Finding{}
+	}
+
 	result := &domain.ScanResult{
 		ID:          scanID,
 		Status:      domain.ScanStatusCompleted,
 		Target:      req.Target,
-		Findings:    []domain.Finding{},
-		Summary: domain.ScanSummary{
-			TotalFindings: 0,
-			Critical:      0,
-			High:          0,
-			Medium:        0,
-			Low:           0,
-			Info:          0,
-		},
+		SpecHash:    specHash,
+		Findings:    allFindings,
+		Summary:     summary,
 		StartedAt:   startedAt,
 		CompletedAt: time.Now(),
 	}
@@ -384,6 +546,7 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 	s.logger.Info().
 		Str("scan_id", scanID).
 		Str("status", string(result.Status)).
+		Int("findings", len(allFindings)).
 		Dur("duration", result.CompletedAt.Sub(result.StartedAt)).
 		Msg("scan completed")
 
@@ -432,4 +595,22 @@ func (s *Scanner) parseSpec(ctx context.Context, specPath string) (*ParsedSpec, 
 	}
 
 	return &parsed, nil
+}
+
+// writeIRToTempFile serializes the parsed spec to a temporary JSON file
+// so the testgen package can consume it.
+func (s *Scanner) writeIRToTempFile(spec *ParsedSpec) (string, error) {
+	data, err := json.Marshal(spec)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal IR: %w", err)
+	}
+
+	tmpDir := os.TempDir()
+	outputPath := filepath.Join(tmpDir, fmt.Sprintf("apiguard-ir-%s.json", uuid.New().String()))
+
+	if err := os.WriteFile(outputPath, data, 0600); err != nil {
+		return "", fmt.Errorf("failed to write IR temp file: %w", err)
+	}
+
+	return outputPath, nil
 }

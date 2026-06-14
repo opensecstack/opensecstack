@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased;
+}
+
+@media print {
+  /* Hide everything except the article */
+  header, nav, footer,
+  aside,
+  [data-print="hide"],
+  .notification-bell,
+  .back-to-top,
+  .install-prompt {
+    display: none !important;
+  }
+
+  /* Remove backgrounds, shadows */
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Make article full width */
+  main, article, .prose {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Code blocks: wrap instead of scroll */
+  pre {
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    border: 1px solid #ccc !important;
+    padding: 8px !important;
+    background: #f5f5f5 !important;
+    color: black !important;
+  }
+
+  /* Links: show URL after link text */
+  a[href]:after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #555;
+  }
+  /* But not for internal nav links or buttons */
+  a[href^="#"]:after,
+  a[href^="/"]:after {
+    content: "";
+  }
+
+  /* Page breaks */
+  h2, h3 { page-break-after: avoid; }
+  pre, blockquote, img { page-break-inside: avoid; }
+
+  /* Force black text on all elements */
+  * {
+    color: black !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Images: max width */
+  img {
+    max-width: 100% !important;
+  }
+}

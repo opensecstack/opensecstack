@@ -1,0 +1,139 @@
+﻿{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "serialNumber": "urn:uuid:4a7b2c1d-e3f4-4a5b-8c6d-9e0f1a2b3c4d",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-05-10T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "opensecstack",
+        "name": "securelab-sbom-gen",
+        "version": "1.0.0"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "bom-ref": "securelab@1.0.0",
+      "name": "securelab",
+      "version": "1.0.0",
+      "description": "Attack simulation and detection validation platform",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:github/opensecstack/securelab@1.0.0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/stdlib@1.22.0",
+      "name": "Go runtime",
+      "version": "1.22.0",
+      "description": "Go programming language standard library",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "purl": "pkg:golang/stdlib@1.22.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/go-chi/chi@5.0.12",
+      "name": "chi",
+      "group": "github.com/go-chi",
+      "version": "5.0.12",
+      "description": "Lightweight, idiomatic Go HTTP router",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:golang/github.com/go-chi/chi@5.0.12"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/jackc/pgx@5.5.5",
+      "name": "pgx",
+      "group": "github.com/jackc",
+      "version": "5.5.5",
+      "description": "PostgreSQL driver and toolkit for Go",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:golang/github.com/jackc/pgx@5.5.5"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/go.uber.org/zap@1.27.0",
+      "name": "zap",
+      "group": "go.uber.org",
+      "version": "1.27.0",
+      "description": "Blazing fast, structured, leveled logging in Go",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:golang/go.uber.org/zap@1.27.0"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/react@18.3.1",
+      "name": "react",
+      "version": "18.3.1",
+      "description": "React JavaScript library for building user interfaces",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/react@18.3.1"
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/tailwindcss@3.4.4",
+      "name": "tailwindcss",
+      "version": "3.4.4",
+      "description": "A utility-first CSS framework",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "purl": "pkg:npm/tailwindcss@3.4.4"
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "securelab@1.0.0",
+      "dependsOn": [
+        "pkg:golang/stdlib@1.22.0",
+        "pkg:golang/github.com/go-chi/chi@5.0.12",
+        "pkg:golang/github.com/jackc/pgx@5.5.5",
+        "pkg:golang/go.uber.org/zap@1.27.0",
+        "pkg:npm/react@18.3.1",
+        "pkg:npm/tailwindcss@3.4.4"
+      ]
+    }
+  ]
+}

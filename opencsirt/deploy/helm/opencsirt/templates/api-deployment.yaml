@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "opencsirt.fullname" . }}-api
+  labels:
+    {{- include "opencsirt.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "opencsirt.name" . }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "opencsirt.name" . }}
+        app.kubernetes.io/component: api
+    spec:
+      containers:
+        - name: api
+          image: "{{ .Values.image.registry }}/{{ .Values.image.api.repository }}:{{ .Values.image.api.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.api.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.service.port }}
+          env:
+            {{- $secret := include "opencsirt.secretName" . }}
+            - name: OPENCSIRT_HTTP_ADDR
+              value: ":{{ .Values.api.service.port }}"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: {{ $secret }}, key: postgresPassword }
+            - name: OPENCSIRT_DB_URL
+              value: "postgres://{{ .Values.postgres.user }}:$(POSTGRES_PASSWORD)@{{ include "opencsirt.fullname" . }}-postgres:5432/{{ .Values.postgres.database }}?sslmode=disable"
+            - name: OPENCSIRT_JWT_SECRET
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: jwtSecret } }
+            - name: OPENCSIRT_PASSWORD_PEPPER
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: passwordPepper } }
+            - name: OPENCSIRT_USERS
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: users, optional: true } }
+            - name: OPENCSIRT_ADVISORY_SERVICE_URL
+              value: "http://{{ include "opencsirt.fullname" . }}-advisory:{{ .Values.advisory.service.port }}"
+            - name: OPENCSIRT_NODE
+              value: {{ .Values.env.node | quote }}
+            - name: OPENCSIRT_TOKEN_TTL
+              value: {{ .Values.env.tokenTtl | quote }}
+            - name: OPENCSIRT_IRFLOW_WEBHOOK_SECRET
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: irflowWebhookSecret, optional: true } }
+            - name: OPENCSIRT_IRFLOW_STRICT_SEVERITY
+              value: {{ .Values.env.irflowStrictSeverity | quote }}
+            - name: OPENCSIRT_THREATFLOW_API_URL
+              value: {{ .Values.env.threatflowApiUrl | quote }}
+            - name: OPENCSIRT_THREATFLOW_API_KEY
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: threatflowApiKey, optional: true } }
+            - name: OPENCSIRT_THREATFLOW_INTERVAL
+              value: {{ .Values.env.threatflowInterval | quote }}
+            - name: OPENCSIRT_NIS2COMPASS_API_URL
+              value: {{ .Values.env.nis2compassApiUrl | quote }}
+            - name: OPENCSIRT_VERTGUARD_API_URL
+              value: {{ .Values.env.vertguardApiUrl | quote }}
+            - name: OPENCSIRT_VERTGUARD_API_KEY
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: vertguardApiKey, optional: true } }
+            - name: OPENCSIRT_CITADEL_API_URL
+              value: {{ .Values.env.citadelApiUrl | quote }}
+            - name: OPENCSIRT_CITADEL_KEY_ID
+              value: {{ .Values.env.citadelKeyId | quote }}
+            - name: OPENCSIRT_CITADEL_DRY_RUN
+              value: {{ .Values.env.citadelDryRun | quote }}
+            # OPENCSIRT_CITADEL_HMAC_SECRETS (plural) is what config.go reads.
+            - name: OPENCSIRT_CITADEL_HMAC_SECRETS
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: citadelHmacSecret, optional: true } }
+            - name: OPENCSIRT_ADVISORY_SERVICE_JWT
+              valueFrom: { secretKeyRef: { name: {{ $secret }}, key: advisoryServiceJwt, optional: true } }
+            - name: OPENCSIRT_OUTBOX_TICK
+              value: {{ .Values.env.outboxTick | quote }}
+            - name: OPENCSIRT_DB_MAX_CONNS
+              value: {{ .Values.env.dbMaxConns | quote }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          readinessProbe:
+            httpGet: { path: /api/v1/health, port: http }
+          livenessProbe:
+            httpGet: { path: /api/v1/health, port: http }
+            initialDelaySeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "opencsirt.fullname" . }}-api
+  labels:
+    {{- include "opencsirt.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.api.service.type }}
+  ports:
+    - port: {{ .Values.api.service.port }}
+      targetPort: http
+      name: http
+  selector:
+    app.kubernetes.io/name: {{ include "opencsirt.name" . }}
+    app.kubernetes.io/component: api

@@ -1,0 +1,15 @@
+/* TEAM */
+Project: opensecstack
+Contributors: opensecstack contributors
+GitHub: https://github.com/opensecstack
+
+/* TECHNOLOGY */
+Language: Go, Python, TypeScript
+Backend: APIGuard (Go), NIS2 Compass (Python/Flask), CITADEL (Go)
+Frontend: React + Vite, static HTML
+Database: PostgreSQL, Redis
+License: Apache-2.0
+
+/* SITE */
+Last update: 2026-03-31
+Standards: HTML5, CSS3

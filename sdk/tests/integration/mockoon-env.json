@@ -1,0 +1,58 @@
+{
+  "uuid": "sdk-integration-test",
+  "lastMigration": 32,
+  "name": "OpenSecStack Mock API",
+  "endpointPrefix": "api/v1",
+  "latency": 0,
+  "port": 3000,
+  "routes": [
+    {
+      "uuid": "route-health",
+      "method": "get",
+      "endpoint": "health",
+      "responses": [{"uuid": "r1", "statusCode": 200, "body": "{\"status\":\"ok\",\"version\":\"1.0.0\"}", "headers": [{"key":"Content-Type","value":"application/json"}]}]
+    },
+    {
+      "uuid": "route-auth",
+      "method": "post",
+      "endpoint": "auth/token",
+      "responses": [{"uuid": "r2", "statusCode": 200, "body": "{\"access_token\":\"integ-test-token\",\"refresh_token\":\"refresh-tok\",\"expires_in\":3600}", "headers": [{"key":"Content-Type","value":"application/json"}]}]
+    },
+    {
+      "uuid": "route-scans-list",
+      "method": "get",
+      "endpoint": "scans",
+      "responses": [{"uuid": "r3", "statusCode": 200, "body": "[{\"id\":\"11111111-1111-1111-1111-111111111111\",\"target_url\":\"https://api.example.com\",\"status\":\"completed\",\"modules\":[],\"total_findings\":2,\"critical_count\":1,\"high_count\":1,\"medium_count\":0,\"low_count\":0,\"info_count\":0,\"created_at\":\"2025-01-01T00:00:00Z\",\"updated_at\":\"2025-01-01T00:00:00Z\"}]", "headers": [{"key":"Content-Type","value":"application/json"}]}]
+    },
+    {
+      "uuid": "route-scan-create",
+      "method": "post",
+      "endpoint": "scans",
+      "responses": [{"uuid": "r4", "statusCode": 201, "body": "{\"id\":\"22222222-2222-2222-2222-222222222222\",\"target_url\":\"https://api.example.com\",\"status\":\"pending\",\"modules\":[],\"total_findings\":0,\"critical_count\":0,\"high_count\":0,\"medium_count\":0,\"low_count\":0,\"info_count\":0,\"created_at\":\"2025-01-01T00:00:00Z\",\"updated_at\":\"2025-01-01T00:00:00Z\"}", "headers": [{"key":"Content-Type","value":"application/json"}]}]
+    },
+    {
+      "uuid": "route-scan-get",
+      "method": "get",
+      "endpoint": "scans/:id",
+      "responses": [{"uuid": "r5", "statusCode": 200, "body": "{\"id\":\"11111111-1111-1111-1111-111111111111\",\"target_url\":\"https://api.example.com\",\"status\":\"completed\",\"modules\":[],\"total_findings\":2,\"critical_count\":1,\"high_count\":1,\"medium_count\":0,\"low_count\":0,\"info_count\":0,\"created_at\":\"2025-01-01T00:00:00Z\",\"updated_at\":\"2025-01-01T00:00:00Z\"}", "headers": [{"key":"Content-Type","value":"application/json"}]}]
+    },
+    {
+      "uuid": "route-findings",
+      "method": "get",
+      "endpoint": "scans/:id/findings",
+      "responses": [{"uuid": "r6", "statusCode": 200, "body": "[{\"id\":\"33333333-3333-3333-3333-333333333333\",\"scan_id\":\"11111111-1111-1111-1111-111111111111\",\"owasp_id\":\"API1:2023\",\"module_id\":\"a1_bola\",\"title\":\"BOLA Detected\",\"description\":\"Broken Object Level Authorization\",\"severity\":\"critical\",\"cvss_score\":9.1,\"endpoint_path\":\"/users/{id}\",\"endpoint_method\":\"GET\",\"status\":\"open\",\"created_at\":\"2025-01-01T00:00:00Z\",\"updated_at\":\"2025-01-01T00:00:00Z\"}]", "headers": [{"key":"Content-Type","value":"application/json"}]}]
+    },
+    {
+      "uuid": "route-orgs-create",
+      "method": "post",
+      "endpoint": "organisations",
+      "responses": [{"uuid": "r7", "statusCode": 201, "body": "{\"id\":\"44444444-4444-4444-4444-444444444444\",\"name\":\"Test Org\",\"industry\":\"technology\",\"country\":\"DE\",\"created_at\":\"2025-01-01T00:00:00Z\",\"updated_at\":\"2025-01-01T00:00:00Z\"}", "headers": [{"key":"Content-Type","value":"application/json"}]}]
+    },
+    {
+      "uuid": "route-assessments-create",
+      "method": "post",
+      "endpoint": "organisations/:id/assessments",
+      "responses": [{"uuid": "r8", "statusCode": 201, "body": "{\"id\":\"55555555-5555-5555-5555-555555555555\",\"organisation_id\":\"44444444-4444-4444-4444-444444444444\",\"title\":\"Q1 Assessment\",\"status\":\"draft\",\"framework_version\":\"NIS2-2022\",\"created_at\":\"2025-01-01T00:00:00Z\",\"updated_at\":\"2025-01-01T00:00:00Z\",\"stats\":{\"total\":10,\"compliant\":0,\"partially_compliant\":0,\"non_compliant\":0,\"not_applicable\":0,\"not_assessed\":10,\"compliance_pct\":0.0}}", "headers": [{"key":"Content-Type","value":"application/json"}]}]
+    }
+  ]
+}

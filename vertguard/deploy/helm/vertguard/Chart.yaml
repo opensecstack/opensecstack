@@ -1,0 +1,41 @@
+apiVersion: v2
+name: vertguard
+description: |
+  VertGuard — AI/LLM threat detection platform: prompt-injection scanning,
+  AI threat-feed (MITRE ATLAS), media authenticity (C2PA) and synthetic
+  identity defence. Part of the OpenSecStack ecosystem.
+type: application
+version: 0.1.0
+appVersion: "0.1.0-alpha.0"
+kubeVersion: ">=1.27.0-0"
+
+keywords:
+  - security
+  - ai-security
+  - llm-security
+  - prompt-injection
+  - mitre-atlas
+  - c2pa
+  - opensecstack
+
+home: https://github.com/opensecstack/vertguard
+sources:
+  - https://github.com/opensecstack/vertguard
+
+maintainers:
+  - name: OpenSecStack
+    email: maintainers@opensecstack.org
+    url: https://opensecstack.org
+
+dependencies:
+  - name: postgresql
+    version: 15.5.x
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+  # Local subchart at charts/ml; gated by `ml.enabled` so operators
+  # who run regex-only stay on the same parent release.
+  - name: vertguard-ml
+    version: 0.1.0
+    repository: "file://charts/ml"
+    alias: ml
+    condition: ml.enabled

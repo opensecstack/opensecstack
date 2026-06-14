@@ -1,0 +1,24 @@
+name: rate-limit-bypass
+description: "Rate limit bypass via IP rotation headers — spoof client IP using X-Forwarded-For and X-Real-IP to bypass per-IP rate limits"
+mitre_technique_ids: ["T1110"]
+tags: [api, owasp-a4, rate-limit, evasion]
+severity: medium
+timeout: 2m
+steps:
+  - kind: rate_limit_bypass
+    params:
+      endpoint: /api/v1/login
+      method: POST
+      request_count: 200
+      rotation_headers:
+        - X-Forwarded-For
+        - X-Real-IP
+        - X-Client-IP
+        - CF-Connecting-IP
+      ip_pool_size: 50
+      payload:
+        username: admin
+        password: wrongpassword
+      success_indicator:
+        # Success = we sent 200 requests without being blocked
+        min_requests_through: 150

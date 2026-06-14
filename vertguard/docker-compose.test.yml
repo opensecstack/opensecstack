@@ -1,0 +1,21 @@
+version: "3.9"
+
+# Integration test database — separate port to avoid conflicts with
+# local-dev Postgres. Used by `make test-integration`.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: vertguard
+      POSTGRES_PASSWORD: vertguard_test
+      POSTGRES_DB: vertguard_test
+    ports:
+      - "54838:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vertguard -d vertguard_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 10

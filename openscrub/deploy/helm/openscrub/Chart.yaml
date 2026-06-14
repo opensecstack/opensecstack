@@ -1,0 +1,18 @@
+apiVersion: v2
+name: openscrub
+description: OpenScrub — DDoS mitigation platform (XDP/eBPF data plane + Go API)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://github.com/opensecstack/opensecstack/tree/main/openscrub
+sources:
+  - https://github.com/opensecstack/opensecstack
+maintainers:
+  - name: opensecstack contributors
+    email: maintainers@opensecstack.org
+keywords:
+  - ddos
+  - xdp
+  - ebpf
+  - mitigation
+  - opensecstack

@@ -1,0 +1,198 @@
+name: NIS2 Compass CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'nis2compass/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'nis2compass/**'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nis2compass/
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install linters
+        run: pip install flake8 black isort
+
+      - name: flake8
+        run: flake8 app/ --max-line-length=120 --ignore=E501,W503
+
+      - name: black
+        run: black --check app/
+
+      - name: isort
+        run: isort --check-only app/
+
+      - name: Install mypy
+        run: pip install mypy types-requests
+
+      - name: mypy
+        run: mypy app/ --ignore-missing-imports --no-error-summary
+
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nis2compass/
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nis2compass
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: nis2compass_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nis2compass"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NIS2_DB_URL: postgresql+psycopg2://nis2compass:testpass@localhost:5432/nis2compass_test
+      NIS2_TEST_DB_URL: postgresql+psycopg2://nis2compass:testpass@localhost:5432/nis2compass_test
+      NIS2_REDIS_URL: redis://localhost:6379/0
+      NIS2_TEST_REDIS_URL: redis://localhost:6379/0
+      NIS2_SECRET_KEY: test-secret-key-ci
+      NIS2_JWT_SECRET: test-jwt-secret-at-least-32-chars-long
+      NIS2_ENV: testing
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run migrations
+        run: alembic upgrade head
+
+      - name: Run tests
+        run: pytest tests/ -v --cov=app --cov-report=term-missing --cov-fail-under=80
+
+  test-web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nis2compass/web
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+  security:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nis2compass/
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c # v5
+        with:
+          python-version: "3.12"
+
+      - name: Install security tools
+        run: pip install bandit pip-audit
+
+      - name: bandit (Python SAST)
+        run: bandit -r app/ -f json -o bandit-results.json
+
+      - name: Upload bandit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-results
+          path: nis2compass/bandit-results.json
+
+      - name: pip-audit (dependency CVE check)
+        run: pip-audit -r requirements.txt --format json -o pip-audit-results.json
+
+      - name: Upload pip-audit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pip-audit-results
+          path: nis2compass/pip-audit-results.json
+
+  docker-build:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [lint, test, test-web, security]
+
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06100226 # v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@4a13e500e55cf31b7a5d59a38ab2040ab0f42f56 # v5
+        with:
+          context: nis2compass/
+          file: nis2compass/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/nis2compass:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/nis2compass:latest
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/${{ github.repository }}/nis2compass:${{ github.sha }}
+          format: sarif
+          output: trivy-nis2compass.sarif
+          severity: CRITICAL,HIGH
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-nis2compass.sarif

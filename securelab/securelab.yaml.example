@@ -1,0 +1,89 @@
+# SecureLab Configuration File
+# Alternative to environment variables. Place at ./securelab.yaml
+# or pass path with --config flag.
+# Environment variables take precedence over config file values.
+#
+# SAFETY: This file should never contain production credentials.
+# Use environment variables for secrets in production deployments.
+
+http:
+  # Address and port the HTTP API listens on.
+  addr: "127.0.0.1:8080"
+  # Enable development mode.
+  dev_mode: false
+  # Read timeout for HTTP requests.
+  read_timeout: "30s"
+  # Write timeout for HTTP responses.
+  write_timeout: "30s"
+
+database:
+  # PostgreSQL DSN. Prefer to set via SECURELAB_DB_URL env var.
+  url: "postgres://securelab:changeme@localhost:5432/securelab?sslmode=disable"
+  # Maximum number of open connections.
+  max_open_conns: 25
+  # Maximum number of idle connections.
+  max_idle_conns: 5
+  # Connection lifetime.
+  conn_max_lifetime: "5m"
+
+auth:
+  # JWT signing secret. Set via SECURELAB_JWT_SECRET env var in production.
+  jwt_secret: "change-this-to-a-random-secret-at-least-32-chars"
+  # JWT token expiry.
+  jwt_expiry: "24h"
+
+citadel:
+  # CITADEL API base URL.
+  url: "https://citadel.internal"
+  # HMAC secret for event signing.
+  hmac_secret: "change-this-citadel-hmac-secret"
+  # Dry run: log events but do not send.
+  dry_run: true
+  # Timeout for CITADEL API calls.
+  timeout: "10s"
+  # Retry attempts on failure.
+  retries: 3
+
+openscrub:
+  # OpenScrub API base URL.
+  url: "https://openscrub.internal"
+  # API key for authentication.
+  api_key: "changeme-openscrub-key"
+  # Polling interval when waiting for detection events.
+  poll_interval: "5s"
+
+apiguard:
+  # APIGuard API base URL.
+  url: "https://apiguard.internal"
+  # API key for authentication.
+  api_key: "changeme-apiguard-key"
+  poll_interval: "5s"
+
+threatflow:
+  # ThreatFlow API base URL.
+  url: "https://threatflow.internal"
+  # API key for authentication.
+  api_key: "changeme-threatflow-key"
+  poll_interval: "5s"
+
+detection:
+  # How long to wait for detection events after an attack step.
+  window: "60s"
+
+safety:
+  # Target URL substrings that are blocked from receiving attacks.
+  # Add any domain fragments that indicate production environments.
+  blocked_targets:
+    - "production"
+    - "prod"
+    - "live"
+  # Maximum concurrent runs.
+  max_concurrent_runs: 3
+  # Default per-step timeout.
+  default_step_timeout: "5m"
+
+logging:
+  # Log level: debug, info, warn, error.
+  level: "info"
+  # Log format: json or text.
+  format: "json"

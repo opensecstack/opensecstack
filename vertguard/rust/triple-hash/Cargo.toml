@@ -1,0 +1,24 @@
+[package]
+name         = "triple-hash"
+description  = "SHA-256 + SHA-512 + BLAKE3 combined hashing for VertGuard vantage-hash bridge"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+authors.workspace     = true
+repository.workspace  = true
+readme.workspace      = true
+
+[lib]
+name       = "triple_hash"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+sha2       = "0.10"
+blake3     = "1"
+hex        = "0.4"
+serde      = { workspace = true }
+serde_json = { workspace = true }
+
+[features]
+default = []
+ffi     = []

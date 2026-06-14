@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "vertguard.fullname" . }}-test-connection"
+  labels:
+    {{- include "vertguard.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: wget
+      image: busybox:1.36
+      command:
+        - wget
+      args:
+        - "--quiet"
+        - "--tries=1"
+        - "--timeout=5"
+        - "--output-document=-"
+        - "http://{{ include "vertguard.fullname" . }}:{{ .Values.service.port }}/api/v1/health"

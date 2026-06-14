@@ -1,0 +1,34 @@
+VertGuard {{ .Chart.AppVersion }} has been installed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+1. Service URL (in-cluster):
+   http://{{ include "vertguard.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+
+{{- if .Values.ingress.enabled }}
+
+2. External access (Ingress):
+{{- range .Values.ingress.hosts }}
+   {{- range .paths }}
+   https://{{ .host | default "<host>" }}{{ .path }}
+   {{- end }}
+{{- end }}
+{{- else }}
+
+2. Port-forward for local testing:
+   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "vertguard.fullname" . }} 8091:{{ .Values.service.port }}
+   curl http://localhost:8091/api/v1/health
+{{- end }}
+
+3. Bootstrap a JWT for the first login (HS256 with VERTGUARD_AUTH_SECRET):
+   kubectl --namespace {{ .Release.Namespace }} get secret {{ include "vertguard.secretName" . }} -o jsonpath='{.data.auth-secret}' | base64 -d
+   # Use the secret with a JWT helper (e.g. `jwt encode --secret "$SECRET" '{"sub":"admin","scope":"admin"}'`)
+   # POST it as Authorization: Bearer <jwt> against /api/v1/...
+
+{{- if not .Values.existingSecret }}
+{{- if .Values.secret.create }}
+
+WARNING: secret.create=true was used — the auth secret is in the Helm release.
+Switch to `existingSecret` (SealedSecrets / ESO / Vault) before going to production.
+{{- end }}
+{{- end }}
+
+Documentation: https://github.com/opensecstack/vertguard/blob/main/docs/deployment-helm.md

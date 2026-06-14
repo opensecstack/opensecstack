@@ -1,0 +1,103 @@
+# OpenSecStack CODEOWNERS
+# Each pattern below assigns review ownership for PRs touching matching
+# paths. GitHub enforces these via branch protection.
+#
+# For the rationale, see docs/release-process.md and the
+# `ownership` section of CONTRIBUTING.md.
+
+# ── Global fallback ────────────────────────────────────────────────────
+* @opensecstack/core-maintainers
+
+# ── Platforms (built v1.0.0) ───────────────────────────────────────────
+/apiguard/     @opensecstack/apiguard-maintainers
+/nis2compass/  @opensecstack/nis2compass-maintainers
+/citadel/      @opensecstack/citadel-maintainers @opensecstack/security-team
+/irflow/       @opensecstack/irflow-maintainers
+/threatflow/   @opensecstack/threatflow-maintainers
+
+# ── Platforms (scaffolded) ─────────────────────────────────────────────
+/cyberpath/    @opensecstack/cyberpath-maintainers
+
+# ── Platforms (planned) ────────────────────────────────────────────────
+# When these directories land, uncomment and assign.
+# /openscrub/    @opensecstack/openscrub-maintainers
+# /securelab/    @opensecstack/securelab-maintainers
+# /opencsirt/    @opensecstack/opencsirt-maintainers
+
+# ── SDK ────────────────────────────────────────────────────────────────
+# Cross-platform impact — all platform leads must sign off.
+/sdk/          @opensecstack/core-maintainers
+/sdk/go/       @opensecstack/core-maintainers
+/sdk/python/   @opensecstack/core-maintainers
+/sdk/typescript/ @opensecstack/core-maintainers
+/sdk/rust/     @opensecstack/core-maintainers
+/sdk/go/password/        @opensecstack/security-team
+/sdk/python-password/    @opensecstack/security-team
+
+# ── Website ────────────────────────────────────────────────────────────
+/website/      @opensecstack/website-maintainers
+
+# ── Deployment & infrastructure ────────────────────────────────────────
+/deploy/       @opensecstack/core-maintainers
+/deploy/k8s/   @opensecstack/core-maintainers
+
+# ── Security-sensitive files — require security team sign-off ──────────
+# Root
+/SECURITY.md                             @opensecstack/security-team
+/LICENSE                                 @opensecstack/core-maintainers
+/docs/security-architecture.md           @opensecstack/security-team
+/docs/security-maturity.md               @opensecstack/security-team
+
+# APIGuard
+/apiguard/internal/auth/                 @opensecstack/security-team
+/apiguard/internal/api/middleware/       @opensecstack/security-team
+
+# NIS2 Compass
+/nis2compass/app/auth.py                 @opensecstack/security-team
+
+# CITADEL — every change reviewed by security team (governance core)
+/citadel/internal/marshal/               @opensecstack/security-team @opensecstack/citadel-maintainers
+/citadel/internal/db/worm.go             @opensecstack/security-team @opensecstack/citadel-maintainers
+/citadel/migrations/                     @opensecstack/security-team @opensecstack/citadel-maintainers
+/citadel/SECURITY.md                     @opensecstack/security-team
+/citadel/docs/security-model.md          @opensecstack/security-team
+/citadel/docs/sod.md                     @opensecstack/security-team
+/citadel/docs/augur.md                   @opensecstack/security-team
+/citadel/docs/chain-anchor.md            @opensecstack/security-team
+/citadel/docs/triple-hash.md             @opensecstack/security-team
+
+# IRFlow
+/irflow/internal/auth/                   @opensecstack/security-team @opensecstack/irflow-maintainers
+/irflow/internal/webhook/                @opensecstack/security-team @opensecstack/irflow-maintainers
+/irflow/internal/governance/             @opensecstack/security-team @opensecstack/irflow-maintainers
+/irflow/SECURITY.md                      @opensecstack/security-team
+
+# ThreatFlow
+/threatflow/internal/auth/               @opensecstack/security-team @opensecstack/threatflow-maintainers
+/threatflow/SECURITY.md                  @opensecstack/security-team
+
+# ── Release & governance ───────────────────────────────────────────────
+/CHANGELOG.md                            @opensecstack/core-maintainers
+/ROADMAP.md                              @opensecstack/core-maintainers
+/GOVERNANCE.md                           @opensecstack/core-maintainers
+/CODE_OF_CONDUCT.md                      @opensecstack/core-maintainers
+/ARCHITECTURE.md                         @opensecstack/core-maintainers
+/ECOSYSTEM.md                            @opensecstack/core-maintainers
+/docs/deployment-topology.md             @opensecstack/core-maintainers
+/docs/release-process.md                 @opensecstack/core-maintainers
+/docs/deprecation-policy.md              @opensecstack/core-maintainers
+/docs/compatibility-matrix.md            @opensecstack/core-maintainers
+/.github/                                @opensecstack/core-maintainers
+/.github/CODEOWNERS                      @opensecstack/core-maintainers
+
+# ── Architecture decisions — require two core maintainers ──────────────
+/adrs/         @opensecstack/core-maintainers
+/rfcs/         @opensecstack/core-maintainers
+
+# ── Per-platform CHANGELOGs are owned by that platform + core ──────────
+/apiguard/CHANGELOG.md      @opensecstack/apiguard-maintainers @opensecstack/core-maintainers
+/nis2compass/CHANGELOG.md   @opensecstack/nis2compass-maintainers @opensecstack/core-maintainers
+/citadel/CHANGELOG.md       @opensecstack/citadel-maintainers @opensecstack/core-maintainers
+/irflow/CHANGELOG.md        @opensecstack/irflow-maintainers @opensecstack/core-maintainers
+/threatflow/CHANGELOG.md    @opensecstack/threatflow-maintainers @opensecstack/core-maintainers
+/sdk/CHANGELOG.md           @opensecstack/core-maintainers

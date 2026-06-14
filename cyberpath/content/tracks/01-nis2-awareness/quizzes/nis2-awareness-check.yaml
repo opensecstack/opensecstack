@@ -1,0 +1,156 @@
+id: nis2-awareness-check
+title: "Knowledge Check — NIS2 Article 21 Awareness"
+randomise: true
+randomise_choices: true
+pass_threshold: 0.80
+questions:
+  - id: q1
+    type: multiple-choice
+    prompt: "How many mandatory cybersecurity measure categories does NIS2 Article 21(2) define?"
+    choices:
+      - id: a
+        text: "5"
+      - id: b
+        text: "8"
+      - id: c
+        text: "10"
+      - id: d
+        text: "12"
+    correct: [c]
+    explanation: "NIS2 Article 21(2) enumerates exactly ten measure categories, labelled (a) through (j). Every in-scope entity must address all ten, with depth proportionate to size and risk profile."
+    points: 1
+
+  - id: q2
+    type: multiple-choice
+    prompt: "Which NIS2 article places direct accountability for cybersecurity risk management on the management body?"
+    choices:
+      - id: a
+        text: "Article 21(2)"
+      - id: b
+        text: "Article 21(4)"
+      - id: c
+        text: "Article 23(1)"
+      - id: d
+        text: "Article 18"
+    correct: [b]
+    explanation: "Article 21(4) explicitly assigns accountability to management bodies: they must approve risk management measures, oversee implementation, and can be held personally liable for infringements. Delegating to IT does not satisfy this obligation."
+    points: 1
+
+  - id: q3
+    type: multiple-choice
+    prompt: "Under NIS2 Article 23, within how many hours must an early warning be sent to the competent authority after becoming aware of a significant incident?"
+    choices:
+      - id: a
+        text: "6 hours"
+      - id: b
+        text: "24 hours"
+      - id: c
+        text: "48 hours"
+      - id: d
+        text: "72 hours"
+    correct: [b]
+    explanation: "Article 23 requires an early warning within 24 hours of becoming aware of a significant incident. The detailed notification is due within 72 hours, and a final report within one month of resolution."
+    points: 1
+
+  - id: q4
+    type: multiple-select
+    prompt: "Which of the following are explicitly required by NIS2 Article 21(2)(j)? Select all that apply."
+    choices:
+      - id: a
+        text: "Multi-factor authentication for administrative access"
+      - id: b
+        text: "Secure voice and video communications"
+      - id: c
+        text: "Annual penetration testing"
+      - id: d
+        text: "Secured emergency communication systems where appropriate"
+    correct: [a, b, d]
+    explanation: "Article 21(2)(j) specifically mandates MFA or continuous authentication, secure voice/video/text communications, and secured emergency communication systems. Penetration testing falls under Art.21(2)(f) — assessing effectiveness of measures."
+    points: 1
+
+  - id: q5
+    type: true-false
+    prompt: "A risk analysis produced two years ago and not reviewed since satisfies the NIS2 Article 21(2)(a) requirement for policies on risk analysis."
+    correct: false
+    explanation: "NIS2 requires risk analysis to be an ongoing, regularly reviewed process — not a one-time exercise. It must be updated at least annually and after significant changes to the environment or threat landscape. An outdated risk analysis is a compliance gap."
+    points: 1
+
+  - id: q6
+    type: multiple-choice
+    prompt: "Which NIS2 Article 21 sub-measure specifically covers supply chain security risks from direct suppliers and service providers?"
+    choices:
+      - id: a
+        text: "Art.21(2)(a)"
+      - id: b
+        text: "Art.21(2)(c)"
+      - id: c
+        text: "Art.21(2)(d)"
+      - id: d
+        text: "Art.21(2)(e)"
+    correct: [c]
+    explanation: "Art.21(2)(d) addresses security in the supply chain, including the security posture of direct suppliers and service providers. It requires risk assessments of suppliers and appropriate contractual security clauses."
+    points: 1
+
+  - id: q7
+    type: multiple-choice
+    prompt: "An organisation argues that SMS OTP satisfies the NIS2 MFA requirement for administrative access. Which statement best describes the regulatory position?"
+    choices:
+      - id: a
+        text: "SMS OTP fully satisfies the requirement with no caveats"
+      - id: b
+        text: "SMS OTP is accepted but discouraged due to SIM-swap risk; stronger factors are preferred"
+      - id: c
+        text: "SMS OTP is explicitly prohibited by NIS2"
+      - id: d
+        text: "NIS2 does not specify acceptable MFA methods"
+    correct: [b]
+    explanation: "SMS OTP is generally accepted as a second factor under NIS2, but supervisory guidance discourages it for high-risk access due to SIM-swap vulnerabilities. FIDO2/WebAuthn hardware tokens and TOTP authenticator apps are preferred."
+    points: 1
+
+  - id: q8
+    type: scenario
+    prompt: "A medium-sized energy company discovers at 09:00 on Monday that its billing system has been compromised and customer data exfiltrated. The CISO wants to wait until the forensic investigation is complete before notifying the competent authority. Is this correct under NIS2?"
+    choices:
+      - id: a
+        text: "Yes — notification should wait until root cause is confirmed"
+      - id: b
+        text: "No — an early warning must be sent within 24 hours of becoming aware of the incident, regardless of investigation status"
+      - id: c
+        text: "No — notification must be sent within 6 hours for energy sector entities"
+      - id: d
+        text: "Yes — only a final report is required, submitted within one month"
+    correct: [b]
+    explanation: "The 24-hour early warning clock starts when the entity becomes aware — not when the investigation is complete. The early warning can be preliminary and updated; waiting for full forensics before notifying breaches the Art.23 timeline and constitutes an independent compliance failure."
+    points: 1
+
+  - id: q9
+    type: multiple-select
+    prompt: "Which of the following are components of a compliant NIS2 governance structure under Art.21(2)(a) and Art.21(4)? Select all that apply."
+    choices:
+      - id: a
+        text: "A current risk register reviewed at least annually"
+      - id: b
+        text: "Security policies approved by the management body"
+      - id: c
+        text: "Documented evidence of board-level cybersecurity training and oversight"
+      - id: d
+        text: "A CISO appointed from an external consultancy"
+    correct: [a, b, c]
+    explanation: "A compliant governance structure requires a live risk analysis process, management body-approved policies, and documented board engagement including training and oversight. NIS2 does not mandate that the CISO be internal — but the other three elements are explicitly required."
+    points: 1
+
+  - id: q10
+    type: multiple-choice
+    prompt: "What does 'proportionality' mean in the context of NIS2 Article 21 compliance?"
+    choices:
+      - id: a
+        text: "Smaller entities are exempt from all Article 21 obligations"
+      - id: b
+        text: "Entities may select any five of the ten measures they find easiest to implement"
+      - id: c
+        text: "The depth of implementation may be scaled to entity size, risk, and sector — but all ten measures must be addressed and the proportionality decision must be documented"
+      - id: d
+        text: "Proportionality only applies to essential entities, not important entities"
+    correct: [c]
+    explanation: "Proportionality under NIS2 means the implementation depth — not the list of required measures — may be scaled. All ten categories must be addressed by every in-scope entity. The proportionality rationale must be documented and defensible to the competent authority."
+    points: 1

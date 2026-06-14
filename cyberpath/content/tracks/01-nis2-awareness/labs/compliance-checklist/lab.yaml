@@ -1,0 +1,117 @@
+﻿id: compliance-checklist
+version: 1.0.0
+title: "NIS2 Article 21 Compliance Self-Assessment"
+runtime: wasm
+image: "ghcr.io/opensecstack/cyberpath-labs/compliance-checklist:1.0.0"
+entry_command: "/usr/local/bin/checklist-lab"
+time_limit_seconds: 1800
+
+objectives:
+  - "Review each of the ten NIS2 Article 21(2) measure categories and mark whether a control is fully in place, partially in place, or absent"
+  - "Identify at least three compliance gaps and record a remediation priority (high/medium/low) for each"
+  - "Map identified gaps to the responsible organisational team or role"
+  - "Generate a compliance summary report showing overall coverage score across all ten measures"
+
+instructions: |
+  ## Scenario
+
+  You are the compliance officer for Albtech S.A., an essential entity under NIS2.
+  You have been asked to conduct an internal self-assessment against NIS2 Article 21(2)
+  ahead of an expected AKCESK inspection.
+
+  Your task is to work through the compliance checklist using the `checklist` CLI tool.
+
+  ### Step 1 — List all control categories
+  Start by viewing the full list of NIS2 Article 21(2) measure categories:
+
+  ```bash
+  checklist list-categories
+  ```
+
+  This will display all ten categories (a) through (j) with a brief description of each.
+
+  ### Step 2 — Assess each category
+  For each category, mark its current implementation status:
+
+  ```bash
+  checklist assess \
+    --category art21-a \
+    --status full|partial|absent \
+    --notes "Brief explanation of current state"
+  ```
+
+  Work through all ten categories: `art21-a` through `art21-j`.
+
+  ### Step 3 — Record remediation priorities for gaps
+  For any category assessed as `partial` or `absent`, record a remediation priority:
+
+  ```bash
+  checklist gap \
+    --category art21-b \
+    --priority high|medium|low \
+    --owner "Name or team responsible" \
+    --target-date "YYYY-MM-DD"
+  ```
+
+  You must record at least three gap entries to complete this step.
+
+  ### Step 4 — Generate the compliance summary report
+  When all categories have been assessed, generate the summary report:
+
+  ```bash
+  checklist report --format text
+  ```
+
+  The report will show your coverage score (percentage of categories fully or partially addressed)
+  and list all identified gaps with their priorities.
+
+  ### Completing the lab
+  Run the validation check when you have finished:
+
+  ```bash
+  checklist lab validate
+  ```
+
+  The validation output will confirm which objectives are complete.
+
+validation:
+  - id: all-categories-assessed
+    type: checklist_all_assessed
+    expected_count: 10
+    weight: 3
+    diagnostic: "Not all ten Art.21(2) categories have been assessed. Run 'checklist list-categories' to see which are missing."
+
+  - id: gaps-recorded
+    type: checklist_gap_count
+    min_count: 3
+    weight: 3
+    diagnostic: "At least three gap entries are required. Run 'checklist gap' for each partial or absent category."
+
+  - id: gaps-have-owners
+    type: checklist_gaps_have_field
+    field: "owner"
+    weight: 2
+    diagnostic: "Each recorded gap must have an owner assigned. Re-run 'checklist gap' with --owner for any gaps missing this field."
+
+  - id: report-generated
+    type: checklist_report_generated
+    weight: 2
+    diagnostic: "The compliance summary report has not been generated. Run 'checklist report --format text'."
+
+success_criteria:
+  min_score: 8
+  required_rules:
+    - all-categories-assessed
+    - gaps-recorded
+
+network:
+  egress_whitelist: []
+
+hints:
+  - trigger: idle_seconds:180
+    text: "Use 'checklist list-categories' to see all ten Art.21(2) categories and their IDs."
+
+  - trigger: idle_seconds:600
+    text: "Remember: mark partial or absent categories with 'checklist gap' to record remediation priorities."
+
+content_hash: ""

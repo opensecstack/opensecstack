@@ -1,0 +1,230 @@
+// VertGuard ML inference service.
+//
+// STATUS: Phase 4.2 contract. The Go side speaks this gRPC interface
+// to a Python service that wraps a fine-tuned classifier
+// (DistilBERT-base by default; pluggable via the model registry).
+//
+// The Go scanners use the regex library as a prefilter. For inputs
+// that classify as SUSPICIOUS (borderline), the scanner calls
+// `Score(...)` here and folds the ML confidence into its final
+// decision. CLEAN and BLOCKED inputs from the regex prefilter skip
+// the ML call by default — operators can flip a config knob to
+// score every request when measuring ML quality against production.
+//
+// Backwards compatibility: never remove a field; mark deprecated.
+// Add new fields with new tag numbers. Server must accept unknown
+// fields (proto3 default).
+
+syntax = "proto3";
+
+package vertguard.ml.v1;
+
+option go_package = "github.com/opensecstack/vertguard/internal/ml/pb;mlpb";
+
+// InferenceService scores text against the loaded classifier.
+service InferenceService {
+  // ScorePrompt returns ML confidence for prompt-injection text.
+  rpc ScorePrompt(PromptScoreRequest) returns (ScoreResponse) {}
+
+  // ScorePhishing returns ML confidence for phishing text.
+  rpc ScorePhishing(PhishingScoreRequest) returns (ScoreResponse) {}
+
+  // ScoreMedia returns ML confidence for deepfake/authenticity detection.
+  // Phase 4.2 — requires media ML weights; returns Unimplemented when weights absent.
+  rpc ScoreMedia(MediaScoreRequest) returns (ScoreResponse) {}
+
+  // ScoreIdentity returns ML confidence for synthetic identity detection.
+  // Phase 4.3 — requires identity ML weights; returns Unimplemented when absent.
+  rpc ScoreIdentity(IdentityScoreRequest) returns (ScoreResponse) {}
+
+  // ScoreAudio returns ML confidence for voice clone detection.
+  // Phase 4.3 — requires audio ML weights; returns Unimplemented when absent.
+  rpc ScoreAudio(AudioScoreRequest) returns (ScoreResponse) {}
+
+  // ScoreVideoStream is a bidirectional stream for real-time deepfake
+  // detection on video call frames. Client sends VideoFrameRequest
+  // messages; server replies with VideoScoreEvent per frame.
+  // Phase 4.3 — requires video ML weights.
+  rpc ScoreVideoStream(stream VideoFrameRequest) returns (stream VideoScoreEvent) {}
+
+  // BatchScorePrompt is a stream-friendly bulk variant for offline
+  // evaluation against a corpus. Optional in v1.
+  rpc BatchScorePrompt(stream PromptScoreRequest) returns (stream ScoreResponse) {}
+
+  // ModelInfo describes the currently loaded model. Operators poll
+  // this to verify which version is serving.
+  rpc ModelInfo(ModelInfoRequest) returns (ModelInfoResponse) {}
+}
+
+// PromptScoreRequest is the single-input scoring shape for prompts.
+message PromptScoreRequest {
+  // Raw user input. Service hashes this server-side; the hash (not
+  // the raw text) is what propagates to logs and audit.
+  string input = 1;
+
+  // Optional context tag (matches the Go scorer's context map):
+  // "default", "internal_dev_tool", "untrusted_document_content",
+  // "user_chat_input", "untrusted_third_party". Empty = default.
+  string context = 2;
+
+  // Correlation ID supplied by the caller for log stitching.
+  string correlation_id = 3;
+
+  // Tenant ID, optional, for per-tenant model selection.
+  string tenant = 4;
+}
+
+// PhishingScoreRequest mirrors PromptScoreRequest with a kind hint.
+message PhishingScoreRequest {
+  string input = 1;
+  // Kind ∈ "url" | "email" | "html". Empty = treat as text.
+  string kind = 2;
+  string correlation_id = 3;
+  string tenant = 4;
+}
+
+// MediaScoreRequest carries metadata about a media file for ML classification.
+// Raw bytes are NOT sent over gRPC — the Go side hashes the file and sends
+// the hash + extracted features only (privacy-by-design).
+message MediaScoreRequest {
+  // SHA-256 hex digest of the media file, prefixed "sha256:".
+  string file_hash = 1;
+  // MIME type hint (e.g. "image/jpeg", "video/mp4"). Empty = unknown.
+  string mime_type = 2;
+  // File size in bytes.
+  int64 file_size = 3;
+  // Whether C2PA manifest was present and valid (from Go-side C2PA check).
+  bool has_c2pa_manifest = 4;
+  bool c2pa_signature_valid = 5;
+  // Correlation ID for log stitching with the Go scanner.
+  string correlation_id = 6;
+  string tenant = 7;
+}
+
+// IdentityScoreRequest carries extracted identity claim features for ML.
+// Raw PII is NOT sent — only derived, non-reversible signals.
+message IdentityScoreRequest {
+  // Claim type: "passport" | "national_id" | "driver_license" | "login_credentials".
+  string claim_type = 1;
+  // Verification context: "kyc" | "login" | "account_recovery".
+  string context = 2;
+  // Derived signals — never raw PII fields.
+  // name_token_count: number of tokens in the name field.
+  int32 name_token_count = 3;
+  // email_domain_is_disposable: true when email domain matches blocklist.
+  bool email_domain_is_disposable = 4;
+  // id_format_valid: true when id_number passes country-specific format check.
+  bool id_format_valid = 5;
+  // issuer_country: uppercased ISO-3166-1 alpha-2.
+  string issuer_country = 6;
+  // has_dob: true when dob field is present and parseable.
+  bool has_dob = 7;
+  // replay_count: number of times this id_number hash seen in the window.
+  int32 replay_count = 8;
+  string correlation_id = 9;
+  string tenant = 10;
+}
+
+// AudioScoreRequest carries MFCC and spectral fingerprints for voice clone
+// detection. Raw audio bytes are NOT sent — the Go side (audio-fingerprint
+// crate) hashes the coefficients and sends only the 32-byte SHA-256 digests
+// (privacy-by-design, mirrors the media and video request patterns).
+message AudioScoreRequest {
+  // Session ID groups audio chunks from one call / recording session.
+  string session_id = 1;
+  // 32-byte SHA-256 of the MFCC coefficient vector.
+  bytes mfcc_hash = 2;
+  // 32-byte SHA-256 of the spectral fingerprint (centroid + flux).
+  bytes spectral_hash = 3;
+  // Duration of the audio chunk in milliseconds.
+  float duration_ms = 4;
+  // Whether a voice was detected in this chunk (pre-detection flag from
+  // the Go VAD step; false triggers an early-return CLEAN in the ML model).
+  bool voice_detected = 5;
+  // Correlation ID for log stitching with the Go scanner.
+  string correlation_id = 6;
+  string tenant = 7;
+}
+
+// VideoFrameRequest is one frame of a video call sent for deepfake analysis.
+// Raw pixels are NOT sent — a compact feature vector is extracted Go-side.
+message VideoFrameRequest {
+  // Session ID groups frames from one video call.
+  string session_id = 1;
+  // Frame sequence number within the session.
+  int64 frame_seq = 2;
+  // Timestamp of the frame in unix milliseconds.
+  int64 frame_ts_ms = 3;
+  // Feature vector extracted from the frame (e.g. CLIP embedding, 512-dim).
+  // Sent as raw float32 little-endian bytes to avoid proto repeated field overhead.
+  bytes feature_vector = 4;
+  // Whether face was detected in this frame.
+  bool face_detected = 5;
+  string correlation_id = 6;
+  string tenant = 7;
+}
+
+// VideoScoreEvent is the per-frame deepfake verdict returned by the server.
+message VideoScoreEvent {
+  string session_id = 1;
+  int64 frame_seq = 2;
+  // Confidence ∈ [0,1] that this frame is a deepfake.
+  double confidence = 3;
+  string verdict = 4;
+  double latency_ms = 5;
+  string model_version = 6;
+}
+
+// ScoreResponse is the unified shape returned by both score RPCs.
+message ScoreResponse {
+  // Confidence ∈ [0, 1].
+  double confidence = 1;
+
+  // Verdict mirrors the Go scanner's classification enum.
+  // CLEAN | SUSPICIOUS | BLOCKED.
+  string verdict = 2;
+
+  // Top contributing features the model attributes the score to.
+  // Optional; empty when explainability is unavailable.
+  repeated FeatureWeight top_features = 3;
+
+  // Inference latency reported by the Python side (excludes RPC
+  // serialization).
+  double latency_ms = 4;
+
+  // Model version string, propagated for log-time auditability.
+  string model_version = 5;
+
+  // Score-time SHA-256 of the input bytes, hex-encoded with the
+  // "sha256:" prefix to match the Go scanner's InputHash format.
+  string input_hash = 6;
+}
+
+// FeatureWeight names a feature and its attributed weight.
+message FeatureWeight {
+  string name = 1;
+  double weight = 2;
+}
+
+// ModelInfo describes the currently loaded model.
+message ModelInfoRequest {}
+
+message ModelInfoResponse {
+  // Model identifier (e.g. "distilbert-prompt-injection-v1").
+  string name = 1;
+
+  // Semantic version of the deployed weights.
+  string version = 2;
+
+  // Free-text training-data summary (corpus, size, date range).
+  string training_summary = 3;
+
+  // Loaded at unix seconds.
+  int64 loaded_at = 4;
+
+  // Backend implementation tag: "stub", "onnx-cpu", "torch-gpu", etc.
+  string backend = 5;
+
+  // Last-known eval metrics from the eval harness, JSON-encoded.
+  string eval_metrics_json = 6;
+}

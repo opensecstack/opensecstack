@@ -1,0 +1,434 @@
+name: Nightly
+
+# Full-stack nightly validation: no path filtering, every component, every check.
+# Runs at 02:00 UTC daily. Also triggerable manually via workflow_dispatch.
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+env:
+  GO_VERSION: "1.24"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # 1. test-all — full test suite, no path filtering
+  # ──────────────────────────────────────────────────────────────────────────
+
+  test-all:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: apiguard
+            language: go
+            working_dir: apiguard
+            go_sum_path: apiguard/go.sum
+          - component: citadel
+            language: go
+            working_dir: .citadel
+            go_sum_path: .citadel/go.sum
+          - component: irflow
+            language: go
+            working_dir: irflow
+            go_sum_path: irflow/go.sum
+          - component: nis2compass
+            language: python
+            working_dir: nis2compass
+
+    name: "test-all (${{ matrix.component }})"
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ${{ matrix.component }}_test
+          POSTGRES_USER: ${{ matrix.component }}
+          POSTGRES_PASSWORD: ${{ matrix.component }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 10s
+          --health-timeout 5s --health-retries 5
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.working_dir }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Go setup (apiguard, citadel) ---
+      - name: Setup Go
+        if: matrix.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: ${{ matrix.go_sum_path }}
+
+      - name: Go tests (race detector, 15m timeout)
+        if: matrix.language == 'go'
+        env:
+          DATABASE_URL: postgres://${{ matrix.component }}:${{ matrix.component }}@localhost:5432/${{ matrix.component }}_test?sslmode=disable
+        run: go test -race -count=1 -timeout=15m ./...
+
+      # --- Python setup (nis2compass) ---
+      - name: Setup Python
+        if: matrix.language == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: nis2compass/requirements*.txt
+
+      - name: Install Python dependencies
+        if: matrix.language == 'python'
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run migrations
+        if: matrix.language == 'python'
+        env:
+          DATABASE_URL: postgresql://nis2compass:nis2compass@localhost:5432/nis2compass_test
+        run: alembic upgrade head
+
+      - name: Pytest (300s timeout)
+        if: matrix.language == 'python'
+        env:
+          DATABASE_URL: postgresql://nis2compass:nis2compass@localhost:5432/nis2compass_test
+          REDIS_URL: redis://localhost:6379/0
+          FLASK_ENV: testing
+          SECRET_KEY: nightly-secret
+        run: pytest tests/ -v --timeout=300
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 1b. SDK tests — Go SDK, Python SDK, vantage-hash (Rust)
+  # ──────────────────────────────────────────────────────────────────────────
+
+  test-sdks:
+    runs-on: ubuntu-latest
+    name: "test-all (sdks)"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            sdk/vantage-hash
+            sdk/rust
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: sdk/typescript/package-lock.json
+
+      - name: Go SDK tests
+        working-directory: sdk/go
+        run: go test -race -count=1 -timeout=15m ./...
+
+      - name: Python SDK tests
+        working-directory: sdk/python
+        run: |
+          pip install -r requirements.txt pytest pytest-cov
+          pytest tests/ -v --timeout=300
+
+      - name: TypeScript SDK tests
+        working-directory: sdk/typescript
+        run: |
+          npm ci
+          npm test
+
+      - name: vantage-hash tests (Rust)
+        working-directory: sdk/vantage-hash
+        run: cargo test --all-features
+
+      - name: Rust SDK tests
+        working-directory: sdk/rust
+        run: cargo test --all-features
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 2. dependency-audit — parallel with test-all
+  # ──────────────────────────────────────────────────────────────────────────
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Go vulncheck ---
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: govulncheck — apiguard
+        working-directory: apiguard
+        run: govulncheck ./...
+
+      - name: govulncheck — citadel
+        working-directory: .citadel
+        run: govulncheck ./...
+
+      - name: govulncheck — IRFlow
+        working-directory: irflow
+        run: govulncheck ./...
+
+      - name: govulncheck — Go SDK
+        working-directory: sdk/go
+        run: govulncheck ./...
+
+      # --- Python audit ---
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: pip-audit — nis2compass
+        run: pip-audit -r nis2compass/requirements.txt
+
+      - name: pip-audit — Python SDK
+        run: |
+          if [ -f sdk/python/requirements.txt ]; then
+            pip-audit -r sdk/python/requirements.txt
+          else
+            pip-audit --requirement <(pip install sdk/python/ --dry-run --report - \
+              | python3 -c "import sys,json; [print(f'{p[\"metadata\"][\"name\"]}=={p[\"metadata\"][\"version\"]}') for p in json.load(sys.stdin)[\"install\"]]") \
+              || echo "::warning::Could not audit Python SDK via pyproject.toml"
+          fi
+
+      # --- Rust audit ---
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --quiet
+
+      - name: cargo audit — vantage-hash
+        working-directory: sdk/vantage-hash
+        run: cargo audit
+
+      - name: cargo audit — Rust SDK
+        working-directory: sdk/rust
+        run: cargo audit
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 3. dast — needs test-all to pass
+  # ──────────────────────────────────────────────────────────────────────────
+
+  dast:
+    needs: [test-all, test-sdks]
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start full stack
+        run: docker compose -f deploy/docker-compose.dev.yml up -d --wait --wait-timeout 120
+
+      - name: Wait for APIGuard health endpoint
+        run: |
+          curl -sf --retry 15 --retry-delay 5 --retry-connrefused \
+            http://localhost:8080/api/v1/health
+
+      - name: Wait for NIS2 Compass health endpoint
+        run: |
+          curl -sf --retry 15 --retry-delay 5 --retry-connrefused \
+            http://localhost:5000/api/v1/health || \
+          curl -sf --retry 15 --retry-delay 5 --retry-connrefused \
+            http://localhost:8090/api/v1/health
+
+      - name: Wait for Citadel health endpoint
+        run: |
+          curl -sf --retry 15 --retry-delay 5 --retry-connrefused \
+            http://localhost:9000/health
+
+      - name: Install Nuclei
+        run: |
+          go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+          nuclei -update-templates -silent
+
+      - name: DAST — APIGuard
+        run: |
+          nuclei -u http://localhost:8080 \
+            -tags api,owasp \
+            -jsonl -output dast-apiguard.jsonl \
+            -severity medium,high,critical || true
+
+      - name: DAST — NIS2 Compass
+        run: |
+          nuclei -u http://localhost:5000 \
+            -tags api,owasp \
+            -jsonl -output dast-nis2compass.jsonl \
+            -severity medium,high,critical || true
+
+      - name: DAST — Citadel
+        run: |
+          nuclei -u http://localhost:9000 \
+            -tags api \
+            -jsonl -output dast-citadel.jsonl \
+            -severity medium,high,critical || true
+
+      - name: Fail if CRITICAL findings found
+        run: |
+          failed=0
+          for f in dast-*.jsonl; do
+            [ ! -f "$f" ] && continue
+            if grep -q '"severity":"critical"' "$f" 2>/dev/null; then
+              echo "::error::Critical DAST finding in ${f}"
+              cat "$f"
+              failed=1
+            fi
+          done
+          [ "$failed" -eq 1 ] && exit 1
+          echo "No critical DAST findings."
+
+      - name: Collect container logs on failure
+        if: failure()
+        run: docker compose -f deploy/docker-compose.dev.yml logs --no-color > stack-logs.txt
+
+      - name: Upload DAST results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-dast-results
+          path: |
+            dast-*.jsonl
+            stack-logs.txt
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f deploy/docker-compose.dev.yml down -v
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 4. worm-integrity — parallel with dast (does not need test-all)
+  # ──────────────────────────────────────────────────────────────────────────
+
+  worm-integrity:
+    needs: [test-all, test-sdks]
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: citadel_worm
+          POSTGRES_USER: citadel
+          POSTGRES_PASSWORD: citadel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: .citadel/go.sum
+
+      - name: Run CITADEL migrations
+        env:
+          DATABASE_URL: postgres://citadel:citadel@localhost:5432/citadel_worm?sslmode=disable
+        working-directory: .citadel
+        run: |
+          go install github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+          migrate -path db/migrations -database "$DATABASE_URL" up
+
+      - name: Verify WORM chain integrity
+        env:
+          DATABASE_URL: postgres://citadel:citadel@localhost:5432/citadel_worm?sslmode=disable
+        working-directory: .citadel
+        run: go test -run TestVerify -v -count=1 -timeout=10m ./internal/worm/...
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 5. notify-on-failure — open a GitHub Issue when any job fails
+  # ──────────────────────────────────────────────────────────────────────────
+
+  notify-on-failure:
+    needs:
+      - test-all
+      - test-sdks
+      - dependency-audit
+      - dast
+      - worm-integrity
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const date = new Date().toISOString().slice(0, 10);
+            const title = `Nightly CI failure — ${date}`;
+
+            // Check for an existing open issue with the same title
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'ci-failure,nightly',
+              per_page: 100
+            });
+
+            const duplicate = existing.data.find(i => i.title === title);
+            if (duplicate) {
+              core.info(`Issue already exists: #${duplicate.number} — skipping creation.`);
+              return;
+            }
+
+            // Determine which jobs failed
+            const needs = ${{ toJSON(needs) }};
+            const failedJobs = Object.entries(needs)
+              .filter(([_, v]) => v.result === 'failure')
+              .map(([k, _]) => k);
+
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const body = [
+              `## Nightly CI failure — ${date}`,
+              '',
+              'One or more nightly jobs failed.',
+              '',
+              `**Failed jobs:** ${failedJobs.length > 0 ? failedJobs.join(', ') : '_could not determine_'}`,
+              '',
+              `**Workflow run:** ${runUrl}`,
+              '',
+              `cc @${context.repo.owner}`
+            ].join('\n');
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['ci-failure', 'nightly']
+            });
+
+            core.info(`Created issue: "${title}"`);

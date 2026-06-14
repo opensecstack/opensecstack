@@ -1,0 +1,128 @@
+version: "3.8"
+
+# NIS2 Compass — Development Docker Compose
+# Uses hardcoded dev secrets — NEVER use in production.
+
+services:
+  nis2compass-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8090:8090"
+    volumes:
+      - .:/app
+    environment:
+      - NIS2_DB_URL=postgresql+psycopg2://nis2compass:nis2compassdev@postgres:5432/nis2compass
+      - NIS2_REDIS_URL=redis://:redisdev@redis:6379/0
+      - NIS2_SECRET_KEY=dev-secret-key-do-not-use-in-production
+      - NIS2_JWT_SECRET=dev-jwt-secret-32-chars-minimum-ok
+      - NIS2_ENV=development
+      - NIS2_DEBUG=true
+      - NIS2_API_KEYS=dev-api-key-change-me
+      - NIS2_UPLOAD_DIR=/app/uploads
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  migrate:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - .:/app:ro
+    command: >
+      sh -c "pip install -q alembic psycopg2-binary sqlalchemy &&
+             alembic upgrade head"
+    environment:
+      - NIS2_DB_HOST=postgres
+      - NIS2_DB_PORT=5432
+      - NIS2_DB_USER=nis2compass
+      - NIS2_DB_PASSWORD=nis2compassdev
+      - NIS2_DB_NAME=nis2compass
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  seed:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - .:/app:ro
+    command: >
+      sh -c "pip install -q psycopg2-binary &&
+             python seeds/01_nis2_controls.py &&
+             python seeds/02_sample_org.py"
+    environment:
+      - NIS2_DB_HOST=postgres
+      - NIS2_DB_PORT=5432
+      - NIS2_DB_USER=nis2compass
+      - NIS2_DB_PASSWORD=nis2compassdev
+      - NIS2_DB_NAME=nis2compass
+    networks:
+      - backend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgresdev
+      POSTGRES_DB: nis2compass
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass redisdev
+    ports:
+      - "6380:6379"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redisdev", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: dev@opensecstack.local
+      PGADMIN_DEFAULT_PASSWORD: pgadmindev
+    ports:
+      - "5051:80"
+    networks:
+      - backend
+    depends_on:
+      - postgres
+
+volumes:
+  pgdata_dev:
+
+networks:
+  frontend:
+  backend:

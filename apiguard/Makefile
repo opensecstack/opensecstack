@@ -1,4 +1,4 @@
-.PHONY: dev test test-coverage test-fp bench build lint fmt migrate scan-example clean docs release
+.PHONY: dev test test-coverage test-fp bench build build-cli lint fmt migrate migrate-down db-reset seed logs scan-example clean docs release
 
 # Start full local stack with hot reload
 dev:
@@ -30,6 +30,10 @@ bench:
 build:
 	docker compose build
 
+# Build the apiguard CLI binary
+build-cli:
+	go build -ldflags="-X github.com/opensecstack/apiguard/internal/version.Version=$(shell git describe --tags --always --dirty 2>/dev/null || echo dev) -X github.com/opensecstack/apiguard/internal/version.GitCommit=$(shell git rev-parse --short HEAD 2>/dev/null || echo unknown) -X github.com/opensecstack/apiguard/internal/version.BuildDate=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)" -o bin/apiguard ./cmd/apiguard/
+
 # Run linters
 lint:
 	golangci-lint run ./...
@@ -46,6 +50,29 @@ fmt:
 migrate:
 	go run ./cmd/migrate up
 
+# Roll back the last applied migration
+migrate-down:
+	docker compose -f docker-compose.dev.yml run --rm migrate \
+		-path=/migrations \
+		-database=postgres://apiguard:devpassword@postgres:5432/apiguard?sslmode=disable \
+		down 1
+
+# Drop and recreate the dev database, then re-run all migrations
+db-reset:
+	docker compose -f docker-compose.dev.yml exec postgres \
+		psql -U apiguard -c "DROP DATABASE IF EXISTS apiguard;" postgres
+	docker compose -f docker-compose.dev.yml exec postgres \
+		psql -U apiguard -c "CREATE DATABASE apiguard;" postgres
+	$(MAKE) migrate
+
+# Run the seed script to populate dev data
+seed:
+	go run ./cmd/seed
+
+# Tail live API logs from the dev stack
+logs:
+	docker compose -f docker-compose.dev.yml logs -f apiguard-api
+
 # Run APIGuard against VAmPI example target
 scan-example:
 	docker compose -f docker-compose.test.yml up -d vampi
@@ -59,6 +86,7 @@ clean:
 	docker compose -f docker-compose.test.yml down -v
 	cargo clean
 	rm -rf reports/*.html reports/*.pdf reports/*.json
+	rm -f bin/apiguard
 
 # Start local documentation site
 docs:

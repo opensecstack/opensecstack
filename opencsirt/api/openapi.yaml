@@ -1,0 +1,448 @@
+openapi: 3.0.3
+info:
+  title: OpenCSIRT API
+  version: 1.0.0
+  description: |
+    OpenCSIRT — national/sector CSIRT operations platform.
+    AGPL-3.0-or-later.
+
+servers:
+  - url: http://localhost:8088
+    description: Local dev
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Constituency:
+      type: object
+      required: [id, name, sector, kind]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        sector: { type: string }
+        country: { type: string }
+        kind: { type: string, enum: [essential, important, out_of_scope] }
+        tlp_default: { type: string, enum: [clear, green, amber, red] }
+        primary_contact: { type: string }
+        secondary_contact_email: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ConstituencyCreateRequest:
+      type: object
+      required: [name, sector, kind]
+      properties:
+        name: { type: string }
+        sector: { type: string }
+        country: { type: string }
+        kind: { type: string, enum: [essential, important, out_of_scope] }
+        tlp_default: { type: string, enum: [clear, green, amber, red] }
+        primary_contact: { type: string }
+        secondary_contact_email: { type: string }
+    Incident:
+      type: object
+      required: [id, source, severity, status, title, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        constituency_id: { type: string, format: uuid, nullable: true }
+        source: { type: string, enum: [irflow, manual, abuse_mailbox, peer_csirt] }
+        severity: { type: string, enum: [low, medium, high, critical] }
+        status: { type: string, enum: [open, triaged, contained, closed] }
+        title: { type: string }
+        description: { type: string }
+        created_at: { type: string, format: date-time }
+        closed_at: { type: string, format: date-time, nullable: true }
+        metadata: { type: object, additionalProperties: true }
+    IncidentCreateRequest:
+      type: object
+      required: [severity, title]
+      properties:
+        constituency_id: { type: string, format: uuid }
+        source: { type: string, enum: [irflow, manual, abuse_mailbox, peer_csirt] }
+        severity: { type: string, enum: [low, medium, high, critical] }
+        title: { type: string }
+        description: { type: string }
+        metadata: { type: object, additionalProperties: true }
+    Advisory:
+      type: object
+      required: [id, csaf_id, state, tlp, title]
+      properties:
+        id: { type: string, format: uuid }
+        incident_id: { type: string, format: uuid, nullable: true }
+        csaf_id: { type: string }
+        state: { type: string, enum: [draft, published, withdrawn] }
+        tlp: { type: string, enum: [clear, green, amber, red] }
+        title: { type: string }
+        summary: { type: string }
+        version: { type: integer }
+        published_at: { type: string, format: date-time, nullable: true }
+        withdrawn_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    AdvisoryCreateRequest:
+      type: object
+      required: [title, tlp]
+      properties:
+        incident_id: { type: string, format: uuid }
+        title: { type: string }
+        summary: { type: string }
+        tlp: { type: string, enum: [clear, green, amber, red] }
+        iocs:
+          type: array
+          items: { type: object, additionalProperties: true }
+        vulnerability: { type: object, additionalProperties: true }
+    Peer:
+      type: object
+      required: [id, name, country, registry, trust, ed25519_fingerprint]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        country: { type: string }
+        registry: { type: string, enum: [first, tf-csirt, csirts-network, other] }
+        trust: { type: string, enum: [verified, pending, failed, expired] }
+        ed25519_fingerprint: { type: string }
+        last_handshake_at: { type: string, format: date-time, nullable: true }
+    HealthResponse:
+      type: object
+      required: [status, db]
+      properties:
+        status: { type: string }
+        db: { type: boolean }
+        advisory_service: { type: boolean }
+        uptime_seconds: { type: integer }
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string }
+    LoginResponse:
+      type: object
+      required: [token, role, sub]
+      properties:
+        token: { type: string }
+        role: { type: string }
+        sub: { type: string }
+        expires_at: { type: string, format: date-time }
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/health:
+    get:
+      summary: Liveness + dependency status
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthResponse" }
+
+  /api/v1/auth/login:
+    post:
+      summary: Issue a JWT for the configured operator user list
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "401": { description: Invalid credentials }
+        "503": { description: Issuer disabled (no users configured) }
+
+  /api/v1/constituencies:
+    get:
+      summary: List constituencies
+      parameters:
+        - { name: limit,  in: query, schema: { type: integer, minimum: 0 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  constituencies: { type: array, items: { $ref: "#/components/schemas/Constituency" } }
+                  count: { type: integer }
+    post:
+      summary: Onboard a constituency (operator+ role required)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConstituencyCreateRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Constituency" }
+        "400": { description: Validation error }
+
+  /api/v1/constituencies/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: Get a constituency
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Constituency" }
+        "404": { description: Not found }
+    put:
+      summary: Update a constituency (operator+ role required)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConstituencyCreateRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Constituency" }
+        "400": { description: Validation error }
+        "404": { description: Not found }
+
+  /api/v1/incidents:
+    get:
+      summary: List incidents
+      parameters:
+        - { name: status,   in: query, schema: { type: string } }
+        - { name: severity, in: query, schema: { type: string } }
+        - { name: limit,    in: query, schema: { type: integer, minimum: 0 } }
+        - { name: offset,   in: query, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  incidents: { type: array, items: { $ref: "#/components/schemas/Incident" } }
+                  count: { type: integer }
+    post:
+      summary: Open an incident (operator+ role required)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IncidentCreateRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Incident" }
+        "400": { description: Validation error }
+
+  /api/v1/incidents/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: Get an incident
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Incident" }
+        "404": { description: Not found }
+
+  /api/v1/incidents/{id}/escalate:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: Escalate an incident to triaged status (operator+ role required)
+      responses:
+        "200":
+          description: OK — updated incident
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Incident" }
+        "403": { description: Insufficient role }
+        "404": { description: Not found }
+
+  /api/v1/incidents/{id}/close:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: Close an incident (operator+ role required)
+      responses:
+        "200":
+          description: OK — updated incident
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Incident" }
+        "404": { description: Not found }
+
+  /api/v1/advisories:
+    get:
+      summary: List advisories (AMBER/RED filtered for analyst role)
+      parameters:
+        - { name: state,  in: query, schema: { type: string } }
+        - { name: tlp,    in: query, schema: { type: string } }
+        - { name: limit,  in: query, schema: { type: integer, minimum: 0 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  advisories: { type: array, items: { $ref: "#/components/schemas/Advisory" } }
+                  count: { type: integer }
+    post:
+      summary: Draft a CSAF 2.0 advisory via Python subsystem (operator+ role required)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdvisoryCreateRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Advisory" }
+        "400": { description: Validation error }
+
+  /api/v1/advisories/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: Get an advisory (AMBER/RED blocked for analyst role)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Advisory" }
+        "403": { description: TLP too high for role }
+        "404": { description: Not found }
+
+  /api/v1/advisories/{id}/csaf:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: Get the raw CSAF 2.0 document (AMBER/RED blocked for analyst role)
+      responses:
+        "200":
+          description: OK — raw CSAF document
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        "403": { description: TLP too high for role }
+        "404": { description: Not found }
+
+  /api/v1/advisories/{id}/publish:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: Publish — seal, emit CITADEL evidence, push STIX to ThreatFlow (csirt_lead+ role required)
+      responses:
+        "200":
+          description: OK — published advisory
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Advisory" }
+        "404": { description: Not found or not in draft state }
+
+  /api/v1/advisories/{id}/withdraw:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: Withdraw a published advisory (csirt_lead+ role required)
+      responses:
+        "200":
+          description: OK — withdrawn advisory
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Advisory" }
+        "404": { description: Not found or not in published state }
+        '409':
+          description: Advisory is not in published state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/peers:
+    get:
+      summary: List peer CSIRTs (analyst+ role required)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  peers: { type: array, items: { $ref: "#/components/schemas/Peer" } }
+                  count: { type: integer }
+
+  /api/v1/peers/{id}/handshake:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: Record a handshake with a peer CSIRT (operator+ role required)
+      responses:
+        "200":
+          description: OK — updated peer record
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Peer" }
+        "404": { description: Not found }
+
+  /api/v1/metrics:
+    get:
+      summary: Prometheus exposition (JWT-gated, analyst+ role)
+      responses:
+        "200":
+          description: text/plain Prometheus metrics
+
+  /api/v1/metrics/snapshot:
+    get:
+      summary: JSON snapshot for the dashboard
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/v1/integrations/irflow/incident:
+    post:
+      summary: IRFlow webhook receiver (HMAC-SHA256 verified)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200": { description: Accepted }
+        "401": { description: Signature invalid }

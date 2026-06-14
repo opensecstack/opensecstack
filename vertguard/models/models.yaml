@@ -1,0 +1,59 @@
+# VertGuard model registry
+# Each entry describes one model artefact used by the Python ML inference service.
+# The download.sh script reads this file to fetch and verify models.
+#
+# Fields:
+#   name        — unique identifier referenced by the ML service config
+#   version     — semver model version (bump when retraining or replacing weights)
+#   path        — directory relative to the repository root where weights are stored
+#   sha256      — expected SHA-256 checksum of the downloaded tarball/archive
+#   source      — canonical download URL (HuggingFace or internal mirror)
+#   size_mb     — approximate size in MiB for preflight disk-space checks
+#   description — human-readable purpose
+
+models:
+  - name: distilbert-prompt-injection
+    version: "1.0.0"
+    path: models/distilbert-prompt-injection/
+    sha256: "placeholder-sha256-update-after-training"
+    source: "https://huggingface.co/opensecstack/vertguard-prompt-injection"
+    size_mb: 268
+    description: >
+      DistilBERT fine-tuned on a curated dataset of prompt injection attacks
+      (direct, indirect, jailbreak, role-play, encoding-based).
+      Powers Module 3 ML enrichment; activated when VERTGUARD_ML_ENABLED=true.
+
+  - name: distilbert-phishing
+    version: "1.0.0"
+    path: models/distilbert-phishing/
+    sha256: "placeholder-sha256-update-after-training"
+    source: "https://huggingface.co/opensecstack/vertguard-phishing"
+    size_mb: 268
+    description: >
+      DistilBERT fine-tuned on phishing URL and message corpora.
+      Powers Module 5 (AI Phishing Detection) ML enrichment; activated when
+      VERTGUARD_PHISHING_ENABLED=true and VERTGUARD_ML_ENABLED=true.
+
+  - name: identity-gan-detector
+    version: "1.0.0"
+    path: models/identity-gan-detector/
+    sha256: "placeholder-sha256-update-after-training"
+    source: "https://huggingface.co/opensecstack/vertguard-identity-gan"
+    size_mb: 512
+    description: >
+      GAN-based synthetic-identity detector. Classifies whether a set of
+      identity attributes (name, address, SSN pattern, biometric embedding)
+      was machine-generated. Powers Module 6 real-time enrichment; activated
+      when VERTGUARD_IDENTITY_REALTIME_ENABLED=true.
+
+  - name: media-deepfake-detector
+    version: "1.0.0"
+    path: models/media-deepfake-detector/
+    sha256: "placeholder-sha256-update-after-training"
+    source: "https://huggingface.co/opensecstack/vertguard-deepfake"
+    size_mb: 890
+    description: >
+      Vision transformer fine-tuned on deepfake image/video frame corpora.
+      Complements the C2PA provenance check in Module 1 (Media Authenticity)
+      with content-level forgery detection; activated when
+      VERTGUARD_ML_ENABLED=true and VERTGUARD_MEDIA_BINARY_PATH is set.

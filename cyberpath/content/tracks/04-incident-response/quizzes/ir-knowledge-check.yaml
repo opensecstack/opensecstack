@@ -1,0 +1,140 @@
+id: ir-knowledge-check
+title: "Knowledge Check — Incident Response Basics"
+randomise: true
+randomise_choices: true
+pass_threshold: 0.80
+questions:
+  - id: q1
+    type: multiple-choice
+    prompt: "Which phase of the IR lifecycle focuses on limiting the damage of an active attack?"
+    choices:
+      - id: a
+        text: "Identification"
+      - id: b
+        text: "Containment"
+      - id: c
+        text: "Eradication"
+      - id: d
+        text: "Recovery"
+    correct: [b]
+    explanation: "Containment is the phase where you limit the blast radius of an active incident, isolating affected hosts and stopping lateral movement without destroying forensic evidence."
+    points: 1
+
+  - id: q2
+    type: multiple-choice
+    prompt: "Under NIS2 Article 23, within how many hours must the initial notification of a significant incident be sent?"
+    choices:
+      - id: a
+        text: "6 hours"
+      - id: b
+        text: "24 hours"
+      - id: c
+        text: "48 hours"
+      - id: d
+        text: "72 hours"
+    correct: [b]
+    explanation: "NIS2 Article 23 requires an early warning within 24 hours of becoming aware of a significant incident. The detailed report is due within 72 hours."
+    points: 1
+
+  - id: q3
+    type: true-false
+    prompt: "During short-term containment, the affected host should be powered off immediately to preserve evidence."
+    correct: false
+    explanation: "No — powering off the host destroys volatile memory evidence (running processes, network connections, encryption keys). Short-term containment keeps the host powered on while isolating it from the network."
+    points: 1
+
+  - id: q4
+    type: multiple-choice
+    prompt: "Which of the following should NOT be captured before eradication?"
+    choices:
+      - id: a
+        text: "Volatile memory image"
+      - id: b
+        text: "Log exports from the affected system"
+      - id: c
+        text: "Pre-incident backup copy"
+      - id: d
+        text: "Network packet captures"
+    correct: [c]
+    explanation: "The backup copy already exists — it does not need to be captured before eradication. Memory image, logs, and network captures are fresh forensic evidence that must be collected before eradication processes destroy them."
+    points: 1
+
+  - id: q5
+    type: multiple-choice
+    prompt: "Which opensecstack ecosystem tool serves as the IR orchestration platform?"
+    choices:
+      - id: a
+        text: "APIGuard"
+      - id: b
+        text: "ThreatFlow"
+      - id: c
+        text: "IRFlow"
+      - id: d
+        text: "CITADEL"
+    correct: [c]
+    explanation: "IRFlow is the opensecstack IR orchestration platform, providing structured incident records, playbooks, task assignment, and CITADEL integration for audit trails."
+    points: 1
+
+  - id: q6
+    type: scenario
+    prompt: "Your SIEM raises an alert for unusual outbound traffic on port 4444 from ten workstations. What is your first step as an IR analyst?"
+    choices:
+      - id: a
+        text: "Immediately isolate all ten workstations from the network"
+      - id: b
+        text: "Perform triage: confirm the alert, gather context, and classify severity before acting"
+      - id: c
+        text: "Immediately notify AKCESK as a significant incident"
+      - id: d
+        text: "Restore all workstations from backup"
+    correct: [b]
+    explanation: "Proper triage prevents overreaction to false positives and ensures proportionate actions. You must confirm the incident, gather context (what is communicating, with whom, when it started) and classify severity before executing containment actions."
+    points: 1
+
+  - id: q7
+    type: true-false
+    prompt: "The post-incident review (PIR) is optional if the incident was successfully contained within one hour."
+    correct: false
+    explanation: "PIR is mandatory regardless of duration or severity. It identifies root causes, control failures, and required changes — and produces the documentation required for NIS2 reporting and audit evidence."
+    points: 1
+
+  - id: q8
+    type: multiple-choice
+    prompt: "Which NIS2 article establishes incident handling obligations?"
+    choices:
+      - id: a
+        text: "Article 21(2)(a)"
+      - id: b
+        text: "Article 21(2)(b)"
+      - id: c
+        text: "Article 21(2)(e)"
+      - id: d
+        text: "Article 21(2)(g)"
+    correct: [b]
+    explanation: "NIS2 Article 21(2)(b) mandates incident handling as one of the ten mandatory cybersecurity measures for essential and important entities."
+    points: 1
+
+  - id: q9
+    type: code-fill
+    prompt: "Complete the winpmem command to capture volatile memory to 'memory.raw':"
+    template: |
+      winpmem_mini_x64.exe ___ memory.raw
+    correct: ["-o", "--output", "-"]
+    explanation: "The -o (or --output) flag specifies the output file. Understanding basic memory capture tool syntax is essential for evidence collection."
+    points: 1
+
+  - id: q10
+    type: multiple-choice
+    prompt: "What does 'dwell time' mean in an IR context?"
+    choices:
+      - id: a
+        text: "Duration of containment"
+      - id: b
+        text: "Time from initial compromise to detection"
+      - id: c
+        text: "Time needed to recover systems"
+      - id: d
+        text: "Duration of the PIR phase"
+    correct: [b]
+    explanation: "Dwell time measures how long an attacker was present in your environment without being detected. Longer dwell times (months or years) correlate with greater access exploitation, data exfiltration, and incident impact."
+    points: 1

@@ -1,0 +1,290 @@
+# =============================================================================
+# Production overrides for the opensecstack Helm chart.
+#
+# Apply on top of values.yaml:
+#   helm upgrade --install opensecstack ./deploy/helm/opensecstack \
+#     -f values.yaml \
+#     -f values.prod.yaml \
+#     -n opensecstack
+#
+# Secrets are NOT stored here. Provision them separately:
+#   kubectl create secret generic opensecstack-db-secrets  -n opensecstack \
+#     --from-literal=POSTGRES_PASSWORD=<strong-password>  \
+#     --from-literal=NIS2_DB_PASSWORD=<strong-password>
+#   kubectl create secret generic opensecstack-app-secrets -n opensecstack \
+#     --from-literal=APIGUARD_JWT_SECRET=<32-byte-hex>    \
+#     --from-literal=NIS2_JWT_SECRET=<32-byte-hex>         \
+#     --from-literal=NIS2_SECRET_KEY=<32-byte-hex>         \
+#     --from-literal=REDIS_PASSWORD=<strong-password>
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Global — production-wide defaults
+# ---------------------------------------------------------------------------
+global:
+  # Never pull :latest blindly in production; use digest-pinned or tagged images
+  imagePullPolicy: IfNotPresent
+
+namespace: opensecstack
+
+# ---------------------------------------------------------------------------
+# Pod Security Context — applied to all application pods
+# Enforces non-root execution across the stack.
+# ---------------------------------------------------------------------------
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# ---------------------------------------------------------------------------
+# APIGuard — Go API gateway, CPU-bound during request scanning
+# ---------------------------------------------------------------------------
+apiguard:
+  image:
+    repository: ghcr.io/opensecstack/apiguard
+    tag: "1.0.0"                       # pin to a release tag, never use latest
+
+  replicas: 3                          # baseline before HPA kicks in
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  service:
+    port: 8080
+
+  ingress:
+    enabled: true
+    host: api.opensecstack.io          # production domain
+    tlsSecret: apiguard-tls            # cert-manager will create this
+
+  # Prometheus monitoring annotations added to pod template
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+
+  # Pod disruption budget — ensure at least 1 pod is always available
+  podDisruptionBudget:
+    minAvailable: 1
+
+  # Anti-affinity — spread pods across nodes for resilience
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - apiguard
+            topologyKey: kubernetes.io/hostname
+
+  # Rate limiting for the API gateway
+  rateLimit:
+    global: 200                        # max requests/second across all endpoints
+    auth: 30                           # max requests/second to auth endpoints
+
+  # CORS — restrict origins to production domains only
+  cors:
+    allowedOrigins:
+      - "https://api.opensecstack.io"
+      - "https://compass.opensecstack.io"
+      - "https://citadel.opensecstack.io"
+
+# ---------------------------------------------------------------------------
+# NIS2 Compass — Python/Flask compliance assessment engine
+# ---------------------------------------------------------------------------
+nis2compass:
+  image:
+    repository: ghcr.io/opensecstack/nis2compass
+    tag: "1.0.0"
+
+  replicas: 3
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  service:
+    port: 8090
+
+  ingress:
+    enabled: true
+    host: compass.opensecstack.io      # production domain
+    tlsSecret: nis2compass-tls
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8090"
+    prometheus.io/path: "/metrics"
+
+  podDisruptionBudget:
+    minAvailable: 1
+
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - nis2compass
+            topologyKey: kubernetes.io/hostname
+
+  cors:
+    allowedOrigins:
+      - "https://api.opensecstack.io"
+      - "https://compass.opensecstack.io"
+      - "https://citadel.opensecstack.io"
+
+# ---------------------------------------------------------------------------
+# CITADEL — Go SBOM / supply-chain verification service
+# ---------------------------------------------------------------------------
+citadel:
+  image:
+    repository: ghcr.io/opensecstack/citadel
+    tag: "1.0.0"
+
+  replicas: 2
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  service:
+    port: 8070
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8070"
+    prometheus.io/path: "/metrics"
+
+  podDisruptionBudget:
+    minAvailable: 1
+
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - citadel
+            topologyKey: kubernetes.io/hostname
+
+  cors:
+    allowedOrigins:
+      - "https://api.opensecstack.io"
+      - "https://compass.opensecstack.io"
+      - "https://citadel.opensecstack.io"
+
+# ---------------------------------------------------------------------------
+# PostgreSQL — DISABLED in production; use an external managed database
+# (e.g. AWS RDS, GCP Cloud SQL, Azure Database for PostgreSQL)
+# ---------------------------------------------------------------------------
+postgres:
+  # Disable the in-cluster Postgres deployment for production
+  enabled: false
+
+  # External managed database connection details
+  # These values are injected into the opensecstack-config ConfigMap
+  external:
+    host: "opensecstack-prod.xxxxxxxx.us-east-1.rds.amazonaws.com"   # REPLACE with real endpoint
+    port: "5432"
+    user: "apiguard"
+    apiguardDbName: "apiguard"
+    nis2DbName: "nis2compass"
+
+  # Resource limits kept here for reference; not used when enabled=false
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+  persistence:
+    size: 100Gi
+    storageClass: "gp3"                # REPLACE with your cloud's retain-policy class
+
+# ---------------------------------------------------------------------------
+# Redis — DISABLED in production; use an external managed Redis
+# (e.g. AWS ElastiCache, GCP Memorystore, Azure Cache for Redis)
+# ---------------------------------------------------------------------------
+redis:
+  # Disable the in-cluster Redis deployment for production
+  enabled: false
+
+  # External managed Redis connection details
+  external:
+    host: "opensecstack-prod.xxxxxx.0001.use1.cache.amazonaws.com"   # REPLACE with real endpoint
+    port: "6379"
+
+  # Resource limits kept here for reference; not used when enabled=false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# ---------------------------------------------------------------------------
+# Application config — wired into the opensecstack-config ConfigMap
+# When postgres/redis are external, these must point to the managed endpoints.
+# ---------------------------------------------------------------------------
+config:
+  logLevel: warn                       # reduce log volume in production
+  postgresHost: "opensecstack-prod.xxxxxxxx.us-east-1.rds.amazonaws.com"  # REPLACE — must match postgres.external.host
+  postgresPort: "5432"
+  postgresUser: "apiguard"
+  apiguardDbName: "apiguard"
+  nis2DbName: "nis2compass"
+  redisHost: "opensecstack-prod.xxxxxx.0001.use1.cache.amazonaws.com"     # REPLACE — must match redis.external.host
+  redisPort: "6379"
+
+# ---------------------------------------------------------------------------
+# HPA — scale aggressively in production
+# ---------------------------------------------------------------------------
+hpa:
+  enabled: true
+  minReplicas: 3                       # never drop below 3 replicas
+  maxReplicas: 15                      # upper bound for cost control
+  cpuThreshold: 70                     # scale at 70% CPU utilization
+
+# ---------------------------------------------------------------------------
+# cert-manager — real Let's Encrypt production ACME endpoint
+# ---------------------------------------------------------------------------
+certManager:
+  enabled: true
+  email: "admin@opensecstack.io"       # receives cert expiry warnings
+  issuerType: letsencrypt-prod         # production certificates (not staging)
+
+# ---------------------------------------------------------------------------
+# Network Policies — restrict traffic between pods
+# When enabled, only explicitly allowed traffic is permitted.
+# ---------------------------------------------------------------------------
+networkPolicies:
+  enabled: true

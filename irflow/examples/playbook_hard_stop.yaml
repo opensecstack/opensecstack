@@ -1,0 +1,33 @@
+name: CITADEL HARD STOP Response
+description: Automated P1 incident when CITADEL issues a HARD STOP governance decision
+version: "1.0"
+trigger:
+  event_type: citadel.hard_stop
+
+steps:
+  - id: create_p1
+    name: Create P1 Incident
+    type: action
+    config:
+      action_type: create_incident
+      severity: P1
+      title_template: "HARD STOP: {{.event.trigger}} — {{.event.execution_id}}"
+    on_success: notify_all
+
+  - id: notify_all
+    name: Notify All Stakeholders
+    type: notify
+    config:
+      channels:
+        - security-incidents
+        - management
+        - compliance
+      message_template: "CITADEL HARD STOP triggered. P1 incident created. Immediate response required."
+    on_success: freeze_check
+
+  - id: freeze_check
+    name: Verify Project Freeze
+    type: action
+    config:
+      action_type: contain
+      description: "Verify all project deployments are frozen per CITADEL mandate"

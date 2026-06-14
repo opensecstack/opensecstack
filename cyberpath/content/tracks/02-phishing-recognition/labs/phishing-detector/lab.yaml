@@ -1,0 +1,124 @@
+﻿id: phishing-detector
+version: 1.0.0
+title: "Phishing Email Classification Exercise"
+runtime: wasm
+image: "ghcr.io/opensecstack/cyberpath-labs/phishing-detector:1.0.0"
+entry_command: "/usr/local/bin/phishing-lab"
+time_limit_seconds: 1800
+
+objectives:
+  - "Inspect the email headers and body of ten sample emails and classify each as phishing or legitimate"
+  - "For emails classified as phishing, identify at least one specific indicator that supports the classification"
+  - "Achieve a classification accuracy of at least 80% (8 out of 10 correct)"
+  - "Submit a written justification for at least three of your classifications"
+
+instructions: |
+  ## Scenario
+
+  You are an IT helpdesk analyst at Albtech S.A. Your manager has received reports of suspicious
+  emails from several staff members. You have been given a set of ten sample emails to analyse
+  and classify.
+
+  Use the `phishlab` CLI tool to work through the email samples.
+
+  ### Step 1 — List the sample emails
+  View all available email samples:
+
+  ```bash
+  phishlab list
+  ```
+
+  This will display ten email IDs (email-001 through email-010) with a brief summary line.
+
+  ### Step 2 — Inspect each email
+  For each email, view the full headers and body:
+
+  ```bash
+  phishlab inspect --id email-001
+  ```
+
+  Pay attention to:
+  - The actual From address (not just the display name)
+  - The Return-Path header
+  - The Reply-To header (if present)
+  - SPF/DKIM/DMARC authentication results in the headers
+  - Domain similarity to known legitimate domains
+  - Urgency or authority language in the body
+  - Links — hover over any URL to see the real destination
+
+  ### Step 3 — Classify each email
+  After inspecting an email, submit your classification:
+
+  ```bash
+  phishlab classify \
+    --id email-001 \
+    --verdict phishing|legitimate \
+    --indicator "Brief description of the main indicator (required for phishing verdicts)"
+  ```
+
+  For at least three emails (of any verdict), add a written justification:
+
+  ```bash
+  phishlab justify \
+    --id email-001 \
+    --text "Your reasoning here — what specific elements led to your conclusion"
+  ```
+
+  ### Step 4 — Submit your results
+  When you have classified all ten emails, submit your results for scoring:
+
+  ```bash
+  phishlab submit
+  ```
+
+  The tool will display your accuracy score and highlight any misclassifications with explanations.
+
+  ### Completing the lab
+  Run the validation check after submission:
+
+  ```bash
+  phishlab lab validate
+  ```
+
+validation:
+  - id: all-emails-classified
+    type: phishlab_all_classified
+    expected_count: 10
+    weight: 2
+    diagnostic: "Not all ten emails have been classified. Run 'phishlab list' to see which are missing."
+
+  - id: accuracy-threshold
+    type: phishlab_accuracy
+    min_correct: 8
+    weight: 4
+    diagnostic: "Classification accuracy is below 80%. Review the misclassified emails and their explanations, then re-examine the headers for the indicators you missed."
+
+  - id: indicators-provided
+    type: phishlab_indicators_present
+    required_for_verdict: phishing
+    weight: 2
+    diagnostic: "All phishing classifications must include an indicator description. Re-run 'phishlab classify' with --indicator for any phishing verdicts that are missing this field."
+
+  - id: justifications-submitted
+    type: phishlab_justification_count
+    min_count: 3
+    weight: 2
+    diagnostic: "At least three written justifications are required. Run 'phishlab justify' for three or more emails."
+
+success_criteria:
+  min_score: 8
+  required_rules:
+    - all-emails-classified
+    - accuracy-threshold
+
+network:
+  egress_whitelist: []
+
+hints:
+  - trigger: idle_seconds:180
+    text: "Use 'phishlab inspect --id email-001' to view the full headers. Check the actual From address domain against the organisation's known domain."
+
+  - trigger: idle_seconds:600
+    text: "Remember: SPF passing does not mean the sender is legitimate. Check whether the sending domain itself is a lookalike of the real organisation's domain."
+
+content_hash: ""

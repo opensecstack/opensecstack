@@ -1,0 +1,336 @@
+# VertGuard configuration example
+# Copy to vertguard.yaml and point VERTGUARD_CONFIG_PATH at it.
+# Environment variables (prefix VERTGUARD_) override every key shown here.
+# All values shown are the compiled-in defaults unless noted otherwise.
+#
+# See docs/configuration.md for the full reference and security guidance.
+
+# ── Server ────────────────────────────────────────────────────────────────────
+server:
+  # TCP port the HTTP API listens on.
+  port: 8091
+
+  # Port for the internal metrics / dashboard endpoint.
+  dashboard_port: 3009
+
+  # Structured log level: trace | debug | info | warn | error.
+  log_level: "info"
+
+  # Maximum duration the server waits to read a complete request.
+  read_timeout: "30s"
+
+  # Maximum duration the server has to write a response (including body).
+  write_timeout: "30s"
+
+  # How long to wait between flipping /readyz to 503 and calling Shutdown,
+  # giving the load balancer time to drain in-flight traffic.
+  drain_grace: "5s"
+
+  # Token-bucket rate limiter — disabled by default.
+  rate_limit_enabled: false
+  rate_limit_rps: 100.0
+  rate_limit_burst: 200
+
+# ── Database ──────────────────────────────────────────────────────────────────
+db:
+  host: "localhost"
+  port: 5438
+  name: "vertguard"
+  user: "vertguard"
+  # password is intentionally blank here; supply via VERTGUARD_DB_PASSWORD.
+  password: ""
+
+  # Use "require" or "verify-full" in production. "disable" is for
+  # local development only and will trigger a startup warning.
+  ssl_mode: "disable"
+
+  # Maximum open connections in the pgxpool. Tune to (cpu_count * 4).
+  max_open_conns: 25
+
+  # Minimum idle connections kept warm. 0 lets the db package derive a
+  # sensible floor from max_open_conns.
+  min_conns: 0
+
+# ── Auth (JWT HS256) ──────────────────────────────────────────────────────────
+auth:
+  # Primary HMAC signing/verification secret.
+  # Generate: openssl rand -base64 32
+  # Empty enables dev mode with a loud startup warning. Never empty in prod.
+  secret: ""
+
+  # Pre-rotation slot: verifier will accept tokens signed with this secret
+  # while minting still uses `secret`. Promote by swapping and clearing.
+  secret_next: ""
+
+  # Post-rotation drain slot: keeps old tokens valid through max(token_ttl,
+  # 24 h) after a promotion. Clear once the drain window elapses.
+  secret_previous: ""
+
+  # Lifetime of issued tokens.
+  token_ttl: "8h"
+
+  # Expected `iss` claim value in incoming JWT tokens.
+  issuer: "vertguard"
+
+  # DANGER: bypass JWT verification entirely. For local development only.
+  # Rejected at startup when VG_ENV=production.
+  dev_mode: false
+
+# ── CITADEL WORM integration ──────────────────────────────────────────────────
+citadel:
+  # Base URL of the CITADEL service. Empty = standalone mode (no WORM logging).
+  base_url: ""
+
+  # Legacy alias — used when base_url is empty.
+  api_url: "http://localhost:8099"
+
+  # HMAC signing key for event attestation. Single-key legacy path.
+  # For rotation use hmac_secrets (comma-separated CSV env or YAML list).
+  hmac_secret: ""
+  key_id: ""
+
+  # Multi-slot rotation knobs (primary, next, previous order).
+  # Set via VERTGUARD_CITADEL_HMAC_SECRETS="primary,next,previous".
+  hmac_secrets: []
+  key_ids: []
+
+  # Project / tenant identifier stamped on every emitted evidence row.
+  project_id: ""
+
+  # When true, CITADEL calls are logged but not transmitted (dry run).
+  dry_run: false
+
+  # Maximum events buffered in the async emit queue before back-pressure.
+  queue_max: 10000
+
+  # Async emit buffer size. 0 falls back to queue_max.
+  async_buffer: 0
+
+  # Master switch — set to true to enable CITADEL emission.
+  enabled: false
+
+# ── ThreatFlow integration ────────────────────────────────────────────────────
+threatflow:
+  # URL of the ThreatFlow push API. Empty = no outbound IOC push.
+  api_url: "http://localhost:8084"
+  key_id: ""
+  key_secret: ""
+
+  # HMAC secret for validating inbound ThreatFlow webhook events.
+  # Also seeds the default subscriber for the outbound push path.
+  webhook_secret: ""
+
+# ── AI Threat Feed (Module 4) ─────────────────────────────────────────────────
+threatfeed:
+  # Path to a YAML file listing community threat-intel sources.
+  sources_path: "/etc/vertguard/sources.yaml"
+
+  # Cron expression for periodic MITRE ATLAS sync (weekly by default).
+  atlas_sync_cron: "0 0 * * 0"
+
+  # Cron expression for community-feed sync (daily by default).
+  community_sync_cron: "0 6 * * *"
+
+  # How often enriched IOCs are pushed to ThreatFlow.
+  push_interval: "15m"
+
+  # Cron expression for reconciliation sweeps.
+  reconcile_cron: "0 4 * * *"
+
+  # Minimum ML confidence score for an IOC to be emitted.
+  min_confidence: 0.5
+
+  # Override the upstream MITRE ATLAS YAML URL (air-gapped mirrors, etc.).
+  # Defaults to the public GitHub raw URL when unset.
+  atlas_source_url: ""
+
+# ── Module 3: Prompt Injection Defence ───────────────────────────────────────
+prompt:
+  # Scores below clean_threshold → CLEAN.
+  clean_threshold: 0.3
+
+  # Scores at or above block_threshold → BLOCKED. Must be > clean_threshold.
+  block_threshold: 0.7
+
+  # Maximum input size the scanner will process (bytes). Range: 1 KiB–16 MiB.
+  max_input_size: 1048576  # 1 MiB
+
+  # Path to the JSON rule pack (VG-003 v1.0 format). Empty = DefaultLibrary.
+  rule_pack_path: ""
+
+  # Directory scanned for operator-supplied custom patterns (YAML).
+  custom_patterns_path: ""
+
+  # Directory holding the bundled pattern registry.
+  pattern_registry_path: "/etc/vertguard/patterns/"
+
+  # Optional NeMo Guardrails endpoint for LLM-based second-opinion checks.
+  nemo_endpoint: ""
+
+  # Optional LlamaGuard endpoint.
+  llamaguard_endpoint: ""
+
+  # Path to a Python ML binary used as a subprocess backend (no gRPC).
+  # Only consulted when ml.enabled is false or ml.grpc_url is empty.
+  ml_binary_path: ""
+
+  # Timeout for subprocess ML calls.
+  ml_timeout: "2s"
+
+# ── Module 1: Media Authenticity (C2PA) ──────────────────────────────────────
+media:
+  # Path to the compiled c2pa-verify CLI binary. Empty disables Module 1.
+  binary_path: "/usr/local/bin/c2pa-verify"
+
+  # Per-invocation subprocess timeout.
+  timeout: "10s"
+
+  # Maximum uploaded file size (bytes). Default: 100 MiB.
+  max_size: 104857600
+
+  # Legacy trust-store path forwarded to the c2pa-verify CLI.
+  c2pa_truststore: "/etc/vertguard/c2pa-truststore"
+
+  # Enable OCSP checks inside the c2pa-verify subprocess.
+  c2pa_ocsp_enabled: false
+
+  # Whether to store media content alongside scan results.
+  content_retention: false
+
+  # Directory holding PEM trust anchors (one per file or a bundle).
+  # Empty = no anchor pinning; all C2PA chains resolve as "untrusted".
+  trust_anchors_dir: ""
+
+  # PEM or DER certificate revocation list path.
+  revocation_list_path: ""
+
+  # How often to poll trust_anchors_dir / revocation_list_path for changes.
+  reload_interval: "60s"
+
+  # When true, the /scan/media endpoint returns 422 for untrusted/revoked
+  # content instead of 200 with verdict="untrusted". Default false (migrate
+  # carefully: existing clients may not expect 422).
+  require_trust: false
+
+# ── Module 5: AI Phishing Detection ──────────────────────────────────────────
+phishing:
+  # Master switch.
+  enabled: false
+
+  # Path to the phishing model directory.
+  models_path: ""
+
+  clean_threshold: 0.3
+  block_threshold: 0.7
+
+  # Maximum input length in bytes. Default: 1 MiB.
+  max_input_size: 1048576
+
+# ── Module 6: Identity Verification ──────────────────────────────────────────
+identity:
+  # Master switch.
+  enabled: false
+
+  # Enable real-time ML enrichment (Phase 4.3).
+  realtime_enabled: false
+
+  clean_threshold: 0.3
+  block_threshold: 0.7
+
+  # Maximum input length in bytes. Default: 64 KiB.
+  max_input_size: 65536
+
+  # Window over which repeated identical inputs count toward replay detection.
+  replay_window: "10m"
+
+  # Number of identical inputs in replay_window that triggers BLOCKED.
+  replay_threshold: 5
+
+  # Path to operator-supplied identity pattern YAML files.
+  patterns_path: ""
+
+# ── Python gRPC ML service (Phase 4.2+) ──────────────────────────────────────
+ml:
+  # Master switch — enable the gRPC ML enricher.
+  enabled: false
+
+  # gRPC address of the Python ML inference service.
+  grpc_url: "localhost:50051"
+
+  # Path where model artefacts are stored on disk.
+  models_path: "/var/lib/vertguard/models/"
+
+  # Enable GPU inference (passed through to the Python service config).
+  gpu_enabled: false
+
+  # Maximum batch size for inference requests.
+  max_batch_size: 16
+
+  # Per-RPC timeout. The breaker trips after 5 consecutive failures.
+  timeout: "1s"
+
+  # When true, every request is scored by ML (eval mode). Default false
+  # scores only SUSPICIOUS inputs, which is cheaper for production traffic.
+  always_score: false
+
+# ── IOC Store (VG-006) ────────────────────────────────────────────────────────
+ioc:
+  # Master switch.
+  enabled: false
+
+  # Default poll interval for all configured sources.
+  interval: "1h"
+
+  # How often the janitor sweeps expired IOCs from the database.
+  sweep_interval: "1h"
+
+  # CIDR ranges and hostnames that are never flagged as IOCs.
+  # Can also be set via VERTGUARD_IOC_ALLOWLIST="10.0.0.0/8,localhost".
+  allowlist: []
+
+  # Convenience MISP integration (alternative to listing a source below).
+  misp_url: ""
+  misp_token: ""
+
+  # Convenience abuse.ch integration.
+  abusech_enabled: false
+  abusech_urls: ""
+  abusech_hashes: ""
+
+  # Structured source list — supports misp | abusech | file adapters.
+  sources: []
+  # Example:
+  #   - type: misp
+  #     name: "internal-misp"
+  #     url: "https://misp.internal/events/restSearch"
+  #     auth_header: "Bearer <token>"
+  #     interval: "30m"
+  #     enabled: true
+  #
+  #   - type: abusech
+  #     name: "urlhaus"
+  #     url: "https://urlhaus-api.abuse.ch/v1/urls/recent/"
+  #     hash_url: "https://urlhaus-api.abuse.ch/v1/payloads/recent/"
+  #     enabled: true
+  #
+  #   - type: file
+  #     name: "local-blocklist"
+  #     path: "/etc/vertguard/blocklist.txt"
+  #     enabled: true
+
+# ── Outbound Webhook Dispatcher (VG-015) ─────────────────────────────────────
+webhook:
+  # Master switch — enable outbound webhook subscriber management.
+  enabled: false
+
+  # Maximum delivery attempts per event before the event is dropped.
+  max_retries: 3
+
+  # Base delay for exponential back-off between retry attempts.
+  backoff_base: "200ms"
+
+  # How often the outbox worker flushes pending events to subscribers.
+  outbox_flush_interval: "5s"
+
+  # HTTP request timeout for each delivery attempt.
+  request_timeout: "5s"

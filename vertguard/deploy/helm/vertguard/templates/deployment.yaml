@@ -1,0 +1,137 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vertguard.fullname" . }}
+  labels:
+    {{- include "vertguard.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      {{- include "vertguard.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vertguard.selectorLabels" . | nindent 8 }}
+      annotations:
+        # ConfigMap rollover triggers pod restart on config change.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if not .Values.metrics.serviceMonitor.enabled }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.service.port }}"
+        prometheus.io/path: "/metrics"
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "vertguard.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "vertguard.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: vertguard
+          image: {{ include "vertguard.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.config.server.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "vertguard.fullname" . }}-config
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          env:
+            # ── DB host resolved via helper (embedded vs external) ──
+            - name: VERTGUARD_DB_HOST
+              value: {{ include "vertguard.databaseHost" . | quote }}
+            # ── Secrets ───────────────────────────────────────────
+            - name: VERTGUARD_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vertguard.secretName" . }}
+                  key: auth-secret
+            - name: VERTGUARD_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vertguard.secretName" . }}
+                  key: db-password
+            {{- if .Values.config.citadel.enabled }}
+            - name: VERTGUARD_CITADEL_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vertguard.secretName" . }}
+                  key: citadel-hmac-secret
+                  optional: true
+            {{- end }}
+            {{- if .Values.config.threatflow.api_url }}
+            - name: VERTGUARD_THREATFLOW_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "vertguard.secretName" . }}
+                  key: threatflow-webhook-secret
+                  optional: true
+            {{- end }}
+            {{- if .Values.ml.enabled }}
+            # WHY: subchart's Service is named `vertguard-ml`; the Go
+            # client discovers it via cluster DNS without operator
+            # intervention. Override `ml.service.port` to change.
+            - name: VERTGUARD_ML_GRPC_URL
+              value: {{ printf "vertguard-ml:%v" (default 50051 ((.Values.ml).service).port) | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            # /livez never pings the DB — kubelet should only restart the
+            # pod when the process itself is wedged.
+            httpGet:
+              path: /livez
+              port: http
+            # Fallback (pre-split deployments): path: /api/v1/health
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+          readinessProbe:
+            # /readyz pings the DB and respects the shutdown drain flag.
+            httpGet:
+              path: /readyz
+              port: http
+            # Fallback (pre-split deployments): path: /api/v1/health
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            # readOnlyRootFilesystem requires writable scratch for tmp.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,28 @@
+﻿id: sample-lab
+version: 1.0.0
+runtime: wasm-shell
+image: "ghcr.io/opensecstack/cyberpath-labs/wasm-shell:1.0.0"
+entry_command: "/bin/sh"
+assets:
+  - path: "/work/sample.txt"
+    content: "@./assets/sample.txt"
+validation:
+  - id: file-exists
+    type: file_exists
+    target: "/work/answer.txt"
+    weight: 1
+    diagnostic:
+      sq: "Mungon /work/answer.txt."
+      en: "Missing /work/answer.txt."
+success_criteria:
+  min_score: 1
+  required_rules: [file-exists]
+time_limit_seconds: 600
+network:
+  egress_whitelist: []
+hints:
+  - trigger: idle_seconds:120
+    text:
+      sq: "Provo të krijosh skedarin."
+      en: "Try creating the file."
+content_hash: ""

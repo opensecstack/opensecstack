@@ -1,0 +1,106 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sin
+      POSTGRES_USER: sin
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sin"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.10
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-devkey}
+      MEILI_ENV: production
+    volumes:
+      - meilidata:/meili_data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7700/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-dev}
+    ports:
+      - "8090:8090"
+    depends_on:
+      db:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+    environment:
+      # Server
+      COMMUNITY_HTTP_ADDR: ":8090"
+      COMMUNITY_NODE: ${COMMUNITY_NODE:-community-0}
+      COMMUNITY_DEV_MODE: ${COMMUNITY_DEV_MODE:-false}
+
+      # Database
+      COMMUNITY_DB_URL: postgres://sin:${DB_PASSWORD:-changeme}@db:5432/sin?sslmode=disable
+      COMMUNITY_DB_MAX_CONNS: ${COMMUNITY_DB_MAX_CONNS:-16}
+
+      # Auth
+      COMMUNITY_JWT_SECRET: ${COMMUNITY_JWT_SECRET:-change-in-production-must-be-32-chars}
+      COMMUNITY_JWT_ISSUER: ${COMMUNITY_JWT_ISSUER:-community}
+      COMMUNITY_TOKEN_TTL: ${COMMUNITY_TOKEN_TTL:-12h}
+      COMMUNITY_PASSWORD_PEPPER: ${COMMUNITY_PASSWORD_PEPPER:-change-in-production}
+
+      # Registration
+      COMMUNITY_INVITE_ONLY: ${COMMUNITY_INVITE_ONLY:-false}
+      COMMUNITY_ALLOWED_EMAIL_DOMAINS: ${COMMUNITY_ALLOWED_EMAIL_DOMAINS:-}
+      COMMUNITY_USERS: ${COMMUNITY_USERS:-}
+
+      # Meilisearch
+      MEILISEARCH_URL: http://meilisearch:7700
+      MEILISEARCH_KEY: ${MEILI_MASTER_KEY:-devkey}
+
+      # Uploads
+      UPLOAD_DIR: /app/uploads
+
+      # Site
+      SITE_URL: ${SITE_URL:-https://sin.to}
+
+      # SMTP
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@sin.to}
+      DIGEST_ENABLED: ${DIGEST_ENABLED:-true}
+
+      # GitHub OAuth
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GITHUB_CALLBACK_URL: ${GITHUB_CALLBACK_URL:-https://sin.to/api/v1/auth/github/callback}
+
+      # Google OAuth
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-https://sin.to/api/v1/auth/google/callback}
+
+      # Citadel
+      COMMUNITY_CITADEL_API_URL: ${COMMUNITY_CITADEL_API_URL:-}
+      COMMUNITY_CITADEL_KEY_ID: ${COMMUNITY_CITADEL_KEY_ID:-community-1}
+      COMMUNITY_CITADEL_HMAC_SECRETS: ${COMMUNITY_CITADEL_HMAC_SECRETS:-}
+      COMMUNITY_CITADEL_DRY_RUN: ${COMMUNITY_CITADEL_DRY_RUN:-true}
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  meilidata:
+  uploads:

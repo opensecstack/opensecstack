@@ -1,28 +1,36 @@
-version: "3.8"
+# docker-compose.dev.yml
+# Development stack — includes dev secrets, migration runner, and DB tooling.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#   or standalone: docker compose -f docker-compose.dev.yml up
+# WARNING: contains hard-coded dev secrets — never use in production.
 
-# Development stack with hot reload
-# Usage: docker compose -f docker-compose.dev.yml up
+version: "3.8"
 
 services:
   apiguard-api:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    environment:
+      APIGUARD_DB_URL: postgres://apiguard:devpassword@postgres:5432/apiguard?sslmode=disable
+      APIGUARD_REDIS_URL: redis://:devredispass@redis:6379
+      APIGUARD_JWT_SECRET: dev-jwt-secret-min-32-chars-replace-in-prod
+      APIGUARD_LOG_LEVEL: debug
+      APIGUARD_PORT: "8080"
+    volumes:
+      - .:/app
+      - /app/vendor
     ports:
       - "8080:8080"
-    environment:
-      - APIGUARD_DB_URL=postgres://apiguard:changeme@postgres:5432/apiguard?sslmode=disable
-      - APIGUARD_JWT_SECRET=dev-secret-do-not-use-in-production-min32chars
-      - APIGUARD_REDIS_URL=redis://redis:6379/0
-    volumes:
-      - ./cmd:/app/cmd
-      - ./internal:/app/internal
-      - ./rust:/app/rust
+    networks:
+      - frontend
+      - backend
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
+    restart: unless-stopped
 
   apiguard-web:
     build:
@@ -32,34 +40,104 @@ services:
       - "3000:3000"
     volumes:
       - ./web/src:/app/src
+    networks:
+      - frontend
     depends_on:
       - apiguard-api
 
+  migrate:
+    image: migrate/migrate:v4.18.1
+    volumes:
+      - ./migrations:/migrations
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://apiguard:devpassword@postgres:5432/apiguard?sslmode=disable"
+      - "up"
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
   postgres:
     image: postgres:16-alpine
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_USER: apiguard
-      POSTGRES_PASSWORD: changeme
+      POSTGRES_PASSWORD: devpassword
       POSTGRES_DB: apiguard
+    ports:
+      - "5432:5432"
+    networks:
+      - backend
     volumes:
-      - pgdata-dev:/var/lib/postgresql/data
+      - pgdata_dev:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U apiguard"]
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
+    command: redis-server --requirepass devredispass
+    environment:
+      REDIS_PASSWORD: devredispass
+      REDISCLI_AUTH: devredispass
     ports:
       - "6379:6379"
+    networks:
+      - backend
+    volumes:
+      - redisdata_dev:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "devredispass", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: dev@apiguard.local
+      PGADMIN_DEFAULT_PASSWORD: devpassword
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "5050:80"
+    networks:
+      - backend
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin_dev:/var/lib/pgadmin
+    restart: unless-stopped
+
+  adminer:
+    image: adminer:latest
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - "5051:8080"
+    networks:
+      - backend
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    environment:
+      REDIS_HOSTS: local:redis:6379:0:devredispass
+    ports:
+      - "8082:8081"
+    networks:
+      - backend
+    depends_on:
+      - redis
+    restart: unless-stopped
 
   vampi:
     image: erev0s/vampi:latest
@@ -67,6 +145,14 @@ services:
       - "5000:5000"
     environment:
       - FLASK_ENV=development
+    networks:
+      - backend
 
 volumes:
-  pgdata-dev:
+  pgdata_dev:
+  redisdata_dev:
+  pgadmin_dev:
+
+networks:
+  frontend:
+  backend:

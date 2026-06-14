@@ -1,0 +1,100 @@
+# SecureLab — Production Docker Compose
+#
+# SAFETY: All services run on securelab-net (isolated bridge network).
+# Do NOT attach securelab-api or securelab-db to a production network.
+# See docs/safety-controls.md for full isolation requirements.
+#
+# Secrets use ${VAR:?explanation} — compose will fail fast if any
+# required variable is unset, preventing misconfigured deployments.
+
+version: "3.9"
+
+networks:
+  securelab-net:
+    driver: bridge
+    name: securelab-net
+
+volumes:
+  securelab-db-data:
+
+services:
+
+  # ── SecureLab API (Go binary) ──────────────────────────────────────────────
+  securelab-api:
+    image: ghcr.io/opensecstack/securelab:1.0.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    container_name: securelab-api
+    restart: unless-stopped
+    ports:
+      # Bound to 127.0.0.1. Place a TLS-terminating reverse proxy in front.
+      - "127.0.0.1:8080:8080"
+    environment:
+      SECURELAB_HTTP_ADDR: "0.0.0.0:8080"
+      SECURELAB_DEV_MODE: "false"
+      SECURELAB_DB_URL: "${SECURELAB_DB_URL:?SECURELAB_DB_URL must be set}"
+      SECURELAB_JWT_SECRET: "${SECURELAB_JWT_SECRET:?SECURELAB_JWT_SECRET must be set}"
+      SECURELAB_CITADEL_URL: "${SECURELAB_CITADEL_URL:?SECURELAB_CITADEL_URL must be set}"
+      SECURELAB_CITADEL_HMAC_SECRET: "${SECURELAB_CITADEL_HMAC_SECRET:?SECURELAB_CITADEL_HMAC_SECRET must be set}"
+      SECURELAB_CITADEL_DRY_RUN: "${SECURELAB_CITADEL_DRY_RUN:-false}"
+      SECURELAB_OPENSCRUB_URL: "${SECURELAB_OPENSCRUB_URL:-}"
+      SECURELAB_OPENSCRUB_API_KEY: "${SECURELAB_OPENSCRUB_API_KEY:-}"
+      SECURELAB_APIGUARD_URL: "${SECURELAB_APIGUARD_URL:-}"
+      SECURELAB_APIGUARD_API_KEY: "${SECURELAB_APIGUARD_API_KEY:-}"
+      SECURELAB_THREATFLOW_URL: "${SECURELAB_THREATFLOW_URL:-}"
+      SECURELAB_THREATFLOW_API_KEY: "${SECURELAB_THREATFLOW_API_KEY:-}"
+    depends_on:
+      securelab-db:
+        condition: service_healthy
+    networks:
+      - securelab-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── SecureLab Web (nginx serving built React frontend) ────────────────────
+  securelab-web:
+    image: ghcr.io/opensecstack/securelab-web:1.0.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    container_name: securelab-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      securelab-api:
+        condition: service_healthy
+    networks:
+      - securelab-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  securelab-db:
+    image: postgres:16-alpine
+    container_name: securelab-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: securelab
+      POSTGRES_USER: securelab
+      POSTGRES_PASSWORD: "${SECURELAB_DB_PASSWORD:?SECURELAB_DB_PASSWORD must be set}"
+    volumes:
+      - securelab-db-data:/var/lib/postgresql/data
+    networks:
+      - securelab-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U securelab"]
+      interval: 5s
+      timeout: 5s
+      retries: 10

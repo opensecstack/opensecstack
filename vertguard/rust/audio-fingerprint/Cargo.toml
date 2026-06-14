@@ -1,0 +1,22 @@
+[package]
+name         = "audio-fingerprint"
+description  = "Audio fingerprinting (MFCC + spectral) for VertGuard media authenticity"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+authors.workspace     = true
+repository.workspace  = true
+readme.workspace      = true
+
+[lib]
+name       = "audio_fingerprint"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+thiserror  = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+
+[features]
+default = []
+ffi     = []

@@ -2,6 +2,7 @@ version: "3.8"
 
 # Full opensecstack ecosystem stack
 # Usage: docker compose -f deploy/docker-compose.yml up
+# Required env vars — copy deploy/.env.example to deploy/.env and fill in values
 
 services:
   # --- APIGuard ---
@@ -13,9 +14,16 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - APIGUARD_DB_URL=postgres://apiguard:${POSTGRES_PASSWORD:-changeme}@postgres:5432/apiguard?sslmode=disable
-      - APIGUARD_JWT_SECRET=${APIGUARD_JWT_SECRET:-change-this-to-a-random-string-at-least-32-chars}
-      - APIGUARD_REDIS_URL=redis://redis:6379/0
+      - APIGUARD_DB_URL=postgres://apiguard:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/apiguard?sslmode=disable
+      - APIGUARD_JWT_SECRET=${APIGUARD_JWT_SECRET:?APIGUARD_JWT_SECRET must be set}
+      - APIGUARD_REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
+      # CITADEL audit forwarding — citadel-api is defined in .citadel/docker-compose.yml;
+      # start .citadel/docker-compose.yml separately or merge for full integration.
+      - APIGUARD_CITADEL_URL=http://citadel-api:8099
+      - APIGUARD_CITADEL_API_KEY=${CITADEL_API_KEY:-}
+    networks:
+      - frontend
+      - backend
     depends_on:
       postgres:
         condition: service_healthy
@@ -30,8 +38,217 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
+    networks:
+      - frontend
     depends_on:
       - apiguard-api
+    restart: unless-stopped
+
+  # --- NIS2 Compass ---
+  nis2compass-api:
+    image: ghcr.io/opensecstack/nis2compass:latest
+    build:
+      context: ../nis2compass
+      dockerfile: Dockerfile
+    ports:
+      - "8090:8090"
+    environment:
+      - NIS2_DB_URL=postgresql+psycopg2://nis2compass:${NIS2_DB_PASSWORD:?NIS2_DB_PASSWORD must be set}@postgres:5432/nis2compass
+      - NIS2_REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/1
+      - NIS2_SECRET_KEY=${NIS2_SECRET_KEY:?NIS2_SECRET_KEY must be set}
+      - NIS2_JWT_SECRET=${NIS2_JWT_SECRET:?NIS2_JWT_SECRET must be set}
+      # CITADEL audit forwarding — citadel-api is defined in .citadel/docker-compose.yml;
+      # start .citadel/docker-compose.yml separately or merge for full integration.
+      - CITADEL_API_URL=http://citadel-api:8099
+      - CITADEL_API_KEY=${CITADEL_API_KEY:-}
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nis2-migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  nis2compass-web:
+    image: ghcr.io/opensecstack/nis2compass-web:latest
+    build:
+      context: ../nis2compass/web
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    networks:
+      - frontend
+    depends_on:
+      - nis2compass-api
+    restart: unless-stopped
+
+  nis2-migrate:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - ../nis2compass:/app:ro
+    command: >
+      sh -c "pip install -q alembic psycopg2-binary sqlalchemy &&
+             alembic upgrade head"
+    environment:
+      - NIS2_DB_URL=postgresql+psycopg2://nis2compass:${NIS2_DB_PASSWORD:?NIS2_DB_PASSWORD must be set}@postgres:5432/nis2compass
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  # --- ThreatFlow ---
+  threatflow-api:
+    image: ghcr.io/opensecstack/threatflow:latest
+    build:
+      context: ../threatflow
+      dockerfile: Dockerfile
+    ports:
+      - "8091:8091"
+    environment:
+      THREATFLOW_PORT: "8091"
+      THREATFLOW_DB_URL: "postgres://threatflow:${POSTGRES_PASSWORD}@postgres:5432/threatflow?sslmode=disable"
+      THREATFLOW_LOG_LEVEL: "info"
+      THREATFLOW_CITADEL_API_URL: ""
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # --- SIN (Community) ---
+  sin-meilisearch:
+    image: getmeili/meilisearch:v1.10
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?MEILI_MASTER_KEY must be set}
+      MEILI_ENV: production
+    volumes:
+      - sin-meilidata:/meili_data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7700/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  community-api:
+    image: ghcr.io/opensecstack/community:latest
+    build:
+      context: ../community
+      dockerfile: Dockerfile
+    ports:
+      - "8089:8090"
+    environment:
+      COMMUNITY_HTTP_ADDR: ":8090"
+      COMMUNITY_DB_URL: "postgres://sin:${SIN_DB_PASSWORD:?SIN_DB_PASSWORD must be set}@postgres:5432/sin?sslmode=disable"
+      COMMUNITY_JWT_SECRET: ${COMMUNITY_JWT_SECRET:?COMMUNITY_JWT_SECRET must be set}
+      COMMUNITY_JWT_ISSUER: "community"
+      COMMUNITY_TOKEN_TTL: "12h"
+      COMMUNITY_PASSWORD_PEPPER: ${COMMUNITY_PASSWORD_PEPPER:?COMMUNITY_PASSWORD_PEPPER must be set}
+      MEILISEARCH_URL: "http://sin-meilisearch:7700"
+      MEILISEARCH_KEY: ${MEILI_MASTER_KEY}
+      UPLOAD_DIR: "/app/uploads"
+      SITE_URL: ${COMMUNITY_SITE_URL:-https://sin.to}
+      COMMUNITY_CITADEL_API_URL: "http://citadel-api:8099"
+      COMMUNITY_CITADEL_KEY_ID: "community-1"
+      COMMUNITY_CITADEL_HMAC_SECRETS: ${CITADEL_API_KEY:-}
+      COMMUNITY_CITADEL_DRY_RUN: "false"
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@sin.to}
+    volumes:
+      - sin-uploads:/app/uploads
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      sin-meilisearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # --- sinauth (SSO identity provider — every platform authenticates through it) ---
+  # Keys volume is chowned to the distroless nonroot uid (65532) so sinauth-api
+  # can generate/persist its RS256 signing key on first boot without running as root.
+  sinauth-keyinit:
+    image: alpine:3.20
+    command: ["sh", "-c", "mkdir -p /keys && chown -R 65532:65532 /keys && chmod 700 /keys"]
+    volumes:
+      - sinauth-keys:/keys
+    restart: on-failure
+
+  sinauth-migrate:
+    image: ghcr.io/opensecstack/sinauth:latest
+    build:
+      context: ../sinauth
+      dockerfile: Dockerfile
+    command: ["migrate", "--dir", "/migrations"]
+    volumes:
+      - ../sinauth/migrations:/migrations:ro
+    environment:
+      - SINAUTH_DB_URL=postgres://sinauth:${SINAUTH_DB_PASSWORD:?SINAUTH_DB_PASSWORD must be set}@postgres:5432/sinauth?sslmode=disable
+      - SINAUTH_ISSUER=${SINAUTH_ISSUER:?SINAUTH_ISSUER must be set}
+      - SINAUTH_SIGNING_KEY_PATH=/keys/sinauth.pem
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  sinauth-api:
+    image: ghcr.io/opensecstack/sinauth:latest
+    build:
+      context: ../sinauth
+      dockerfile: Dockerfile
+    ports:
+      - "8100:8100"
+    environment:
+      - SINAUTH_HTTP_ADDR=:8100
+      - SINAUTH_DB_URL=postgres://sinauth:${SINAUTH_DB_PASSWORD:?SINAUTH_DB_PASSWORD must be set}@postgres:5432/sinauth?sslmode=disable
+      - SINAUTH_ISSUER=${SINAUTH_ISSUER:?SINAUTH_ISSUER must be set}
+      - SINAUTH_SITE_URL=${SINAUTH_SITE_URL:?SINAUTH_SITE_URL must be set}
+      - SINAUTH_ALLOWED_ORIGINS=${SINAUTH_ALLOWED_ORIGINS:-}
+      - SINAUTH_SIGNING_KEY_PATH=/keys/sinauth.pem
+      - SINAUTH_SIGNING_KEY_ID=${SINAUTH_SIGNING_KEY_ID:-sinauth-1}
+    volumes:
+      - sinauth-keys:/keys
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      sinauth-migrate:
+        condition: service_completed_successfully
+      sinauth-keyinit:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  sinauth-web:
+    image: ghcr.io/opensecstack/sinauth-web:latest
+    build:
+      context: ../sinauth/web
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    networks:
+      - frontend
+    depends_on:
+      - sinauth-api
     restart: unless-stopped
 
   # --- Shared Infrastructure ---
@@ -41,10 +258,16 @@ services:
       - "5432:5432"
     environment:
       POSTGRES_USER: apiguard
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: apiguard
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-nis2-db.sql:/docker-entrypoint-initdb.d/02-init-nis2.sql:ro
+      - ./scripts/init-threatflow-db.sql:/docker-entrypoint-initdb.d/03-init-threatflow.sql:ro
+      - ./scripts/init-sin-db.sql:/docker-entrypoint-initdb.d/04-init-sin.sql:ro
+      - ./scripts/init-sinauth-db.sql:/docker-entrypoint-initdb.d/05-init-sinauth.sql:ro
+    networks:
+      - backend
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U apiguard"]
       interval: 5s
@@ -54,10 +277,13 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
     ports:
       - "6379:6379"
+    networks:
+      - backend
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -65,3 +291,10 @@ services:
 
 volumes:
   pgdata:
+  sin-meilidata:
+  sin-uploads:
+  sinauth-keys:
+
+networks:
+  frontend:
+  backend:

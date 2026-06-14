@@ -1,0 +1,3 @@
+include opensecstack/py.typed
+include README.md
+include LICENSE

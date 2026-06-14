@@ -1,0 +1,273 @@
+# =============================================================================
+# EXAMPLE — Production overrides for the opensecstack Helm chart.
+#
+# Copy this file to values.prod.yaml and fill in the <REPLACE-*> placeholders.
+# DO NOT commit values.prod.yaml — it is in .gitignore.
+#
+# Apply on top of values.yaml:
+#   helm upgrade --install opensecstack ./deploy/helm/opensecstack \
+#     -f values.yaml \
+#     -f values.prod.yaml \
+#     -n opensecstack
+#
+# ── Secrets (create BEFORE installing the chart) ─────────────────────────────
+#
+#   kubectl create secret generic opensecstack-db-secrets  -n opensecstack \
+#     --from-literal=POSTGRES_PASSWORD='<REPLACE-DB-PASSWORD>'  \
+#     --from-literal=NIS2_DB_PASSWORD='<REPLACE-NIS2-DB-PASSWORD>'
+#
+#   kubectl create secret generic opensecstack-app-secrets -n opensecstack \
+#     --from-literal=APIGUARD_JWT_SECRET='<REPLACE-32-BYTE-HEX>'  \
+#     --from-literal=NIS2_JWT_SECRET='<REPLACE-32-BYTE-HEX>'       \
+#     --from-literal=NIS2_SECRET_KEY='<REPLACE-32-BYTE-HEX>'       \
+#     --from-literal=REDIS_PASSWORD='<REPLACE-REDIS-PASSWORD>'
+#
+# Generate hex secrets:  openssl rand -hex 32
+# =============================================================================
+
+global:
+  imagePullPolicy: IfNotPresent
+
+namespace: opensecstack
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# ---------------------------------------------------------------------------
+# APIGuard
+# ---------------------------------------------------------------------------
+apiguard:
+  image:
+    repository: ghcr.io/opensecstack/apiguard
+    tag: "<REPLACE-IMAGE-TAG>"         # e.g. "1.0.0" — pin to a release tag
+
+  replicas: 3
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  service:
+    port: 8080
+
+  ingress:
+    enabled: true
+    host: "<REPLACE-APIGUARD-DOMAIN>"  # e.g. api.yourcompany.com
+    tlsSecret: apiguard-tls
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+
+  podDisruptionBudget:
+    minAvailable: 1
+
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - apiguard
+            topologyKey: kubernetes.io/hostname
+
+  rateLimit:
+    global: 200
+    auth: 30
+
+  cors:
+    allowedOrigins:
+      - "https://<REPLACE-APIGUARD-DOMAIN>"
+      - "https://<REPLACE-NIS2COMPASS-DOMAIN>"
+      - "https://<REPLACE-CITADEL-DOMAIN>"
+
+# ---------------------------------------------------------------------------
+# NIS2 Compass
+# ---------------------------------------------------------------------------
+nis2compass:
+  image:
+    repository: ghcr.io/opensecstack/nis2compass
+    tag: "<REPLACE-IMAGE-TAG>"
+
+  replicas: 3
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  service:
+    port: 8090
+
+  ingress:
+    enabled: true
+    host: "<REPLACE-NIS2COMPASS-DOMAIN>"  # e.g. compass.yourcompany.com
+    tlsSecret: nis2compass-tls
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8090"
+    prometheus.io/path: "/metrics"
+
+  podDisruptionBudget:
+    minAvailable: 1
+
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - nis2compass
+            topologyKey: kubernetes.io/hostname
+
+  cors:
+    allowedOrigins:
+      - "https://<REPLACE-APIGUARD-DOMAIN>"
+      - "https://<REPLACE-NIS2COMPASS-DOMAIN>"
+      - "https://<REPLACE-CITADEL-DOMAIN>"
+
+# ---------------------------------------------------------------------------
+# CITADEL
+# ---------------------------------------------------------------------------
+citadel:
+  image:
+    repository: ghcr.io/opensecstack/citadel
+    tag: "<REPLACE-IMAGE-TAG>"
+
+  replicas: 2
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  service:
+    port: 8070
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8070"
+    prometheus.io/path: "/metrics"
+
+  podDisruptionBudget:
+    minAvailable: 1
+
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - citadel
+            topologyKey: kubernetes.io/hostname
+
+  cors:
+    allowedOrigins:
+      - "https://<REPLACE-APIGUARD-DOMAIN>"
+      - "https://<REPLACE-NIS2COMPASS-DOMAIN>"
+      - "https://<REPLACE-CITADEL-DOMAIN>"
+
+# ---------------------------------------------------------------------------
+# PostgreSQL — DISABLED in production; use a managed database
+# ---------------------------------------------------------------------------
+postgres:
+  enabled: false
+
+  external:
+    host: "<REPLACE-RDS-ENDPOINT>"     # e.g. db.xxxxxx.us-east-1.rds.amazonaws.com
+    port: "5432"
+    user: "apiguard"
+    apiguardDbName: "apiguard"
+    nis2DbName: "nis2compass"
+
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+  persistence:
+    size: 100Gi
+    storageClass: "<REPLACE-STORAGE-CLASS>"   # e.g. gp3 (AWS), standard-rwo (GKE)
+
+# ---------------------------------------------------------------------------
+# Redis — DISABLED in production; use a managed Redis
+# ---------------------------------------------------------------------------
+redis:
+  enabled: false
+
+  external:
+    host: "<REPLACE-REDIS-ENDPOINT>"   # e.g. cache.xxxxxx.0001.use1.cache.amazonaws.com
+    port: "6379"
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# ---------------------------------------------------------------------------
+# Application config
+# ---------------------------------------------------------------------------
+config:
+  logLevel: warn
+  postgresHost: "<REPLACE-RDS-ENDPOINT>"      # must match postgres.external.host
+  postgresPort: "5432"
+  postgresUser: "apiguard"
+  apiguardDbName: "apiguard"
+  nis2DbName: "nis2compass"
+  redisHost: "<REPLACE-REDIS-ENDPOINT>"       # must match redis.external.host
+  redisPort: "6379"
+
+# ---------------------------------------------------------------------------
+# HPA
+# ---------------------------------------------------------------------------
+hpa:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 15
+  cpuThreshold: 70
+
+# ---------------------------------------------------------------------------
+# cert-manager
+# ---------------------------------------------------------------------------
+certManager:
+  enabled: true
+  email: "<REPLACE-OPS-EMAIL>"         # e.g. ops@yourcompany.com
+  issuerType: letsencrypt-prod
+
+# ---------------------------------------------------------------------------
+# Network Policies
+# ---------------------------------------------------------------------------
+networkPolicies:
+  enabled: true

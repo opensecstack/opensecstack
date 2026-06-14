@@ -1,0 +1,75 @@
+version: "3.9"
+
+# Development override — run with:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Or standalone (includes all services):
+#   docker compose -f docker-compose.dev.yml up
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: community
+      POSTGRES_PASSWORD: community
+      POSTGRES_DB: community
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U community"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.10
+    environment:
+      MEILI_MASTER_KEY: "dev-meili-master-key"
+      MEILI_ENV: "development"
+    ports:
+      - "7700:7700"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./uploads:/app/uploads
+    environment:
+      COMMUNITY_HTTP_ADDR: ":8090"
+      COMMUNITY_DB_URL: "postgres://community:community@postgres:5432/community?sslmode=disable"
+      COMMUNITY_JWT_SECRET: "dev-secret-do-not-use-in-prod-min-32-bytes"
+      COMMUNITY_JWT_ISSUER: "community"
+      COMMUNITY_TOKEN_TTL: "24h"
+      COMMUNITY_SITE_URL: "http://localhost:5173"
+      COMMUNITY_DEV_MODE: "true"
+      COMMUNITY_PASSWORD_PEPPER: "dev-pepper-do-not-use-in-prod"
+      COMMUNITY_USERS: "admin:admin:40a487e69bfd2b64adc205cdd1f91de6e85a1aeb309f9bde4dc4e780c131cd26,admin:admin:c8785def6132d2f8254b405d2cabe49c913c2169cb28c061af8ec26783702030"
+      COMMUNITY_UPLOAD_DIR: "/app/uploads"
+      COMMUNITY_MEILISEARCH_URL: "http://meilisearch:7700"
+      COMMUNITY_MEILISEARCH_KEY: "dev-meili-master-key"
+      COMMUNITY_CITADEL_DRY_RUN: "true"
+      COMMUNITY_CITADEL_KEY_ID: "community-1"
+
+  web:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: "http://localhost:8090"
+    depends_on:
+      - api
+
+volumes:
+  postgres_dev_data:

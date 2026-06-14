@@ -1,0 +1,220 @@
+# =============================================================================
+# EXAMPLE — Staging overrides for the opensecstack Helm chart.
+#
+# Copy this file to values.staging.yaml and fill in the <REPLACE-*> placeholders.
+# DO NOT commit values.staging.yaml — it is in .gitignore.
+#
+# Apply on top of values.yaml:
+#   helm upgrade --install opensecstack-staging ./deploy/helm/opensecstack \
+#     -f values.yaml \
+#     -f values.staging.yaml \
+#     -n opensecstack-staging
+# =============================================================================
+
+global:
+  imagePullPolicy: Always
+
+namespace: opensecstack-staging
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# ---------------------------------------------------------------------------
+# APIGuard
+# ---------------------------------------------------------------------------
+apiguard:
+  image:
+    repository: ghcr.io/opensecstack/apiguard
+    tag: latest
+
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+  service:
+    port: 8080
+
+  ingress:
+    enabled: true
+    host: "<REPLACE-APIGUARD-STAGING-DOMAIN>"  # e.g. api.staging.yourcompany.com
+    tlsSecret: apiguard-staging-tls
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+
+  cors:
+    allowedOrigins:
+      - "https://<REPLACE-APIGUARD-STAGING-DOMAIN>"
+      - "https://<REPLACE-NIS2COMPASS-STAGING-DOMAIN>"
+      - "https://<REPLACE-CITADEL-STAGING-DOMAIN>"
+      - "http://localhost:3000"
+      - "http://localhost:8080"
+
+  rateLimit:
+    global: 500
+    auth: 100
+
+  debug:
+    enabled: true
+    profiling: true
+
+# ---------------------------------------------------------------------------
+# NIS2 Compass
+# ---------------------------------------------------------------------------
+nis2compass:
+  image:
+    repository: ghcr.io/opensecstack/nis2compass
+    tag: latest
+
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+  service:
+    port: 8090
+
+  ingress:
+    enabled: true
+    host: "<REPLACE-NIS2COMPASS-STAGING-DOMAIN>"
+    tlsSecret: nis2compass-staging-tls
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8090"
+    prometheus.io/path: "/metrics"
+
+  cors:
+    allowedOrigins:
+      - "https://<REPLACE-APIGUARD-STAGING-DOMAIN>"
+      - "https://<REPLACE-NIS2COMPASS-STAGING-DOMAIN>"
+      - "https://<REPLACE-CITADEL-STAGING-DOMAIN>"
+      - "http://localhost:3000"
+      - "http://localhost:8090"
+
+  debug:
+    enabled: true
+    profiling: true
+
+# ---------------------------------------------------------------------------
+# CITADEL
+# ---------------------------------------------------------------------------
+citadel:
+  image:
+    repository: ghcr.io/opensecstack/citadel
+    tag: latest
+
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+  service:
+    port: 8070
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8070"
+    prometheus.io/path: "/metrics"
+
+  cors:
+    allowedOrigins:
+      - "https://<REPLACE-APIGUARD-STAGING-DOMAIN>"
+      - "https://<REPLACE-NIS2COMPASS-STAGING-DOMAIN>"
+      - "https://<REPLACE-CITADEL-STAGING-DOMAIN>"
+      - "http://localhost:3000"
+      - "http://localhost:8070"
+
+  debug:
+    enabled: true
+    profiling: true
+
+# ---------------------------------------------------------------------------
+# PostgreSQL — enabled in staging as an in-cluster deployment
+# ---------------------------------------------------------------------------
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  persistence:
+    size: 10Gi
+    storageClass: ""
+
+# ---------------------------------------------------------------------------
+# Redis — enabled in staging as an in-cluster deployment
+# ---------------------------------------------------------------------------
+redis:
+  enabled: true
+  image: redis:7-alpine
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+# ---------------------------------------------------------------------------
+# Application config
+# ---------------------------------------------------------------------------
+config:
+  logLevel: info
+  postgresHost: postgres-service
+  postgresPort: "5432"
+  postgresUser: apiguard
+  apiguardDbName: apiguard
+  nis2DbName: nis2compass
+  redisHost: redis-service
+  redisPort: "6379"
+
+# ---------------------------------------------------------------------------
+# HPA
+# ---------------------------------------------------------------------------
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  cpuThreshold: 75
+
+# ---------------------------------------------------------------------------
+# cert-manager — Let's Encrypt STAGING (fake certs, no rate limits)
+# ---------------------------------------------------------------------------
+certManager:
+  enabled: true
+  email: "<REPLACE-OPS-EMAIL>"
+  issuerType: letsencrypt-staging
+
+# ---------------------------------------------------------------------------
+# Network Policies — disabled in staging for easier debugging
+# ---------------------------------------------------------------------------
+networkPolicies:
+  enabled: false

@@ -1,0 +1,16 @@
+name: api-endpoint-enum
+description: "API endpoint enumeration using built-in wordlist — discovers undocumented or hidden API paths"
+mitre_technique_ids: ["T1595.003"]
+tags: [recon, api, endpoint-enumeration, discovery]
+severity: low
+timeout: 10m
+steps:
+  - kind: api_enum
+    params:
+      base_path: /api
+      wordlist: builtin:api-paths-v1
+      methods: [GET, POST]
+      concurrency: 20
+      follow_redirects: false
+      record_status_codes: [200, 201, 301, 302, 401, 403]
+      interesting_status_codes: [200, 201]

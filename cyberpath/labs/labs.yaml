@@ -1,0 +1,61 @@
+﻿# Lab image digest registry.
+# SHA-256 digests are stamped by the publish-track workflow after each push.
+# Pinning by digest protects against tag mutation attacks.
+# See docs/security/image-signing.md for the full verification procedure.
+version: "1"
+labs:
+  - id: compliance-checklist
+    track: 01-nis2-awareness
+    image: ghcr.io/opensecstack/cyberpath-labs/compliance-checklist
+    tag: "1.0.0"
+    digest: ""
+    cosign_verified: false
+
+  - id: phishing-detector
+    track: 02-phishing-recognition
+    image: ghcr.io/opensecstack/cyberpath-labs/phishing-detector
+    tag: "1.0.0"
+    digest: ""
+    cosign_verified: false
+
+  - id: vuln-scan
+    track: 03-secure-coding
+    image: ghcr.io/opensecstack/cyberpath-labs/vuln-scan
+    tag: "1.0.0"
+    digest: ""
+    cosign_verified: false
+
+  - id: ir-triage-lab
+    track: 04-incident-response
+    image: ghcr.io/opensecstack/cyberpath-labs/ir-triage-lab
+    tag: "1.0.0"
+    digest: ""
+    cosign_verified: false
+
+  - id: apiguard-scan-lab
+    track: 05-api-security
+    image: ghcr.io/opensecstack/cyberpath-labs/apiguard-scan-lab
+    tag: "1.0.0"
+    digest: ""
+    cosign_verified: false
+
+  - id: threatflow-enrichment-lab
+    track: 06-threat-intelligence
+    image: ghcr.io/opensecstack/cyberpath-labs/threatflow-enrichment-lab
+    tag: "1.0.0"
+    digest: ""
+    cosign_verified: false
+
+  - id: cis-hardening-lab
+    track: 07-linux-hardening
+    image: ghcr.io/opensecstack/cyberpath-labs/cis-hardening-lab
+    tag: "1.0.0"
+    digest: ""
+    cosign_verified: false
+
+  - id: pcap-investigation-lab
+    track: 08-network-forensics
+    image: ghcr.io/opensecstack/cyberpath-labs/pcap-investigation-lab
+    tag: "1.0.0"
+    digest: ""
+    cosign_verified: false

@@ -53,14 +53,55 @@ Every MARSHAL evaluation produces exactly one of three outcomes:
 
 ## Documentation
 
-- [Architecture](docs/architecture.md)
-- [MARSHAL Engine](docs/marshal.md)
-- [BEACON Advisory Intelligence](docs/beacon.md)
-- [PATROL Audit Intelligence](docs/patrol.md)
-- [Evidence Vault](docs/evidence-vault.md)
-- [WORM Log Specification](docs/worm-log.md)
-- [Chain Anchor Algorithm](docs/chain-anchor.md)
-- [Separation of Duties](docs/sod.md)
+### Getting Started / Overview
+
+- [Architecture](docs/architecture.md) — Four-layer system design (P0_CORE, P1_OPERATIONAL, P1.5_INSTITUTIONAL, DATA)
+- [Data Model](docs/data-model.md) — PostgreSQL schema for the CITADEL governance engine
+- [Kerkese Specification](docs/kerkese-spec.md) — Structured action request format submitted to MARSHAL for governance review
+- [Known Limitations](docs/known-limitations.md) — Current limitations of CITADEL v0.1.x and planned improvements
+- [Auditor Walkthrough](docs/auditor-walkthrough.md) — Guide for auditors conducting governance reviews of CITADEL-governed systems
+
+### MARSHAL (Governance Engine)
+
+- [MARSHAL Engine](docs/marshal.md) — Deterministic 5-gate decision engine (EXECUTE / REFUSE / HARD STOP)
+- [ARBITER Overview](docs/arbiter.md) — System-level overview of the governance decision system (MARSHAL, BEACON, PATROL, VIGIL)
+- [Appeal Flow](docs/appeal-flow.md) — Process for appealing a MARSHAL REFUSE or HARD STOP decision
+- [Dry Run and Drill Procedure](docs/dry-run.md) — Dry-run mode for Kerkese evaluation and quarterly Hard Stop drill procedure
+- [Separation of Duties](docs/sod.md) — SoD enforcement rules; violations trigger immediate HARD STOP
+
+### WORM (Audit Ledger)
+
+- [WORM Log Specification](docs/worm-log.md) — Append-only immutable evidence ledger (INSERT-only, no UPDATE, no DELETE)
+- [Chain Anchor Algorithm](docs/chain-anchor.md) — SHA-256 cryptographic chain proving WORM log integrity
+- [Triple Hash](docs/triple-hash.md) — Three-algorithm content hashing scheme for defence-in-depth against collisions
+- [Evidence Vault](docs/evidence-vault.md) — Forensic evidence store with chain of custody for all governance evidence
+
+### VIGIL (Monitoring)
+
+- [VIGIL Monitoring Layer](docs/vigil.md) — Two-tier monitoring: real-time governance health and deep periodic audit scanning
+- [BEACON Advisory Intelligence](docs/beacon.md) — Analytical advisory intelligence returning normative signals (no execution authority)
+- [PATROL Audit Intelligence](docs/patrol.md) — Audit verification intelligence with continuous and deep audit verdicts
+
+### AUGUR (Threat Advisories)
+
+- [AUGUR Predictive Advisory](docs/augur.md) — Pre-emptive governance advisories based on mirror data analysis
+- [Multi-ERP Mirror Configuration](docs/multi-erp.md) — Configuration for AUGUR reading from multiple ERP mirror sources
+
+### Security / Auth
+
+- [Security Model](docs/security-model.md) — Security properties, trust boundaries, and threat model for CITADEL
+- [SOP-012: Incident Response](docs/sop-012-incident.md) — Standard operating procedure for security incident management
+
+### Operations / Runbooks
+
+- [Operator Runbook](docs/operator-runbook.md) — Day-to-day operational procedures for CITADEL administrators
+- [Hard Stop Playbook](docs/hard-stop-playbook.md) — Procedures when MARSHAL issues a HARD STOP (notifications, resolution steps)
+- [Pre-Freeze Checklist](docs/pre-freeze-checklist.md) — Checklist to complete before applying a project freeze in CITADEL
+
+### Integration / Connectors
+
+- [Connector Guide](docs/connector-guide.md) — Integration layer for submitting Kerkese requests to MARSHAL from external systems
+- [GitHub Task Integration](docs/task-github.md) — Creating and managing GitHub Issues as governance task artifacts from MARSHAL decisions
 
 ## Name History
 

@@ -1,0 +1,50 @@
+﻿id: linux-hardening
+version: 1.0.0
+title: "Linux Hardening"
+description: "Linux server hardening fundamentals: CIS benchmarks, SELinux/AppArmor basics, auditd, kernel hardening, and package supply chain. Hands-on labs apply controls and re-run the benchmark."
+
+audience:
+  - sysadmin
+  - platform-engineer
+  - sre
+
+nis2_mappings:
+  primary: art21.c
+  secondary:
+    - art21.h
+    - art21.g
+
+prerequisites: []
+
+duration_minutes: 360
+language_source: sq
+
+modules:
+  - id: linux-hardening-concepts
+    order: 1
+    title: "Linux Hardening Concepts"
+    lessons:
+      - 01-linux-hardening-introduction
+    quiz: ~
+    lab: ~
+
+  - id: linux-hardening-practice
+    order: 2
+    title: "Applying CIS Controls with Benchmark"
+    lessons:
+      - 02-linux-hardening-controls
+    quiz: linux-knowledge-check
+    lab: cis-hardening-lab
+
+certification:
+  offered: true
+  level: practitioner
+  expires_after_months: 24
+
+content_hash: ""
+
+changelog:
+  - version: 1.0.0
+    date: 2026-05-05
+    changes:
+      - "Initial release for v1.0.0. Lab uses Docker (requires real Linux userspace for CIS benchmark tooling)."

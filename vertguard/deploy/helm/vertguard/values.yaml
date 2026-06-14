@@ -1,0 +1,315 @@
+# Default values for VertGuard.
+# This is a YAML-formatted file. Values are referenced by templates via .Values.
+#
+# Sensitive material (auth.secret, db.password, citadel.hmac_secret,
+# threatflow.webhook_secret) MUST be supplied via `existingSecret` in
+# production — never commit them inline. See docs/deployment-helm.md.
+
+# -- Number of API replicas. HPA (autoscaling.enabled) overrides this at runtime.
+replicaCount: 2
+
+image:
+  repository: ghcr.io/opensecstack/vertguard
+  # Defaults to .Chart.AppVersion when empty so chart bumps stay in lockstep.
+  tag: ""
+  # Production: pin to the cosign-signed digest instead of (or in
+  # addition to) `tag` so registry tag mutation cannot swap the image
+  # under you. The release workflow signs each image keylessly via
+  # GitHub OIDC; verify before pinning. See
+  # docs/security/image-signing.md for cosign verify commands.
+  #
+  # digest: "sha256:<digest from `crane digest ghcr.io/opensecstack/vertguard:vX.Y.Z`>"
+  digest: ""
+  pullPolicy: IfNotPresent
+  # Reference pre-created docker-registry secrets here for private registries.
+  pullSecrets: []
+  # - name: ghcr-pull
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Disable only if you bind an existing SA — pod still needs one.
+  create: true
+  name: ""
+  annotations: {}
+
+# -- Pod-level security context. distroless:nonroot runs as UID 65532.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Container-level security context. Image is read-only; no privileged caps needed.
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 8091
+  # When using a LoadBalancer in cloud, set annotations for cert-manager / cloud LB tuning.
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: vertguard.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  # - secretName: vertguard-tls
+  #   hosts:
+  #     - vertguard.example.com
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  # Memory target keeps GC pressure in check; remove to disable.
+  targetMemoryUtilizationPercentage: 80
+
+# -- Voluntary disruption guard. minAvailable=1 keeps API up during node drains.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# -- Default-deny-style ingress + explicit egress. Combine with a CNI that supports NP.
+networkPolicy:
+  enabled: false
+  ingress:
+    # Namespace selectors that may reach the API. Empty list = deny all from outside.
+    namespaces: []
+    # - kube-system
+    # - monitoring
+  egress:
+    # CIDRs the pod is allowed to reach for CITADEL/ThreatFlow / model gateways.
+    extraCIDRs: []
+    # - 10.0.0.0/8
+
+metrics:
+  serviceMonitor:
+    # Requires prometheus-operator CRDs.
+    enabled: false
+    namespace: ""
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+    relabelings: []
+
+# -- Probes target /api/v1/health (always-on, no auth, returns DB ping result).
+probes:
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+
+# Place keys here only when service-mesh / node-pool tuning demands it.
+nodeSelector: {}
+# Typical use: pin to a dedicated security/AI workload pool.
+tolerations: []
+# Typical use: tolerate `dedicated=ai-security:NoSchedule` taints.
+affinity: {}
+# Typical use: preferred anti-affinity to spread replicas across zones.
+
+# -- Inject extra env vars (e.g. proxy settings) without forking the chart.
+extraEnv: []
+# - name: HTTPS_PROXY
+#   value: http://proxy.internal:3128
+
+# -- Additional envFrom sources (vendored ConfigMaps / Secrets).
+extraEnvFrom: []
+# - configMapRef:
+#     name: vertguard-extra
+# - secretRef:
+#     name: vertguard-extra-secret
+
+# ─────────────────────────────────────────────────────────────────────
+# Application configuration
+# Maps 1:1 onto the Config struct in internal/config/config.go.
+# Any non-empty value here is rendered as VERTGUARD_<UPPER>_<KEY>.
+# Sensitive fields are referenced via existingSecret instead — set them
+# to empty strings here.
+# ─────────────────────────────────────────────────────────────────────
+config:
+  server:
+    port: 8091
+    dashboard_port: 3009
+    log_level: info
+    read_timeout: 30s
+    write_timeout: 30s
+
+  db:
+    # When postgresql.enabled=true the host is derived from the release name.
+    host: ""
+    port: 5432
+    name: vertguard
+    user: vertguard
+    # Sourced from secret — leave blank.
+    password: ""
+    # 'require' or 'verify-full' for production.
+    ssl_mode: require
+    max_open_conns: 25
+
+  auth:
+    # Sourced from secret — leave blank.
+    secret: ""
+    token_ttl: 8h
+    issuer: vertguard
+    dev_mode: false
+
+  citadel:
+    enabled: false
+    api_url: ""
+    base_url: ""
+    key_id: ""
+    # Sourced from secret — leave blank.
+    hmac_secret: ""
+    project_id: ""
+    dry_run: false
+    queue_max: 10000
+    async_buffer: 1024
+
+  threatflow:
+    api_url: ""
+    key_id: ""
+    # Sourced from secret — leave blank.
+    webhook_secret: ""
+
+  prompt:
+    clean_threshold: 0.3
+    block_threshold: 0.7
+    max_input_size: 1048576
+    pattern_registry_path: /etc/vertguard/patterns/
+    custom_patterns_path: ""
+    nemo_endpoint: ""
+    llamaguard_endpoint: ""
+
+  threatfeed:
+    sources_path: /etc/vertguard/sources.yaml
+    atlas_sync_cron: "0 0 * * 0"
+    community_sync_cron: "0 6 * * *"
+    push_interval: 15m
+    reconcile_cron: "0 4 * * *"
+    min_confidence: 0.5
+
+  media:
+    # Path to the c2pa-verify CLI inside the runtime image. The
+    # default Dockerfile installs it at /usr/local/bin/c2pa-verify.
+    binary_path: /usr/local/bin/c2pa-verify
+    timeout: 10s
+    # PEM bundle of trust anchors for C2PA signer chain validation.
+    # Mount via ConfigMap (public roots only) or Secret (if it
+    # contains private CA material). See docs/c2pa-trust-store.md.
+    c2pa_truststore: /etc/vertguard/c2pa-truststore
+    c2pa_ocsp_enabled: false
+    max_size: 104857600
+    content_retention: false
+
+  phishing:
+    enabled: false
+    models_path: /var/lib/vertguard/models/phishing
+    clean_threshold: 0.3
+    block_threshold: 0.7
+
+# ─────────────────────────────────────────────────────────────────────
+# Secret management
+# Two modes:
+#   1. existingSecret (recommended): pre-create a Secret with keys
+#      auth-secret, db-password, citadel-hmac-secret, threatflow-webhook-secret
+#      via SealedSecrets / ESO / Vault — set its name here.
+#   2. secret.create=true: chart-managed Secret seeded from values below
+#      (suitable for dev only — ends up in Helm release manifest).
+# ─────────────────────────────────────────────────────────────────────
+existingSecret: ""
+
+secret:
+  create: false
+  # Used only when secret.create=true. Override via --set or values file.
+  authSecret: "CHANGE-ME-32-CHARS-MIN-DO-NOT-USE-IN-PROD"
+  dbPassword: ""
+  citadelHmacSecret: ""
+  threatflowWebhookSecret: ""
+
+# ─────────────────────────────────────────────────────────────────────
+# In-cluster mTLS (gap 1.4)
+# Closes security-checklist gap 1.4: STRICT mTLS between API and ML gRPC.
+#
+# Istio users: set mtls.enabled=true — PeerAuthentication + DestinationRule
+#   are rendered from templates/mtls-policy.yaml.
+# Linkerd users: set mtls.enabled=false here and apply
+#   deploy/linkerd/mtls-policy.yaml manually (Server + ServerAuthorization).
+#
+# Both modes enforce STRICT mTLS on port 50051 of the vertguard-ml pod.
+# ─────────────────────────────────────────────────────────────────────
+mtls:
+  # Set to true when running Istio as the service mesh.
+  # For Linkerd, leave false and apply deploy/linkerd/mtls-policy.yaml.
+  enabled: true
+
+# ─────────────────────────────────────────────────────────────────────
+# Bitnami PostgreSQL subchart
+# Disable to BYO managed Postgres (RDS / Cloud SQL); set config.db.host.
+# ─────────────────────────────────────────────────────────────────────
+postgresql:
+  enabled: true
+  auth:
+    username: vertguard
+    database: vertguard
+    # Subchart will read the password from the existingSecret if set;
+    # otherwise it generates one. We surface it through config.db.password.
+    existingSecret: ""
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+# ─────────────────────────────────────────────────────────────────────
+# ML inference subchart (deploy/helm/vertguard/charts/ml/)
+# When `ml.enabled=true`, the subchart renders a Python gRPC service at
+# vertguard-ml:50051 and the parent Deployment automatically gets
+# VERTGUARD_ML_GRPC_URL pointed at it. Override `ml.*` keys to feed the
+# subchart's own values (image, backend, resources, …).
+# Default off — Phase 4.2 stub. See docs/ml-architecture.md.
+# ─────────────────────────────────────────────────────────────────────
+ml:
+  enabled: false
+
+# Pod annotations rendered onto the Deployment.
+podAnnotations: {}
+# When metrics.serviceMonitor is disabled but you still want classic
+# prometheus.io discovery, the chart adds scrape annotations automatically.

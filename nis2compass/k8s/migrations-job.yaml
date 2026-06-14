@@ -1,0 +1,110 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nis2compass-migrations
+  namespace: nis2compass
+  labels:
+    app: nis2compass-api
+    app.kubernetes.io/part-of: nis2compass
+  annotations:
+    # When using Helm, set this to "pre-install,pre-upgrade" so that migrations
+    # run before any application pods are created or updated.
+    # helm.sh/hook: pre-install,pre-upgrade
+    # helm.sh/hook-weight: "-5"
+    # helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  # Retry up to 3 times before marking the Job as failed.
+  backoffLimit: 3
+  # Clean up the completed Job automatically after 10 minutes.
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: nis2compass-api
+        app.kubernetes.io/part-of: nis2compass
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999        # matches the 'nis2' system user created in the Dockerfile
+        runAsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      # Wait for the database to accept connections before running migrations.
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h "$NIS2_DB_HOST" -p "$NIS2_DB_PORT" -U postgres; do
+                echo "Waiting for PostgreSQL at $NIS2_DB_HOST:$NIS2_DB_PORT..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready."
+          env:
+            - name: NIS2_DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_DB_HOST
+            - name: NIS2_DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_DB_PORT
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+
+      containers:
+        - name: migrate
+          image: ghcr.io/opensecstack/nis2compass:1.0.0
+          command:
+            - flask
+            - db
+            - upgrade
+          env:
+            # ── DB connection ────────────────────────────────────────────
+            - name: NIS2_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nis2compass-secrets
+                  key: NIS2_DB_PASSWORD
+            - name: NIS2_DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_DB_HOST
+            - name: NIS2_DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_DB_PORT
+            - name: NIS2_DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_DB_USER
+            - name: NIS2_DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_DB_NAME
+            - name: NIS2_DB_URL
+              value: "postgresql+psycopg2://$(NIS2_DB_USER):$(NIS2_DB_PASSWORD)@$(NIS2_DB_HOST):$(NIS2_DB_PORT)/$(NIS2_DB_NAME)"
+            # Flask requires SECRET_KEY to initialise even for CLI commands
+            - name: NIS2_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: nis2compass-secrets
+                  key: NIS2_SECRET_KEY
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL

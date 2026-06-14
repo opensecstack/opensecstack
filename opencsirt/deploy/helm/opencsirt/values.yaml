@@ -1,0 +1,115 @@
+# Default values for the opencsirt chart.
+
+image:
+  registry: ghcr.io/opensecstack
+  pullPolicy: IfNotPresent
+  api:
+    repository: opencsirt-api
+    tag: "1.0.0"
+  advisory:
+    repository: opencsirt-advisory
+    tag: "1.0.0"
+  web:
+    repository: opencsirt-web
+    tag: "1.0.0"
+
+api:
+  replicas: 2
+  resources:
+    requests: { cpu: "100m", memory: "128Mi" }
+    limits:   { cpu: "500m", memory: "512Mi" }
+  service:
+    type: ClusterIP
+    port: 8088
+  # Caps-only posture matching the rest of the ecosystem (OpenScrub /
+  # IRFlow / etc.). The API process needs no Linux caps; we drop ALL.
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 9088
+    runAsGroup: 9088
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+
+advisory:
+  replicas: 1
+  logLevel: "INFO"
+  # Redis URL for the Python advisory subsystem. Defaults to an in-cluster
+  # Redis named opencsirt-redis; override if using a managed Redis.
+  redisUrl: "redis://opencsirt-redis:6379/0"
+  resources:
+    requests: { cpu: "50m", memory: "128Mi" }
+    limits:   { cpu: "300m", memory: "512Mi" }
+  service:
+    # Loopback-only equivalent for cluster: ClusterIP, no Ingress,
+    # NetworkPolicy locks ingress to the api Pods only (see
+    # templates/advisory-networkpolicy.yaml).
+    type: ClusterIP
+    port: 8089
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 9089
+    runAsGroup: 9089
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: [ALL]
+
+web:
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 80
+  ingress:
+    enabled: false
+    host: opencsirt.example.org
+    tls: false
+
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  storage: 20Gi
+  user: opencsirt
+  database: opencsirt
+
+# Non-secret env. Real secrets live in the Secret named by
+# .Values.secrets.existingSecret (or the chart-generated one).
+env:
+  node: "opencsirt-0"
+  tokenTtl: "12h"
+  threatflowApiUrl: ""
+  threatflowInterval: "15m"
+  nis2compassApiUrl: ""
+  vertguardApiUrl: ""
+  citadelApiUrl: ""
+  citadelKeyId: "opencsirt-1"
+  # DEFAULT true — set to "false" in production to actually emit events.
+  citadelDryRun: "true"
+  irflowStrictSeverity: "false"
+  outboxTick: "10s"
+  dbMaxConns: "16"
+
+secrets:
+  # If set, the chart references this pre-existing Secret and does
+  # not generate one. The Secret MUST contain keys: jwtSecret,
+  # postgresPassword, passwordPepper, users, irflowWebhookSecret,
+  # threatflowApiKey, citadelHmacSecret, vertguardApiKey,
+  # advisoryServiceJwt.
+  existingSecret: ""
+  # If existingSecret is empty, the chart generates random values on
+  # first install and persists them via helm.sh/resource-policy: keep.
+  generateOnInstall: true
+  # Operator-supplied secret values. Only used when existingSecret is empty.
+  # Override with --set secrets.threatflowApiKey=<value> or equivalent.
+  threatflowApiKey: ""
+  vertguardApiKey: ""
+
+serviceAccount:
+  create: true
+  name: ""
+
+# Restrict Advisory subsystem ingress to the API Pods. This is the
+# Helm equivalent of the docker-compose loopback-only posture.
+networkPolicy:
+  enabled: true

@@ -3,6 +3,19 @@ name = "modules"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Rust side of L3 OWASP modules for APIGuard"
+description = "Rust L3 OWASP modules for APIGuard — performance-critical analysis"
+
+[lib]
+name = "modules"
+path = "src/lib.rs"
+
+[[bin]]
+name = "apiguard-modules"
+path = "src/main.rs"
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+regex = "1"
+clap = { version = "4", features = ["derive"] }
+once_cell = "1"

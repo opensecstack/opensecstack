@@ -1,0 +1,86 @@
+rules:
+  - id: CR-001
+    name: Missing X-Request-ID Header
+    description: >
+      API responses should include an X-Request-ID header so that individual
+      requests can be correlated across logs, traces, and client-side error
+      reports. Absence of this header makes incident investigation harder and
+      can be a sign of missing observability instrumentation.
+    owasp_ref: API8:2023
+    severity: low
+    enabled: true
+    checks:
+      - type: header_missing
+        target: "*"
+        method: "*"
+        params:
+          header: X-Request-ID
+        message: "Response is missing X-Request-ID header for request tracing"
+
+  - id: CR-002
+    name: Sensitive Data in Error Response
+    description: >
+      Error responses must not expose internal stack traces or debug information.
+      Leaking stack traces allows attackers to enumerate internal frameworks,
+      library versions, and file paths, lowering the cost of targeted exploits.
+    owasp_ref: API8:2023
+    severity: high
+    enabled: true
+    checks:
+      - type: response_body_contains
+        target: "*"
+        method: "*"
+        params:
+          text: "stack trace"
+        message: "Error response exposes internal stack trace"
+
+  - id: CR-003
+    name: Strict-Transport-Security Header Missing
+    description: >
+      Responses should include the Strict-Transport-Security (HSTS) header to
+      instruct browsers to only connect over HTTPS. Without HSTS an attacker
+      performing a MITM attack can downgrade the connection to plain HTTP.
+    owasp_ref: API8:2023
+    severity: medium
+    enabled: true
+    checks:
+      - type: header_missing
+        target: "*"
+        method: "GET"
+        params:
+          header: Strict-Transport-Security
+        message: "Response is missing Strict-Transport-Security header (HSTS)"
+
+  - id: CR-004
+    name: Slow Response Time (Potential DoS Indicator)
+    description: >
+      Responses that take longer than 5000 ms may indicate a denial-of-service
+      vulnerability or algorithmic complexity issue that an attacker could exploit
+      to exhaust server resources.
+    owasp_ref: API4:2023
+    severity: medium
+    enabled: true
+    checks:
+      - type: response_time_exceeds
+        target: "*"
+        method: "*"
+        params:
+          ms: "5000"
+        message: "Response time exceeded 5000 ms — potential DoS indicator"
+
+  - id: CR-005
+    name: Debug Information Leaked in Response Body
+    description: >
+      Responses must not contain debug keywords such as "debug" which may
+      indicate that the application is running in a non-production mode and
+      is leaking internal implementation details.
+    owasp_ref: API8:2023
+    severity: low
+    enabled: true
+    checks:
+      - type: response_body_contains
+        target: "*"
+        method: "*"
+        params:
+          text: "\"debug\": true"
+        message: "Response body contains debug flag set to true"

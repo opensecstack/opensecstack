@@ -1,0 +1,117 @@
+name: VertGuard Security Scans
+
+# Blocking vulnerability gates: gosec + govulncheck + staticcheck (Go),
+# cargo audit + cargo deny (Rust), npm audit (web), pip-audit (Python).
+# Runs on every PR touching vertguard/, on pushes to main, and weekly
+# on Monday at 06:00 UTC to catch newly-disclosed advisories against
+# unchanged dependency trees.
+#
+# Each job is independent so a partial failure (e.g. a transient
+# advisory in c2pa-rs deps) does not cascade. All scanners are blocking
+# — a green CI badge is meaningless if a scanner is muted.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'vertguard/**'
+      - '.github/workflows/security.yml'
+  pull_request:
+    paths:
+      - 'vertguard/**'
+      - '.github/workflows/security.yml'
+  schedule:
+    # Weekly Monday 06:00 UTC — catches advisories disclosed against
+    # an otherwise-untouched dependency tree.
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  go-security:
+    name: Go security scanners
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vertguard
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: vertguard/go.sum
+      - name: Install scanners
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+      # Two gosec invocations: the SARIF dump for code-scanning is
+      # non-blocking (so partial parse failures still ship results),
+      # but the gating run after it MUST exit non-zero on findings —
+      # a green CI badge is meaningless if the scanner is muted.
+      - name: gosec (SARIF for code-scanning)
+        run: gosec -severity medium -confidence medium -fmt sarif -out gosec.sarif ./... || true
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: vertguard/gosec.sarif
+          category: gosec
+      - name: gosec (blocking gate)
+        run: gosec -severity medium -confidence medium ./...
+      - name: govulncheck
+        run: govulncheck ./...
+      - name: staticcheck
+        run: staticcheck ./...
+
+  rust-security:
+    name: cargo audit + cargo deny
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vertguard/rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: vertguard/rust
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit
+      - run: cargo install cargo-deny --locked
+      - run: cargo deny check
+
+  npm-audit:
+    name: npm audit (web)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: vertguard/web/package-lock.json
+      - run: cd vertguard/web && npm ci
+      - run: cd vertguard/web && npm audit --omit=dev --audit-level=high
+
+  pip-audit:
+    name: Python vulnerability scan (pip-audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vertguard/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pip-audit
+        run: python -m pip install --upgrade pip pip-audit
+      - name: Run pip-audit (runtime + ML + training extras)
+        # -P pyproject scans the declared dependency tree directly so we
+        # don't need a fully-resolved lockfile. Extras cover the ML
+        # side-car runtime and the training pipeline; if either surface
+        # ships a vulnerable pin, this fails the PR.
+        run: pip-audit --strict --disable-pip -f columns

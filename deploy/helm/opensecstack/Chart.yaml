@@ -1,0 +1,14 @@
+apiVersion: v2
+name: opensecstack
+description: opensecstack platform — APIGuard + NIS2 Compass + CITADEL
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - security
+  - compliance
+  - nis2
+  - api-security
+maintainers:
+  - name: opensecstack contributors
+dependencies: []

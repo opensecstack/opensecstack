@@ -1,0 +1,72 @@
+# Build artefacts
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+*.test
+*.out
+coverage.txt
+coverage.html
+go.work
+go.work.sum
+vendor/
+
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock.bak
+
+# Node / Vite
+node_modules/
+.pnp
+.pnp.*
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.log
+.yarn/install-state.gz
+web/dist/
+web/.vite/
+.eslintcache
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
+
+# Docker
+.docker/
+
+# Test / coverage outputs
+*.coverprofile
+junit.xml
+test-results/
+
+# Lab images (large; tracked via labs.yaml checksums)
+labs/images/
+*.wasm.bin
+
+# Generated docs
+docs/api/generated/
+
+# OS / misc
+*.tmp
+*.bak

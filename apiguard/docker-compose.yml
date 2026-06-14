@@ -1,6 +1,22 @@
 version: "3.8"
 
 services:
+  migrate:
+    image: migrate/migrate:v4.18.1
+    volumes:
+      - ./migrations:/migrations:ro
+    command: [
+      "-path", "/migrations",
+      "-database", "postgres://apiguard:${POSTGRES_PASSWORD}@postgres:5432/apiguard?sslmode=disable",
+      "up"
+    ]
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
   apiguard-api:
     image: ghcr.io/opensecstack/apiguard:latest
     build:
@@ -20,6 +36,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   apiguard-web:

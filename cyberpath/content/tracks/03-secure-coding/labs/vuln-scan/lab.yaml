@@ -1,0 +1,136 @@
+﻿id: vuln-scan
+version: 1.0.0
+title: "Code Vulnerability Review Exercise"
+runtime: wasm
+image: "ghcr.io/opensecstack/cyberpath-labs/vuln-scan:1.0.0"
+entry_command: "/usr/local/bin/vulnscan-lab"
+time_limit_seconds: 3600
+
+objectives:
+  - "Review eight code snippets and identify the vulnerability class present in each (SQL injection, XSS, IDOR, or hardcoded secret)"
+  - "For each vulnerable snippet, select the correct secure alternative from the provided options"
+  - "Identify the hardcoded secret in at least one snippet and describe the correct remediation approach"
+  - "Achieve an overall score of at least 80% across all snippet assessments"
+
+instructions: |
+  ## Scenario
+
+  You are a security reviewer conducting a pre-release code review for Albtech S.A.'s
+  internal web application. You have been given eight code snippets — a mix of Python,
+  JavaScript, and SQL — extracted from the application's codebase. Each snippet may
+  contain one or more security vulnerabilities.
+
+  Your task is to identify the vulnerability in each snippet and select or write the
+  secure alternative, using the `vslab` CLI tool.
+
+  ### Step 1 — List all code snippets
+  View the available snippets:
+
+  ```bash
+  vslab list
+  ```
+
+  This will display eight snippet IDs (snippet-001 through snippet-008) with a one-line
+  description of what the code does.
+
+  ### Step 2 — Inspect a snippet
+  View the code for a specific snippet:
+
+  ```bash
+  vslab show --id snippet-001
+  ```
+
+  Read the code carefully. Look for:
+  - String concatenation of user input into SQL queries (SQL injection)
+  - Unencoded user input rendered in HTML output (XSS)
+  - Object identifiers exposed in parameters without authorisation checks (IDOR)
+  - Credentials, API keys, or passwords hardcoded as literals (hardcoded secrets)
+
+  ### Step 3 — Classify the vulnerability
+  For each snippet, submit your vulnerability classification:
+
+  ```bash
+  vslab classify \
+    --id snippet-001 \
+    --vuln sqli|xss|idor|hardcoded-secret|none \
+    --explanation "Brief description of what makes this vulnerable"
+  ```
+
+  Use `none` if the snippet is already secure.
+
+  ### Step 4 — Select the secure fix
+  For vulnerable snippets, view the available fix options:
+
+  ```bash
+  vslab fixes --id snippet-001
+  ```
+
+  Then select the fix you believe is correct:
+
+  ```bash
+  vslab fix \
+    --id snippet-001 \
+    --choice A|B|C|D
+  ```
+
+  ### Step 5 — Remediate the hardcoded secret
+  For the snippet(s) containing a hardcoded secret, provide your remediation recommendation:
+
+  ```bash
+  vslab remediate \
+    --id snippet-005 \
+    --text "Describe how you would remove the hardcoded secret and retrieve it securely at runtime"
+  ```
+
+  ### Completing the lab
+  When all snippets have been classified and fixes selected, run the validation:
+
+  ```bash
+  vslab lab validate
+  ```
+
+validation:
+  - id: all-snippets-classified
+    type: vslab_all_classified
+    expected_count: 8
+    weight: 2
+    diagnostic: "Not all eight snippets have been classified. Run 'vslab list' to see which are missing, then 'vslab classify' for each."
+
+  - id: classification-accuracy
+    type: vslab_accuracy
+    min_correct: 6
+    weight: 3
+    diagnostic: "Classification accuracy is below 75%. Review the snippets you misclassified. Look carefully for string concatenation in queries (SQLi), unencoded output in HTML (XSS), missing authorisation checks (IDOR), and credential literals (hardcoded secrets)."
+
+  - id: fixes-selected
+    type: vslab_fixes_complete
+    expected_count: 8
+    weight: 2
+    diagnostic: "Fix selections are not complete. Run 'vslab fixes --id <snippet-id>' to see options, then 'vslab fix --id <snippet-id> --choice <A|B|C|D>'."
+
+  - id: secret-remediation-provided
+    type: vslab_remediation_present
+    min_length: 40
+    weight: 3
+    diagnostic: "A written remediation recommendation is required for the hardcoded secret snippet. Run 'vslab remediate' with a description of how to move the secret to an environment variable or secrets vault."
+
+success_criteria:
+  min_score: 8
+  required_rules:
+    - all-snippets-classified
+    - classification-accuracy
+
+network:
+  egress_whitelist: []
+
+hints:
+  - trigger: idle_seconds:180
+    text: "Look for the string concatenation operator (+, f-string, or .format()) being used to build a SQL query — that is the SQL injection signal."
+
+  - trigger: idle_seconds:600
+    text: "For XSS: check whether user-controlled data is being inserted into HTML output using innerHTML, document.write, or a template with autoescaping disabled."
+
+  - trigger: idle_seconds:1200
+    text: "For hardcoded secrets: look for string literals that look like passwords, API keys (long random strings), or connection strings containing credentials directly in the code."
+
+content_hash: ""

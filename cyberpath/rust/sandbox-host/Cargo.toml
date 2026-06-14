@@ -1,0 +1,42 @@
+﻿[package]
+name = "cyberpath-sandbox-host"
+version = "1.0.0"
+edition = "2021"
+description = "Wasm sandbox host for CyberPath lab sessions (v1.0.0 target)"
+license = "AGPL-3.0-or-later"
+
+[lib]
+name = "cyberpath_sandbox_host"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cyberpath-sandbox-host"
+path = "src/main.rs"
+
+[dependencies]
+# Wasm runtime — Bytecode Alliance, WASI Preview 2
+wasmtime = { version = "24", features = ["component-model"] }
+wasmtime-wasi = "24"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# IPC protocol serialisation
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+
+# Structured logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Error handling
+anyhow = "1"
+
+# UUID generation for session IDs
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+# wasmtime (already a dependency) natively parses WAT text when its built-in
+# `wat` feature is enabled (default). No separate `wat` crate is needed.

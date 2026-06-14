@@ -1,0 +1,208 @@
+﻿id: cis-hardening-lab
+version: 1.0.0
+title: "CIS Benchmark Hardening Exercise on Ubuntu 22.04"
+
+# NOTE: This track uses Docker (not Wasm) because it needs a real Linux userspace
+# for kernel parameter manipulation, SSH daemon configuration, auditd, and OpenSCAP.
+runtime: docker
+image: "ghcr.io/opensecstack/cyberpath-labs/cis-hardening:1.0.0"
+entry_command: "/bin/bash"
+time_limit_seconds: 3600
+
+objectives:
+  - "Run the OpenSCAP CIS Level 1 benchmark scan and record the baseline score"
+  - "Apply SSH hardening controls per CIS Section 5.2"
+  - "Apply kernel parameter hardening via sysctl per CIS Section 3"
+  - "Configure auditd rules for privileged command logging"
+  - "Re-run the benchmark and demonstrate measurable score improvement"
+
+instructions: |
+  ## Environment
+
+  You are connected to a deliberately under-hardened Ubuntu 22.04 LTS server container.
+  Your goal is to improve its CIS Level 1 score from its current baseline.
+  All tools are pre-installed: oscap, auditd, and the SCAP content files.
+
+  ## Step 1 — Baseline scan
+
+  Run the OpenSCAP baseline scan and save the results:
+
+  ```bash
+  oscap xccdf eval \
+    --profile xccdf_org.ssgproject.content_profile_cis_level1_server \
+    --report /lab/baseline-report.html \
+    --results /lab/baseline-results.xml \
+    /usr/share/xml/scap/ssg/content/ssg-ubuntu2204-ds.xml 2>/dev/null
+
+  # Record your baseline score
+  echo "Baseline pass count:"
+  grep -c 'result>pass' /lab/baseline-results.xml
+
+  echo "Baseline fail count:"
+  grep -c 'result>fail' /lab/baseline-results.xml
+  ```
+
+  Write your baseline score to `/lab/scores.txt`:
+
+  ```bash
+  echo "Baseline: $(grep -c 'result>pass' /lab/baseline-results.xml) pass / $(grep -c 'result>fail' /lab/baseline-results.xml) fail" > /lab/scores.txt
+  ```
+
+  ## Step 2 — SSH hardening (CIS Section 5.2)
+
+  Apply the SSH hardening controls:
+
+  ```bash
+  # Back up the original configuration
+  cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
+
+  # Apply hardening settings
+  cat >> /etc/ssh/sshd_config << 'EOF'
+
+  # CIS hardening applied by lab exercise
+  Protocol 2
+  PermitRootLogin no
+  PasswordAuthentication no
+  PermitEmptyPasswords no
+  MaxAuthTries 4
+  LoginGraceTime 60
+  AllowAgentForwarding no
+  AllowTcpForwarding no
+  X11Forwarding no
+  ClientAliveInterval 300
+  ClientAliveCountMax 0
+  LogLevel VERBOSE
+  EOF
+
+  # Validate configuration
+  sshd -t && echo "SSH config valid" || echo "SSH config error — check syntax"
+  ```
+
+  Note: In this lab environment SSH is not actively used for connectivity,
+  so applying configuration changes will not disconnect you.
+
+  ## Step 3 — Kernel hardening (CIS Section 3)
+
+  ```bash
+  cat > /etc/sysctl.d/99-cis-hardening.conf << 'EOF'
+  net.ipv4.ip_forward = 0
+  net.ipv4.conf.all.send_redirects = 0
+  net.ipv4.conf.default.send_redirects = 0
+  net.ipv4.conf.all.accept_redirects = 0
+  net.ipv4.conf.all.secure_redirects = 0
+  net.ipv4.conf.all.accept_source_route = 0
+  net.ipv4.icmp_echo_ignore_broadcasts = 1
+  net.ipv4.tcp_syncookies = 1
+  net.ipv4.conf.all.rp_filter = 1
+  kernel.dmesg_restrict = 1
+  kernel.kptr_restrict = 2
+  kernel.randomize_va_space = 2
+  fs.protected_hardlinks = 1
+  fs.protected_symlinks = 1
+  fs.suid_dumpable = 0
+  EOF
+
+  sysctl --system 2>/dev/null
+  echo "Kernel parameters applied"
+  ```
+
+  ## Step 4 — auditd configuration (CIS Section 4)
+
+  ```bash
+  cat > /etc/audit/rules.d/99-cis-hardening.rules << 'EOF'
+  -b 8192
+  -w /etc/passwd -p wa -k identity
+  -w /etc/group -p wa -k identity
+  -w /etc/shadow -p wa -k identity
+  -w /etc/sudoers -p wa -k privilege-escalation
+  -w /etc/sudoers.d/ -p wa -k privilege-escalation
+  -w /etc/ssh/sshd_config -p wa -k sshd-config
+  -a always,exit -F arch=b64 -S execve -F euid=0 -k root-commands
+  -w /usr/bin/sudo -p x -k privilege-escalation
+  -w /usr/bin/su -p x -k privilege-escalation
+  EOF
+
+  augenrules --load 2>/dev/null
+  systemctl restart auditd 2>/dev/null || service auditd restart 2>/dev/null
+  echo "auditd rules applied"
+  ```
+
+  ## Step 5 — Post-hardening scan
+
+  Re-run the OpenSCAP scan:
+
+  ```bash
+  oscap xccdf eval \
+    --profile xccdf_org.ssgproject.content_profile_cis_level1_server \
+    --report /lab/hardened-report.html \
+    --results /lab/hardened-results.xml \
+    /usr/share/xml/scap/ssg/content/ssg-ubuntu2204-ds.xml 2>/dev/null
+
+  echo "Hardened pass count:"
+  grep -c 'result>pass' /lab/hardened-results.xml
+
+  echo "Hardened fail count:"
+  grep -c 'result>fail' /lab/hardened-results.xml
+
+  # Append to scores file
+  echo "Hardened: $(grep -c 'result>pass' /lab/hardened-results.xml) pass / $(grep -c 'result>fail' /lab/hardened-results.xml) fail" >> /lab/scores.txt
+  cat /lab/scores.txt
+  ```
+
+  ## Validate
+
+  ```bash
+  cis-lab validate
+  ```
+
+validation:
+  - id: baseline-scan-complete
+    type: file_exists
+    target: "/lab/baseline-results.xml"
+    weight: 2
+    diagnostic: "Baseline scan results not found. Run the initial OpenSCAP scan."
+
+  - id: ssh-hardened
+    type: file_contains
+    target: "/etc/ssh/sshd_config"
+    contains: "PasswordAuthentication no"
+    weight: 2
+    diagnostic: "SSH hardening not applied. Add 'PasswordAuthentication no' to /etc/ssh/sshd_config."
+
+  - id: sysctl-applied
+    type: file_exists
+    target: "/etc/sysctl.d/99-cis-hardening.conf"
+    weight: 2
+    diagnostic: "CIS hardening sysctl file not found. Create /etc/sysctl.d/99-cis-hardening.conf."
+
+  - id: auditd-rules-applied
+    type: file_exists
+    target: "/etc/audit/rules.d/99-cis-hardening.rules"
+    weight: 2
+    diagnostic: "auditd rules not found. Create /etc/audit/rules.d/99-cis-hardening.rules."
+
+  - id: score-improved
+    type: cis_score_improved
+    baseline_file: "/lab/baseline-results.xml"
+    hardened_file: "/lab/hardened-results.xml"
+    min_improvement_pct: 10
+    weight: 3
+    diagnostic: "Post-hardening scan score does not show sufficient improvement (minimum 10 percentage points). Check that all steps were executed and re-run the scan."
+
+success_criteria:
+  min_score: 9
+  required_rules:
+    - baseline-scan-complete
+    - score-improved
+
+network:
+  egress_whitelist: []
+
+hints:
+  - trigger: idle_seconds:300
+    text: "Remember to run 'sysctl --system' after creating the sysctl.d file to apply the kernel parameters."
+
+  - trigger: idle_seconds:1200
+    text: "If the second scan shows no improvement, check that sshd_config doesn't have duplicate keys overriding your settings. Run 'grep PasswordAuthentication /etc/ssh/sshd_config' to verify."
+
+content_hash: ""

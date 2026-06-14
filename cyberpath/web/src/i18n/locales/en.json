@@ -1,0 +1,135 @@
+﻿{
+  "common": {
+    "appTitle": "CyberPath",
+    "tagline": "Cybersecurity training for NIS2 compliance",
+    "nav": {
+      "home": "Home",
+      "tracks": "Tracks",
+      "progress": "Progress",
+      "certifications": "Certifications",
+      "login": "Log in",
+      "logout": "Log out",
+      "admin": "Admin"
+    },
+    "buttons": {
+      "start": "Start",
+      "continue": "Continue",
+      "submit": "Submit",
+      "save": "Save",
+      "cancel": "Cancel",
+      "retry": "Retry",
+      "viewDetails": "View details",
+      "stop": "Stop",
+      "markComplete": "Mark complete",
+      "next": "Next"
+    },
+    "labels": {
+      "loading": "Loading...",
+      "empty": "Nothing to show.",
+      "duration": "Duration",
+      "audience": "Audience",
+      "lab": "Lab",
+      "certification": "Certification",
+      "yes": "Yes",
+      "no": "No",
+      "minutes": "min",
+      "hours": "h",
+      "search": "Search",
+      "email": "Email",
+      "password": "Password",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "role": "Role",
+      "completed": "Completed",
+      "inProgress": "In progress",
+      "notStarted": "Not started",
+      "issued": "Issued",
+      "expires": "Expires",
+      "status": "Status",
+      "session": "Session",
+      "runtime": "Runtime",
+      "validation": "Validation"
+    },
+    "errors": {
+      "generic": "Something went wrong.",
+      "network": "Network error.",
+      "unauthorized": "You must be logged in.",
+      "notFound": "Page not found.",
+      "invalidCredentials": "Invalid email or password.",
+      "rateLimited": "Too many attempts. Please try again later.",
+      "missingFields": "Please fill in both email and password."
+    },
+    "localeSwitch": {
+      "label": "Language",
+      "sq": "Albanian",
+      "en": "English"
+    },
+    "user": {
+      "menuLabel": "My account",
+      "anonymous": "Not signed in"
+    },
+    "footer": {
+      "copyright": "OpenSecStack — CyberPath"
+    }
+  },
+  "tracks": {
+    "list": {
+      "title": "Available tracks",
+      "filterAudience": "Filter by audience",
+      "filterMeasure": "NIS2 measure",
+      "searchPlaceholder": "Search tracks...",
+      "allMeasures": "All measures"
+    },
+    "detail": {
+      "modules": "Modules",
+      "labs": "Labs",
+      "startTrack": "Start track",
+      "continueTrack": "Continue",
+      "prerequisites": "Prerequisites",
+      "nis2Mappings": "NIS2 mappings",
+      "noModules": "No modules yet."
+    },
+    "lesson": {
+      "completed": "Lesson marked complete.",
+      "completionFailed": "Could not mark lesson complete.",
+      "video": "Video",
+      "backToTrack": "Back to track"
+    },
+    "lab": {
+      "starting": "Starting lab session...",
+      "running": "Lab session running",
+      "stopped": "Lab session stopped",
+      "expired": "Lab session expired",
+      "stopSession": "Stop session",
+      "results": "Validation results",
+      "noActiveSession": "No active session. Click Start to provision a lab.",
+      "terminalPlaceholder": "Terminal will appear here once the session is connected."
+    },
+    "progress": {
+      "title": "My progress",
+      "perTrack": "Per-track completion",
+      "quizAvg": "Quiz average",
+      "lessonsDone": "Lessons completed"
+    },
+    "certifications": {
+      "title": "My certifications",
+      "noCerts": "No certifications yet. Complete a certified track to earn one."
+    },
+    "admin": {
+      "title": "Cohort administration",
+      "comingSoon": "Cohort management — v1.0.0",
+      "stubBody": "Cohort CRUD lands in v1.0.0. This page is gated by RequireAuth(role=admin)."
+    },
+    "titles": {
+      "nis2-art21-awareness": "NIS2 Article 21 awareness",
+      "phishing-recognition": "Phishing recognition",
+      "secure-coding": "Secure coding (OWASP Top 10)",
+      "incident-response-basics": "Incident response basics",
+      "api-security": "API security",
+      "threat-intel-basics": "Threat intelligence basics",
+      "linux-hardening": "Linux hardening",
+      "network-forensics": "Network forensics"
+    },
+    "placeholder": "Translated placeholder (i18n)"
+  }
+}

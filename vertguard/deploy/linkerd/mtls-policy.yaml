@@ -1,0 +1,56 @@
+# ─────────────────────────────────────────────────────────────────────
+# Linkerd mTLS policy — VertGuard API ↔ ML gRPC side-car
+# Closes security-checklist gap 1.4.
+#
+# Equivalent Istio policy is in:
+#   deploy/helm/vertguard/templates/mtls-policy.yaml
+#
+# Apply this file when Linkerd is the in-cluster service mesh:
+#   kubectl apply -f deploy/linkerd/mtls-policy.yaml -n <vertguard-namespace>
+#
+# The Server resource selects the ML pod on port 50051 and declares it
+# as a gRPC surface requiring proxy (mTLS) protocol.
+# The ServerAuthorization then restricts callers to the vertguard-api
+# ServiceAccount only; all other meshed or unmeshed clients are rejected
+# at the Linkerd proxy without reaching the application.
+# ─────────────────────────────────────────────────────────────────────
+apiVersion: policy.linkerd.io/v1beta1
+kind: Server
+metadata:
+  name: vertguard-ml-grpc
+  # Change to the namespace where VertGuard is deployed.
+  namespace: vertguard
+  labels:
+    app.kubernetes.io/part-of: vertguard
+    app.kubernetes.io/component: ml-mtls
+  annotations:
+    security.vertguard.io/gap: "1.4"
+    security.vertguard.io/closed-by: "deploy/linkerd/mtls-policy.yaml"
+spec:
+  podSelector:
+    matchLabels:
+      app: vertguard-ml
+  port: 50051
+  proxyProtocol: gRPC
+---
+apiVersion: policy.linkerd.io/v1beta1
+kind: ServerAuthorization
+metadata:
+  name: vertguard-api-only
+  namespace: vertguard
+  labels:
+    app.kubernetes.io/part-of: vertguard
+    app.kubernetes.io/component: ml-mtls
+  annotations:
+    security.vertguard.io/gap: "1.4"
+    security.vertguard.io/closed-by: "deploy/linkerd/mtls-policy.yaml"
+spec:
+  server:
+    name: vertguard-ml-grpc
+  client:
+    meshTLS:
+      # Only the vertguard-api ServiceAccount (same namespace) may dial
+      # the ML gRPC port. All other callers — including unmeshed pods —
+      # are denied at the proxy layer.
+      serviceAccounts:
+        - name: vertguard-api

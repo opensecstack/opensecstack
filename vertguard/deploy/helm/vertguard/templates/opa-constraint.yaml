@@ -1,0 +1,122 @@
+# ─────────────────────────────────────────────────────────────────────
+# OPA Gatekeeper policy — deny chart-managed secret creation outside dev
+# Closes security-checklist gap 5.6.
+#
+# Two resources are rendered:
+#   1. ConstraintTemplate  — defines the Rego logic (NoSecretCreateInProd)
+#   2. Constraint instance — scopes enforcement to the vertguard namespace
+#
+# Prerequisite: OPA Gatekeeper must be installed in the cluster.
+# The constraint blocks any Pod or ServiceAccount whose RBAC bindings
+# allow secret.create UNLESS the pod carries the label
+# vertguard/profile=dev.  This prevents the Helm chart `secret.create=true`
+# path from being exploitable in a production or staging namespace.
+#
+# In practice, operators should use existingSecret (SealedSecrets / ESO /
+# Vault) and never set secret.create=true outside local dev clusters.
+# ─────────────────────────────────────────────────────────────────────
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: nosecretcreateinprod
+  labels:
+    {{- include "vertguard.labels" . | nindent 4 }}
+  annotations:
+    security.vertguard.io/gap: "5.6"
+    security.vertguard.io/closed-by: "deploy/helm/vertguard/templates/opa-constraint.yaml"
+spec:
+  crd:
+    spec:
+      names:
+        kind: NoSecretCreateInProd
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedProfile:
+              type: string
+              description: >
+                Label value of vertguard/profile that is allowed to have
+                secret-create rights. Defaults to "dev".
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package nosecretcreateinprod
+
+        # Deny if the object requests secret.create RBAC capability and
+        # is NOT running with the allowed profile label.
+        violation[{"msg": msg}] {
+          # Only evaluate ClusterRole / Role rules, not arbitrary objects.
+          rule := input.review.object.rules[_]
+          rule.resources[_] == "secrets"
+          rule.verbs[_] == "create"
+
+          # Derive the profile label from the object metadata.
+          profile := object.get(
+            input.review.object.metadata.labels,
+            "vertguard/profile",
+            "prod"
+          )
+
+          # The allowed profile comes from constraint parameters; default "dev".
+          allowed := object.get(
+            input.parameters,
+            "allowedProfile",
+            "dev"
+          )
+
+          profile != allowed
+
+          msg := sprintf(
+            "vertguard: secret.create RBAC is only permitted when vertguard/profile=%v; got profile=%v on %v/%v",
+            [allowed, profile, input.review.object.kind, input.review.object.metadata.name]
+          )
+        }
+
+        # Second check: deny Pod specs that carry the chart-managed secret
+        # annotation (`helm.sh/chart` present) unless profile==dev.
+        # This catches a Helm release that tries to create the Secret object
+        # itself in a non-dev namespace.
+        violation[{"msg": msg}] {
+          input.review.object.kind == "Secret"
+          annotations := object.get(input.review.object.metadata, "annotations", {})
+          startswith(object.get(annotations, "helm.sh/chart", ""), "vertguard")
+
+          profile := object.get(
+            input.review.object.metadata.labels,
+            "vertguard/profile",
+            "prod"
+          )
+
+          allowed := object.get(input.parameters, "allowedProfile", "dev")
+          profile != allowed
+
+          msg := sprintf(
+            "vertguard: chart-managed Secrets are blocked outside profile=%v; set existingSecret instead",
+            [allowed]
+          )
+        }
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: NoSecretCreateInProd
+metadata:
+  name: vertguard-no-secret-create-in-prod
+  labels:
+    {{- include "vertguard.labels" . | nindent 4 }}
+  annotations:
+    security.vertguard.io/gap: "5.6"
+    security.vertguard.io/closed-by: "deploy/helm/vertguard/templates/opa-constraint.yaml"
+spec:
+  # Enforce (not just audit) — change to "warn" during initial rollout if needed.
+  enforcementAction: deny
+  match:
+    namespaces:
+      - {{ .Release.Namespace }}
+    kinds:
+      - apiGroups: ["rbac.authorization.k8s.io"]
+        kinds: ["ClusterRole", "Role"]
+      - apiGroups: [""]
+        kinds: ["Secret"]
+  parameters:
+    # Only workloads labelled vertguard/profile=dev may carry secret.create.
+    allowedProfile: "dev"

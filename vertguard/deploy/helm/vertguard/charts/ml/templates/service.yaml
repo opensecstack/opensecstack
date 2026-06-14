@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Service
+metadata:
+  # WHY a stable name: parent chart wires the Go side with
+  # VERTGUARD_ML_GRPC_URL=vertguard-ml:50051 — DNS discovery only works
+  # if the service name is predictable across releases.
+  name: vertguard-ml
+  labels:
+    {{- include "vertguard-ml.labels" . | nindent 4 }}
+  annotations:
+    {{- if not .Values.metrics.serviceMonitor.enabled }}
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "{{ .Values.metrics.port }}"
+    prometheus.io/path: "/metrics"
+    {{- end }}
+    {{- with .Values.service.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: grpc
+      port: {{ .Values.service.port }}
+      targetPort: grpc
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.metrics.port }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "vertguard-ml.selectorLabels" . | nindent 4 }}

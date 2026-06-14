@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: opensecstack
+  labels:
+    app: postgres
+    app.kubernetes.io/part-of: opensecstack
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  # storageClassName: standard   # Uncomment and set to match your cluster's StorageClass

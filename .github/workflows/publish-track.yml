@@ -1,0 +1,278 @@
+name: Publish Track Lab Images
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "cyberpath/content/tracks/**"
+  workflow_dispatch:
+    inputs:
+      track:
+        description: "Track slug to rebuild (e.g. 02-phishing-recognition) or 'all'"
+        required: true
+        default: "all"
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+# ---------------------------------------------------------------------------
+# Detect which tracks changed (or use the manual override)
+# ---------------------------------------------------------------------------
+jobs:
+  detect-tracks:
+    name: Detect changed tracks
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Build track matrix
+        id: set-matrix
+        shell: bash
+        run: |
+          ALL_TRACKS=(
+            "01-nis2-awareness"
+            "02-phishing-recognition"
+            "03-secure-coding"
+            "04-incident-response"
+            "05-api-security"
+            "06-threat-intelligence"
+            "07-linux-hardening"
+            "08-network-forensics"
+          )
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            INPUT="${{ github.event.inputs.track }}"
+            if [[ "$INPUT" == "all" ]]; then
+              TRACKS=("${ALL_TRACKS[@]}")
+            else
+              TRACKS=("$INPUT")
+            fi
+          else
+            CHANGED=$(git diff --name-only HEAD~1 HEAD -- 'cyberpath/content/tracks/' \
+              | grep -oP 'cyberpath/content/tracks/\K[^/]+' \
+              | sort -u)
+            TRACKS=()
+            for t in $CHANGED; do
+              TRACKS+=("$t")
+            done
+          fi
+
+          if [[ ${#TRACKS[@]} -eq 0 ]]; then
+            echo "matrix={\"track\":[]}" >> "$GITHUB_OUTPUT"
+          else
+            JSON=$(printf '%s\n' "${TRACKS[@]}" | jq -R . | jq -sc '{track: .}')
+            echo "matrix=$JSON" >> "$GITHUB_OUTPUT"
+          fi
+
+# ---------------------------------------------------------------------------
+# Build, push, sign, attest, and update digest for each changed track
+# ---------------------------------------------------------------------------
+  publish:
+    name: "Publish ${{ matrix.track }}"
+    needs: detect-tracks
+    if: ${{ fromJson(needs.detect-tracks.outputs.matrix).track[0] != null }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.detect-tracks.outputs.matrix) }}
+
+    steps:
+      # -----------------------------------------------------------------------
+      # Setup
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install syft (for SBOM generation)
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Install crane
+        uses: imjasonh/setup-crane@v0.4
+
+      # -----------------------------------------------------------------------
+      # Resolve lab metadata from lab.yaml
+      # -----------------------------------------------------------------------
+      - name: Read lab metadata
+        id: meta
+        shell: bash
+        run: |
+          TRACK="${{ matrix.track }}"
+          TRACK_DIR="cyberpath/content/tracks/${TRACK}"
+
+          # Find the single lab directory under this track
+          LAB_DIR=$(find "${TRACK_DIR}/labs" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+          if [[ -z "$LAB_DIR" ]]; then
+            echo "ERROR: No lab directory found under ${TRACK_DIR}/labs" >&2
+            exit 1
+          fi
+
+          LAB_YAML="${LAB_DIR}/lab.yaml"
+          if [[ ! -f "$LAB_YAML" ]]; then
+            echo "ERROR: lab.yaml not found at ${LAB_YAML}" >&2
+            exit 1
+          fi
+
+          LAB_ID=$(grep -m1 '^id:' "$LAB_YAML" | awk '{print $2}')
+          VERSION=$(grep -m1 '^version:' "$LAB_YAML" | awk '{print $2}')
+          IMAGE_REF=$(grep -m1 '^image:' "$LAB_YAML" | awk '{print $2}' | tr -d '"')
+
+          echo "lab_id=${LAB_ID}"        >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}"      >> "$GITHUB_OUTPUT"
+          echo "image_ref=${IMAGE_REF}"  >> "$GITHUB_OUTPUT"
+          echo "lab_dir=${LAB_DIR}"      >> "$GITHUB_OUTPUT"
+          echo "dockerfile=${LAB_DIR}/Dockerfile" >> "$GITHUB_OUTPUT"
+
+          echo "Track   : ${TRACK}"
+          echo "Lab ID  : ${LAB_ID}"
+          echo "Version : ${VERSION}"
+          echo "Image   : ${IMAGE_REF}"
+
+      # -----------------------------------------------------------------------
+      # Authenticate to ghcr.io
+      # -----------------------------------------------------------------------
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # Build and push the lab image
+      # -----------------------------------------------------------------------
+      - name: Build and push lab image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.meta.outputs.lab_dir }}
+          file: ${{ steps.meta.outputs.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.image_ref }}
+          provenance: false
+          sbom: false
+
+      # -----------------------------------------------------------------------
+      # Keyless OIDC signing (Sigstore / Rekor)
+      # -----------------------------------------------------------------------
+      - name: Sign image with cosign (keyless OIDC)
+        shell: bash
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          IMAGE_DIGEST="${{ steps.meta.outputs.image_ref }}@${{ steps.build.outputs.digest }}"
+          cosign sign --yes "${IMAGE_DIGEST}"
+
+      # -----------------------------------------------------------------------
+      # CycloneDX SBOM generation and attestation
+      # -----------------------------------------------------------------------
+      - name: Generate CycloneDX SBOM with syft
+        shell: bash
+        run: |
+          IMAGE_DIGEST="${{ steps.meta.outputs.image_ref }}@${{ steps.build.outputs.digest }}"
+          syft "${IMAGE_DIGEST}" -o cyclonedx-json > sbom.cdx.json
+
+      - name: Attest SBOM with cosign
+        shell: bash
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          IMAGE_DIGEST="${{ steps.meta.outputs.image_ref }}@${{ steps.build.outputs.digest }}"
+          cosign attest --yes \
+            --type cyclonedx \
+            --predicate sbom.cdx.json \
+            "${IMAGE_DIGEST}"
+
+      # -----------------------------------------------------------------------
+      # Resolve the authoritative SHA-256 digest via crane and stamp labs.yaml
+      # -----------------------------------------------------------------------
+      - name: Resolve canonical digest
+        id: digest
+        shell: bash
+        run: |
+          DIGEST=$(crane digest "${{ steps.meta.outputs.image_ref }}")
+          echo "value=${DIGEST}" >> "$GITHUB_OUTPUT"
+          echo "Digest: ${DIGEST}"
+
+      - name: Stamp digest into labs/labs.yaml
+        shell: bash
+        run: |
+          LAB_ID="${{ steps.meta.outputs.lab_id }}"
+          DIGEST="${{ steps.digest.outputs.value }}"
+          LABS_YAML="cyberpath/labs/labs.yaml"
+
+          python3 - <<'PYEOF'
+          import sys, re
+
+          lab_id  = "$LAB_ID"
+          digest  = "$DIGEST"
+          path    = "$LABS_YAML"
+
+          with open(path, "r") as fh:
+              content = fh.read()
+
+          # Match the block for this lab_id and replace its digest line.
+          # Pattern: after "  - id: <lab_id>" (anywhere in block), replace
+          # the next "    digest: ..." line.
+          pattern = (
+              r'(  - id: ' + re.escape(lab_id) + r'(?:\n(?!  - id:)[^\n]*)*?\n'
+              r'    digest: )"[^"]*"'
+          )
+          replacement = r'\g<1>"' + digest + r'"'
+          updated, n = re.subn(pattern, replacement, content, count=1, flags=re.DOTALL)
+
+          if n == 0:
+              sys.exit(f"ERROR: could not locate digest field for lab '{lab_id}' in {path}")
+
+          # Also flip cosign_verified to true now that we have just signed it.
+          pattern_cv = (
+              r'(  - id: ' + re.escape(lab_id) + r'(?:\n(?!  - id:)[^\n]*)*?\n'
+              r'    cosign_verified: )false'
+          )
+          updated, _ = re.subn(pattern_cv, r'\g<1>true', updated, count=1, flags=re.DOTALL)
+
+          with open(path, "w") as fh:
+              fh.write(updated)
+
+          print(f"Stamped digest for '{lab_id}': {digest}")
+          PYEOF
+
+      # -----------------------------------------------------------------------
+      # Commit the updated labs/labs.yaml back to main
+      # -----------------------------------------------------------------------
+      - name: Commit updated labs.yaml
+        shell: bash
+        env:
+          LAB_ID: ${{ steps.meta.outputs.lab_id }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          IMAGE_REF: ${{ steps.meta.outputs.image_ref }}
+          DIGEST: ${{ steps.digest.outputs.value }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add cyberpath/labs/labs.yaml
+
+          if git diff --cached --quiet; then
+            echo "No changes to labs.yaml — skipping commit."
+          else
+            MSG="chore(labs): stamp digest for ${LAB_ID} [${VERSION}]"$'\n\n'"Automated by publish-track.yml after successful push + cosign sign + SBOM attestation."$'\n'"Image: ${IMAGE_REF}@${DIGEST}"
+            git commit -m "$MSG"
+            git pull --rebase origin main
+            git push origin main
+          fi

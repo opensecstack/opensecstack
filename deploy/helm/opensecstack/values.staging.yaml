@@ -1,0 +1,231 @@
+# =============================================================================
+# Staging overrides for the opensecstack Helm chart.
+#
+# Staging mirrors production topology with real TLS and the same image tags
+# but uses smaller resources and Let's Encrypt staging to avoid rate limits.
+#
+# Apply on top of values.yaml:
+#   helm upgrade --install opensecstack-staging ./deploy/helm/opensecstack \
+#     -f values.yaml \
+#     -f values.staging.yaml \
+#     -n opensecstack-staging
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Global — staging always pulls to catch new builds immediately
+# ---------------------------------------------------------------------------
+global:
+  imagePullPolicy: Always              # always pull so new pushes are picked up
+
+namespace: opensecstack-staging
+
+# ---------------------------------------------------------------------------
+# Pod Security Context — same policy as prod to catch permission issues early
+# ---------------------------------------------------------------------------
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# ---------------------------------------------------------------------------
+# APIGuard
+# ---------------------------------------------------------------------------
+apiguard:
+  image:
+    repository: ghcr.io/opensecstack/apiguard
+    tag: latest                        # staging tracks latest builds
+
+  replicas: 1                          # single replica is sufficient for staging
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+  service:
+    port: 8080
+
+  ingress:
+    enabled: true
+    host: api.staging.opensecstack.io
+    tlsSecret: apiguard-staging-tls
+
+  # Prometheus monitoring — validate scraping works before prod
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+
+  # CORS — allow staging domains plus localhost for developer testing
+  cors:
+    allowedOrigins:
+      - "https://api.staging.opensecstack.io"
+      - "https://compass.staging.opensecstack.io"
+      - "https://citadel.staging.opensecstack.io"
+      - "http://localhost:3000"
+      - "http://localhost:8080"
+
+  # Rate limiting — more relaxed than prod for testing
+  rateLimit:
+    global: 500
+    auth: 100
+
+  # Debug and profiling endpoints enabled for staging troubleshooting
+  debug:
+    enabled: true
+    profiling: true                    # exposes /debug/pprof (Go) or equivalent
+
+# ---------------------------------------------------------------------------
+# NIS2 Compass
+# ---------------------------------------------------------------------------
+nis2compass:
+  image:
+    repository: ghcr.io/opensecstack/nis2compass
+    tag: latest
+
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+  service:
+    port: 8090
+
+  ingress:
+    enabled: true
+    host: compass.staging.opensecstack.io
+    tlsSecret: nis2compass-staging-tls
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8090"
+    prometheus.io/path: "/metrics"
+
+  cors:
+    allowedOrigins:
+      - "https://api.staging.opensecstack.io"
+      - "https://compass.staging.opensecstack.io"
+      - "https://citadel.staging.opensecstack.io"
+      - "http://localhost:3000"
+      - "http://localhost:8090"
+
+  debug:
+    enabled: true
+    profiling: true
+
+# ---------------------------------------------------------------------------
+# CITADEL
+# ---------------------------------------------------------------------------
+citadel:
+  image:
+    repository: ghcr.io/opensecstack/citadel
+    tag: latest
+
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+  service:
+    port: 8070
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8070"
+    prometheus.io/path: "/metrics"
+
+  cors:
+    allowedOrigins:
+      - "https://api.staging.opensecstack.io"
+      - "https://compass.staging.opensecstack.io"
+      - "https://citadel.staging.opensecstack.io"
+      - "http://localhost:3000"
+      - "http://localhost:8070"
+
+  debug:
+    enabled: true
+    profiling: true
+
+# ---------------------------------------------------------------------------
+# PostgreSQL — enabled in staging as an in-cluster deployment
+# ---------------------------------------------------------------------------
+postgres:
+  enabled: true                        # run Postgres inside the cluster
+  image: postgres:16-alpine
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  persistence:
+    size: 10Gi
+    storageClass: ""                   # use cluster default in staging
+
+# ---------------------------------------------------------------------------
+# Redis — enabled in staging as an in-cluster deployment
+# ---------------------------------------------------------------------------
+redis:
+  enabled: true                        # run Redis inside the cluster
+  image: redis:7-alpine
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+# ---------------------------------------------------------------------------
+# Application config
+# ---------------------------------------------------------------------------
+config:
+  logLevel: info                       # verbose enough to catch issues before prod
+  postgresHost: postgres-service       # in-cluster service name
+  postgresPort: "5432"
+  postgresUser: apiguard
+  apiguardDbName: apiguard
+  nis2DbName: nis2compass
+  redisHost: redis-service             # in-cluster service name
+  redisPort: "6379"
+
+# ---------------------------------------------------------------------------
+# HPA — enabled to validate autoscaling behavior before prod
+# ---------------------------------------------------------------------------
+hpa:
+  enabled: true
+  minReplicas: 1                       # staging can scale down to 1
+  maxReplicas: 5                       # keep costs low
+  cpuThreshold: 75                     # slightly higher threshold than prod
+
+# ---------------------------------------------------------------------------
+# cert-manager — Let's Encrypt STAGING avoids rate limits during testing
+# Browsers will warn about untrusted certs; this is expected.
+# ---------------------------------------------------------------------------
+certManager:
+  enabled: true
+  email: "admin@opensecstack.io"
+  issuerType: letsencrypt-staging      # staging ACME endpoint (fake certs)
+
+# ---------------------------------------------------------------------------
+# Network Policies — disabled in staging for easier debugging
+# ---------------------------------------------------------------------------
+networkPolicies:
+  enabled: false

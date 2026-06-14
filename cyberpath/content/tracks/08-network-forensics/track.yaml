@@ -1,0 +1,50 @@
+﻿id: network-forensics
+version: 1.0.0
+title: "Network Forensics"
+description: "Network forensics fundamentals: PCAP analysis, common protocol artefacts, IDS rule reading (Suricata/Snort), correlation with host evidence. Hands-on labs walk through real sanitised PCAP samples and answer scoped investigative questions."
+
+audience:
+  - soc-analyst
+  - ir-engineer
+  - csirt-engineer
+
+nis2_mappings:
+  primary: art21.b
+  secondary:
+    - art21.g
+
+prerequisites:
+  - incident-response-basics
+
+duration_minutes: 420
+language_source: sq
+
+modules:
+  - id: network-forensics-concepts
+    order: 1
+    title: "Network Forensics Concepts"
+    lessons:
+      - 01-network-forensics-introduction
+    quiz: ~
+    lab: ~
+
+  - id: network-forensics-practice
+    order: 2
+    title: "PCAP Analysis and Investigation with Tools"
+    lessons:
+      - 02-network-forensics-tools
+    quiz: netforensics-knowledge-check
+    lab: pcap-investigation-lab
+
+certification:
+  offered: true
+  level: practitioner
+  expires_after_months: 24
+
+content_hash: ""
+
+changelog:
+  - version: 1.0.0
+    date: 2026-05-05
+    changes:
+      - "Initial release for v1.0.0."

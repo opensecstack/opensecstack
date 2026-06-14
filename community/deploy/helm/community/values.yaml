@@ -1,0 +1,26 @@
+replicaCount: 1
+
+image:
+  repository: opensecstack/community
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  port: 8090
+
+config:
+  httpAddr: ":8090"
+  node: "community-0"
+  jwtIssuer: "community"
+  tokenTtl: "12h"
+  dbMaxConns: 16
+  citadelKeyId: "community-1"
+  citadelDryRun: true
+
+secrets:
+  dbUrl: ""
+  jwtSecret: ""
+  passwordPepper: ""
+  users: ""
+  citadelHmacSecrets: ""
+  citadelApiUrl: ""

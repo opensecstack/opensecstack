@@ -1,0 +1,38 @@
+{{- if .Values.certManager.enabled }}
+{{- if .Values.apiguard.ingress.enabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "opensecstack.fullname" . }}-apiguard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: apiguard
+    {{- include "opensecstack.labels" . | nindent 4 }}
+spec:
+  secretName: {{ .Values.apiguard.ingress.tlsSecret | quote }}
+  issuerRef:
+    name: {{ .Values.certManager.issuerType }}
+    kind: ClusterIssuer
+  dnsNames:
+    - {{ .Values.apiguard.ingress.host | quote }}
+{{- end }}
+{{- if .Values.nis2compass.ingress.enabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "opensecstack.fullname" . }}-nis2compass
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: nis2compass
+    {{- include "opensecstack.labels" . | nindent 4 }}
+spec:
+  secretName: {{ .Values.nis2compass.ingress.tlsSecret | quote }}
+  issuerRef:
+    name: {{ .Values.certManager.issuerType }}
+    kind: ClusterIssuer
+  dnsNames:
+    - {{ .Values.nis2compass.ingress.host | quote }}
+{{- end }}
+{{- end }}

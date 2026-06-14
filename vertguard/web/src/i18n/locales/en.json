@@ -1,0 +1,124 @@
+{
+  "common": {
+    "app_name": "VertGuard",
+    "tagline": "Prompt-injection & phishing scanner",
+    "nav": {
+      "dashboard": "Dashboard",
+      "scan": "Scan",
+      "threatfeed": "Threat Feed",
+      "metrics": "Metrics",
+      "video": "Video",
+      "logout": "Log out"
+    },
+    "actions": {
+      "submit": "Submit",
+      "cancel": "Cancel",
+      "login": "Log in",
+      "continue": "Continue",
+      "scan": "Scan"
+    },
+    "labels": {
+      "username": "Username",
+      "password": "Password",
+      "loading": "Loading…",
+      "error": "Error"
+    }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "modules": "Modules",
+    "fields": {
+      "status": "Status",
+      "database": "Database",
+      "version": "Version",
+      "commit": "Commit"
+    },
+    "errors": {
+      "health_failed": "Health check failed: {{detail}}"
+    }
+  },
+  "scan": {
+    "title": "Prompt scan",
+    "placeholder": "Paste a prompt to inspect…",
+    "scanning": "Scanning…",
+    "summary": "confidence {{confidence}} · {{duration}} ms · {{count}} match(es)",
+    "table": {
+      "pattern": "Pattern",
+      "category": "Category",
+      "atlas": "ATLAS",
+      "confidence": "Confidence"
+    }
+  },
+  "threatfeed": {
+    "title": "Threat Feed",
+    "tabs": {
+      "ioc_feed": "IOC Feed",
+      "atlas_coverage": "ATLAS Coverage"
+    },
+    "errors": {
+      "load_failed": "Error: {{detail}}"
+    },
+    "ioc": {
+      "search_placeholder": "Filter by IOC value…",
+      "count_label": "IOCs",
+      "empty": "No IOCs found.",
+      "col": {
+        "value": "IOC Value",
+        "type": "Type",
+        "severity": "Severity",
+        "source": "Source",
+        "first_seen": "First Seen",
+        "last_seen": "Last Seen"
+      }
+    },
+    "atlas": {
+      "coverage_summary": "{{covered}} / {{total}} techniques covered ({{pct}}%)",
+      "show_covered_only": "Show only covered",
+      "show_all": "Show all",
+      "empty": "No techniques match the current filter.",
+      "col": {
+        "tactic": "Tactic",
+        "technique_id": "Technique ID",
+        "technique_name": "Technique Name",
+        "covered": "Covered"
+      }
+    }
+  },
+  "metrics": {
+    "title": "Metrics",
+    "intro": "VertGuard exposes Prometheus metrics at /metrics.",
+    "open": "Open /metrics",
+    "footnote": "Wire Grafana / Prometheus separately. JSON metrics endpoint planned for v0.5."
+  },
+  "video": {
+    "title": "Video Deepfake Detection",
+    "description": "Start a session to score live WebRTC video frames for deepfake activity.",
+    "start_session": "Start Session",
+    "stop_session": "Stop Session",
+    "session_id_label": "Session:",
+    "last_frames": "Last {{count}} frame(s)",
+    "waiting_frames": "Waiting for frames…",
+    "status": {
+      "idle": "Idle",
+      "connecting": "Connecting…",
+      "live": "Live",
+      "error": "Error",
+      "stopped": "Stopped"
+    },
+    "table": {
+      "frame": "Frame",
+      "verdict": "Verdict",
+      "confidence": "Confidence",
+      "latency": "Latency"
+    },
+    "errors": {
+      "session_failed": "Failed to create session: {{detail}}",
+      "ws_error": "WebSocket connection error."
+    }
+  },
+  "not_found": {
+    "title": "404",
+    "body": "Page not found.",
+    "back": "Back to dashboard"
+  }
+}

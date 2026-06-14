@@ -1,0 +1,14 @@
+name: port-scan
+description: "TCP port scan of ports 1-1024 — validates that port scanning activity is detected"
+mitre_technique_ids: ["T1046"]
+tags: [recon, port-scan, discovery]
+severity: low
+timeout: 5m
+steps:
+  - kind: port_scan
+    params:
+      port_range: [1, 1024]
+      protocol: tcp
+      concurrency: 100
+      timeout_per_port: 500ms
+      record_open_ports: true

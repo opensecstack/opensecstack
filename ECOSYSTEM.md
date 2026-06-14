@@ -1,53 +1,68 @@
 # opensecstack Ecosystem Architecture
 
-> 8 platforms. 1 governance layer. 1 SDK. All open source. All integrated.
+> 11 platforms. 1 governance layer. 1 SDK. All open source. All integrated.
+>
+> Current state: All 11 platforms + SDK at v1.0.0 production. Long-term sovereignty stack (Phase 5) is aspirational — see [ROADMAP.md](ROADMAP.md).
 
 ## Platform Overview
 
-| Platform | Purpose | Language | Licence | Status |
-|----------|---------|----------|---------|--------|
-| **APIGuard** | API security testing (OWASP API Top 10) | Go + Rust | Apache 2.0 | In Development |
-| **NIS2 Compass** | NIS2 Article 21 compliance assessment | Python + Go | AGPL-3.0 | Planned |
-| **ThreatFlow** | Threat intelligence aggregation & correlation | Rust + Go | Apache 2.0 | Planned |
-| **IRFlow** | Incident response orchestration | Go + Python | AGPL-3.0 | Planned |
-| **OpenScrub** | DDoS mitigation (XDP/eBPF) | Rust + C | Apache 2.0 | Planned |
-| **CyberPath** | Security training & certification | Go + React | Apache 2.0 | Planned |
-| **SecureLab** | Attack simulation & detection validation | Python + Rust | Apache 2.0 | Planned |
-| **OpenCSIRT** | National/sector CSIRT operations | Go + Python | AGPL-3.0 | Planned |
+| Platform | Purpose | Language | Licence | Version | Status |
+|----------|---------|----------|---------|---------|--------|
+| **APIGuard** | API security testing (OWASP API Top 10) | Go + Rust | Apache 2.0 | **v1.0.0** | ✅ Production |
+| **NIS2 Compass** | NIS2 Article 21 compliance assessment | Python + Go | AGPL-3.0 | **v1.0.0** | ✅ Production |
+| **IRFlow** | Incident response orchestration | Go + Python | AGPL-3.0 | **v1.0.0** | ✅ Production |
+| **ThreatFlow** | Threat intelligence aggregation & correlation | Rust + Go | Apache 2.0 | **v1.0.0** | ✅ Production |
+| **OpenScrub** | DDoS mitigation (XDP/eBPF) | Rust + C + Go | Apache 2.0 | **v1.0.0** | ✅ Production |
+| **CyberPath** | Security training & certification | Go + React + Rust | Apache 2.0 | **v1.0.0** | ✅ Production |
+| **SecureLab** | Attack simulation & detection validation | Python + Rust | Apache 2.0 | **v1.0.0** | ✅ Production |
+| **OpenCSIRT** | National/sector CSIRT operations | Go + Python | AGPL-3.0 | **v1.0.0** | ✅ Production |
+| **VertGuard** | AI-attack defence — prompt injection (OWASP LLM Top 10), C2PA media authenticity, AI threat feed (MITRE ATLAS), deepfake video/voice detection, Python ML (HuggingFace), Zoom/Teams/WebEx plugins, real-time WebSocket video stream | Go + Rust + Python | AGPL-3.0 | **v1.0.0** | ✅ Production |
+| **SIN Community** | Developer knowledge hub — posts, comments, tags, full-text search, notifications, TOTP 2FA, API keys, series, spaces | Go + React + TypeScript + PostgreSQL + Meilisearch | Apache 2.0 | **v1.0.0** | ✅ Production |
+
+**Identity Layer:**
+| Component | Purpose | Language | Version | Status |
+|-----------|---------|----------|---------|--------|
+| **sinauth** | OAuth 2.0 / OpenID Connect authorization server — single sign-on for all platforms, RS256 + JWKS, authorization-code + PKCE, social login (Google, GitHub), TOTP MFA | Go + PostgreSQL | **v1.0.0** | ✅ Production |
 
 **Governance Layer:**
-| Component | Purpose | Language |
-|-----------|---------|----------|
-| **CITADEL** | Governance, audit trail, evidence chain, separation of duties | Go + Rust (Odoo 18/19) |
+| Component | Purpose | Language | Version | Status |
+|-----------|---------|----------|---------|--------|
+| **CITADEL** | Governance engine (MARSHAL 5-gate, WORM chain, NDS, AUGUR, chain anchors) | Go | **v1.0.0** | ✅ Production |
+
+**SDK:**
+| Component | Purpose | Languages | Version | Status |
+|-----------|---------|-----------|---------|--------|
+| **opensecstack/sdk** | Typed clients, event schemas, OpenAPI contracts, Argon2id+pepper module | Go · Python · TypeScript · Rust | **v1.0.0** | ✅ Production |
 
 ## Architecture Diagram
 
 ```
                          ┌─────────────────────────────────────────────┐
                          │            opensecstack/sdk                 │
-                         │     Go + Python clients · Event schemas     │
-                         │       Integration contracts (OpenAPI)       │
+                         │  Go · Python · TypeScript · Rust clients    │
+                         │     Event schemas · OpenAPI contracts       │
                          └──────────────────┬──────────────────────────┘
                                             │
           ┌─────────────────────────────────┼─────────────────────────────────┐
           │                                 │                                 │
           │              ┌──────────────────┴──────────────────┐              │
-          │              │           CITADEL                 │              │
-          │              │  ┌───────────┐  ┌───────────────┐   │              │
-          │              │  │ MARSHAL  │  │  WORM Log     │   │              │
-          │              │  │ (5 gates) │  │  (append-only)│   │              │
-          │              │  └───────────┘  └───────────────┘   │              │
-          │              │  ┌───────────┐  ┌───────────────┐   │              │
-          │              │  │  BEACON   │  │  PATROL       │   │              │
-          │              │  │ (intel)   │  │  (audit)      │   │              │
-          │              │  └───────────┘  └───────────────┘   │              │
-          │              │  ┌──────────────────────────────┐   │              │
-          │              │  │  Chain Anchors (SHA-256)     │   │              │
-          │              │  │  Evidence Vault · SoD Engine │   │              │
-          │              │  └──────────────────────────────┘   │              │
+          │              │              CITADEL                │              │
+          │              │  ┌───────────┐   ┌───────────────┐  │              │
+          │              │  │  MARSHAL  │   │  WORM Log     │  │              │
+          │              │  │  5-gate   │   │  TripleHash   │  │              │
+          │              │  │  engine   │   │  append-only  │  │              │
+          │              │  └───────────┘   └───────────────┘  │              │
+          │              │  ┌───────────┐   ┌───────────────┐  │              │
+          │              │  │   AUGUR   │   │ Chain Anchors │  │              │
+          │              │  │behavioral │   │ Ed25519-signed│  │              │
+          │              │  └───────────┘   └───────────────┘  │              │
+          │              │  ┌───────────┐   ┌───────────────┐  │              │
+          │              │  │    NDS    │   │     VIGIL     │  │              │
+          │              │  │ (SoD)     │   │ (planned v2)  │  │              │
+          │              │  └───────────┘   └───────────────┘  │              │
           │              └──────────────────┬──────────────────┘              │
           │                                 │                                 │
-          │         EXECUTE / REFUSE / HARD STOP                              │
+          │         EXECUTE / REFUSE / HARD_STOP                              │
           │                                 │                                 │
   ┌───────┴──────────────┬──────────────────┼───────────────┬────────────────┐│
   │                      │                  │               │                ││
@@ -58,19 +73,25 @@
 │ API sec  │  │ NIS2 Art.21  │  │ Threat intel │  │ Incident   │  │ DDoS         │
 │ testing  │  │ assessment   │  │ aggregation  │  │ response   │  │ mitigation   │
 │          │  │              │  │              │  │            │  │              │
-│ Go+Rust  │  │ Python+Go    │  │ Rust+Go      │  │ Go+Python  │  │ Rust+C       │
+│ Go+Rust  │  │ Python+Go    │  │ Rust+Go      │  │ Go+Python  │  │ Rust+C+Go    │
+│ v1.0.0 ✅│  │ v1.0.0 ✅    │  │ v1.0.0 ✅    │  │ v1.0.0 ✅  │  │ v1.0.0 ✅    │
 └────┬─────┘  └──────┬───────┘  └──────┬───────┘  └─────┬──────┘  └──────┬───────┘
-     │               │                 │                 │                │
-     └───────────────┼─────────────────┼─────────────────┼────────────────┘
-                     │                 │                 │
-              ┌──────┴───────┐  ┌──────┴───────┐  ┌─────┴────────┐
-              │  CyberPath   │  │  SecureLab   │  │  OpenCSIRT   │
-              │              │  │              │  │              │
-              │ Security     │  │ Attack sim   │  │ CSIRT        │
-              │ training     │  │ & detection  │  │ operations   │
-              │              │  │ validation   │  │              │
-              │ Go+React     │  │ Python+Rust  │  │ Go+Python    │
-              └──────────────┘  └──────────────┘  └──────────────┘
+     │               │                 │                │                │
+     └───────────────┼─────────────────┼────────────────┼────────────────┘
+                     │                 │                │
+         ┌───────────┼─────────────────┼────────────────┼────────────┐
+         │           │                 │                │            │
+  ┌──────┴───────┐  │  ┌──────────────┐│┌─────────────┐│ ┌──────────┴───┐
+  │  CyberPath   │  │  │  SecureLab   │││  OpenCSIRT  ││ │  VertGuard   │
+  │  v1.0.0 ✅   │  │  │  (planned)   │││  v1.0.0 ✅  ││ │  v1.0.0 ✅   │
+  │              │  │  │              │││             ││ │              │
+  │ Security     │  │  │ Attack sim   │││ CSIRT       ││ │ AI-attack    │
+  │ training     │  │  │ & detection  │││ operations  ││ │ defence      │
+  │              │  │  │ validation   │││             ││ │              │
+  │ Go+React+Rs  │  │  │ Python+Rust  │││ Go+Python   ││ │ Go+Rust+Py   │
+  └──────────────┘  │  └──────────────┘│└─────────────┘│ └──────────────┘
+                    │                  │               │
+                    └──────────────────┴───────────────┘
 ```
 
 ## Data Flow Between Platforms
@@ -80,10 +101,12 @@ APIGuard scan findings ──────────► IRFlow (auto-create inc
                        ──────────► ThreatFlow (IOC extraction from scan targets)
                        ──────────► NIS2 Compass (Art.21 Measure 8 evidence)
                        ──────────► CITADEL (citadel.evidence + citadel.log)
+                       ──────────► VertGuard (AI-detection of synthetic payloads)
 
 ThreatFlow IOCs ─────────────────► OpenScrub (auto-block malicious IPs)
                 ─────────────────► IRFlow (enrich incidents with threat context)
                 ─────────────────► OpenCSIRT (advisory generation)
+                ─────────────────► VertGuard (enrich AI threat feed)
 
 IRFlow incidents ────────────────► NIS2 Compass (Art.23 notification trigger)
                  ────────────────► OpenCSIRT (CSIRT coordination)
@@ -95,17 +118,30 @@ NIS2 Compass assessments ────────► CITADEL (compliance evidenc
 SecureLab simulations ───────────► IRFlow (validate playbooks)
                       ───────────► OpenScrub (validate DDoS rules)
                       ───────────► ThreatFlow (validate detection rules)
+                      ───────────► VertGuard (validate AI-attack detection)
 
 CyberPath completions ───────────► NIS2 Compass (Art.21 Measure G evidence)
                       ───────────► CITADEL (training evidence for audit)
 
 OpenCSIRT advisories ────────────► ThreatFlow (advisory → IOC pipeline)
                      ────────────► NIS2 Compass (incident notification tracking)
+                     ────────────► VertGuard (cross-CSIRT AI threat sharing)
+
+VertGuard AI-threat detection ───► IRFlow (auto-incident on HIGH-confidence detection)
+                               ───► ThreatFlow (AI-specific IOC feed)
+                               ───► CITADEL (evidence for AI-initiated actions)
+                               ───► OpenCSIRT (cross-border AI attack coordination)
 ```
 
 ## Integration Contracts
 
-All inter-platform communication uses the `opensecstack/sdk`:
+All inter-platform communication uses the `opensecstack/sdk`. End-user
+and operator authentication is delegated to **sinauth** over OpenID
+Connect — platforms validate sinauth-issued RS256 tokens against the
+JWKS endpoint (`https://auth.sin.to/.well-known/jwks.json`) rather than
+minting their own user credentials. See
+[sinauth/docs/integration/](sinauth/docs/integration/) for the
+per-platform OIDC client setup.
 
 | Contract | Format | Version | Description |
 |----------|--------|---------|-------------|
@@ -113,10 +149,15 @@ All inter-platform communication uses the `opensecstack/sdk`:
 | IOC Bundle | STIX 2.1 | v1 | ThreatFlow → OpenScrub, IRFlow, OpenCSIRT |
 | Incident Record | JSON | v1 | IRFlow → NIS2 Compass, OpenCSIRT, CITADEL |
 | Compliance Evidence | JSON | v1 | NIS2 Compass → CITADEL |
-| CITADEL Event | JSON | v2.0 | Any platform → CITADEL (MARSHAL input) |
+| CITADEL Kerkese | JSON | v1 | Any platform → CITADEL MARSHAL |
 | Training Record | JSON | v1 | CyberPath → NIS2 Compass, CITADEL |
 | Advisory | CSAF 2.0 | v1 | OpenCSIRT → ThreatFlow |
 | Simulation Result | JSON | v1 | SecureLab → IRFlow, OpenScrub, ThreatFlow |
+| AI-Attack Detection | JSON | v1 | VertGuard → IRFlow, ThreatFlow, OpenCSIRT |
+| Content Provenance | C2PA | 2.0 | VertGuard → CITADEL (as WORM evidence) |
+| Identity (SSO) | OpenID Connect 1.0 | RS256 | sinauth → every platform (ID/access tokens, JWKS) |
+
+All cross-platform webhooks are HMAC-SHA256 signed with a ±5-minute replay window and per-source secrets. See [IRFlow webhook spec](irflow/docs/webhook-spec.md) for the canonical wire format.
 
 ## Language-Per-Layer Strategy
 
@@ -124,39 +165,74 @@ All inter-platform communication uses the `opensecstack/sdk`:
 |---------|----------|-----------|
 | HTTP services, orchestration, CLI | **Go** | Goroutines for concurrency, single binary deployment, mature ecosystem |
 | Parsing untrusted input, crypto, regex-heavy analysis | **Rust** | Memory safety for security-critical code, performance for high-throughput paths |
-| Data science, ML, report templates | **Python** | Ecosystem (pandas, Jinja2, scikit-learn), rapid prototyping |
-| Dashboards and UIs | **React** | Component ecosystem, TypeScript safety, developer familiarity |
+| ML inference, data science, report templates | **Python** | HuggingFace ecosystem, pandas, Jinja2, scikit-learn |
+| Dashboards and UIs | **React + TypeScript** | Component ecosystem, type safety, developer familiarity |
 | Kernel-level packet processing | **C + Rust/Aya** | XDP/eBPF requires C or Rust/Aya for kernel programs |
 | Data persistence | **PostgreSQL 16+** | JSONB for flexible storage, row-level security, WORM tables for CITADEL |
-| ERP governance layer | **Odoo 18/19** | CITADEL runs inside Odoo — institutional governance, multi-ERP topology |
+| ERP layer (future CITADEL companion) | **Odoo-inspired, not Odoo-based** | Custom ERP for governance workflows, to be built Phase 5 Tier A |
 
 ## Licensing Model
 
-| Category | Licence | Platforms | Rationale |
-|----------|---------|-----------|-----------|
-| Security tools (used in CI/CD) | Apache 2.0 | APIGuard, ThreatFlow, OpenScrub, CyberPath, SecureLab | Permissive — embeddable in proprietary pipelines |
-| Governance platforms | AGPL-3.0 | IRFlow, NIS2 Compass, OpenCSIRT | Copyleft — governance modifications must remain open |
+| Category | Licence | Components | Rationale |
+|----------|---------|------------|-----------|
+| Security tools (embeddable in CI/CD) | Apache 2.0 | APIGuard, ThreatFlow, OpenScrub, CyberPath, SecureLab | Permissive — embeddable in proprietary pipelines |
+| Governance platforms | AGPL-3.0 | CITADEL, IRFlow, NIS2 Compass, OpenCSIRT, VertGuard | Copyleft — governance modifications must remain open |
+| Community platforms | Apache 2.0 | SIN Community | Permissive — open knowledge hub |
 | SDK | Apache 2.0 | opensecstack/sdk | Permissive — anyone can build integrations |
-| CITADEL | AGPL-3.0 | .citadel | Copyleft — audit trail integrity requires transparency |
+| Crypto library (planned Phase 5 Tier A) | Apache 2.0 | vantage-hash (TripleHash extracted) | Library — maximum adoption |
+
+## Cross-Platform Security Guarantees
+
+Every opensecstack deployment provides these guarantees:
+
+| Guarantee | Enforced by |
+|---|---|
+| **Every privileged action is cryptographically evaluated** | CITADEL MARSHAL 5-gate engine |
+| **Every decision is WORM-logged with TripleHash integrity** | CITADEL WORM chain (SHA-256 + SHA-512 + BLAKE3) |
+| **Tamper-resistance via Ed25519 anchors** | CITADEL chain anchors (every 100 entries) |
+| **Separation of Duties enforced at protocol level** | CITADEL Gate 3 (NDS) — operator ≠ verifier, cross-role-group |
+| **All inter-platform webhooks HMAC-signed, replay-protected** | IRFlow webhook spec (±5 min window) |
+| **Single sign-on with central MFA across all platforms** | sinauth OIDC (RS256 + JWKS, PKCE, TOTP) |
+| **All API clients JWT-authenticated with RBAC** | IRFlow auth middleware, 5 canonical roles |
+| **Password hashing Argon2id + server-side pepper** | sdk/go/password + sdk/python-password |
+| **NIS2 Article 21(2) + Article 23 compliance by design** | NIS2 Compass measure tracking + IRFlow notification |
 
 ## Repository Structure
 
 ```
-opensecstack/
+opensecstack/                       ← monorepo (current, 2026)
 ├── apiguard/           ← API security testing
 ├── nis2compass/        ← NIS2 compliance assessment
 ├── threatflow/         ← Threat intelligence
 ├── irflow/             ← Incident response
 ├── openscrub/          ← DDoS mitigation
 ├── cyberpath/          ← Security training
-├── securelab/          ← Attack simulation
+├── securelab/          ← Attack simulation & detection
 ├── opencsirt/          ← CSIRT operations
-├── .citadel/             ← CITADEL governance layer
-├── sdk/                ← Go + Python SDK
-├── deploy/             ← Docker Compose, Helm, deployment docs
+├── vertguard/          ← AI-attack defence (v1.0.0)
+├── community/          ← SIN developer knowledge hub (v1.0.0) + community resources
+├── sinauth/            ← SIN identity provider (OAuth2 / OIDC SSO, v1.0.0)
+├── citadel/            ← CITADEL governance layer
+├── sdk/                ← Go + Python + TypeScript + Rust SDK
+├── deploy/             ← Docker Compose, K8s manifests
 ├── docs/               ← Ecosystem-level documentation
-├── community/          ← Community resources
 ├── website/            ← opensecstack.org source
 ├── rfcs/               ← Request for Comments
 └── adrs/               ← Architecture Decision Records
 ```
+
+**Future repositories** (Phase 5, 2028-2036): `vantage-hash`, `pyramid-registry`, `pyramid-mvno`, `pyramid-os`, `symphy-os` — extracted from the monorepo when their independent lifecycle justifies the split. See [docs/release-process.md](docs/release-process.md) for the split criteria.
+
+## Deployment Topology
+
+For port assignments, network segmentation, and tier-specific
+deployment profiles, see [docs/deployment-topology.md](docs/deployment-topology.md)
+and [docs/security-maturity.md](docs/security-maturity.md).
+
+## Related
+
+- [ROADMAP.md](ROADMAP.md) — 10-year phased plan
+- [ARCHITECTURE.md](ARCHITECTURE.md) — technical deep-dive
+- [docs/release-process.md](docs/release-process.md) — how releases coordinate
+- [docs/compatibility-matrix.md](docs/compatibility-matrix.md) — version pairing
+- [docs/deprecation-policy.md](docs/deprecation-policy.md) — feature retirement

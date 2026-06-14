@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>404 — Page Not Found | opensecstack</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue: #2563EB; --blue-dark: #1D4ED8; --slate-900: #0F172A;
+      --slate-800: #1E293B; --slate-700: #334155; --slate-500: #64748B;
+      --slate-300: #CBD5E1; --white: #FFFFFF; --radius: 8px;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 16px; line-height: 1.6; color: var(--slate-800); background: var(--white); display: flex; flex-direction: column; min-height: 100vh; }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header { background: var(--slate-900); color: var(--white); position: sticky; top: 0; z-index: 100; border-bottom: 1px solid var(--slate-700); }
+    .nav-inner { max-width: 1100px; margin: 0 auto; padding: 0 24px; height: 60px; display: flex; align-items: center; justify-content: space-between; }
+    .nav-logo { font-size: 1.2rem; font-weight: 700; letter-spacing: -0.02em; color: var(--white); }
+    .nav-logo .logo-accent { color: var(--blue); }
+    nav ul { list-style: none; display: flex; gap: 28px; }
+    nav a { color: var(--slate-300); font-size: 0.9rem; font-weight: 500; transition: color .15s; }
+    nav a:hover { color: var(--white); text-decoration: none; }
+    .btn { display: inline-block; padding: 8px 20px; border-radius: var(--radius); font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: background .15s; }
+    .btn-primary { background: var(--blue); color: var(--white); }
+    .btn-primary:hover { background: var(--blue-dark); text-decoration: none; }
+    main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 80px 24px; text-align: center; }
+    .error-num { font-size: clamp(5rem, 20vw, 9rem); font-weight: 800; letter-spacing: -0.04em; color: var(--blue); line-height: 1; margin-bottom: 16px; }
+    .error-title { font-size: 1.75rem; font-weight: 700; color: var(--slate-900); margin-bottom: 12px; }
+    .error-msg { color: var(--slate-500); margin-bottom: 32px; }
+    .back-link { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--blue); font-size: 0.95rem; }
+    .back-link:hover { text-decoration: underline; }
+    footer { background: var(--slate-900); color: var(--slate-500); padding: 48px 24px; font-size: 0.85rem; }
+    .footer-inner { max-width: 1100px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 32px; justify-content: space-between; align-items: flex-start; }
+    .footer-brand .logo { font-size: 1.1rem; font-weight: 700; color: var(--white); margin-bottom: 8px; }
+    .footer-brand .logo span { color: var(--blue); }
+    .footer-links { display: flex; flex-wrap: wrap; gap: 40px; }
+    .footer-col h4 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--slate-300); margin-bottom: 14px; }
+    .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .footer-col a { color: var(--slate-500); transition: color .15s; }
+    .footer-col a:hover { color: var(--white); text-decoration: none; }
+    .footer-bottom { max-width: 1100px; margin: 40px auto 0; padding-top: 24px; border-top: 1px solid var(--slate-700); display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center; font-size: 0.8rem; }
+    .license-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: rgba(37,99,235,.15); border: 1px solid rgba(37,99,235,.3); border-radius: 999px; color: #93C5FD; font-size: 0.75rem; font-weight: 600; }
+    @media (max-width: 640px) { .nav-inner { flex-direction: column; height: auto; padding: 14px 20px; gap: 10px; } nav ul { gap: 16px; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="nav-inner">
+    <div class="nav-logo">
+      <span>open<span class="logo-accent">sec</span>stack</span>
+    </div>
+    <nav>
+      <ul>
+        <li><a href="./#features">Platforms</a></li>
+        <li><a href="./#how-it-works">How it Works</a></li>
+        <li><a href="./#architecture">Architecture</a></li>
+        <li><a href="https://github.com/opensecstack/opensecstack" target="_blank" rel="noopener">GitHub</a></li>
+        <li><a class="btn btn-primary" href="./#get-started">Get Started</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div>
+    <div class="error-num">404</div>
+    <h1 class="error-title">Page not found</h1>
+    <p class="error-msg">The page you're looking for doesn't exist.</p>
+    <a class="back-link" href="./">&#8592; Back to home</a>
+  </div>
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <div class="logo">open<span>sec</span>stack</div>
+      <p>Open-source cybersecurity ecosystem<br />for Europe and beyond.</p>
+    </div>
+    <div class="footer-links">
+      <div class="footer-col">
+        <h4>Platforms</h4>
+        <ul>
+          <li><a href="https://github.com/opensecstack/opensecstack/tree/main/apiguard">APIGuard</a></li>
+          <li><a href="https://github.com/opensecstack/opensecstack/tree/main/nis2compass">NIS2 Compass</a></li>
+          <li><a href="https://github.com/opensecstack/opensecstack/tree/main/.citadel">CITADEL</a></li>
+          <li><a href="https://github.com/opensecstack/opensecstack/blob/main/ROADMAP.md">Roadmap</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Developers</h4>
+        <ul>
+          <li><a href="https://github.com/opensecstack/opensecstack/blob/main/docs/quick-start.md">Quick Start</a></li>
+          <li><a href="https://github.com/opensecstack/opensecstack/tree/main/sdk">SDK</a></li>
+          <li><a href="https://github.com/opensecstack/opensecstack/tree/main/rfcs">RFCs</a></li>
+          <li><a href="https://github.com/opensecstack/opensecstack/blob/main/CONTRIBUTING.md">Contributing</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Community</h4>
+        <ul>
+          <li><a href="https://github.com/opensecstack/opensecstack/discussions">GitHub Discussions</a></li>
+          <li><a href="https://github.com/opensecstack/opensecstack/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a></li>
+          <li><a href="https://github.com/opensecstack/opensecstack/blob/main/SECURITY.md">Security Policy</a></li>
+          <li><a href="https://github.com/opensecstack/opensecstack/blob/main/CLA.md">CLA</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>&#169; 2024&#8211;2026 opensecstack contributors</span>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      <span class="license-badge">Apache 2.0 / AGPL-3.0</span>
+      <a href="https://github.com/opensecstack/opensecstack" style="color:var(--slate-500);">
+        github.com/opensecstack/opensecstack
+      </a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

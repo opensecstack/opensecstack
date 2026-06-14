@@ -1,0 +1,86 @@
+# VertGuard dataset registry
+# Each entry describes one training/evaluation dataset used to fine-tune
+# or benchmark VertGuard's ML models.
+# The download.sh script reads this file to fetch and verify datasets.
+#
+# Fields:
+#   name        — unique identifier
+#   version     — dataset version (bump on any content change)
+#   path        — directory relative to the repository root
+#   sha256      — SHA-256 of the downloaded archive
+#   source      — canonical download URL
+#   size_mb     — approximate size in MiB (compressed)
+#   license     — SPDX identifier or "proprietary"
+#   splits      — train/eval/test record counts (informational)
+#   description — human-readable purpose
+
+datasets:
+  - name: prompt-injection
+    version: "1.0.0"
+    path: datasets/prompt-injection/
+    sha256: "placeholder-sha256-update-after-curation"
+    source: "https://huggingface.co/datasets/opensecstack/vertguard-prompt-injection"
+    size_mb: 45
+    license: "Apache-2.0"
+    splits:
+      train: 80000
+      eval: 10000
+      test: 10000
+    description: >
+      Curated dataset for Module 3 prompt injection classifier fine-tuning.
+      Covers direct injection, indirect injection, jailbreak, role-play, and
+      encoding-based (Base64, hex, ROT13) attack patterns alongside clean
+      control samples.  Derived from public CTF write-ups, red-team corpora,
+      and OpenSecStack synthetic augmentation.
+
+  - name: phishing
+    version: "1.0.0"
+    path: datasets/phishing/
+    sha256: "placeholder-sha256-update-after-curation"
+    source: "https://huggingface.co/datasets/opensecstack/vertguard-phishing"
+    size_mb: 120
+    license: "Apache-2.0"
+    splits:
+      train: 150000
+      eval: 20000
+      test: 20000
+    description: >
+      Phishing URL and email-body dataset for Module 5 classifier fine-tuning.
+      Positive samples sourced from PhishTank, OpenPhish, and abuse.ch.
+      Negative samples drawn from Majestic Million and Tranco top-1M lists.
+      Text samples include both raw URLs and full-body phishing email text.
+
+  - name: identity-synthetic
+    version: "1.0.0"
+    path: datasets/identity-synthetic/
+    sha256: "placeholder-sha256-update-after-curation"
+    source: "https://huggingface.co/datasets/opensecstack/vertguard-identity-synthetic"
+    size_mb: 200
+    license: "Apache-2.0"
+    splits:
+      train: 60000
+      eval: 8000
+      test: 8000
+    description: >
+      Synthetic-identity detection dataset for Module 6 GAN-detector training.
+      Positive (synthetic) samples generated via GAN and language-model pipelines
+      to mimic realistic identity documents.  Negative (genuine) samples sourced
+      from anonymised public records and consent-gathered volunteer data.
+
+  - name: media-deepfake
+    version: "1.0.0"
+    path: datasets/media-deepfake/
+    sha256: "placeholder-sha256-update-after-curation"
+    source: "https://huggingface.co/datasets/opensecstack/vertguard-media-deepfake"
+    size_mb: 3200
+    license: "CC-BY-4.0"
+    splits:
+      train: 40000
+      eval: 5000
+      test: 5000
+    description: >
+      Image and video-frame deepfake dataset for Module 1 content-level
+      forgery detection.  Positive samples generated with FaceSwap, DeepFaceLab,
+      and diffusion-based inpainting pipelines.  Negative samples are unmodified
+      frames from Creative Commons licensed video corpora.
+      Each sample is paired with optional C2PA provenance metadata where available.

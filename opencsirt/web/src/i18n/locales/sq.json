@@ -1,0 +1,152 @@
+{
+  "common": {
+    "app_name": "OpenCSIRT",
+    "tagline": "Operacione CSIRT kombëtar/sektor",
+    "nav": {
+      "constituencies": "Konstituenca",
+      "incidents": "Incidente",
+      "advisories": "Këshillime",
+      "peers": "Partnerë",
+      "metrics": "Metrika",
+      "logout": "Dil"
+    },
+    "actions": {
+      "save": "Ruaj",
+      "cancel": "Anulo",
+      "delete": "Fshij",
+      "refresh": "Rifresko",
+      "submit": "Dërgo",
+      "login": "Hyr",
+      "create": "Krijo",
+      "publish": "Publiko",
+      "withdraw": "Tërhiq",
+      "handshake": "Shtrëngim dore"
+    },
+    "labels": {
+      "username": "Përdorues",
+      "password": "Fjalëkalim",
+      "loading": "Duke u ngarkuar…",
+      "empty": "Asnjë rezultat",
+      "error": "Gabim",
+      "page": "Faqe"
+    },
+    "footer": "OpenCSIRT v{{version}} · AGPL-3.0"
+  },
+  "constituencies": {
+    "title": "Drejtoria e konstituencave",
+    "add_title": "Shto njësi konstituente",
+    "fields": {
+      "name": "Emri",
+      "kind": "Lloji",
+      "sector": "Sektori",
+      "tlp_default": "TLP i parazgjedhur",
+      "primary_contact": "Kontakti kryesor",
+      "secondary_contact": "Kontakt dytësor",
+      "created_at": "Krijuar"
+    },
+    "kinds": {
+      "essential": "Subjekt esencial",
+      "important": "Subjekt i rëndësishëm",
+      "out_of_scope": "Jashtë fushëveprimit"
+    }
+  },
+  "incidents": {
+    "title": "Incidente",
+    "fields": {
+      "id": "ID e incidentit",
+      "title": "Titulli",
+      "source": "Burimi",
+      "severity": "Ashpërsia",
+      "constituency": "Konstituenca",
+      "status": "Statusi",
+      "created_at": "Hapur"
+    },
+    "statuses": {
+      "open": "I hapur",
+      "triaged": "I klasifikuar",
+      "contained": "I izoluar",
+      "closed": "I mbyllur"
+    },
+    "severities": {
+      "low": "I ulët",
+      "medium": "Mesatar",
+      "high": "I lartë",
+      "critical": "Kritik"
+    }
+  },
+  "advisories": {
+    "title": "Këshillime",
+    "draft_title": "Draft këshillimi",
+    "fields": {
+      "id": "ID e këshillimit",
+      "title": "Titulli",
+      "csaf_id": "Id ndjekës CSAF",
+      "tlp": "TLP",
+      "state": "Gjendja",
+      "version": "Versioni",
+      "published_at": "Publikuar",
+      "withdrawn_at": "Tërhequr"
+    },
+    "states": {
+      "draft": "Draft",
+      "published": "I publikuar",
+      "withdrawn": "I tërhequr"
+    },
+    "preview": "Pamje paraprake CSAF",
+    "publish_warning": "Publikimi emeton dëshmi CITADEL dhe shtyn një paketë STIX te ThreatFlow. Ky veprim regjistrohet dhe nuk mund të zhbëhet (vetëm zëvendësohet nga një revizion i ri).",
+    "withdraw_warning": "Tërheqja e shënon këshillimin si të pavlefshëm. Ky veprim regjistrohet dhe nuk mund të zhbëhet."
+  },
+  "peers": {
+    "title": "CSIRT partnerë",
+    "fields": {
+      "name": "Emri",
+      "country": "Shteti",
+      "registry": "Regjistri",
+      "trust": "Besimi",
+      "last_handshake": "Shtrëngimi i fundit",
+      "fingerprint": "Gjurmë Ed25519"
+    },
+    "trust": {
+      "verified": "I verifikuar",
+      "pending": "Në pritje",
+      "failed": "Dështuar",
+      "expired": "Skaduar"
+    }
+  },
+  "metrics": {
+    "title": "Metrika",
+    "source": "Burimi: GET /api/v1/metrics/snapshot. Ekspozimi Prometheus në /api/v1/metrics (i mbrojtur me JWT).",
+    "node": "Nyje",
+    "sections": {
+      "incidents": "Incidente",
+      "advisories": "Këshillime",
+      "system": "Sistemi"
+    },
+    "incident_status": {
+      "open": "I hapur",
+      "triaged": "I klasifikuar",
+      "contained": "I izoluar",
+      "closed": "I mbyllur"
+    },
+    "advisory_state": {
+      "draft": "Draft",
+      "published": "I publikuar",
+      "withdrawn": "I tërhequr"
+    },
+    "cards": {
+      "outbox_pending": "Radha CITADEL (në pritje)",
+      "outbox_failed": "Radha CITADEL (dështuar)",
+      "iocs_last_bundle_size": "Paketë e fundit IOC",
+      "advisory_service_up": "Nënsistemi i këshillimeve"
+    },
+    "bool": {
+      "yes": "ok",
+      "no": "poshtë"
+    }
+  },
+  "not_found": {
+    "title": "404",
+    "body": "Faqja nuk u gjet.",
+    "back": "Kthehu te incidentet"
+  }
+}

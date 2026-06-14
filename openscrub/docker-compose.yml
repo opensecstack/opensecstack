@@ -1,0 +1,86 @@
+version: "3.9"
+
+# OpenScrub — build-from-source compose file for local development and CI.
+#
+# Differences from deploy/docker-compose.yml:
+#   - All services are built from local Dockerfiles (no pre-built image tags).
+#   - The dataplane service is omitted; the API defaults to the noop transport
+#     so the stack boots without BPF privileges on a developer laptop.
+#   - Web is exposed on port 80 (same as production nginx default).
+#
+# Quick start:
+#   cp .env.example .env          # fill in OPENSCRUB_DB_PASSWORD,
+#                                  # OPENSCRUB_JWT_SECRET, OPENSCRUB_PASSWORD_PEPPER
+#   docker compose up --build
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: openscrub
+      POSTGRES_PASSWORD: ${OPENSCRUB_DB_PASSWORD:?set OPENSCRUB_DB_PASSWORD in .env}
+      POSTGRES_DB: openscrub
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - openscrub-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openscrub"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: cmd/openscrub/Dockerfile
+    ports:
+      - "8087:8087"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      OPENSCRUB_HTTP_ADDR: ":8087"
+      OPENSCRUB_DB_URL: "postgres://openscrub:${OPENSCRUB_DB_PASSWORD:?set OPENSCRUB_DB_PASSWORD in .env}@postgres:5432/openscrub?sslmode=disable"
+      OPENSCRUB_DB_MAX_CONNS: ${OPENSCRUB_DB_MAX_CONNS:-16}
+      # No dataplane available when running from source on a dev laptop.
+      OPENSCRUB_DATAPLANE_TRANSPORT: ${OPENSCRUB_DATAPLANE_TRANSPORT:-noop}
+      OPENSCRUB_JWT_SECRET: ${OPENSCRUB_JWT_SECRET:?set OPENSCRUB_JWT_SECRET in .env (>=32 bytes)}
+      OPENSCRUB_JWT_ISSUER: ${OPENSCRUB_JWT_ISSUER:-openscrub}
+      OPENSCRUB_TOKEN_TTL: ${OPENSCRUB_TOKEN_TTL:-1h}
+      # Login issuer creds — comma-separated user:role:sha256hex.
+      # Generate hashes: echo -n "${OPENSCRUB_PASSWORD_PEPPER}:<plaintext>" | sha256sum
+      #
+      # DEV-ONLY DEFAULTS below let `docker compose up` work out-of-the-box.
+      # Production deployments MUST override OPENSCRUB_PASSWORD_PEPPER and
+      # OPENSCRUB_USERS via .env (or a sealed Secret in Helm).
+      OPENSCRUB_PASSWORD_PEPPER: ${OPENSCRUB_PASSWORD_PEPPER:?set OPENSCRUB_PASSWORD_PEPPER in .env}
+      OPENSCRUB_USERS: ${OPENSCRUB_USERS:-operator:operator:0e129ba1a3bfa9e08c8865e51fcf92adedd6f6e5f0f6fef4a7b4e88a053098d6,admin:admin:cba8c86cb3ddc213b83d7ce751c55fb8ee011bce8f2f2973442aee7fab0d40a2}
+      OPENSCRUB_DEV_MODE: ${OPENSCRUB_DEV_MODE:-false}
+      OPENSCRUB_LOG_LEVEL: ${OPENSCRUB_LOG_LEVEL:-info}
+      OPENSCRUB_NODE: ${OPENSCRUB_NODE:-openscrub-dev}
+      OPENSCRUB_MITIGATION_MIN_DURATION: ${OPENSCRUB_MITIGATION_MIN_DURATION:-5s}
+      OPENSCRUB_IFACE: ${OPENSCRUB_IFACE:-eth0}
+      OPENSCRUB_XDP_MODE: ${OPENSCRUB_XDP_MODE:-skb}
+      OPENSCRUB_THREATFLOW_API_URL: ${OPENSCRUB_THREATFLOW_API_URL:-}
+      OPENSCRUB_THREATFLOW_TOKEN: ${OPENSCRUB_THREATFLOW_TOKEN:-}
+      OPENSCRUB_THREATFLOW_INTERVAL: ${OPENSCRUB_THREATFLOW_INTERVAL:-15m}
+      OPENSCRUB_CITADEL_API_URL: ${OPENSCRUB_CITADEL_API_URL:-}
+      OPENSCRUB_CITADEL_HMAC_SECRET: ${OPENSCRUB_CITADEL_HMAC_SECRET:-}
+      OPENSCRUB_CITADEL_HMAC_SECRETS: ${OPENSCRUB_CITADEL_HMAC_SECRETS:-}
+      OPENSCRUB_CITADEL_KEY_ID: ${OPENSCRUB_CITADEL_KEY_ID:-}
+      OPENSCRUB_CITADEL_KEY_IDS: ${OPENSCRUB_CITADEL_KEY_IDS:-}
+      OPENSCRUB_CITADEL_SOURCE: ${OPENSCRUB_CITADEL_SOURCE:-openscrub}
+      OPENSCRUB_CITADEL_DRY_RUN: ${OPENSCRUB_CITADEL_DRY_RUN:-false}
+
+  web:
+    build:
+      context: web
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+
+volumes:
+  openscrub-pg:

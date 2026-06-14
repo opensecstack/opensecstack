@@ -1,0 +1,115 @@
+---
+# ── PersistentVolumeClaim ────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nis2compass-postgres-pvc
+  namespace: nis2compass
+  labels:
+    app: nis2compass-postgres
+    app.kubernetes.io/part-of: nis2compass
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  # storageClassName: standard   # Uncomment and set to match your cluster's StorageClass
+
+---
+# ── StatefulSet ──────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nis2compass-postgres
+  namespace: nis2compass
+  labels:
+    app: nis2compass-postgres
+    app.kubernetes.io/part-of: nis2compass
+spec:
+  serviceName: nis2compass-postgres-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nis2compass-postgres
+  template:
+    metadata:
+      labels:
+        app: nis2compass-postgres
+        app.kubernetes.io/part-of: nis2compass
+    spec:
+      securityContext:
+        fsGroup: 999           # postgres GID — ensures the data volume is group-writable
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            # Superuser credentials
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nis2compass-secrets
+                  key: POSTGRES_PASSWORD
+            # Create the application database on first boot
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: nis2compass-config
+                  key: NIS2_DB_NAME
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: nis2compass-postgres-pvc
+
+---
+# ── Service ──────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: nis2compass-postgres-service
+  namespace: nis2compass
+  labels:
+    app: nis2compass-postgres
+    app.kubernetes.io/part-of: nis2compass
+spec:
+  type: ClusterIP
+  selector:
+    app: nis2compass-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      protocol: TCP

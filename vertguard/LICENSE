@@ -1,0 +1,34 @@
+VertGuard — AI-Attack Defence Platform
+Copyright (C) 2026 OpenSecStack Contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+The full text of the AGPL-3.0 licence is available at:
+https://www.gnu.org/licenses/agpl-3.0.txt
+
+Why AGPL-3.0 for VertGuard
+===========================
+
+VertGuard is a governance-adjacent platform: its detections become
+evidence in the CITADEL WORM audit chain and feed compliance
+reporting through NIS2 Compass. AGPL-3.0 ensures that any modified
+version operated as a network service must publish its source to its
+users — preventing a closed-source fork of a trust-critical
+AI-defence component from diverging silently from the reference
+implementation.
+
+Tool platforms in this repository (APIGuard, ThreatFlow, SDKs)
+remain Apache-2.0; the copyleft obligation is scoped to
+governance-critical platforms by design. See the root
+LICENSE file for the full ecosystem licence manifest.

@@ -1,0 +1,12 @@
+name: bola-basic
+description: "BOLA via sequential integer ID enumeration on REST objects"
+mitre_technique_ids: ["T1078"]
+tags: [api, owasp-a1, bola]
+severity: high
+timeout: 3m
+steps:
+  - kind: bola
+    params:
+      endpoint: /api/v1/users/{id}
+      id_range: [1, 100]
+      auth_token_param: low_privilege_jwt

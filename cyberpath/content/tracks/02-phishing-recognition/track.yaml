@@ -1,0 +1,50 @@
+﻿id: phishing-recognition
+version: 1.0.0
+title: "Phishing Recognition"
+description: "A beginner-level track that trains staff to recognise phishing emails, spear-phishing campaigns, vishing, and business email compromise. Learners develop the skills to identify email header manipulation, spoofed sender addresses, urgency tactics, and advanced social engineering techniques, then practise classifying sample emails in a hands-on lab."
+
+audience:
+  - all-staff
+  - it-helpdesk
+  - finance-team
+  - executive-assistant
+
+nis2_mappings:
+  primary: art21.g
+  secondary: []
+
+prerequisites:
+  - nis2-article-21-awareness
+
+duration_minutes: 90
+language_source: en
+
+modules:
+  - id: phishing-anatomy
+    order: 1
+    title: "Anatomy of a Phishing Email"
+    lessons:
+      - 01-anatomy-of-a-phishing-email
+    quiz: ~
+    lab: ~
+
+  - id: advanced-social-engineering
+    order: 2
+    title: "Advanced Social Engineering Techniques"
+    lessons:
+      - 02-advanced-social-engineering
+    quiz: phishing-knowledge-check
+    lab: phishing-detector
+
+certification:
+  offered: true
+  level: awareness
+  expires_after_months: 12
+
+content_hash: ""
+
+changelog:
+  - version: 1.0.0
+    date: 2026-05-07
+    changes:
+      - "Initial release for v1.0.0."

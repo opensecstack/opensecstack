@@ -1,0 +1,30 @@
+[package]
+name         = "vertguard-prompt-patterns"
+description  = "Prompt injection pattern-matching engine for VertGuard Module 3"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+authors.workspace     = true
+repository.workspace  = true
+readme.workspace      = true
+
+[lib]
+name       = "vertguard_prompt_patterns"
+crate-type = ["rlib", "cdylib"]  # cdylib for FFI from Go (Phase 4.1)
+
+[dependencies]
+regex        = { workspace = true }
+aho-corasick = { workspace = true }
+thiserror    = { workspace = true }
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+serde_yaml   = { workspace = true }
+
+[dev-dependencies]
+# Criterion for benchmarks lands in v0.2+
+
+[features]
+default = []
+# `ffi` enables the C-ABI surface used by Go via CGO. Turn off for
+# pure-Rust consumers (Rust-native integration tests, benchmarks).
+ffi     = []

@@ -1,0 +1,37 @@
+services:
+  sinauth:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8100:8100"
+    environment:
+      SINAUTH_HTTP_ADDR:        ":8100"
+      SINAUTH_DEV_MODE:         "true"
+      SINAUTH_DB_URL:           "postgres://sinauth:sinauth@postgres:5432/sinauth?sslmode=disable"
+      SINAUTH_ISSUER:           "http://localhost:8100"
+      SINAUTH_SITE_URL:         "http://localhost:5174"
+      SINAUTH_SIGNING_KEY_PATH: "/app/dev-keys/sinauth.pem"
+      SINAUTH_SIGNING_KEY_ID:   "dev-1"
+      # Social OAuth — export these in your shell to enable Google/GitHub login
+      # locally. Redirect URIs auto-derive from SINAUTH_ISSUER, so register
+      # http://localhost:8100/api/v1/auth/google/callback (and .../github/callback)
+      # in the Google / GitHub OAuth app consoles.
+      GOOGLE_CLIENT_ID:         "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET:     "${GOOGLE_CLIENT_SECRET:-}"
+      GITHUB_CLIENT_ID:         "${GITHUB_CLIENT_ID:-}"
+      GITHUB_CLIENT_SECRET:     "${GITHUB_CLIENT_SECRET:-}"
+    volumes:
+      - .:/app
+      - ./dev-keys:/app/dev-keys
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB:       sinauth
+      POSTGRES_USER:     sinauth
+      POSTGRES_PASSWORD: sinauth
+    ports:
+      - "5433:5432"

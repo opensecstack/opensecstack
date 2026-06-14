@@ -1,0 +1,19 @@
+model_type: gradient_boosting
+output_dir: /var/lib/vertguard/models/video-gan
+features:
+  - face_detected
+  - clip_embedding_512_dims
+training:
+  n_estimators: 300
+  max_depth: 5
+  learning_rate: 0.03
+  subsample: 0.8
+  random_state: 42
+datasets:
+  - name: ff_plus_plus
+    path: data/video/faceforensics
+  - name: dfdc
+    path: data/video/dfdc_clips
+eval:
+  metrics: [auc_roc, eer, f1]
+  threshold: 0.60

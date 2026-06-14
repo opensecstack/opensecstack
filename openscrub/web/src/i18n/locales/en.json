@@ -1,0 +1,109 @@
+{
+  "common": {
+    "app_name": "OpenScrub",
+    "tagline": "DDoS mitigation with XDP/eBPF",
+    "nav": {
+      "rules": "Rules",
+      "add_rule": "Add rule",
+      "mitigations": "Live mitigations",
+      "metrics": "Metrics",
+      "logout": "Log out"
+    },
+    "actions": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "refresh": "Refresh",
+      "submit": "Submit",
+      "login": "Log in"
+    },
+    "labels": {
+      "username": "Username",
+      "password": "Password",
+      "loading": "Loading…",
+      "empty": "No results",
+      "error": "Error",
+      "page": "Page"
+    },
+    "footer": "OpenScrub v{{version}} · {{license}}"
+  },
+  "rules": {
+    "title": "Active rules",
+    "add_title": "Add new rule",
+    "total": "{{count}} total",
+    "fields": {
+      "cidr": "CIDR",
+      "type": "Type",
+      "pps": "Packets/s (limit)",
+      "port": "Port",
+      "ttl": "TTL (seconds)",
+      "source": "Source",
+      "created_at": "Created"
+    },
+    "types": {
+      "blocklist": "Blocklist",
+      "ratelimit": "Rate-limit",
+      "syncookie": "SYN cookie"
+    },
+    "placeholders": {
+      "cidr": "e.g. 192.0.2.0/24"
+    },
+    "filter": {
+      "all": "All types"
+    },
+    "errors": {
+      "cidr_invalid": "Invalid CIDR",
+      "pps_required": "Packets/s required for rate-limit",
+      "port_invalid": "Port must be between 1 and 65535",
+      "ttl_invalid": "TTL must be at least 1 second"
+    },
+    "deleted": "Rule deleted"
+  },
+  "mitigations": {
+    "title": "Live mitigations (auto-refresh every 5s)",
+    "count": "{{count}} total",
+    "fields": {
+      "started_at": "Started",
+      "ended_at": "Ended",
+      "src_ip": "Source IP",
+      "rule_id": "Rule",
+      "packets_dropped": "Packets dropped",
+      "bytes_dropped": "Bytes dropped",
+      "emitted": "Emitted"
+    },
+    "emitted": {
+      "yes": "yes",
+      "no": "no"
+    }
+  },
+  "metrics": {
+    "title": "Metrics",
+    "dataplane_detached_warning": "Data-plane is not attached. Rules are not being enforced — check the XDP loader on this node.",
+    "source": "Source: GET /api/v1/metrics/snapshot. For ad-hoc PromQL, query the Prometheus instance directly via /api/v1/metrics.",
+    "cards": {
+      "pps_passed": "Packets passed (pps)",
+      "pps_dropped": "Packets dropped (pps)",
+      "pps_ratelimited": "Packets rate-limited (pps)",
+      "syn_cookies_sent": "SYN cookies sent",
+      "rules_active": "Active rules",
+      "rules_v4": "Rules (IPv4)",
+      "rules_v6": "Rules (IPv6)",
+      "rules_ratelimit": "Rules (rate-limit)",
+      "rules_syncookie": "Rules (SYN cookie)",
+      "ioc_pull_count": "IOC pulls",
+      "ioc_pull_last_at": "Last IOC pull",
+      "citadel_queue_depth": "CITADEL queue depth",
+      "dataplane_attached": "Data-plane attached",
+      "snapshot_at": "Snapshot at"
+    },
+    "bool": {
+      "yes": "yes",
+      "no": "no"
+    }
+  },
+  "not_found": {
+    "title": "404",
+    "body": "Page not found.",
+    "back": "Back to rules"
+  }
+}

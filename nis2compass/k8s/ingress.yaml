@@ -1,0 +1,44 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nis2compass-ingress
+  namespace: nis2compass
+  labels:
+    app: nis2compass-api
+    app.kubernetes.io/part-of: nis2compass
+  annotations:
+    # Allow larger request bodies for file uploads (matches NIS2_MAX_UPLOAD_BYTES default of 20 MiB)
+    nginx.ingress.kubernetes.io/proxy-body-size: "21m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Strip the /api prefix before forwarding to the Flask API so that
+    # routes defined in the app (e.g. /health, /v1/...) are reached correctly.
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    # cert-manager will provision and renew the TLS certificate automatically.
+    # Switch to letsencrypt-staging first to validate, then change to letsencrypt-prod.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: nis2compass.example.com   # Replace with your actual hostname
+      http:
+        paths:
+          # API traffic — strip /api prefix before forwarding
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: nis2compass-api-service
+                port:
+                  number: 8090
+          # Web frontend — all other paths go to nginx/React
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nis2compass-web-service
+                port:
+                  number: 3000
+  tls:
+    - hosts:
+        - nis2compass.example.com     # Must match the host above
+      secretName: nis2compass-tls    # cert-manager will create this Secret

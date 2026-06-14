@@ -1,0 +1,147 @@
+id: netforensics-knowledge-check
+title: "Knowledge Check — Network Forensics"
+randomise: true
+randomise_choices: true
+pass_threshold: 0.80
+questions:
+  - id: q1
+    type: multiple-choice
+    prompt: "Which Zeek log file records every TCP/UDP/ICMP connection with duration and bytes transferred?"
+    choices:
+      - id: a
+        text: "dns.log"
+      - id: b
+        text: "conn.log"
+      - id: c
+        text: "http.log"
+      - id: d
+        text: "weird.log"
+    correct: [b]
+    explanation: "conn.log is Zeek's primary connection log — it records every network connection with source/destination IPs, ports, protocol, duration, bytes transferred, and connection state. It is the starting point for most investigations."
+    points: 1
+
+  - id: q2
+    type: multiple-choice
+    prompt: "Which tshark command would extract the TLS SNI (server name) from a capture file?"
+    choices:
+      - id: a
+        text: "tshark -r capture.pcap -Y \"tls.handshake.type == 1\" -T fields -e tls.handshake.extensions_server_name"
+      - id: b
+        text: "tshark -r capture.pcap -Y \"http.host\" -T fields -e http.host"
+      - id: c
+        text: "tshark -r capture.pcap -Y \"dns\" -T fields -e dns.qry.name"
+      - id: d
+        text: "tshark -r capture.pcap -z follow,tcp,ascii,0"
+    correct: [a]
+    explanation: "TLS SNI is transmitted in the ClientHello message (handshake type 1). The tls.handshake.extensions_server_name field extracts the destination hostname from the TLS ClientHello — useful even when traffic is encrypted."
+    points: 1
+
+  - id: q3
+    type: true-false
+    prompt: "The absence of packets in a PCAP file always means no attacker activity occurred during that time period."
+    correct: false
+    explanation: "PCAP evidence may be incomplete for many reasons: the capture started after initial activity, packet loss caused gaps, or the attacker moved through unmonitored segments. Absence of evidence is not evidence of absence."
+    points: 1
+
+  - id: q4
+    type: multiple-choice
+    prompt: "Which network artefact is characteristic of periodic beaconing C2 traffic?"
+    choices:
+      - id: a
+        text: "Large number of DNS NXDOMAIN queries"
+      - id: b
+        text: "Regular HTTP requests to an external host at fixed intervals"
+      - id: c
+        text: "SMB connections between servers"
+      - id: d
+        text: "TLS certificate signed by trusted CA"
+    correct: [b]
+    explanation: "Periodic beaconing — requests to the C2 server at regular intervals (e.g., every 60 seconds) — is the fundamental communication pattern of C2 malware. The regular interval distinguishes it from human browsing traffic, which is irregular."
+    points: 1
+
+  - id: q5
+    type: multiple-choice
+    prompt: "In a Suricata rule, what does the option 'flow:established,to_server' do?"
+    choices:
+      - id: a
+        text: "Applies the rule only to TCP connections during the SYN handshake phase"
+      - id: b
+        text: "Applies the rule only to traffic in the server direction in established TCP connections"
+      - id: c
+        text: "Applies the rule to all UDP packets"
+      - id: d
+        text: "Applies the rule only to TLS-encrypted flows"
+    correct: [b]
+    explanation: "'flow:established,to_server' restricts the rule to established TCP (not SYN/SYN-ACK handshake) and only client-to-server traffic. This reduces false positives by eliminating server responses and incomplete connection traffic."
+    points: 1
+
+  - id: q6
+    type: scenario
+    prompt: "During PCAP analysis, you see 500 DNS queries to domains like 'xkqplmfgt.net', 'vbnmpqrst.com', 'asdfjklmn.org' within 30 seconds from the same IP. What does this suggest?"
+    choices:
+      - id: a
+        text: "Normal web browsing activity"
+      - id: b
+        text: "DGA malware activity seeking the active C2 server"
+      - id: c
+        text: "Port scanning from the internal host"
+      - id: d
+        text: "DNS resolver misconfiguration"
+    correct: [b]
+    explanation: "Rapid querying of domains with random-looking names producing mostly NXDOMAIN is the signature pattern of DGA malware. The malware algorithmically generates a large list of domains and probes them looking for the one where the operator has registered the C2 server."
+    points: 1
+
+  - id: q7
+    type: true-false
+    prompt: "NetFlow/IPFIX records are equivalent to full PCAP — both can examine packet payload."
+    correct: false
+    explanation: "NetFlow/IPFIX records only flow metadata: source/destination IPs, ports, protocol, packet/byte counts, and duration — but not the actual packet payload. Full PCAP is required for payload inspection (file reconstruction, HTTP conversation following, etc.)."
+    points: 1
+
+  - id: q8
+    type: multiple-choice
+    prompt: "Which Sysmon Event ID logs process-level DNS queries on Windows?"
+    choices:
+      - id: a
+        text: "Event ID 1 (Process Create)"
+      - id: b
+        text: "Event ID 11 (File Create)"
+      - id: c
+        text: "Event ID 22 (DNSEvent)"
+      - id: d
+        text: "Event ID 3 (Network Connection)"
+    correct: [c]
+    explanation: "Sysmon Event ID 22 (DNSEvent) logs DNS queries made by processes through the normal Windows resolver. Correlating it with Zeek DNS reveals queries that bypass the OS resolver — a common pattern of C2 malware performing raw DNS queries."
+    points: 1
+
+  - id: q9
+    type: multiple-choice
+    prompt: "What does a JA3 fingerprint identify?"
+    choices:
+      - id: a
+        text: "The server's TLS certificate"
+      - id: b
+        text: "The client's TLS implementation via ClientHello parameters"
+      - id: c
+        text: "The IP address of the malware C2 server"
+      - id: d
+        text: "The TLS SNI hostname"
+    correct: [b]
+    explanation: "JA3 hashes the TLS ClientHello parameters (TLS version, ciphers, compression methods, extensions, and elliptic curves) to produce a fingerprint of the client's TLS library. Malware C2 libraries often produce specific, known JA3 hashes."
+    points: 1
+
+  - id: q10
+    type: multiple-choice
+    prompt: "What is the recommended minimum PCAP retention period for network boundaries per NIS2 good practices?"
+    choices:
+      - id: a
+        text: "24 hours"
+      - id: b
+        text: "3 days"
+      - id: c
+        text: "7–30 days"
+      - id: d
+        text: "365 days"
+    correct: [c]
+    explanation: "Good practices recommend 7–30 days of full PCAP at network boundaries — balancing storage cost with evidence availability. Short retention (24 hours, 3 days) is insufficient when incident dwell time is weeks. NetFlow/IPFIX records can be retained for 90–365 days at much lower storage cost."
+    points: 1

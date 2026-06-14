@@ -1,0 +1,38 @@
+{
+  "name": "@opensecstack/sdk",
+  "version": "1.0.0",
+  "description": "Official TypeScript SDK for OpenSecStack — APIGuard, NIS2Compass, and CITADEL",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["opensecstack", "apiguard", "nis2", "citadel", "security", "api"],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/opensecstack/opensecstack",
+    "directory": "sdk/typescript"
+  },
+  "engines": { "node": ">=18" },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0",
+    "eslint": "^9.0.0",
+    "@types/node": "^20.0.0"
+  }
+}

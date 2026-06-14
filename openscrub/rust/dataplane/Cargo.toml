@@ -1,0 +1,44 @@
+[package]
+name = "openscrub-dataplane"
+version = "1.0.0"
+edition = "2021"
+description = "OpenScrub XDP/eBPF data plane userspace loader and MapWriter API"
+license = "Apache-2.0"
+
+[lib]
+name = "openscrub_dataplane"
+path = "src/lib.rs"
+
+[[bin]]
+name = "openscrub-loader"
+path = "src/main.rs"
+
+[dependencies]
+# Aya — pure-Rust BPF userspace
+aya = "0.13"
+aya-log = "0.2"
+
+# Async runtime (loader needs to keep the program attached)
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "sync"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# CLI parsing for the loader binary
+clap = { version = "4", features = ["derive"] }
+
+# IP prefix parsing
+ipnet = "2"
+
+# IPC RPC server — line-delimited JSON over Unix domain socket. The Go
+# control plane (internal/dataplane/uds.go) is the only client.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }

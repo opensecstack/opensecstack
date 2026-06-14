@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg: #f8fafc;
+  --color-fg: #0f172a;
+  --color-brand: #1d4ed8;
+  --color-accent: #0ea5e9;
+  --color-muted: #64748b;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}

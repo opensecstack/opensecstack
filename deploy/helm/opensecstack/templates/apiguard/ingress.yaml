@@ -1,0 +1,33 @@
+{{- if .Values.apiguard.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "opensecstack.fullname" . }}-apiguard
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: apiguard
+    {{- include "opensecstack.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    {{- if .Values.certManager.enabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.certManager.issuerType | quote }}
+    {{- end }}
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ .Values.apiguard.ingress.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "opensecstack.fullname" . }}-apiguard
+                port:
+                  number: {{ .Values.apiguard.service.port }}
+  tls:
+    - hosts:
+        - {{ .Values.apiguard.ingress.host | quote }}
+      secretName: {{ .Values.apiguard.ingress.tlsSecret | quote }}
+{{- end }}

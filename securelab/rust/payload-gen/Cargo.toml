@@ -1,0 +1,20 @@
+﻿[package]
+name = "payload-gen"
+version = "1.0.0"
+edition = "2021"
+description = "SecureLab payload generator — BOLA IDs, JWT none tokens, mass assignment payloads, fuzzer, and encoder"
+license = "Apache-2.0"
+repository = "https://github.com/opensecstack/securelab"
+
+[lib]
+name = "payload_gen"
+crate-type = ["lib"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rand = "0.8"
+base64 = "0.22"
+url = "2"
+
+[dev-dependencies]

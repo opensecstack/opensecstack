@@ -1,7 +1,26 @@
+# Claude Code (AI assistant settings — never commit)
+.claude/
+
+# CITADEL governance runtime (local governance state — not for VCS)
+.citadel/
+
 # Environment
 .env
 .env.local
 .env.*.local
+**/.env
+**/.env.local
+**/.env.*.local
+
+# Secrets / keys
+*.key
+*.pem
+*.p12
+*.pfx
+*.cert
+*.crt
+secrets/
+**/secrets/
 
 # IDE
 .idea/
@@ -72,6 +91,11 @@ lcov.info
 # SDK build output
 sdk/dist/
 sdk/pkg/
+
+# Helm environment overrides (contain real hostnames, endpoints, tuning)
+# Commit only *.example files; keep actual values local.
+deploy/helm/opensecstack/values.prod.yaml
+deploy/helm/opensecstack/values.staging.yaml
 
 # Website build output
 website/.next/

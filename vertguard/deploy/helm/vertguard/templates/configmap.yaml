@@ -1,0 +1,21 @@
+{{/*
+Non-sensitive config rendered as VERTGUARD_<SECTION>_<KEY> env vars.
+Iterates the .Values.config map; sensitive keys are deliberately
+excluded — they come via secretKeyRef in deployment.yaml.
+*/}}
+{{- $skip := list "db.password" "auth.secret" "citadel.hmac_secret" "threatflow.webhook_secret" "db.host" -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vertguard.fullname" . }}-config
+  labels:
+    {{- include "vertguard.labels" . | nindent 4 }}
+data:
+{{- range $section, $kv := .Values.config }}
+{{- range $key, $val := $kv }}
+{{- $path := printf "%s.%s" $section $key }}
+{{- if and (not (has $path $skip)) (ne (toString $val) "") }}
+  VERTGUARD_{{ upper $section }}_{{ upper $key }}: {{ toString $val | quote }}
+{{- end }}
+{{- end }}
+{{- end }}

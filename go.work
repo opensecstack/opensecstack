@@ -1,0 +1,17 @@
+go 1.25.0
+
+use (
+	./apiguard
+	./citadel
+	./community
+	./cyberpath
+	./irflow
+	./opencsirt
+	./openscrub
+	./sdk/go
+	./sdk/go/sinauth
+	./securelab
+	./sinauth
+	./threatflow
+	./vertguard
+)

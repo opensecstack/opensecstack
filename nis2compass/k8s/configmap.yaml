@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nis2compass-config
+  namespace: nis2compass
+  labels:
+    app.kubernetes.io/part-of: nis2compass
+data:
+  # ── Flask / application ──────────────────────────────────────────────────
+  NIS2_ENV: "production"
+  NIS2_DEBUG: "false"
+
+  # Logging
+  LOG_LEVEL: "info"
+
+  # CORS — set to your frontend origin(s) in production, e.g. "https://nis2compass.example.com"
+  NIS2_CORS_ORIGINS: ""
+
+  # Rate limiting (requests / minute / IP)
+  NIS2_RATE_LIMIT: "100"
+
+  # Trusted upstream proxy IPs (comma-separated); leave empty to use direct connection IP only
+  NIS2_TRUSTED_PROXIES: ""
+
+  # Maximum upload size in bytes (default: 20 MiB)
+  NIS2_MAX_UPLOAD_BYTES: "20971520"
+
+  # ── Database (non-secret) ────────────────────────────────────────────────
+  NIS2_DB_HOST: "nis2compass-postgres-service"
+  NIS2_DB_PORT: "5432"
+  NIS2_DB_USER: "nis2compass"
+  NIS2_DB_NAME: "nis2compass"
+
+  # Connection-pool size for SQLAlchemy
+  NIS2_DB_POOL_SIZE: "10"
+
+  # ── Redis (non-secret) ───────────────────────────────────────────────────
+  NIS2_REDIS_HOST: "nis2compass-redis-service"
+  NIS2_REDIS_PORT: "6379"
+
+  # ── JWT ─────────────────────────────────────────────────────────────────
+  # Token time-to-live in seconds (default: 3600 = 1 hour)
+  NIS2_JWT_TTL: "3600"
+
+  # ── CITADEL audit forwarding (optional) ─────────────────────────────────
+  # Leave empty to disable audit forwarding.
+  CITADEL_API_URL: ""
+
+  # ── Webhook (optional) ───────────────────────────────────────────────────
+  # Leave empty to disable outbound webhook notifications.
+  NIS2_WEBHOOK_URL: ""

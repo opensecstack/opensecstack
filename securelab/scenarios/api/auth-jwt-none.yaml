@@ -1,0 +1,14 @@
+name: auth-jwt-none
+description: "JWT alg:none bypass — craft a token with algorithm set to none to bypass signature verification"
+mitre_technique_ids: ["T1078.001"]
+tags: [api, owasp-a2, jwt, auth-bypass]
+severity: critical
+timeout: 1m
+steps:
+  - kind: jwt_none
+    params:
+      endpoint: /api/v1/profile
+      original_token_param: valid_jwt
+      claims_override:
+        role: admin
+      expected_bypass: true

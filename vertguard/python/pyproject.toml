@@ -1,0 +1,77 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vertguard-ml"
+version = "0.1.0"
+description = "VertGuard ML inference service (gRPC) — prompt-injection and phishing classifiers."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "OpenSecStack" }]
+dependencies = [
+    "grpcio>=1.62",
+    "grpcio-health-checking>=1.62",
+    "grpcio-reflection>=1.62",
+    "protobuf>=4.25",
+    "pydantic>=2.6",
+    "structlog>=24.1",
+]
+
+[project.optional-dependencies]
+# ML extra is opt-in so the stub-only image stays lean (no torch wheel).
+ml = [
+    "transformers>=4.40",
+    "torch>=2.2",
+    "onnxruntime>=1.17",
+    "scikit-learn>=1.4",
+    "joblib>=1.4",
+]
+# Fine-tuning pipeline (training/). Heavier than `ml`; pull in only when
+# training. CPU-only torch wheels are acceptable for dev; CUDA strongly
+# recommended for real runs.
+training = [
+    "transformers>=4.40",
+    "torch>=2.2",
+    "datasets>=2.18",
+    "accelerate>=0.30",
+    "evaluate>=0.4",
+    "scikit-learn>=1.4",
+    "pyyaml>=6.0",
+    "onnx>=1.16",
+    "onnxruntime>=1.17",
+]
+dev = [
+    "grpcio-tools>=1.62",
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "types-protobuf",
+]
+
+[project.scripts]
+vertguard-ml = "vertguard_ml.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["vertguard_ml"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+# Generated proto stubs are excluded; they aren't typed cleanly.
+exclude = ["vertguard_ml/proto/"]
+
+[tool.pytest.ini_options]
+testpaths = ["vertguard_ml/tests"]
+asyncio_mode = "auto"

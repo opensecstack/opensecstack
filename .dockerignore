@@ -1,0 +1,16 @@
+# Keep the repo-root build context small. Go backend dev/prod images only need
+# Go source + the sdk module; everything below is irrelevant or huge.
+**/node_modules
+**/dist
+**/build
+**/target
+**/.venv
+**/__pycache__
+**/*.pyc
+**/tmp
+**/.git
+**/.next
+**/coverage
+**/*.log
+go.work
+go.work.sum

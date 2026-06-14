@@ -65,7 +65,10 @@ class APIGuardClient:
         # via 3xx redirects to attacker-controlled URLs (SDK-M4).
         self._session.max_redirects = 0
         self._token_expiry: Optional[float] = None
-        self._auth_lock = threading.Lock()
+        # RLock (reentrant) — the 401-retry path in _request() holds this lock
+        # while calling _authenticate(), which in turn re-acquires it to
+        # store the refreshed JWT. A plain Lock deadlocks in that case.
+        self._auth_lock = threading.RLock()
 
     # ------------------------------------------------------------------
     # Internal helpers

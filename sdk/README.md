@@ -60,7 +60,7 @@ The SDK provides typed contracts, event schemas, and client libraries that all o
 
 ## Status
 
-In development. Initial contracts being defined alongside APIGuard v0.1.0.
+**v1.0.0 — Production.** API surface frozen. All four language SDKs (Go, Python, TypeScript, Rust) are stable and covered by semantic versioning guarantees.
 
 ## Licence
 

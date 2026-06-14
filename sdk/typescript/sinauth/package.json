@@ -1,0 +1,19 @@
+{
+  "name": "@opensecstack/sinauth",
+  "version": "0.1.0",
+  "description": "sinauth SDK — token verification and OAuth2 PKCE helpers",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+  },
+  "dependencies": {
+    "jose": "^5.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}

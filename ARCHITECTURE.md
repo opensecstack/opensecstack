@@ -1,6 +1,6 @@
-# SIN Architecture
+# opensecstack (SIN) Architecture
 
-High-level architecture of the opensecstack platform ecosystem.
+High-level architecture of the opensecstack (SIN — Security Intelligence Network) platform ecosystem.
 
 ---
 
@@ -47,6 +47,41 @@ opensecstack is a collection of security and governance platforms that work toge
 | ThreatFlow | Go | Threat intelligence and IOC management | `threatflow/` |
 | OpenCSIRT | Go + React | CSIRT portal | `opencsirt/` |
 | SDK | Go + Python | Typed clients and integration contracts | `sdk/` |
+| OpenScrub | Rust + C + Go | XDP/eBPF DDoS mitigation, GoBGP blackhole routing | `openscrub/` |
+| CyberPath | Go + React + Rust | Security training, Docker/Wasm labs, NIS2 Art.21(2)(g) | `cyberpath/` |
+| SecureLab | Python + Rust + Go | Attack simulation, MITRE ATT&CK detection validation | `securelab/` |
+| VertGuard | Go + Rust + Python | AI-attack defence — prompt injection, deepfake, C2PA | `vertguard/` |
+| SIN Community | Go + React + TypeScript | Developer knowledge hub — posts, tags, search, spaces | `community/` |
+| sinauth | Go + PostgreSQL | Identity provider — OAuth 2.0 / OIDC single sign-on for all platforms | `sinauth/` |
+
+---
+
+## Identity Architecture (sinauth)
+
+sinauth is the ecosystem's identity layer — a dedicated OAuth 2.0 /
+OpenID Connect authorization server. Every platform delegates end-user
+and operator authentication to it instead of managing its own user
+credentials.
+
+```
+Browser (platform web app)
+    │  authorization_code + PKCE (S256)
+    ▼
+sinauth /oauth/authorize ── login + consent ── /oauth/token
+    │                                              │
+    │  RS256-signed ID + access tokens             │
+    ▼                                              ▼
+Platform validates token signature against sinauth JWKS
+    (https://auth.sin.to/.well-known/jwks.json)
+```
+
+- Standards: OAuth 2.0 + OpenID Connect Core 1.0, RS256 signing, JWKS.
+- Flows: authorization_code + PKCE for browser apps; refresh tokens; SSO sessions.
+- MFA: TOTP (authenticator apps). Social login: Google, GitHub.
+- Issuer: `https://auth.sin.to` (local: `http://localhost:8100`).
+- Per-platform OIDC client setup: `sinauth/docs/integration/`.
+
+See `sinauth/docs/architecture.md` for detail.
 
 ---
 
@@ -196,6 +231,12 @@ opensecstack/
 ├── threatflow/         Threat intelligence
 ├── opencsirt/          CSIRT portal
 ├── sdk/                Go + Python SDK and tools
+├── openscrub/          XDP/eBPF DDoS mitigation
+├── cyberpath/          Security training platform
+├── securelab/          Attack simulation and detection validation
+├── vertguard/          AI-attack defence
+├── community/          SIN developer knowledge hub
+├── sinauth/            Identity provider (OAuth2 / OIDC SSO)
 ├── adrs/               Architecture Decision Records
 ├── docs/               Cross-platform documentation
 └── ARCHITECTURE.md     This file

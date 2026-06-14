@@ -1,26 +1,34 @@
-# SIN (Security Intelligence Network)
+# opensecstack (SIN — Security Intelligence Network)
 
 > Open-source cybersecurity ecosystem for Europe and beyond.
 
-**8 integrated security platforms + 1 governance layer.**
-Built for NIS2 compliance, API security, incident response, threat intelligence, and security operations — all connected through a typed SDK and governed by an immutable audit trail.
+**11 integrated security platforms + 1 identity layer + 1 governance layer + 4-language SDK.**
+Built for NIS2 compliance, API security, incident response, threat
+intelligence, AI-attack defence, and security operations — all
+connected through typed SDK contracts, fronted by a single sign-on
+identity provider (sinauth), and governed by an immutable audit trail.
+
+> **Status (Q2 2026):** All 11 platforms + SDK at v1.0.0 production.
+> See [ROADMAP.md](ROADMAP.md) for the long-term roadmap.
 
 ---
 
 ## Table of Contents
 
-- [Why SIN](#why-SIN)
+- [Why opensecstack](#why-opensecstack)
 - [The Ecosystem](#the-ecosystem)
 - [Architecture](#architecture)
-- [Active Platforms](#active-platforms)
+- [Production Platforms](#production-platforms)
   - [APIGuard](#apiguard)
   - [NIS2 Compass](#nis2-compass)
+  - [IRFlow](#irflow)
+  - [ThreatFlow](#threatflow)
   - [CITADEL](#citadel)
-- [Planned Platforms](#planned-platforms)
+- [All Platforms](#the-ecosystem)
 - [SDK](#sdk)
 - [Quick Start](#quick-start)
-- [Deployment](#deployment)
-- [Security](#security)
+- [Security & Maturity](#security--maturity)
+- [Post-Quantum Strategy](#post-quantum-strategy)
 - [Documentation](#documentation)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
@@ -29,32 +37,58 @@ Built for NIS2 compliance, API security, incident response, threat intelligence,
 
 ---
 
-## Why SIN
+## Why opensecstack
 
 European organisations face a growing regulatory and threat landscape:
 
-- **NIS2 Directive** mandates incident response, supply chain security, and regular risk assessments for essential and important entities.
-- **API-first architectures** expose new attack surfaces not covered by traditional WAFs.
-- **Fragmented tooling** means security teams operate across disconnected products with no unified audit trail.
+- **NIS2 Directive** mandates incident response, supply chain security,
+  and regular risk assessments for essential and important entities.
+- **EU AI Act** and projected **NIS3** will require AI-attack defence
+  as a formal obligation by 2030-2032.
+- **API-first architectures** expose attack surfaces not covered by
+  traditional WAFs.
+- **Fragmented tooling** leaves security teams operating across
+  disconnected products with no unified audit trail.
 
-SIN provides a **cohesive, open-source alternative**: every platform shares the same SDK contracts, every action flows into the same governance layer, and every deployment can be self-hosted with zero vendor lock-in.
+opensecstack provides a **cohesive, open-source alternative**: every
+platform shares the same SDK contracts, every action flows into the
+same governance layer, and every deployment can be self-hosted with
+zero vendor lock-in.
 
 ---
 
 ## The Ecosystem
 
-| Platform | What It Does | Stack | Licence | Status |
+| Platform | What it does | Stack | Licence | Status |
 |----------|-------------|-------|---------|--------|
-| [**APIGuard**](apiguard/) | API security testing — OWASP API Top 10 (A1–A10), CVSS 3.1 scoring, SARIF/HTML/PDF/JSON reports | Go + Rust + React | Apache 2.0 | Active |
-| [**NIS2 Compass**](nis2compass/) | NIS2 Article 21(2) compliance assessment, evidence management, PDF reporting | Python + Go + React | AGPL-3.0 | Active |
-| **ThreatFlow** | Threat intelligence aggregation, IOC correlation, STIX 2.1 bundles | Rust + Go | Apache 2.0 | Planned |
-| **IRFlow** | Incident response orchestration with NIS2 72-hour notification support | Go + Python | AGPL-3.0 | Planned |
-| **OpenScrub** | DDoS mitigation at kernel level via XDP/eBPF | Rust + C | Apache 2.0 | Planned |
-| **CyberPath** | Security awareness training and certification | Go + React | Apache 2.0 | Planned |
-| **SecureLab** | Attack simulation and detection rule validation | Python + Rust | Apache 2.0 | Planned |
-| **OpenCSIRT** | National/sector CSIRT operations and advisory management | Go + Python | AGPL-3.0 | Planned |
+| [**APIGuard**](apiguard/) | API security testing — OWASP API Top 10 (A1–A10), CVSS 3.1, SARIF/HTML/PDF/JSON reports | Go + Rust + Python + React | Apache 2.0 | ✅ **v1.0.0** |
+| [**NIS2 Compass**](nis2compass/) | NIS2 Article 21(2) compliance assessment, evidence management, Article 23 notification | Python + Go + React | AGPL-3.0 | ✅ **v1.0.0** |
+| [**CITADEL**](citadel/) | Cryptographic governance engine — MARSHAL, WORM, NDS, AUGUR, chain anchors | Go | AGPL-3.0 | ✅ **v1.0.0** |
+| [**IRFlow**](irflow/) | Incident response orchestration — playbooks, governed actions, NIS2 72-hour notification | Go + Python | AGPL-3.0 | ✅ **v1.0.0** |
+| [**ThreatFlow**](threatflow/) | Threat intelligence aggregation — IOC ingestion, STIX 2.1, MITRE ATT&CK | Rust + Go | Apache 2.0 | ✅ **v1.0.0** |
+| [**VertGuard**](vertguard/) | AI-attack defence — deepfake, prompt injection, AI threat intel, MITRE ATLAS | Go + Rust + Python | AGPL-3.0 | ✅ **v1.0.0** |
+| [**OpenScrub**](openscrub/) | DDoS mitigation at kernel level (XDP/eBPF, GoBGP) | Rust + C + Go | Apache 2.0 | ✅ **v1.0.0** |
+| [**CyberPath**](cyberpath/) | Security training — Docker/Wasm labs, NIS2 Art. 21(2)(g) evidence | Go + React + Python | Apache 2.0 | ✅ **v1.0.0** |
+| [**SecureLab**](securelab/) | Attack simulation — MITRE ATT&CK coverage, detection validation | Python + Rust + Go | Apache 2.0 | ✅ **v1.0.0** |
+| [**OpenCSIRT**](opencsirt/) | National/sector CSIRT operations — TAXII 2.1, STIX 2.1, CSAF 2.0 | Go + Python | AGPL-3.0 | ✅ **v1.0.0** |
+| [**SIN Community**](community/) | Developer knowledge hub — posts, tags, full-text search, notifications, TOTP, API keys, spaces | Go + React + TypeScript | Apache 2.0 | ✅ **v1.0.0** |
 
-**Governance:** [**CITADEL**](.citadel/) — immutable audit trail, SHA-256 chain anchors, MARSHAL authorisation engine, BEACON risk scoring, PATROL anomaly detection, separation of duties enforcement. Built by Security Intelligence Network(SIN).
+**Identity layer:** [**sinauth**](sinauth/) — dedicated OAuth 2.0 /
+OpenID Connect authorization server. One account grants access to every
+SIN platform via single sign-on: RS256-signed ID/access tokens, JWKS
+endpoint, authorization-code + PKCE (S256) flow, social login (Google,
+GitHub), and TOTP MFA. What Auth0 is globally, sinauth is for SIN.
+Apache 2.0, runs on `:8100`, issuer `https://auth.sin.to`. Per-platform
+integration guides in [sinauth/docs/integration/](sinauth/docs/integration/).
+
+**Governance layer:** CITADEL (above) — MARSHAL 5-gate decision
+engine, WORM audit chain with TripleHash (SHA-256 + SHA-512 + BLAKE3)
++ Ed25519 anchors, NDS separation of duties, AUGUR behavioural
+heuristics. VIGIL ecosystem health monitor is design-stage (v2.0).
+
+**SDK:** [opensecstack/sdk](sdk/) — typed clients in Go, Python,
+TypeScript, Rust. Shared Argon2id + pepper password hashing module
+(byte-compatible across languages).
 
 ---
 
@@ -62,28 +96,39 @@ SIN provides a **cohesive, open-source alternative**: every platform shares the 
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        SIN ecosystem                        │
+│                     opensecstack (SIN) ecosystem                     │
 │                                                                      │
 │  ┌──────────┐  ┌───────────┐  ┌────────────┐  ┌────────────────┐  │
 │  │ APIGuard │  │NIS2Compass│  │ ThreatFlow │  │    IRFlow      │  │
-│  │ (API sec)│  │(compliance│  │ (threat    │  │ (incident resp)│  │
-│  │          │  │  mgmt)    │  │  intel)    │  │                │  │
+│  │ v1.0.0   │  │  v1.0.0   │  │  v1.0.0    │  │   v1.0.0       │  │
 │  └────┬─────┘  └─────┬─────┘  └─────┬──────┘  └───────┬────────┘  │
 │       │              │              │                  │            │
-│       └──────────────┴──────────────┴──────────────────┘            │
-│                              │                                       │
-│                    SIN/sdk                                  │
-│               (typed contracts, event schemas)                       │
-│                              │                                       │
+│  ┌────┴──────────────┴──────────────┴──────────────────┴───────┐   │
+│  │              opensecstack/sdk (v1.0.0)                      │   │
+│  │        Go · Python · TypeScript · Rust contracts            │   │
+│  └─────────────────────────────┬───────────────────────────────┘   │
+│                                │                                     │
 │       ┌───────────────────────────────────────────────┐             │
-│       │                   CITADEL                     │             │
-│       │  MARSHAL (authz) · BEACON (risk) · PATROL    │             │
-│       │  WORM log · SHA-256 chain · SoD enforcement  │             │
+│       │            CITADEL (v1.0.0, AGPL-3.0)         │             │
+│       │  MARSHAL (5 gates) · WORM (TripleHash chain)  │             │
+│       │  NDS (SoD) · AUGUR (behavioural heuristics)   │             │
+│       │  Ed25519 anchors · VIGIL (planned v2.0)       │             │
 │       └───────────────────────────────────────────────┘             │
+│                                                                      │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
+│  │  VertGuard   │  │  OpenScrub   │  │  OpenCSIRT   │              │
+│  │  v1.0.0 ✅   │  │  v1.0.0 ✅   │  │  v1.0.0 ✅   │              │
+│  └──────────────┘  └──────────────┘  └──────────────┘              │
+│                                                                      │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │
+│  │  CyberPath   │  │  SecureLab   │  │     SIN Community        │  │
+│  │  v1.0.0 ✅   │  │  v1.0.0 ✅   │  │  v1.0.0 ✅               │  │
+│  └──────────────┘  └──────────────┘  └──────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-All platforms communicate through the [SIN SDK](sdk/) using **typed JSON contracts**. Supported event schemas:
+All platforms communicate through the [opensecstack/sdk](sdk/) using
+**typed JSON contracts**. Supported event schemas:
 
 | Contract | Format | Producers → Consumers |
 |----------|--------|-----------------------|
@@ -91,140 +136,189 @@ All platforms communicate through the [SIN SDK](sdk/) using **typed JSON contrac
 | IOC Bundle | STIX 2.1 v1 | ThreatFlow → OpenScrub, IRFlow, OpenCSIRT |
 | Incident Record | JSON v1 | IRFlow → NIS2 Compass, OpenCSIRT, CITADEL |
 | Compliance Evidence | JSON v1 | NIS2 Compass → CITADEL |
-| CITADEL Event | JSON v2.0 | Any platform → CITADEL |
+| CITADEL Kerkese | JSON v2.0 | Any platform → CITADEL (MARSHAL input) |
 | Training Record | JSON v1 | CyberPath → NIS2 Compass, CITADEL |
 | Advisory | CSAF 2.0 v1 | OpenCSIRT → ThreatFlow |
-| Simulation Result | JSON v1 | SecureLab → IRFlow, OpenScrub, ThreatFlow |
+| Simulation Result | JSON v1 | SecureLab → IRFlow, OpenScrub, ThreatFlow, VertGuard |
+| AI-Attack Detection | JSON v1 | VertGuard → CITADEL, IRFlow, ThreatFlow |
+| Content Provenance | C2PA + JSON v1.3 | VertGuard Module 1 evidence envelope |
 
-See [ECOSYSTEM.md](ECOSYSTEM.md) for the full architecture diagram and data-flow map.
+See [ECOSYSTEM.md](ECOSYSTEM.md) for the full architecture diagram
+and data-flow map.
 
 ---
 
-## Active Platforms
+## Production Platforms
 
 ### APIGuard
 
 **Automated API security testing against the OWASP API Security Top 10.**
 
-- Parses OpenAPI 3.x and Swagger 2.0 schemas (Rust-powered parser; GraphQL planned)
-- Tests A1 (Broken Object Level Authorisation) through A10 (Unsafe Consumption of APIs)
-- CVSS 3.1 scoring for every finding
-- Reports in JSON, SARIF, HTML, and PDF
+- Parses OpenAPI 3.x and Swagger 2.0 schemas (Rust-powered parser)
+- Tests A1 (Broken Object Level Authorisation) through A10
+- CVSS 3.1 scoring, reports in JSON, SARIF, HTML, PDF
 - CI/CD integration (GitHub Actions, GitLab CI, Jenkins)
-- Custom rule support with YAML/TOML definitions
-- JWT/API-key authentication support for testing protected endpoints
-- Fully self-hosted — no data leaves your infrastructure
+- Custom rules via YAML/TOML
+- JWT/API-key authentication for protected endpoints
+- Self-hosted — no data leaves your infrastructure
 
-```bash
-cd apiguard && make dev
-# API on :8080, web UI on :3000
-```
+**Stack:** Go 1.24 · Rust 1.76+ · Python 3.12 · React · PostgreSQL 16
 
-**Stack:** Go 1.22 · Rust 1.76+ · React + TypeScript + Vite · PostgreSQL 16 · Redis 7
-
-See [apiguard/README.md](apiguard/README.md) and [apiguard/docs/](apiguard/docs/) for the full reference.
-
----
+See [apiguard/README.md](apiguard/README.md) and
+[apiguard/docs/](apiguard/docs/) for the full reference.
 
 ### NIS2 Compass
 
-**NIS2 Article 21(2) compliance management — from gap assessment to PDF evidence.**
+**NIS2 Article 21(2) compliance management — from gap assessment to
+PDF evidence.**
 
-- Maps controls to all 10 NIS2 Article 21(2) measures (risk management, incident handling, supply chain, cryptography, access control, etc.)
-- Manages assessments across multiple organisations
-- Tracks control status: `not_started` → `in_progress` → `compliant` / `non_compliant`
-- Uploads and links evidence artifacts to controls (policy documents, screenshots, certificates)
-- Generates signed PDF compliance reports via ReportLab
-- Immutable audit log with SHA-256 CITADEL chain anchors
-- JWT authentication with scoped API keys (`read` / `read_write`)
-- Rate limiting, trusted proxy support, per-endpoint pagination caps
+- All 10 NIS2 Article 21(2) measures mapped to NIST CSF categories
+- Evidence vault with artifact-to-control linking
+- Article 23 72-hour notification delivery
+- Signed PDF compliance reports
+- Immutable audit log anchored in CITADEL WORM chain
+- Multi-org support
 
-```bash
-cd nis2compass && docker compose -f docker-compose.dev.yml up
-# API on :8090, web UI on :3001
-```
+**Stack:** Python 3.12 · Flask · SQLAlchemy 2.0 · ReportLab · Alembic
 
-**Stack:** Python 3.12 · Flask 3.0 · SQLAlchemy 2.0 · PostgreSQL 16 · Redis 7 · ReportLab 4.2 · Alembic · Gunicorn
+See [nis2compass/README.md](nis2compass/README.md).
 
-See [nis2compass/README.md](nis2compass/README.md) for the full reference.
+### IRFlow
 
-**NIS2 Article 21(2) coverage:**
+**Incident response orchestration with NIS2 Article 23 support.**
 
-| Measure | Description |
-|---------|-------------|
-| A | Risk analysis and information system security policies |
-| B | Incident handling |
-| C | Business continuity, backup management, disaster recovery |
-| D | Supply chain security |
-| E | Security in network and information systems acquisition/development/maintenance |
-| F | Policies and procedures to assess effectiveness of cybersecurity risk-management measures |
-| G | Basic cyber hygiene practices and cybersecurity training |
-| H | Policies and procedures regarding the use of cryptography |
-| I | Human resources security, access control and asset management |
-| J | Use of multi-factor authentication or continuous authentication solutions |
+- Graph-based playbook executor with branching + per-step timeouts
+- HMAC-signed webhook ingestion from APIGuard / CITADEL / ThreatFlow
+- JWT + RBAC (5 roles: admin, operator, verifier, viewer, service)
+- CITADEL MARSHAL evaluation on every governed action
+- NIS2 Article 23 async notification with 72-hour tracking
+- Prometheus metrics + structured audit logging
 
----
+**Stack:** Go 1.24 · chi · zap · pgx · PostgreSQL 16
+
+See [irflow/README.md](irflow/README.md) and
+[irflow/docs/](irflow/docs/).
+
+### ThreatFlow
+
+**Threat intelligence aggregation and correlation.**
+
+- IOC ingestion from MISP, AlienVault OTX, VirusTotal, custom feeds
+- STIX 2.1 bundles, TAXII server/client
+- MITRE ATT&CK technique mapping (19 techniques + 16 auto-rules)
+- Cross-feed correlation and confidence scoring
+- Integration with OpenScrub (auto-block) and IRFlow (enrichment)
+
+**Stack:** Go 1.24 · Rust 1.76+ · PostgreSQL 16
+
+See [threatflow/README.md](threatflow/README.md).
 
 ### CITADEL
 
-**Governance layer for the SIN ecosystem.**
+**Cryptographic governance engine for the opensecstack ecosystem.**
 
-CITADEL is built and maintained by Security Intelligence Network(SIN). It provides:
+CITADEL provides the audit and authorisation layer every other
+platform depends on.
 
-- **MARSHAL** — authorisation engine with policy-based access control
-- **BEACON** — real-time risk scoring engine
-- **PATROL** — anomaly detection and behavioural baselining
-- **WORM audit log** — append-only audit entries with PostgreSQL advisory locks
-- **SHA-256 chain anchors** — tamper-evident hash chain linking every audit event
-- **Separation of duties** — enforced at the governance layer, not just the application layer
-- **Evidence vault** — cryptographically verified compliance evidence storage
+- **MARSHAL** — 5-gate decision engine (AuthN → AuthZ → NDS → AUGUR → WORM)
+- **WORM chain** — append-only audit log with SHA-256 + SHA-512 + BLAKE3
+  (TripleHash) per entry; Ed25519 chain anchors every 100 entries
+- **NDS** — Separation of Duties enforced cryptographically at Gate 3
+- **AUGUR** — behavioural heuristics (off-hours, high-frequency,
+  DATA_EXPORT without incident)
+- **Evidence custody** — chain-of-custody manifest for auditor export
+- **VIGIL** — ecosystem health monitor (GREEN / AMBER / RED),
+  design-stage for v2.0
 
-CITADEL runs as a standalone service and receives events from all platforms via webhook.
+**Benchmarks** (Go 1.24.4, Intel i7-7600U):
 
-See [.citadel/README.md](.citadel/README.md) for architecture and integration details.
+- TripleHash: 1.52 µs / 100-byte payload
+- WORM chain step: 427 ns, 0 allocations
+- WORM append (PostgreSQL 16, sync): 4.22 ms
+- MARSHAL 5-gate evaluation: 7.55 µs (in-memory mock)
+- Chain verification (1,000 entries): 10.19 ms
+
+See [citadel/README.md](citadel/README.md) and
+[citadel/docs/](citadel/docs/) (25 guides).
 
 ---
 
-## Planned Platforms
+## Scaffolded & Planned
 
-| Platform | Target | Key Capabilities |
-|----------|--------|-----------------|
-| **ThreatFlow** | Phase 4 | STIX 2.1 IOC ingestion, threat feeds, correlation engine |
-| **IRFlow** | Phase 4 | Incident playbooks, NIS2 72h notification drafting, SOAR connectors |
-| **OpenScrub** | Phase 5 | XDP/eBPF DDoS mitigation, rate limiting at kernel level |
-| **CyberPath** | Phase 5 | Awareness training, phishing simulations, certification tracking |
-| **SecureLab** | Phase 5 | Attack simulation, detection rule testing, purple-team support |
-| **OpenCSIRT** | Phase 5 | CSIRT case management, CSAF advisory publishing, sector coordination |
+### VertGuard (scaffolded — Phase 4.1)
 
-See [ROADMAP.md](ROADMAP.md) for phase timelines and deliverables.
+**AI-attack defence platform. 24 docs + Go/Rust skeleton + docker-compose
+in place. Phase 4.1 accepting contributors.**
+
+Five modules across three phases:
+
+| # | Module | Phase | Status |
+|:-:|---|:-:|---|
+| 1 | Media Authenticity (C2PA + deepfake detection) | 4.1 (C2PA) + 4.2 (ML) | 🔨 scaffold |
+| 2 | AI Phishing Detection | 4.2 | 📋 planned |
+| 3 | **Prompt Injection Defence** (OWASP LLM Top 10) | **4.1** | 🔨 scaffold |
+| 4 | **AI Threat Intelligence Feed** (MITRE ATLAS) | **4.1** | 🔨 scaffold |
+| 5 | Synthetic Identity Detection | 4.3 | 📋 planned |
+
+Port: 8091 (API) · 3009 (Dashboard) · 50051 (gRPC ML side-car,
+Phase 4.2+)
+
+See [vertguard/README.md](vertguard/README.md),
+[RFC-0004](rfcs/RFC-0004-vertguard-platform.md), and
+[vertguard/.github/GOOD_FIRST_ISSUES.md](vertguard/.github/GOOD_FIRST_ISSUES.md)
+for how to contribute.
+
+### OpenScrub (planned — Phase 2)
+
+DDoS mitigation at kernel level. XDP/eBPF programs, GoBGP blackhole
+announcements, FastNetMon detection integration.
+
+### CyberPath (planned — Phase 2)
+
+Security training with Docker and Wasm labs. Content authored as
+YAML + Markdown. NIS2 Article 21(2)(g) evidence records anchored in
+CITADEL.
+
+### SecureLab (planned — Phase 3)
+
+Attack simulation and detection validation. Scenario library maps to
+MITRE ATT&CK. Validates OpenScrub rules, APIGuard detection, and
+VertGuard AI-attack patterns.
+
+### OpenCSIRT (planned — Phase 3)
+
+National and sector CSIRT operations. TAXII 2.1 server + client, STIX
+2.1 object model, CSAF 2.0 advisory generation, NIS2 Article 23
+aggregate reporting. EU peer CSIRT federation.
 
 ---
 
 ## SDK
 
-The [SIN SDK](sdk/) provides typed clients in **Go, Python, TypeScript, and Rust** — the same clients used internally between platforms.
+The [opensecstack/sdk](sdk/) provides typed clients in **Go, Python,
+TypeScript, and Rust** — the same clients used internally between
+platforms.
 
 ### Go SDK
 
-Zero external dependencies. Requires Go 1.21+.
+Zero external dependencies. Go 1.21+.
 
 ```go
-import "github.com/SIN/SIN/sdk/go/SIN"
+import "github.com/opensecstack/sdk/go/opensecstack"
 
-client := SIN.NewAPIGuardClient("https://apiguard.example.com", "your-api-key")
-scan, err := client.CreateScan(ctx, "https://api.example.com/openapi.json")
-findings, err := client.GetFindings(ctx, scan.ID, SIN.GetFindingsOptions{
-    PerPage: 100,
+client := opensecstack.NewAPIGuardClient("https://apiguard.example.com", "your-api-key")
+scan, _ := client.CreateScan(ctx, "https://api.example.com/openapi.json")
+findings, _ := client.GetFindings(ctx, scan.ID, opensecstack.GetFindingsOptions{
     Severity: "critical",
 })
 ```
 
 ### Python SDK
 
-Requires Python 3.10+ and `requests >= 2.31`.
+Python 3.10+. `pip install opensecstack-sdk`.
 
 ```python
-from SIN import APIGuardClient
+from opensecstack import APIGuardClient
 
 client = APIGuardClient("https://apiguard.example.com", api_key="your-api-key")
 scan = client.create_scan(spec_url="https://api.example.com/openapi.json")
@@ -233,135 +327,116 @@ findings = client.get_findings(scan["id"])
 
 ### TypeScript SDK
 
-Zero external dependencies. Requires Node.js 18+. Published as `@SIN/sdk` on npm.
+Node.js 18+ and browser. Zero external runtime dependencies.
 
 ```typescript
-import { APIGuardClient } from "@SIN/sdk";
+import { APIGuardClient } from "@opensecstack/sdk";
 
 const client = new APIGuardClient({
   baseURL: "https://apiguard.example.com",
   apiKey: "your-api-key",
 });
-const scan = await client.createScan("https://api.example.com/openapi.json");
-const findings = await client.getFindings(scan.id);
+const scan = await client.createScan({ specUrl: "https://api.example.com/openapi.json" });
 ```
 
 ### Rust SDK
 
-Async-first with tokio + reqwest. Requires Rust 1.75+.
+Async-first with tokio + reqwest. Rust 1.75+.
 
 ```rust
-use SIN::APIGuardClient;
+use opensecstack::APIGuardClient;
 
 let client = APIGuardClient::new("https://apiguard.example.com", "your-api-key");
 let scan = client.create_scan("https://api.example.com/openapi.json").await?;
-let findings = client.get_findings(&scan.id, Default::default()).await?;
 ```
 
-All clients handle JWT acquisition and refresh automatically, retry on 5xx with exponential backoff, and emit structured warning logs on persistent auth failures.
+**Shared module:** [Argon2id + pepper password hashing](sdk/go/password/)
+with byte-compatible PHC encoding across Go
+([sdk/go/password](sdk/go/password)) and Python
+([sdk/python-password](sdk/python-password)).
 
-See [sdk/README.md](sdk/README.md) · [sdk/go/](sdk/go/) · [sdk/python/](sdk/python/) · [sdk/typescript/](sdk/typescript/) · [sdk/rust/](sdk/rust/).
+See [sdk/README.md](sdk/README.md) and [sdk/docs/](sdk/docs/) (8
+guides).
 
 ---
 
 ## Quick Start
 
-### Full Ecosystem (Docker Compose)
+### Full ecosystem (Docker Compose)
 
 ```bash
-git clone https://github.com/SIN/SIN
-cd SIN
+git clone https://github.com/opensecstack/opensecstack
+cd opensecstack
 
-# Copy and fill in secrets
+# Fill in secrets
 cp deploy/.env.example deploy/.env
-# Required: POSTGRES_PASSWORD, NIS2_DB_PASSWORD, REDIS_PASSWORD,
-#           APIGUARD_JWT_SECRET, NIS2_SECRET_KEY, NIS2_JWT_SECRET
 
 docker compose -f deploy/docker-compose.yml up -d
 ```
 
 | Service | URL |
 |---------|-----|
-| APIGuard API | http://localhost:8080 |
-| APIGuard UI | http://localhost:3000 |
-| NIS2 Compass API | http://localhost:8090 |
-| NIS2 Compass UI | http://localhost:3001 |
+| APIGuard API / UI | http://localhost:8080 / :3000 |
+| NIS2 Compass API / UI | http://localhost:8090 / :3001 |
+| CITADEL API | http://localhost:8099 |
+| IRFlow API | http://localhost:8083 |
+| ThreatFlow API | http://localhost:8084 |
+| VertGuard API / UI (scaffold) | http://localhost:8091 / :3009 |
+| sinauth (identity provider) | http://localhost:8100 |
 
-### Single Platform
+### Single platform
 
 ```bash
-# APIGuard only
-cd apiguard
-make dev            # hot-reload dev stack (API + Rust parser + UI)
-make test           # full test suite (Go + Rust + integration)
-make scan-example   # scan VAmPI as a quick demonstration
-
-# NIS2 Compass only
-cd nis2compass
-docker compose -f docker-compose.dev.yml up
+cd apiguard && make dev            # APIGuard with hot reload
+cd nis2compass && docker compose -f docker-compose.dev.yml up
+cd citadel && make docker-up
+cd irflow && make compose-test-up && make run
+cd threatflow && docker compose up -d
+cd vertguard && docker compose up -d   # scaffold — returns 501 for Phase 4.1 endpoints
+cd sinauth && make keys-generate && docker compose -f docker-compose.dev.yml up   # identity provider on :8100
 ```
 
 ### Kubernetes
 
-Production-ready Kubernetes manifests are in [deploy/k8s/](deploy/k8s/).
-
-```bash
-kubectl apply -f deploy/k8s/namespace.yaml
-kubectl apply -f deploy/k8s/secrets.yaml        # fill in before applying
-kubectl apply -f deploy/k8s/configmap.yaml
-kubectl apply -f deploy/k8s/postgres/
-kubectl apply -f deploy/k8s/redis/
-kubectl apply -f deploy/k8s/apiguard/
-kubectl apply -f deploy/k8s/nis2compass/
-```
+Production-ready manifests in [deploy/k8s/](deploy/k8s/). See
+[deploy/k8s/README.md](deploy/k8s/README.md) for detail.
 
 ---
 
-## Deployment
+## Security & Maturity
 
-### Environment Variables
+v1.0.0 fits different deployments differently. Be honest about your
+tier:
 
-The full stack requires the following environment variables (see [deploy/.env.example](deploy/.env.example)):
+| Profile | v1.0.0 verdict |
+|---|---|
+| **Standard** — single region, trusted operator, NGOs / public admin / SaaS | **Production-ready** |
+| **Elevated** — multi-region, multi-tenant, zero-trust | **Production-ready** with Vault + service mesh + OpenTelemetry |
+| **High assurance** — banking Tier 1, national CSIRTs, NIS2 essential entities | **Not yet** — wait for v1.1 (JWKS, mTLS, third-party audit) |
 
-| Variable | Required By | Description |
-|----------|-------------|-------------|
-| `POSTGRES_PASSWORD` | All | PostgreSQL superuser password |
-| `NIS2_DB_PASSWORD` | NIS2 Compass | NIS2 database password |
-| `REDIS_PASSWORD` | NIS2 Compass | Redis password |
-| `APIGUARD_JWT_SECRET` | APIGuard | JWT signing secret (min 32 bytes) |
-| `NIS2_JWT_SECRET` | NIS2 Compass | JWT signing secret (min 32 bytes) |
-| `NIS2_SECRET_KEY` | NIS2 Compass | Flask session secret |
-| `NIS2_WEBHOOK_SECRET` | NIS2 Compass | HMAC secret for CITADEL webhooks (required when `NIS2_WEBHOOK_URL` is set) |
-| `CITADEL_API_KEY` | All (optional) | CITADEL governance forwarding key |
+Full tier matrix: [docs/security-maturity.md](docs/security-maturity.md).
 
-### Make Targets (root)
-
-| Target | Description |
-|--------|-------------|
-| `make dev` | Start full ecosystem with hot reload |
-| `make up` | Start production stack detached |
-| `make test` | Run all platform test suites |
-| `make build` | Build all Docker images |
-| `make lint` | Run all linters (golangci-lint, clippy, eslint) |
-| `make fmt` | Format all code (gofmt, rustfmt, prettier) |
-| `make migrate` | Run database migrations |
-| `make clean` | Remove all containers, volumes, and build artifacts |
+**Reporting vulnerabilities:** see [SECURITY.md](SECURITY.md). Every
+platform also ships its own SECURITY.md with scope and SLA.
 
 ---
 
-## Security
+## Post-Quantum Strategy
 
-We take security seriously across every platform:
+NIST PQC standards finalised 2024. NIS3 (projected 2030-2032) will
+likely mandate migration. We're moving **before** it's mandatory:
 
-- **No default secrets** — all sensitive values must be explicitly configured; the app refuses to start if credentials are absent
-- **JWT authentication** with configurable TTL and scoped API keys (`read` / `read_write`)
-- **Immutable audit trail** on every write operation, with SHA-256 CITADEL chain anchors
-- **Rate limiting** on all endpoints with trusted-proxy support
-- **Input validation** at every API boundary — pagination caps, MIME-type checks, path traversal prevention
-- **Constant-time comparisons** for API key validation to prevent timing attacks
-- **CORS** configured per-environment with explicit origin allowlisting
+| Version | Year | Action |
+|---|---|---|
+| v1.0.0 | 2026 (now) | Ed25519 anchors + TripleHash. Baseline. |
+| v1.1 | 2026-2027 | Algorithm-identifier schema fields. No breaking change. |
+| v2.0 | 2028 | Hybrid Ed25519 + ML-DSA signatures. |
+| v2.5 | 2029 | QuintHash (TripleHash + 2 PQ-resistant primitives). |
+| v3.0 | 2030 | ML-DSA default. Aligned with expected NIS3 transposition. |
+| v4.0 | 2033 | Ed25519 signing retired; historical verification retained. |
 
-To report a vulnerability, see [SECURITY.md](SECURITY.md).
+See [docs/post-quantum-roadmap.md](docs/post-quantum-roadmap.md) and
+[ADR-011](adrs/ADR-011-post-quantum-agility.md).
 
 ---
 
@@ -371,90 +446,116 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 | Document | Description |
 |----------|-------------|
-| [ECOSYSTEM.md](ECOSYSTEM.md) | Full architecture diagram, data-flow map, integration contracts, licensing rationale |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture, component interactions, deployment topology |
-| [GOVERNANCE.md](GOVERNANCE.md) | Project governance model, decision-making process |
-| [ROADMAP.md](ROADMAP.md) | Phase-by-phase delivery plan |
-| [CHANGELOG.md](CHANGELOG.md) | Project-wide changelog |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guide — code, docs, security research |
-| [SECURITY.md](SECURITY.md) | Vulnerability disclosure policy |
+| [ECOSYSTEM.md](ECOSYSTEM.md) | Full architecture, data-flow map, integration contracts, licensing |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture, component interactions |
+| [GOVERNANCE.md](GOVERNANCE.md) | Project governance, decision-making process |
+| [ROADMAP.md](ROADMAP.md) | Phase-by-phase delivery plan (5 phases to 2036) |
+| [CHANGELOG.md](CHANGELOG.md) | Ecosystem-wide changelog |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guide |
+| [SECURITY.md](SECURITY.md) | Vulnerability disclosure, PQ strategy |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards |
-| [docs/security-architecture.md](docs/security-architecture.md) | Security architecture — five-layer defence model |
-| [docs/tds-integration.md](docs/tds-integration.md) | TDS integration guide for new platform components |
+| [docs/security-architecture.md](docs/security-architecture.md) | Five-layer defence model |
+| [docs/security-maturity.md](docs/security-maturity.md) | 3-tier deployment profile |
+| [docs/deployment-topology.md](docs/deployment-topology.md) | Ports, network segments, secret distribution |
+| [docs/release-process.md](docs/release-process.md) | Per-platform + ecosystem releases |
+| [docs/compatibility-matrix.md](docs/compatibility-matrix.md) | Version pairing, PQC status |
+| [docs/deprecation-policy.md](docs/deprecation-policy.md) | Feature retirement |
+| [docs/post-quantum-roadmap.md](docs/post-quantum-roadmap.md) | PQ migration timeline |
+| [docs/migrations/](docs/migrations/) | Version-to-version migration guides |
+| [docs/tds-integration.md](docs/tds-integration.md) | TDS integration for new components |
 | [adrs/](adrs/) | Architecture Decision Records |
 | [rfcs/](rfcs/) | Request for Comments |
 
-### Platform Documentation
+### Platform documentation
 
 | Platform | Reference |
 |----------|-----------|
-| APIGuard | [apiguard/README.md](apiguard/README.md) · [apiguard/docs/](apiguard/docs/) (22 guides) |
-| NIS2 Compass | [nis2compass/README.md](nis2compass/README.md) · [nis2compass/docs/](nis2compass/docs/) (16 guides) |
-| CITADEL | [.citadel/README.md](.citadel/README.md) · [.citadel/docs/](.citadel/docs/) (26 guides) |
-| IRFlow | [irflow/README.md](irflow/README.md) · [irflow/docs/](irflow/docs/) |
+| APIGuard | [apiguard/README.md](apiguard/README.md) · [apiguard/docs/](apiguard/docs/) (25 guides) |
+| NIS2 Compass | [nis2compass/README.md](nis2compass/README.md) · [nis2compass/docs/](nis2compass/docs/) (17 guides) |
+| CITADEL | [citadel/README.md](citadel/README.md) · [citadel/docs/](citadel/docs/) (25 guides) |
+| IRFlow | [irflow/README.md](irflow/README.md) · [irflow/docs/](irflow/docs/) (12 guides) |
 | ThreatFlow | [threatflow/README.md](threatflow/README.md) · [threatflow/docs/](threatflow/docs/) (21 guides) |
-| Go SDK | [sdk/go/README.md](sdk/go/README.md) · [sdk/go/RELEASING.md](sdk/go/RELEASING.md) |
+| VertGuard | [vertguard/README.md](vertguard/README.md) · [vertguard/docs/](vertguard/docs/) (18 guides) |
+| sinauth (identity) | [sinauth/README.md](sinauth/README.md) · [sinauth/docs/](sinauth/docs/) · [integration guides](sinauth/docs/integration/) |
+| Go SDK | [sdk/go/README.md](sdk/go/README.md) |
 | Python SDK | [sdk/python/README.md](sdk/python/README.md) |
-| TypeScript SDK | [sdk/typescript/README.md](sdk/typescript/README.md) · [sdk/typescript/RELEASING.md](sdk/typescript/RELEASING.md) |
+| TypeScript SDK | [sdk/typescript/README.md](sdk/typescript/README.md) |
 | Rust SDK | [sdk/rust/README.md](sdk/rust/README.md) |
-| SDK Docs | [sdk/docs/](sdk/docs/) (8 guides) |
-| Kubernetes | [deploy/k8s/README.md](deploy/k8s/README.md) |
-| Website | [website/README.md](website/README.md) |
 
 ### Architecture Decision Records
 
 | ADR | Decision |
 |-----|----------|
-| [ADR-001](adrs/ADR-001-rust-for-parsing.md) | Rust for the OpenAPI/GraphQL parsing and analysis layer |
+| [ADR-001](adrs/ADR-001-rust-for-parsing.md) | Rust for OpenAPI/GraphQL parsing and analysis |
 | [ADR-002](adrs/ADR-002-go-for-http-and-orchestration.md) | Go for HTTP servers and orchestration |
 | [ADR-009](adrs/ADR-009-time-dimension-segmentation.md) | Time Dimension Segmentation (TDS) |
+| [ADR-010](adrs/ADR-010-vertguard-platform-strategy.md) | VertGuard platform strategy (AI-attack defence) |
+| [ADR-011](adrs/ADR-011-post-quantum-agility.md) | Post-quantum cryptographic agility |
+
+### RFCs
+
+| RFC | Topic |
+|-----|-------|
+| [RFC-0001](rfcs/RFC-0001.md) | (see file) |
+| [RFC-0002](rfcs/RFC-0002.md) | (see file) |
+| [RFC-0003](rfcs/RFC-0003.md) | (see file) |
+| [RFC-0004](rfcs/RFC-0004-vertguard-platform.md) | VertGuard — AI-Attack Defence Platform (comment period 2026-05-20) |
 
 ---
 
 ## Roadmap
 
-| Phase | Theme | Key Deliverables |
-|-------|-------|-----------------|
-| **Phase 1** (current) | Foundation | APIGuard A1–A3, CITADEL governance engine, Go SDK |
-| **Phase 2** | Full OWASP + CI/CD | APIGuard A4–A10, CVSS 3.1, SARIF, Python SDK, GitLab/Jenkins |
-| **Phase 3** | Dashboard + Multi-tenant | React dashboard, RBAC, API key management, NIS2 Compass release |
-| **Phase 4** | Governance Integration | CITADEL integration, IRFlow release, ThreatFlow release |
-| **Phase 5** | Production + Ecosystem | APIGuard v1.0, OpenScrub, CyberPath, SecureLab, OpenCSIRT |
+| Phase | Theme | Timeline | Status |
+|-------|-------|----------|--------|
+| **Phase 1** | Foundation — 5 platforms + SDK at v1.0.0 | 2026 Q1-Q2 | ✅ Complete |
+| **Phase 2** | Network defence & training — OpenScrub, CyberPath | 2026 Q3 – 2027 Q2 | 📋 Planned |
+| **Phase 3** | Simulation & CSIRT — SecureLab, OpenCSIRT, ecosystem v1.0 | 2027 Q3 – 2028 Q2 | 📋 Planned |
+| **Phase 4** | AI-attack defence — VertGuard (3 sub-phases) | 2026 Q3 – 2028 Q4 | 🔨 Scaffolded |
+| **Phase 5** | Long-term sovereignty stack (tiered aspirational) | 2028 – 2036 | 🔮 Aspirational |
 
-See [ROADMAP.md](ROADMAP.md) for full details and per-platform sub-roadmaps.
+See [ROADMAP.md](ROADMAP.md) for quarterly milestones and honest
+caveats.
 
 ---
 
 ## Contributing
 
-We welcome contributions to every platform — code, tests, documentation, translations, and security research.
+We welcome contributions to every platform — code, tests,
+documentation, translations, and security research.
 
 **Getting started:**
 
 1. Read [CONTRIBUTING.md](CONTRIBUTING.md)
-2. Look for `good first issue` labels across the platform issues
-3. Join the conversation in GitHub Discussions or Discord
+2. Look for `good-first-issue` labels across the platforms
+3. For VertGuard Phase 4.1: see
+   [vertguard/.github/GOOD_FIRST_ISSUES.md](vertguard/.github/GOOD_FIRST_ISSUES.md)
+   (15 issues drafted and ready)
+4. Comment on open RFCs, especially
+   [RFC-0004](rfcs/RFC-0004-vertguard-platform.md)
+5. Join GitHub Discussions
 
-**Development setup** for each platform is documented in its own `README.md`. The root `Makefile` orchestrates the full stack.
+**Development setup** for each platform is documented in its own
+`README.md`. The root `Makefile` orchestrates the full stack.
 
-**All contributors** are bound by the [Contributor License Agreement](CLA.md) and [Code of Conduct](CODE_OF_CONDUCT.md).
+All contributors are bound by the [CLA](CLA.md) and
+[Code of Conduct](CODE_OF_CONDUCT.md). Review ownership per path is
+enforced by [CODEOWNERS](.github/CODEOWNERS).
 
 ---
 
 ## Community
 
 - **GitHub Discussions** — questions, ideas, show & tell
-- **Discord** — real-time chat (`#general`, `#contributors`, per-platform channels)
-- **Monthly community calls** — open to all, schedule in [community/MEETINGS.md](community/MEETINGS.md)
+- **Monthly community calls** — schedule in
+  [community/MEETINGS.md](community/MEETINGS.md)
 
 | Resource | Description |
 |----------|-------------|
-| [community/README.md](community/README.md) | Community hub and programme overview |
-| [community/GOOD-FIRST-ISSUES.md](community/GOOD-FIRST-ISSUES.md) | Curated starter issues for new contributors |
+| [community/README.md](community/README.md) | Community hub overview |
+| [community/GOOD-FIRST-ISSUES.md](community/GOOD-FIRST-ISSUES.md) | Curated starter issues |
 | [community/AMBASSADORS.md](community/AMBASSADORS.md) | EU regional ambassador profiles |
-| [community/HALL-OF-FAME.md](community/HALL-OF-FAME.md) | Outstanding contributor recognition |
-| [community/MEETINGS.md](community/MEETINGS.md) | Meeting schedule and host rotation |
-| [community/MENTORSHIP.md](community/MENTORSHIP.md) | Mentorship programme and mentor profiles |
+| [community/MEETINGS.md](community/MEETINGS.md) | Meeting schedule |
+| [community/MENTORSHIP.md](community/MENTORSHIP.md) | Mentorship programme |
 
 ---
 
@@ -463,7 +564,16 @@ We welcome contributions to every platform — code, tests, documentation, trans
 | Category | Licence | Platforms |
 |----------|---------|-----------|
 | Tool platforms | [Apache 2.0](LICENSE) | APIGuard, ThreatFlow, OpenScrub, CyberPath, SecureLab |
-| Governance platforms | AGPL-3.0 | IRFlow, NIS2 Compass, OpenCSIRT, CITADEL |
-| SDK | Apache 2.0 | SIN/sdk |
+| Governance platforms | AGPL-3.0 | IRFlow, NIS2 Compass, OpenCSIRT, CITADEL, **VertGuard** |
+| Community platforms | Apache 2.0 | **SIN Community** |
+| Identity layer | Apache 2.0 | **sinauth** |
+| SDK | Apache 2.0 | opensecstack/sdk |
 
-**Why two licences?** Tool platforms are permissive so they can be embedded in CI/CD pipelines and commercial workflows. Governance platforms are copyleft so any modifications to the audit trail, compliance reporting, or CSIRT operations must remain open source. See [ECOSYSTEM.md](ECOSYSTEM.md) for the full rationale.
+**Why two licences?** Tool platforms are permissive so they can be
+embedded in CI/CD pipelines and commercial workflows. Governance
+platforms (including VertGuard, whose AI-attack detections become
+evidence in the CITADEL audit chain) are copyleft so any
+modifications to the audit trail, compliance reporting, or CSIRT
+operations must remain open source.
+
+See [ECOSYSTEM.md](ECOSYSTEM.md) for the full rationale.

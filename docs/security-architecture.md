@@ -27,8 +27,9 @@ opensecstack is protected by five concentric security layers. Each layer is inde
 │  │  │  │                                               │  │  │  │
 │  │  │  │  ┌─────────────────────────────────────────┐  │  │  │  │
 │  │  │  │  │  Layer 1 — IDENTITY FENCE               │  │  │  │  │
-│  │  │  │  │  JWT · API keys · HMAC-SHA256 · SoD     │  │  │  │  │
-│  │  │  │  │  Role groups · Token revocation         │  │  │  │  │
+│  │  │  │  │  OIDC SSO (sinauth) · TOTP MFA · JWT     │  │  │  │  │
+│  │  │  │  │  API keys · HMAC-SHA256 · SoD            │  │  │  │  │
+│  │  │  │  │  Role groups · Token revocation          │  │  │  │  │
 │  │  │  │  └─────────────────────────────────────────┘  │  │  │  │
 │  │  │  └───────────────────────────────────────────────┘  │  │  │
 │  │  └─────────────────────────────────────────────────────┘  │  │
@@ -46,8 +47,12 @@ opensecstack is protected by five concentric security layers. Each layer is inde
 
 | Mechanism | Platform | Detail |
 |-----------|---------|--------|
+| Single sign-on (OAuth 2.0 / OIDC) | sinauth | Central identity provider; one account across all platforms; authorization_code + PKCE (S256) |
+| RS256 token issuance + JWKS | sinauth | ID/access tokens signed RS256; platforms validate against `auth.sin.to/.well-known/jwks.json` |
+| TOTP multi-factor authentication | sinauth | Authenticator-app MFA enforced centrally; social login (Google, GitHub) |
 | JWT authentication | APIGuard, NIS2Compass | Short-lived tokens (1 hour expiry), signed with platform key |
-| Refresh token revocation | APIGuard, NIS2Compass | Tokens individually revocable; revocation state checked on every request |
+| Access-token denylist (logout) | APIGuard | `POST /api/v1/auth/logout`; TTL-bounded denylist checked on every request |
+| Refresh token revocation | APIGuard, NIS2Compass, sinauth | Tokens individually revocable; revocation state checked on every request |
 | API key authentication | APIGuard, NIS2Compass, CITADEL | Keys hashed at rest (bcrypt); shown once on creation |
 | HMAC-SHA256 connector signing | CITADEL | Per-request signature over key_id + timestamp + body hash |
 | Timestamp replay protection | CITADEL | ±300 second window; seen (key_id, ts, sig) tuples rejected |
@@ -57,11 +62,13 @@ opensecstack is protected by five concentric security layers. Each layer is inde
 
 ### Known gaps
 
-- No MFA enforcement at application level — relies on identity provider
-- Session invalidation on password change not yet implemented across all platforms
+- MFA available via sinauth (TOTP) but not yet *enforced* by policy on every platform
+- Session invalidation on password change not yet propagated to all platform sessions
 
 ### Reference docs
 
+- [sinauth/docs/security.md](../sinauth/docs/security.md)
+- [sinauth/docs/integration/](../sinauth/docs/integration/)
 - [apiguard/docs/security.md](../apiguard/docs/security.md)
 - [.citadel/docs/security-model.md](../.citadel/docs/security-model.md)
 - [.citadel/docs/sod.md](../.citadel/docs/sod.md)

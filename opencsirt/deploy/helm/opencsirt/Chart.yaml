@@ -1,0 +1,18 @@
+apiVersion: v2
+name: opencsirt
+description: OpenCSIRT — National/sector CSIRT operations (Go API + Python advisory subsystem)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://github.com/opensecstack/opensecstack/tree/main/opencsirt
+sources:
+  - https://github.com/opensecstack/opensecstack
+maintainers:
+  - name: opensecstack contributors
+    email: maintainers@opensecstack.org
+keywords:
+  - csirt
+  - nis2
+  - csaf
+  - advisory
+  - opensecstack

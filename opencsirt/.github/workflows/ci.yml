@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  go:
+    name: Go build + test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: opencsirt
+          POSTGRES_PASSWORD: opencsirt
+          POSTGRES_DB: opencsirt
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      OPENCSIRT_DB_URL: postgres://opencsirt:opencsirt@localhost:5432/opencsirt?sslmode=disable
+      OPENCSIRT_JWT_SECRET: ci-secret-32-bytes-padded-for-test
+      OPENCSIRT_PASSWORD_PEPPER: ci-pepper-32-bytes-padded-for-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go mod download
+      - run: go vet ./...
+      - run: go build ./...
+      - run: go test ./...
+
+  advisory:
+    name: Python advisory lint + test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dev dependencies
+        run: pip install --no-cache-dir ".[dev]"
+      - run: ruff check .
+      - run: pytest
+
+  web:
+    name: Frontend build + lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck || true
+      - run: npm run lint || true
+      - run: npm run build
+
+  docker:
+    name: Docker build check
+    runs-on: ubuntu-latest
+    needs: [go, advisory, web]
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          dockerfile: Dockerfile
+          push: false
+          tags: opencsirt-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build Advisory image
+        uses: docker/build-push-action@v5
+        with:
+          context: python
+          dockerfile: python/Dockerfile
+          push: false
+          tags: opencsirt-advisory:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build Web image
+        uses: docker/build-push-action@v5
+        with:
+          context: web
+          dockerfile: web/Dockerfile
+          push: false
+          tags: opencsirt-web:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,20 @@
+Return-Path: <psirt@vendor.example>
+Received: from mx.vendor.example (mx.vendor.example [198.51.100.10])
+        by mx.victim.example with ESMTPS
+        for <security@victim.example>; Tue, 09 May 2026 10:00:00 +0000
+Authentication-Results: mx.victim.example;
+        spf=pass smtp.mailfrom=vendor.example;
+        dkim=pass header.i=@vendor.example;
+        dmarc=pass
+From: "WidgetCo PSIRT" <psirt@vendor.example>
+To: <security@victim.example>
+Subject: Security Advisory — CVE-2026-1234 in WidgetCo Server
+Date: Tue, 09 May 2026 10:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+WidgetCo PSIRT has published an advisory for CVE-2026-1234 affecting
+WidgetCo Server 1.2 and earlier. Please update to 1.3 at your earliest
+convenience.
+
+Reference: https://vendor.example/security/advisories/CVE-2026-1234

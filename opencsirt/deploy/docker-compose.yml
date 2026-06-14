@@ -1,0 +1,106 @@
+version: "3.9"
+
+# OpenCSIRT local stack — for development and integration tests.
+# Production deployments go via the Helm chart at deploy/helm/opencsirt/.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: opencsirt
+      POSTGRES_PASSWORD: ${OPENCSIRT_DB_PASSWORD:?set OPENCSIRT_DB_PASSWORD in .env}
+      POSTGRES_DB: opencsirt
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - opencsirt-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opencsirt"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+  opencsirt-advisory:
+    image: opensecstack/opencsirt-advisory:1.0.0
+    # Loopback-only inside the compose network — never expose publicly.
+    expose:
+      - "8089"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    environment:
+      OPENCSIRT_PY_HOST: "0.0.0.0"
+      OPENCSIRT_PY_PORT: "8089"
+      OPENCSIRT_PY_LOG_LEVEL: ${OPENCSIRT_LOG_LEVEL:-INFO}
+      OPENCSIRT_PY_REDIS_URL: redis://redis:6379/0
+      # Shared JWT secret — advisory validates tokens minted by the Go core.
+      OPENCSIRT_PY_JWT_SECRET: ${OPENCSIRT_JWT_SECRET:?set OPENCSIRT_JWT_SECRET in .env}
+      OPENCSIRT_PY_JWT_ISSUER: opencsirt
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  opencsirt-api:
+    image: opensecstack/opencsirt-api:1.0.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      opencsirt-advisory:
+        condition: service_started
+    ports:
+      - "8088:8088"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      OPENCSIRT_HTTP_ADDR: ":8088"
+      OPENCSIRT_DB_URL: "postgres://opencsirt:${OPENCSIRT_DB_PASSWORD:?set OPENCSIRT_DB_PASSWORD in .env}@postgres:5432/opencsirt?sslmode=disable"
+      # Required — fail-closed if unset. Generate with: openssl rand -base64 32
+      OPENCSIRT_JWT_SECRET: ${OPENCSIRT_JWT_SECRET:?set OPENCSIRT_JWT_SECRET in .env (>=32 bytes)}
+      OPENCSIRT_PASSWORD_PEPPER: ${OPENCSIRT_PASSWORD_PEPPER:?set OPENCSIRT_PASSWORD_PEPPER in .env}
+      OPENCSIRT_USERS: ${OPENCSIRT_USERS:-}
+      OPENCSIRT_TOKEN_TTL: ${OPENCSIRT_TOKEN_TTL:-12h}
+      OPENCSIRT_ADVISORY_SERVICE_URL: http://opencsirt-advisory:8089
+      OPENCSIRT_IRFLOW_WEBHOOK_SECRET: ${OPENCSIRT_IRFLOW_WEBHOOK_SECRET:-}
+      OPENCSIRT_THREATFLOW_API_URL: ${OPENCSIRT_THREATFLOW_API_URL:-}
+      OPENCSIRT_THREATFLOW_API_KEY: ${OPENCSIRT_THREATFLOW_API_KEY:-}
+      OPENCSIRT_CITADEL_API_URL: ${OPENCSIRT_CITADEL_API_URL:-}
+      OPENCSIRT_CITADEL_HMAC_SECRETS: ${OPENCSIRT_CITADEL_HMAC_SECRETS:-}
+      # Safety flag — default true means events are logged but NOT sent. Set
+      # false in production after verifying CITADEL connectivity.
+      OPENCSIRT_CITADEL_DRY_RUN: ${OPENCSIRT_CITADEL_DRY_RUN:-true}
+      OPENCSIRT_IRFLOW_STRICT_SEVERITY: ${OPENCSIRT_IRFLOW_STRICT_SEVERITY:-false}
+      OPENCSIRT_NIS2COMPASS_API_URL: ${OPENCSIRT_NIS2COMPASS_API_URL:-}
+      OPENCSIRT_VERTGUARD_API_URL: ${OPENCSIRT_VERTGUARD_API_URL:-}
+      OPENCSIRT_VERTGUARD_API_KEY: ${OPENCSIRT_VERTGUARD_API_KEY:-}
+      OPENCSIRT_ADVISORY_SERVICE_JWT: ${OPENCSIRT_ADVISORY_SERVICE_JWT:-}
+
+  opencsirt-web:
+    image: opensecstack/opencsirt-web:1.0.0
+    depends_on:
+      - opencsirt-api
+    ports:
+      - "3088:80"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+volumes:
+  opencsirt-pg:

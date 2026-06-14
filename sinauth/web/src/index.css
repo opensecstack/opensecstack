@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+@theme {
+  --color-sin-50:  #f0f4ff;
+  --color-sin-100: #e0e9ff;
+  --color-sin-500: #3b5bdb;
+  --color-sin-600: #2f4bc7;
+  --color-sin-700: #2541b2;
+  --color-sin-900: #1a2d7a;
+}
+
+body {
+  background-color: #f9fafb;
+  color: #111827;
+  -webkit-font-smoothing: antialiased;
+}

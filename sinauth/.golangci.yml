@@ -1,0 +1,20 @@
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - bodyclose
+    - noctx
+
+linters-settings:
+  goimports:
+    local-prefixes: github.com/opensecstack/sinauth
+
+run:
+  timeout: 5m

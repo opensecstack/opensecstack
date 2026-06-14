@@ -1,0 +1,51 @@
+﻿id: api-security
+version: 1.0.0
+title: "API Security"
+description: "API security fundamentals aligned with OWASP API Top 10 (2023). Hands-on labs use APIGuard against vulnerable API targets; learners identify and remediate findings."
+
+audience:
+  - backend-engineer
+  - api-platform-engineer
+  - appsec-engineer
+
+nis2_mappings:
+  primary: art21.e
+  secondary:
+    - art21.d
+    - art21.g
+
+prerequisites:
+  - secure-coding-owasp-top10
+
+duration_minutes: 300
+language_source: sq
+
+modules:
+  - id: api-threat-landscape
+    order: 1
+    title: "The API Threat Landscape"
+    lessons:
+      - 01-api-security-introduction
+    quiz: ~
+    lab: ~
+
+  - id: api-attack-and-defence
+    order: 2
+    title: "API Attack and Defence with APIGuard"
+    lessons:
+      - 02-api-attack-defence
+    quiz: api-knowledge-check
+    lab: apiguard-scan-lab
+
+certification:
+  offered: true
+  level: practitioner
+  expires_after_months: 24
+
+content_hash: ""
+
+changelog:
+  - version: 1.0.0
+    date: 2026-05-05
+    changes:
+      - "Initial release for v1.0.0."

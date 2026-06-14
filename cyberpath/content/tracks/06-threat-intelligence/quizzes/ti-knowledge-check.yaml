@@ -1,0 +1,147 @@
+id: ti-knowledge-check
+title: "Knowledge Check — Threat Intelligence Basics"
+randomise: true
+randomise_choices: true
+pass_threshold: 0.80
+questions:
+  - id: q1
+    type: multiple-choice
+    prompt: "According to the Pyramid of Pain, which indicator type is HARDEST for an adversary to change?"
+    choices:
+      - id: a
+        text: "File hashes"
+      - id: b
+        text: "IP addresses"
+      - id: c
+        text: "Domain names"
+      - id: d
+        text: "TTPs (Tactics, Techniques, and Procedures)"
+    correct: [d]
+    explanation: "TTPs sit at the apex of the Pyramid of Pain. Changing them requires fundamental adversary retraining and retooling — the most costly process. Hashes, IPs, and domains are trivial to change."
+    points: 1
+
+  - id: q2
+    type: multiple-choice
+    prompt: "Which MITRE ATT&CK technique identifies spearphishing with attachments?"
+    choices:
+      - id: a
+        text: "T1059 — Command and Scripting Interpreter"
+      - id: b
+        text: "T1566.001 — Spearphishing Attachment"
+      - id: c
+        text: "T1078 — Valid Accounts"
+      - id: d
+        text: "T1021 — Remote Services"
+    correct: [b]
+    explanation: "T1566.001 is the ATT&CK sub-technique for phishing via email attachments — the classic initial access method documented widely across many threat actors."
+    points: 1
+
+  - id: q3
+    type: true-false
+    prompt: "TLP:GREEN intelligence can be freely published on the internet."
+    correct: false
+    explanation: "TLP:GREEN is shareable within the broad community but NOT for open publication on the internet. TLP:CLEAR is the only classification with no distribution restriction."
+    points: 1
+
+  - id: q4
+    type: multiple-choice
+    prompt: "Which STIX 2.1 object type represents a detection pattern like '[domain-name:value = \"evil.com\"]'?"
+    choices:
+      - id: a
+        text: "malware"
+      - id: b
+        text: "threat-actor"
+      - id: c
+        text: "indicator"
+      - id: d
+        text: "attack-pattern"
+    correct: [c]
+    explanation: "The 'indicator' SDO type contains the STIX Pattern Language pattern — the '[domain-name:value = ...]' expression is STIX pattern syntax. The attack-pattern object maps to ATT&CK TTPs, not detection patterns."
+    points: 1
+
+  - id: q5
+    type: multiple-choice
+    prompt: "Which intelligence lifecycle phase transforms raw data into analysable format via normalisation and enrichment?"
+    choices:
+      - id: a
+        text: "Planning and Direction"
+      - id: b
+        text: "Collection"
+      - id: c
+        text: "Processing"
+      - id: d
+        text: "Analysis"
+    correct: [c]
+    explanation: "Processing transforms raw collected data — parsing, normalising, deduplicating, and enriching it (e.g., resolving IP to ASN, hash to malware family) before the analysis phase."
+    points: 1
+
+  - id: q6
+    type: scenario
+    prompt: "You receive a TLP:AMBER intelligence report from the Albanian national CSIRT describing active APT29 C2 infrastructure. Who can you share this with?"
+    choices:
+      - id: a
+        text: "Publicly via social media"
+      - id: b
+        text: "With any other Albanian organisation"
+      - id: c
+        text: "Within your organisation and with your clients on a need-to-know basis"
+      - id: d
+        text: "Only within your IR team"
+    correct: [c]
+    explanation: "TLP:AMBER permits sharing within the recipient organisation and with clients (business partners or direct customers) on a need-to-know basis. Public sharing or sharing with any organisation indiscriminately violates the TLP marking."
+    points: 1
+
+  - id: q7
+    type: true-false
+    prompt: "The ACH (Analysis of Competing Hypotheses) method helps analysts counter confirmation bias."
+    correct: true
+    explanation: "ACH forces analysts to explicitly enumerate all plausible hypotheses and score evidence for/against each — making the hypothesis-rejection process explicit and preventing existing beliefs from dominating the analysis."
+    points: 1
+
+  - id: q8
+    type: multiple-choice
+    prompt: "What API protocol does TAXII 2.1 use for distributing STIX bundles?"
+    choices:
+      - id: a
+        text: "FTP over TLS"
+      - id: b
+        text: "HTTPS REST with authentication"
+      - id: c
+        text: "SMTP with MIME attachments"
+      - id: d
+        text: "gRPC over HTTP/2"
+    correct: [b]
+    explanation: "TAXII 2.1 uses HTTPS REST — consumers poll collections via authenticated GET; producers push STIX objects via authenticated POST. This makes integration straightforward with any standard HTTP client."
+    points: 1
+
+  - id: q9
+    type: multiple-choice
+    prompt: "In the reliability rating 'B2', what do 'B' and '2' mean?"
+    choices:
+      - id: a
+        text: "B = usually reliable, 2 = probably true"
+      - id: b
+        text: "B = fairly reliable, 2 = confirmed"
+      - id: c
+        text: "B = not reliable, 2 = doubtful"
+      - id: d
+        text: "B = completely reliable, 2 = probably true"
+    correct: [a]
+    explanation: "In Admiral's Format rating: B = usually reliable (minor doubt about past accuracy); 2 = probably true (corroborated by other information but not fully confirmed)."
+    points: 1
+
+  - id: q10
+    type: multiple-choice
+    prompt: "Which ThreatFlow command would return all ATT&CK techniques associated with APT28?"
+    choices:
+      - id: a
+        text: "threatflow enrich --type ipv4 --value APT28"
+      - id: b
+        text: "threatflow actor --name \"APT28\" --techniques"
+      - id: c
+        text: "threatflow search --pattern \"APT28\""
+      - id: d
+        text: "threatflow stix --bundle APT28"
+    correct: [b]
+    explanation: "The 'threatflow actor --name \"APT28\" --techniques' command queries the actor profile and filters results to return the list of documented ATT&CK techniques associated with that threat group."
+    points: 1

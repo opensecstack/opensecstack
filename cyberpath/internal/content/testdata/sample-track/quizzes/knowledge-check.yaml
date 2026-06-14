@@ -1,0 +1,38 @@
+id: knowledge-check
+title:
+  sq: "Kontroll njohurish"
+  en: "Knowledge check"
+randomise: true
+randomise_choices: true
+pass_threshold: 0.8
+questions:
+  - id: q1
+    type: multiple-choice
+    prompt:
+      sq: "Cili është një sinjal phishing-u?"
+      en: "Which is a phishing signal?"
+    choices:
+      - id: a
+        text:
+          sq: "Adresa nuk përputhet"
+          en: "Address mismatch"
+      - id: b
+        text:
+          sq: "Email i nënshkruar"
+          en: "Signed email"
+    correct: [a]
+    explanation:
+      sq: "Mospërputhja është sinjal."
+      en: "Mismatch is a signal."
+    points: 1
+
+  - id: q2
+    type: true-false
+    prompt:
+      sq: "Smishing është phishing me SMS."
+      en: "Smishing is SMS phishing."
+    correct: true
+    explanation:
+      sq: "Po."
+      en: "Yes."
+    points: 1

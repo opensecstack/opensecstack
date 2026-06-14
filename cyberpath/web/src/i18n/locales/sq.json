@@ -1,0 +1,135 @@
+﻿{
+  "common": {
+    "appTitle": "CyberPath",
+    "tagline": "Trajnim kibernetik për përputhshmëri me NIS2",
+    "nav": {
+      "home": "Ballina",
+      "tracks": "Kurset",
+      "progress": "Përparimi",
+      "certifications": "Certifikatat",
+      "login": "Hyr",
+      "logout": "Dil",
+      "admin": "Administrim"
+    },
+    "buttons": {
+      "start": "Fillo",
+      "continue": "Vazhdo",
+      "submit": "Dërgo",
+      "save": "Ruaj",
+      "cancel": "Anulo",
+      "retry": "Provo sërish",
+      "viewDetails": "Shih detajet",
+      "stop": "Ndalo",
+      "markComplete": "Shëno si të përfunduar",
+      "next": "Tjetra"
+    },
+    "labels": {
+      "loading": "Duke u ngarkuar...",
+      "empty": "Asgjë për t'u shfaqur.",
+      "duration": "Kohëzgjatja",
+      "audience": "Audienca",
+      "lab": "Laborator",
+      "certification": "Certifikatë",
+      "yes": "Po",
+      "no": "Jo",
+      "minutes": "min",
+      "hours": "orë",
+      "search": "Kërko",
+      "email": "Email",
+      "password": "Fjalëkalimi",
+      "showPassword": "Shfaq fjalëkalimin",
+      "hidePassword": "Fshih fjalëkalimin",
+      "role": "Roli",
+      "completed": "Përfunduar",
+      "inProgress": "Në vazhdim",
+      "notStarted": "Pa filluar",
+      "issued": "Lëshuar",
+      "expires": "Skadon",
+      "status": "Statusi",
+      "session": "Sesioni",
+      "runtime": "Mjedisi",
+      "validation": "Vlerësimi"
+    },
+    "errors": {
+      "generic": "Ka ndodhur një gabim.",
+      "network": "Probleme me lidhjen.",
+      "unauthorized": "Duhet të hyni në llogari.",
+      "notFound": "Faqja nuk u gjet.",
+      "invalidCredentials": "Email ose fjalëkalim i pavlefshëm.",
+      "rateLimited": "Shumë përpjekje. Provoni më vonë.",
+      "missingFields": "Plotësoni email-in dhe fjalëkalimin."
+    },
+    "localeSwitch": {
+      "label": "Gjuha",
+      "sq": "Shqip",
+      "en": "Anglisht"
+    },
+    "user": {
+      "menuLabel": "Llogaria ime",
+      "anonymous": "I paloguar"
+    },
+    "footer": {
+      "copyright": "OpenSecStack — CyberPath"
+    }
+  },
+  "tracks": {
+    "list": {
+      "title": "Kurset e disponueshme",
+      "filterAudience": "Filtro sipas audiencës",
+      "filterMeasure": "Masa NIS2",
+      "searchPlaceholder": "Kërko kurse...",
+      "allMeasures": "Të gjitha masat"
+    },
+    "detail": {
+      "modules": "Modulet",
+      "labs": "Laboratorët",
+      "startTrack": "Fillo kursin",
+      "continueTrack": "Vazhdo",
+      "prerequisites": "Parakushtet",
+      "nis2Mappings": "Lidhjet me NIS2",
+      "noModules": "Asnjë modul ende."
+    },
+    "lesson": {
+      "completed": "Mësimi u shënua si i përfunduar.",
+      "completionFailed": "Mësimi nuk u shënua si i përfunduar.",
+      "video": "Video",
+      "backToTrack": "Kthehu te kursi"
+    },
+    "lab": {
+      "starting": "Duke nisur sesionin e laboratorit...",
+      "running": "Sesioni i laboratorit po ekzekutohet",
+      "stopped": "Sesioni i laboratorit u ndal",
+      "expired": "Sesioni i laboratorit ka skaduar",
+      "stopSession": "Ndalo sesionin",
+      "results": "Rezultatet e vlerësimit",
+      "noActiveSession": "Asnjë sesion aktiv. Klikoni Fillo për të hapur një laborator.",
+      "terminalPlaceholder": "Terminali do të shfaqet kur sesioni të lidhet."
+    },
+    "progress": {
+      "title": "Përparimi im",
+      "perTrack": "Përfundimi për çdo kurs",
+      "quizAvg": "Mesatarja e kuizeve",
+      "lessonsDone": "Mësimet e përfunduara"
+    },
+    "certifications": {
+      "title": "Certifikatat e mia",
+      "noCerts": "Asnjë certifikatë ende. Përfundoni një kurs me certifikatë për ta marrë."
+    },
+    "admin": {
+      "title": "Administrimi i kohorteve",
+      "comingSoon": "Menaxhimi i kohorteve — v1.0.0",
+      "stubBody": "CRUD i kohorteve vjen në v1.0.0. Kjo faqe është e mbrojtur me RequireAuth(role=admin)."
+    },
+    "titles": {
+      "nis2-art21-awareness": "Vetëdija për Nenin 21 të NIS2",
+      "phishing-recognition": "Njohja e phishing-ut",
+      "secure-coding": "Kodim i sigurt (OWASP Top 10)",
+      "incident-response-basics": "Bazat e përgjigjes ndaj incidenteve",
+      "api-security": "Siguria e API-ve",
+      "threat-intel-basics": "Bazat e inteligjencës së kërcënimeve",
+      "linux-hardening": "Forcimi i Linux",
+      "network-forensics": "Forenzika e rrjetit"
+    },
+    "placeholder": "Vendmbajtës i përkthyer (i18n)"
+  }
+}

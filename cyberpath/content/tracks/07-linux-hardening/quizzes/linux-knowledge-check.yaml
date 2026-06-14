@@ -1,0 +1,145 @@
+id: linux-knowledge-check
+title: "Knowledge Check — Linux Hardening"
+randomise: true
+randomise_choices: true
+pass_threshold: 0.80
+questions:
+  - id: q1
+    type: multiple-choice
+    prompt: "Which sysctl parameter enables full Address Space Layout Randomisation (ASLR)?"
+    choices:
+      - id: a
+        text: "kernel.kptr_restrict = 2"
+      - id: b
+        text: "kernel.randomize_va_space = 2"
+      - id: c
+        text: "kernel.yama.ptrace_scope = 1"
+      - id: d
+        text: "net.ipv4.tcp_syncookies = 1"
+    correct: [b]
+    explanation: "kernel.randomize_va_space = 2 enables full ASLR randomisation of stack, heap, and shared library addresses. Value 1 randomises only stack and libraries; 0 disables ASLR entirely."
+    points: 1
+
+  - id: q2
+    type: true-false
+    prompt: "SELinux in permissive mode protects the system from compromised processes."
+    correct: false
+    explanation: "Permissive mode only logs MAC policy violations — it does not block them. Real protection requires enforcing mode. Systems running SELinux permissive receive zero mandatory access control benefit."
+    points: 1
+
+  - id: q3
+    type: multiple-choice
+    prompt: "Which SSH configuration option prevents password-based authentication?"
+    choices:
+      - id: a
+        text: "PermitRootLogin no"
+      - id: b
+        text: "PasswordAuthentication no"
+      - id: c
+        text: "MaxAuthTries 4"
+      - id: d
+        text: "Protocol 2"
+    correct: [b]
+    explanation: "PasswordAuthentication no disables password-based authentication, requiring public key authentication. This is the single highest-impact SSH control for preventing password-based compromise (brute-force, credential stuffing)."
+    points: 1
+
+  - id: q4
+    type: multiple-choice
+    prompt: "Which auditd audit goal would log changes to /etc/sudoers?"
+    choices:
+      - id: a
+        text: "-a always,exit -F arch=b64 -S open -k identity"
+      - id: b
+        text: "-w /etc/sudoers -p wa -k privilege-escalation"
+      - id: c
+        text: "-w /usr/bin/sudo -p x -k privilege-escalation"
+      - id: d
+        text: "-b 8192"
+    correct: [b]
+    explanation: "The -w (watch) rule with -p wa (write and attribute permissions) logs any write or attribute change to /etc/sudoers. The -p x (execute) option logs execution of the sudo binary, not configuration modifications."
+    points: 1
+
+  - id: q5
+    type: multiple-choice
+    prompt: "Which NIS2 Article relates to business continuity and system availability — covering server hardening as a preventive control?"
+    choices:
+      - id: a
+        text: "Article 21(2)(b)"
+      - id: b
+        text: "Article 21(2)(c)"
+      - id: c
+        text: "Article 21(2)(e)"
+      - id: d
+        text: "Article 21(2)(h)"
+    correct: [b]
+    explanation: "NIS2 Article 21(2)(c) — business continuity, backup management, and disaster recovery — covers system availability. Unhardened servers are more vulnerable to compromise, impacting availability. Article 21(2)(h) covers cryptography (TLS, disk encryption)."
+    points: 1
+
+  - id: q6
+    type: scenario
+    prompt: "Your initial OpenSCAP scan shows 47% pass against the CIS Level 1 profile. Which single control has the HIGHEST impact on improving your score?"
+    choices:
+      - id: a
+        text: "Enable AIDE and initialise the database"
+      - id: b
+        text: "Disable SSH password authentication and enforce public key"
+      - id: c
+        text: "Add auditd rules for /etc/passwd and /etc/shadow"
+      - id: d
+        text: "Set SELinux/AppArmor to enforcing mode"
+    correct: [d]
+    explanation: "MAC (SELinux/AppArmor) in enforcing mode is addressed by many CIS controls and correlates with many other configuration failures. From a score perspective, enforcing MAC often results in the highest number of CIS controls passing with a single service state change."
+    points: 1
+
+  - id: q7
+    type: true-false
+    prompt: "Running 'apt --allow-unauthenticated' is acceptable if you are installing packages only from official repositories."
+    correct: false
+    explanation: "It is never acceptable. GPG authentication verifies the package comes from the claimed repository and has not been tampered with. Bypassing authentication removes this guarantee — a man-in-the-middle or a compromised repository can deliver arbitrary packages without detection."
+    points: 1
+
+  - id: q8
+    type: multiple-choice
+    prompt: "Which integrity checking tool builds and compares filesystem checksums to detect post-compromise modification?"
+    choices:
+      - id: a
+        text: "auditd"
+      - id: b
+        text: "OpenSCAP"
+      - id: c
+        text: "AIDE"
+      - id: d
+        text: "AppArmor"
+    correct: [c]
+    explanation: "AIDE (Advanced Intrusion Detection Environment) builds a database of system file checksums, permissions, and metadata. Running AIDE after a suspected incident compares the current state against the baseline and reports changes."
+    points: 1
+
+  - id: q9
+    type: code-fill
+    prompt: "Complete the OpenSCAP profile parameter to run the CIS Level 1 Server assessment:"
+    template: |
+      oscap xccdf eval \
+        --profile ___ \
+        --report /tmp/report.html \
+        /usr/share/xml/scap/ssg/content/ssg-ubuntu2204-ds.xml
+    correct:
+      - "xccdf_org.ssgproject.content_profile_cis_level1_server"
+      - "cis_level1_server"
+    explanation: "The full profile ID is xccdf_org.ssgproject.content_profile_cis_level1_server. Run 'oscap info' against the SCAP content file to list all available profiles."
+    points: 1
+
+  - id: q10
+    type: multiple-choice
+    prompt: "Which sysctl parameter protects against TCP SYN flood attacks?"
+    choices:
+      - id: a
+        text: "net.ipv4.ip_forward = 0"
+      - id: b
+        text: "net.ipv4.conf.all.rp_filter = 1"
+      - id: c
+        text: "net.ipv4.tcp_syncookies = 1"
+      - id: d
+        text: "net.ipv4.icmp_echo_ignore_broadcasts = 1"
+    correct: [c]
+    explanation: "tcp_syncookies = 1 enables SYN cookies — a defence mechanism where the server generates a cryptographic cookie instead of allocating state resources during the TCP handshake, preventing resource exhaustion from SYN flood attacks."
+    points: 1

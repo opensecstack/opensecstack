@@ -1,0 +1,51 @@
+﻿id: threat-intelligence-basics
+version: 1.0.0
+title: "Threat Intelligence Basics"
+description: "Threat intelligence fundamentals: IOCs vs TTPs, MITRE ATT&CK, intelligence lifecycle, source quality, sharing protocols (TLP, STIX/TAXII). Hands-on exercises use ThreatFlow as the reference aggregator."
+
+audience:
+  - soc-analyst
+  - threat-hunter
+  - csirt-engineer
+
+nis2_mappings:
+  primary: art21.b
+  secondary:
+    - art21.i
+    - art21.g
+
+prerequisites:
+  - incident-response-basics
+
+duration_minutes: 300
+language_source: sq
+
+modules:
+  - id: ti-concepts
+    order: 1
+    title: "Threat Intelligence Concepts"
+    lessons:
+      - 01-ti-introduction
+    quiz: ~
+    lab: ~
+
+  - id: ti-operations
+    order: 2
+    title: "Intelligence Operations with ThreatFlow"
+    lessons:
+      - 02-ti-operations
+    quiz: ti-knowledge-check
+    lab: threatflow-enrichment-lab
+
+certification:
+  offered: true
+  level: practitioner
+  expires_after_months: 24
+
+content_hash: ""
+
+changelog:
+  - version: 1.0.0
+    date: 2026-05-05
+    changes:
+      - "Initial release for v1.0.0."

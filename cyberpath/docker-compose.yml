@@ -1,0 +1,48 @@
+# CyberPath local stack: API + Postgres + Prometheus (+ optional Grafana).
+# Bind-mounts the migrations dir so `make migrate-up` from the host works
+# against the running Postgres container.
+version: "3.9"
+
+services:
+  cyberpath:
+    build: .
+    image: opensecstack/cyberpath:dev
+    ports:
+      - "8086:8086"
+    environment:
+      CYBERPATH_DB_URL: postgres://cyberpath:cyberpath_dev@postgres:5432/cyberpath?sslmode=disable
+      CYBERPATH_AUTH_DEV_MODE: "true"
+      CYBERPATH_SERVER_LOG_LEVEL: info
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cyberpath
+      POSTGRES_PASSWORD: cyberpath_dev
+      POSTGRES_DB: cyberpath
+    ports:
+      - "5439:5432"
+    volumes:
+      - cyberpath_pgdata:/var/lib/postgresql/data
+      - ./internal/db/migrations:/migrations:ro
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    profiles: ["observability"]
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3030:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    profiles: ["observability"]
+
+volumes:
+  cyberpath_pgdata:

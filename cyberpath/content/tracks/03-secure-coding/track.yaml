@@ -1,0 +1,51 @@
+﻿id: secure-coding
+version: 1.0.0
+title: "Secure Coding"
+description: "An intermediate-level track covering the OWASP Top 10 vulnerabilities and secure coding patterns. Learners develop practical skills in identifying SQL injection, XSS, IDOR, and broken authentication flaws in code, then apply secure patterns including parameterised queries, output encoding, input validation, and secrets management. Includes a hands-on vulnerability scanning lab."
+
+audience:
+  - developer
+  - software-engineer
+  - devops-engineer
+  - qa-engineer
+
+nis2_mappings:
+  primary: art21.e
+  secondary:
+    - art21.f
+
+prerequisites:
+  - nis2-article-21-awareness
+
+duration_minutes: 180
+language_source: en
+
+modules:
+  - id: owasp-top10
+    order: 1
+    title: "OWASP Top 10 Essentials"
+    lessons:
+      - 01-owasp-top10-essentials
+    quiz: ~
+    lab: ~
+
+  - id: secure-coding-patterns
+    order: 2
+    title: "Secure Coding Patterns in Practice"
+    lessons:
+      - 02-secure-coding-patterns
+    quiz: secure-coding-knowledge-check
+    lab: vuln-scan
+
+certification:
+  offered: true
+  level: practitioner
+  expires_after_months: 24
+
+content_hash: ""
+
+changelog:
+  - version: 1.0.0
+    date: 2026-05-07
+    changes:
+      - "Initial release for v1.0.0."

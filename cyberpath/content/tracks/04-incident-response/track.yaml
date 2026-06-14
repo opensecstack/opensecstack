@@ -1,0 +1,50 @@
+﻿id: incident-response-basics
+version: 1.0.0
+title: "Incident Response Basics"
+description: "Incident response fundamentals covering detection, triage, containment, eradication, recovery, and post-incident review. Walks through the IR lifecycle using IRFlow as the reference workflow tool."
+
+audience:
+  - soc-analyst
+  - it-on-call
+  - csirt-engineer
+
+nis2_mappings:
+  primary: art21.b
+  secondary:
+    - art21.g
+
+prerequisites:
+  - nis2-article-21-awareness
+
+duration_minutes: 360
+language_source: sq
+
+modules:
+  - id: ir-fundamentals
+    order: 1
+    title: "Introduction to Incident Response"
+    lessons:
+      - 01-ir-introduction
+    quiz: ~
+    lab: ~
+
+  - id: ir-lifecycle-and-tools
+    order: 2
+    title: "The IR Lifecycle and Operational Tools"
+    lessons:
+      - 02-ir-lifecycle-tools
+    quiz: ir-knowledge-check
+    lab: ir-triage-lab
+
+certification:
+  offered: true
+  level: practitioner
+  expires_after_months: 24
+
+content_hash: ""
+
+changelog:
+  - version: 1.0.0
+    date: 2026-05-05
+    changes:
+      - "Initial release for v1.0.0."

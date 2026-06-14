@@ -1,0 +1,147 @@
+id: phishing-knowledge-check
+title: "Knowledge Check — Phishing Recognition"
+randomise: true
+randomise_choices: true
+pass_threshold: 0.80
+questions:
+  - id: q1
+    type: multiple-choice
+    prompt: "An email arrives from 'IT Support <it-support@albtech-secure.com>' asking you to reset your password urgently. The display name says 'IT Support'. What is the most important thing to check first?"
+    choices:
+      - id: a
+        text: "Whether the email contains your name"
+      - id: b
+        text: "The actual sending domain — 'albtech-secure.com' is not the legitimate 'albtech.al' domain"
+      - id: c
+        text: "Whether the email passed spam filters"
+      - id: d
+        text: "Whether the email was encrypted"
+    correct: [b]
+    explanation: "The display name is entirely attacker-controlled and proves nothing. The actual sending domain — 'albtech-secure.com' — is a lookalike domain, not the legitimate organisation's domain. This is a classic display name spoofing attack."
+    points: 1
+
+  - id: q2
+    type: true-false
+    prompt: "An email that passes SPF authentication is guaranteed to be from the legitimate organisation it claims to represent."
+    correct: false
+    explanation: "SPF checks whether the sending server is authorised for the sending domain — but attackers can register their own lookalike domain and configure valid SPF records for it. SPF passing on 'albtech-secure.com' says nothing about whether that domain is the real organisation."
+    points: 1
+
+  - id: q3
+    type: multiple-choice
+    prompt: "Which of the following best describes a spear-phishing attack?"
+    choices:
+      - id: a
+        text: "A mass campaign sending identical emails to millions of recipients"
+      - id: b
+        text: "A highly personalised attack targeting a specific individual using information gathered through reconnaissance"
+      - id: c
+        text: "A phishing attack delivered via SMS rather than email"
+      - id: d
+        text: "An attack that installs malware without any user interaction"
+    correct: [b]
+    explanation: "Spear phishing is targeted and personalised. Attackers research specific individuals — using LinkedIn, company websites, social media — and craft messages that reference real projects, colleagues, or business relationships to bypass the recipient's suspicion."
+    points: 1
+
+  - id: q4
+    type: multiple-select
+    prompt: "Which psychological mechanisms do phishing attacks most commonly exploit? Select all that apply."
+    choices:
+      - id: a
+        text: "Urgency — creating time pressure to prevent rational evaluation"
+      - id: b
+        text: "Authority — impersonating trusted figures such as executives or regulators"
+      - id: c
+        text: "Curiosity about technical content"
+      - id: d
+        text: "Fear — threatening negative consequences if the recipient does not act"
+    correct: [a, b, d]
+    explanation: "Urgency, authority, and fear are the three primary psychological levers. Together they create a pressure environment where recipients act before verifying. Curiosity is a secondary vector (used in lure attachments) but not one of the primary mechanisms."
+    points: 1
+
+  - id: q5
+    type: multiple-choice
+    prompt: "Your CFO receives an email from the CEO's address asking for an urgent wire transfer to a new supplier account, bypassing the normal approval process. What is the single most effective defence?"
+    choices:
+      - id: a
+        text: "Check whether the CEO's email address is spelled correctly"
+      - id: b
+        text: "Forward the email to IT security for analysis before acting"
+      - id: c
+        text: "Call the CEO on a known phone number from your address book to verbally confirm the instruction"
+      - id: d
+        text: "Check whether the email was marked as external"
+    correct: [c]
+    explanation: "This is a classic BEC scenario. The single effective control is out-of-band call-back verification using a phone number you retrieved independently — not one provided in the email. This defeats the attack regardless of how convincing the email appears."
+    points: 1
+
+  - id: q6
+    type: true-false
+    prompt: "Caller ID displays the true identity of the person calling you and cannot be falsified."
+    correct: false
+    explanation: "Caller ID can be trivially spoofed using VoIP services. Attackers regularly display internal IT extension numbers, bank fraud team numbers, or government agency numbers while calling from unrelated infrastructure. Never trust caller ID as proof of identity."
+    points: 1
+
+  - id: q7
+    type: multiple-choice
+    prompt: "A caller claiming to be from IT support asks for your current password to 'lock your account' before an attack spreads. What should you do?"
+    choices:
+      - id: a
+        text: "Provide the password — IT support needs it to protect you"
+      - id: b
+        text: "Provide only the first three characters as a partial verification"
+      - id: c
+        text: "Refuse — legitimate IT support can reset accounts without your current password — then report the call"
+      - id: d
+        text: "Ask the caller to send a follow-up email to confirm the request"
+    correct: [c]
+    explanation: "Legitimate IT support never needs your current password — they can reset or disable accounts through administrative tools. This is a vishing attack. Hang up and report the call to your security team. Do not follow up by email with a suspected attacker."
+    points: 1
+
+  - id: q8
+    type: scenario
+    prompt: "You receive a LinkedIn message from someone you do not know, saying they work at a partner company and need you to review an attached project proposal. The message references a project name that matches a real internal project. What type of attack is this most likely to be?"
+    choices:
+      - id: a
+        text: "Mass phishing"
+      - id: b
+        text: "Spear phishing using OSINT-gathered reconnaissance"
+      - id: c
+        text: "Vishing"
+      - id: d
+        text: "A legitimate business inquiry"
+    correct: [b]
+    explanation: "Knowledge of an internal project name combined with an unsolicited attachment request on a professional platform is a textbook spear-phishing approach. The attacker used open-source intelligence (OSINT) — likely from LinkedIn and company publications — to craft a credible, targeted message."
+    points: 1
+
+  - id: q9
+    type: multiple-choice
+    prompt: "Which NIS2 Article 21 sub-measure specifically requires cybersecurity training and basic cyber hygiene practices for all staff?"
+    choices:
+      - id: a
+        text: "Art.21(2)(b)"
+      - id: b
+        text: "Art.21(2)(e)"
+      - id: c
+        text: "Art.21(2)(g)"
+      - id: d
+        text: "Art.21(2)(j)"
+    correct: [c]
+    explanation: "Art.21(2)(g) mandates basic cyber hygiene practices and cybersecurity training for all personnel. Phishing recognition training is a direct fulfilment of this requirement for essential and important entities."
+    points: 1
+
+  - id: q10
+    type: multiple-choice
+    prompt: "A supplier you regularly work with sends an email with updated bank account details for future invoice payments. The email looks identical to previous legitimate emails from them. What is the correct response?"
+    choices:
+      - id: a
+        text: "Update the bank details immediately — the email looks genuine"
+      - id: b
+        text: "Call the supplier on a phone number from your existing records — not from the email — to verbally confirm the change"
+      - id: c
+        text: "Reply to the email asking them to confirm the change"
+      - id: d
+        text: "Forward the email to your manager for approval, then update the details"
+    correct: [b]
+    explanation: "Supplier impersonation BEC frequently involves fraudulent payment detail changes. The only safe verification is a phone call to a number from your own records. Replying to the email confirms nothing — if the account is compromised or spoofed, the attacker controls the reply channel."
+    points: 1

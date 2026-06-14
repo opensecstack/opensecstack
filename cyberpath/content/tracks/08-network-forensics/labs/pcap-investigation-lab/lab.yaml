@@ -1,0 +1,156 @@
+﻿id: pcap-investigation-lab
+version: 1.0.0
+title: "PCAP Investigation: Corporate Network Intrusion"
+runtime: wasm
+image: "ghcr.io/opensecstack/cyberpath-labs/pcap-lab:1.0.0"
+entry_command: "/usr/local/bin/pcap-lab-shell"
+time_limit_seconds: 3600
+
+objectives:
+  - "Use tshark to identify the initial C2 callback IP and domain from the provided PCAP"
+  - "Use zeek to extract and analyse the DNS query pattern and identify DGA-like activity"
+  - "Identify the attacker's lateral movement by finding SMB connections to unexpected hosts"
+  - "Extract the TLS SNI values used during the C2 communication"
+  - "Answer the scoped investigative questions in the lab report"
+
+instructions: |
+  ## Scenario
+
+  A financial services company suspects a network intrusion. You have been given a 90-minute
+  PCAP capture taken at the network perimeter during the suspected attack window.
+  The PCAP file is at `/lab/investigation.pcap`.
+  The investigative questions are in `/lab/questions.txt`.
+
+  Answer each question by filling in `/lab/answers.txt`.
+
+  ## Tools available
+
+  - `tshark` — packet-level analysis
+  - `zeek` — structured log extraction
+  - `zeek-cut` — field extraction from zeek logs
+  - `capinfos` — PCAP file statistics
+  - `strings` — string extraction from binary data
+
+  ## Step 1 — PCAP overview
+
+  ```bash
+  # Get capture statistics
+  capinfos /lab/investigation.pcap
+
+  # Get a protocol summary
+  tshark -r /lab/investigation.pcap -q -z io,phs
+  ```
+
+  ## Step 2 — DNS analysis
+
+  ```bash
+  # Run Zeek against the PCAP (creates logs in /lab/zeek-logs/)
+  mkdir -p /lab/zeek-logs
+  cd /lab/zeek-logs && zeek -r /lab/investigation.pcap
+
+  # Extract all DNS queries and count by name
+  zeek-cut query answers < /lab/zeek-logs/dns.log | sort | uniq -c | sort -rn | head -30
+
+  # Look for NXDOMAIN responses (DGA indicator)
+  zeek-cut query rcode < /lab/zeek-logs/dns.log | grep "NXDOMAIN" | wc -l
+
+  # Find DNS queries with unusual length (tunnelling indicator)
+  zeek-cut query < /lab/zeek-logs/dns.log | awk '{print length($1), $1}' | sort -rn | head -10
+  ```
+
+  ## Step 3 — HTTP/HTTPS and C2 analysis
+
+  ```bash
+  # Extract HTTP requests with host and URI
+  tshark -r /lab/investigation.pcap -Y "http.request" \
+    -T fields -e frame.time -e ip.src -e ip.dst -e http.host -e http.request.uri \
+    -E separator=, > /lab/http-requests.csv
+
+  # Extract TLS SNI values
+  tshark -r /lab/investigation.pcap -Y "tls.handshake.type == 1" \
+    -T fields -e frame.time -e ip.src -e ip.dst \
+    -e tls.handshake.extensions_server_name > /lab/tls-sni.txt
+
+  # Look for beaconing: HTTP requests at regular intervals
+  tshark -r /lab/investigation.pcap -Y "http.request" \
+    -T fields -e frame.time -e ip.dst | sort
+  ```
+
+  ## Step 4 — Lateral movement analysis
+
+  ```bash
+  # Find all SMB connections
+  tshark -r /lab/investigation.pcap -Y "tcp.port == 445" \
+    -T fields -e frame.time -e ip.src -e ip.dst | sort
+
+  # Find all RDP connections (port 3389)
+  tshark -r /lab/investigation.pcap -Y "tcp.dstport == 3389" \
+    -T fields -e frame.time -e ip.src -e ip.dst
+
+  # Find large data transfers (potential exfiltration)
+  zeek-cut id.orig_h id.resp_h id.resp_p orig_bytes resp_bytes < /lab/zeek-logs/conn.log | \
+    awk '{if($5 > 1000000) print}' | sort -rn -k5
+  ```
+
+  ## Step 5 — Answer the investigative questions
+
+  Read the questions in `/lab/questions.txt` and write your answers in `/lab/answers.txt`.
+  Be specific: include IPs, domains, timestamps, and byte counts where asked.
+
+  ## Validate
+
+  ```bash
+  pcap-lab validate
+  ```
+
+validation:
+  - id: zeek-logs-generated
+    type: file_exists
+    target: "/lab/zeek-logs/conn.log"
+    weight: 2
+    diagnostic: "Zeek logs not found. Run 'zeek -r /lab/investigation.pcap' from /lab/zeek-logs/."
+
+  - id: http-analysis-done
+    type: file_exists
+    target: "/lab/http-requests.csv"
+    weight: 1
+    diagnostic: "HTTP requests file not found. Run the HTTP extraction tshark command."
+
+  - id: tls-sni-extracted
+    type: file_exists
+    target: "/lab/tls-sni.txt"
+    weight: 1
+    diagnostic: "TLS SNI file not found. Run the SNI extraction tshark command."
+
+  - id: answers-submitted
+    type: file_exists
+    target: "/lab/answers.txt"
+    min_length: 200
+    weight: 3
+    diagnostic: "Answers file missing or too short. Complete /lab/answers.txt answering all investigative questions."
+
+  - id: c2-ip-identified
+    type: answer_contains_key
+    target: "/lab/answers.txt"
+    question_id: "Q1"
+    answer_key: "c2_ip"
+    weight: 3
+    diagnostic: "Question 1 (C2 IP) not answered correctly. Review your TLS SNI analysis and Zeek connection log."
+
+success_criteria:
+  min_score: 8
+  required_rules:
+    - zeek-logs-generated
+    - answers-submitted
+
+network:
+  egress_whitelist: []
+
+hints:
+  - trigger: idle_seconds:360
+    text: "If you're struggling with the DNS landscape, try: zeek-cut query rcode < /lab/zeek-logs/dns.log | sort | uniq -c | sort -rn | head -20"
+
+  - trigger: idle_seconds:1200
+    text: "To find periodic beaconing, sort HTTP requests by timestamp and look for regular time intervals between calls to the same destination host."
+
+content_hash: ""

@@ -1,0 +1,144 @@
+id: api-knowledge-check
+title: "Knowledge Check — API Security"
+randomise: true
+randomise_choices: true
+pass_threshold: 0.80
+questions:
+  - id: q1
+    type: multiple-choice
+    prompt: "Which OWASP API Top 10 (2023) category relates to accessing another user's record by changing the object ID in the URL?"
+    choices:
+      - id: a
+        text: "API2:2023 — Broken Authentication"
+      - id: b
+        text: "API1:2023 — Broken Object Level Authorization (BOLA)"
+      - id: c
+        text: "API5:2023 — Broken Function Level Authorization"
+      - id: d
+        text: "API3:2023 — Broken Object Property Level Authorization"
+    correct: [b]
+    explanation: "BOLA (API1:2023) occurs when an API does not check whether the calling user is authorized to access the specific object identified by the supplied ID."
+    points: 1
+
+  - id: q2
+    type: true-false
+    prompt: "Accepting JWTs signed with the 'none' algorithm is safe if the API is internal-only."
+    correct: false
+    explanation: "It is never safe. The 'none' algorithm removes all cryptographic security, allowing any party to forge any claim. 'Internal' APIs can also be reached from SSRF attacks or compromised internal networks."
+    points: 1
+
+  - id: q3
+    type: multiple-choice
+    prompt: "Which OWASP API Top 10 vulnerability involves modifying your own user object's 'role' field via a PATCH request?"
+    choices:
+      - id: a
+        text: "API1:2023 — BOLA"
+      - id: b
+        text: "API3:2023 — BOPLA (mass assignment)"
+      - id: c
+        text: "API8:2023 — Security Misconfiguration"
+      - id: d
+        text: "API6:2023 — Unrestricted Access to Sensitive Business Flows"
+    correct: [b]
+    explanation: "BOPLA (API3:2023) covers cases where the API accepts modifications to object properties (like 'role' or 'is_admin') that the caller should not be permitted to change. The fix is allowlisting writable fields."
+    points: 1
+
+  - id: q4
+    type: multiple-choice
+    prompt: "Which NIS2 Article primarily captures API security requirements for software-producing organisations?"
+    choices:
+      - id: a
+        text: "Article 21(2)(a) — Risk analysis"
+      - id: b
+        text: "Article 21(2)(b) — Incident handling"
+      - id: c
+        text: "Article 21(2)(e) — Security in acquisition, development, and maintenance"
+      - id: d
+        text: "Article 21(2)(h) — Cryptography"
+    correct: [c]
+    explanation: "NIS2 Article 21(2)(e) mandates security during the development and maintenance of information systems, directly covering API security testing and secure design standards."
+    points: 1
+
+  - id: q5
+    type: multiple-choice
+    prompt: "Which approach is the BEST defence against SSRF via API URL parameters?"
+    choices:
+      - id: a
+        text: "Block IP address 169.254.169.254 at the firewall"
+      - id: b
+        text: "Allowlist acceptable destinations and reject everything else"
+      - id: c
+        text: "Decrypt SSL before passing URLs"
+      - id: d
+        text: "Require authentication for all outbound calls"
+    correct: [b]
+    explanation: "Destination allowlisting is the only complete defence against SSRF. Blocking known addresses like 169.254.169.254 is easily bypassed via alternatives like abbreviated DNS expressions or equivalent IPv6 addresses."
+    points: 1
+
+  - id: q6
+    type: scenario
+    prompt: "APIGuard reports the finding: 'GET /api/v1/users?search=admin returns 200 OK with 50,000 records and no pagination or rate limit.' Which OWASP API Top 10 category fits this?"
+    choices:
+      - id: a
+        text: "API1:2023 — BOLA"
+      - id: b
+        text: "API4:2023 — Unrestricted Resource Consumption"
+      - id: c
+        text: "API6:2023 — Unrestricted Access to Sensitive Business Flows"
+      - id: d
+        text: "API9:2023 — Improper Inventory Management"
+    correct: [b]
+    explanation: "API4:2023 covers API endpoints without rate limiting, response size limits, or pagination constraints — enabling DoS attacks, bulk data extraction, and cost amplification."
+    points: 1
+
+  - id: q7
+    type: true-false
+    prompt: "Enabling GraphQL introspection in the production environment is acceptable practice if the API requires authentication."
+    correct: false
+    explanation: "Introspection exposed to any authenticated user reveals the full schema, including sensitive fields and types. Authenticated attackers (e.g., any free-tier account) gain full reconnaissance. Introspection should be disabled in production or restricted exclusively to the admin role."
+    points: 1
+
+  - id: q8
+    type: multiple-choice
+    prompt: "Which APIGuard feature enables discovering security issues before the API is even built?"
+    choices:
+      - id: a
+        text: "Active scanning mode"
+      - id: b
+        text: "Passive specification analysis mode (OpenAPI YAML)"
+      - id: c
+        text: "Authenticated scanning with production tokens"
+      - id: d
+        text: "Passive traffic capture"
+    correct: [b]
+    explanation: "APIGuard's specification analysis mode scans the OpenAPI YAML spec before the API is built, identifying BOLA risks, missing authentication annotations, and SSRF-prone URL parameters during the design phase."
+    points: 1
+
+  - id: q9
+    type: code-fill
+    prompt: "Complete the JWT algorithm argument to restrict to RS256 only:"
+    template: |
+      decoded = jwt.decode(
+          token,
+          key=PUBLIC_KEY,
+          algorithms=___,
+      )
+    correct: ['["RS256"]', "['RS256']", '["RS256","ES256"]']
+    explanation: "The algorithms parameter must be an explicit list of allowed algorithms. Never leave 'algorithms' undefined or set to None, as this allows the attacker to choose the algorithm (including 'none')."
+    points: 1
+
+  - id: q10
+    type: multiple-choice
+    prompt: "What is the primary risk of API10:2023 — Unsafe Consumption of APIs?"
+    choices:
+      - id: a
+        text: "Third-party API may return overly large responses"
+      - id: b
+        text: "Attacker-controlled content from a compromised third-party API is injected into internal processing"
+      - id: c
+        text: "The third-party API key's authenticity cannot be verified"
+      - id: d
+        text: "Third-party APIs do not support TLS"
+    correct: [b]
+    explanation: "API10:2023 covers the supply chain risk where your backend consumes third-party APIs without input validation. If the third-party API is compromised or returns malicious data, that data is injected directly into your processing pipeline."
+    points: 1

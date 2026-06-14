@@ -1,0 +1,146 @@
+﻿id: threatflow-enrichment-lab
+version: 1.0.0
+title: "ThreatFlow Enrichment and Correlation Exercise"
+runtime: wasm
+image: "ghcr.io/opensecstack/cyberpath-labs/threatflow-lab:1.0.0"
+entry_command: "/usr/local/bin/threatflow-lab-shell"
+time_limit_seconds: 2700
+
+objectives:
+  - "Enrich a set of observables (IP, domain, file hash) using ThreatFlow"
+  - "Identify the MITRE ATT&CK techniques associated with the threat actor in the scenario"
+  - "Classify enriched observables by Pyramid of Pain level"
+  - "Build a STIX indicator object for the most significant observable"
+  - "Apply correct TLP classification to produced intelligence"
+
+instructions: |
+  ## Scenario
+
+  Your SOC has flagged three observables during investigation of a suspicious login event
+  at a financial services entity. You need to enrich these observables using ThreatFlow
+  and produce a structured intelligence summary.
+
+  The observables are available at `/lab/observables.txt`.
+
+  ## Step 1 — Enrich the observables
+
+  ```bash
+  cat /lab/observables.txt
+  ```
+
+  For each observable, run ThreatFlow enrichment:
+
+  ```bash
+  # Enrich each observable (substitute actual values from observables.txt)
+  threatflow enrich --type ipv4 --value <ip-from-file> --output /lab/enrich-ip.json
+  threatflow enrich --type domain --value <domain-from-file> --output /lab/enrich-domain.json
+  threatflow enrich --type sha256 --value <hash-from-file> --output /lab/enrich-hash.json
+  ```
+
+  ## Step 2 — Identify the threat actor and ATT&CK techniques
+
+  Review the enrichment results to identify the associated threat actor:
+
+  ```bash
+  threatflow report summarise /lab/enrich-ip.json
+  ```
+
+  Then retrieve the full ATT&CK technique list for the identified actor:
+
+  ```bash
+  threatflow actor --name "<ACTOR-NAME>" --techniques --output /lab/actor-techniques.json
+  ```
+
+  ## Step 3 — Classify by Pyramid of Pain
+
+  Complete the classification worksheet at `/lab/pyramid-worksheet.txt`.
+  For each observable, write its Pyramid of Pain level (Hash / IP / Domain / Network Artifact / Tool / TTP)
+  and justify your classification in one sentence.
+
+  ## Step 4 — Build a STIX indicator
+
+  Create a STIX 2.1 indicator object for the most significant observable
+  (the one highest on the Pyramid of Pain):
+
+  ```bash
+  threatflow stix create-indicator \
+    --name "Lab exercise indicator" \
+    --pattern "[OBSERVABLE_TYPE:value = 'OBSERVABLE_VALUE']" \
+    --tlp amber \
+    --output /lab/stix-indicator.json
+  ```
+
+  Validate the produced STIX object:
+
+  ```bash
+  threatflow stix validate /lab/stix-indicator.json
+  ```
+
+  ## Step 5 — Intelligence summary
+
+  Write your intelligence summary in `/lab/intel-summary.txt`. Include:
+  - The threat actor identified
+  - The three observables and their Pyramid of Pain levels
+  - The top three ATT&CK techniques associated with this actor
+  - Your recommended TLP classification and reasoning
+
+  ## Validate
+
+  ```bash
+  threatflow lab validate
+  ```
+
+validation:
+  - id: enrichment-complete
+    type: file_exists_all
+    targets:
+      - "/lab/enrich-ip.json"
+      - "/lab/enrich-domain.json"
+      - "/lab/enrich-hash.json"
+    weight: 2
+    diagnostic: "All three enrichment files not found. Run 'threatflow enrich' for each observable."
+
+  - id: actor-techniques-retrieved
+    type: file_exists
+    target: "/lab/actor-techniques.json"
+    weight: 2
+    diagnostic: "Actor techniques file not found. Run 'threatflow actor --techniques'."
+
+  - id: pyramid-worksheet-complete
+    type: file_contains_all
+    target: "/lab/pyramid-worksheet.txt"
+    required_terms: ["Hash", "IP", "TTP"]
+    min_length: 80
+    weight: 2
+    diagnostic: "Pyramid worksheet must contain classifications for all three levels. Complete /lab/pyramid-worksheet.txt."
+
+  - id: stix-indicator-valid
+    type: threatflow_stix_valid
+    target: "/lab/stix-indicator.json"
+    weight: 2
+    diagnostic: "STIX indicator object is invalid or missing. Run 'threatflow stix create-indicator' and 'threatflow stix validate'."
+
+  - id: intel-summary-complete
+    type: file_exists
+    target: "/lab/intel-summary.txt"
+    min_length: 150
+    weight: 2
+    diagnostic: "Intelligence summary missing or too short. Write at least 150 characters to /lab/intel-summary.txt."
+
+success_criteria:
+  min_score: 8
+  required_rules:
+    - enrichment-complete
+    - stix-indicator-valid
+
+network:
+  egress_whitelist: []
+
+hints:
+  - trigger: idle_seconds:240
+    text: "Check 'threatflow enrich --help' to see all supported observable types and output formats."
+
+  - trigger: idle_seconds:900
+    text: "For the STIX indicator, the pattern type follows the format: [type:field = 'value']. E.g.: [ipv4-addr:value = '1.2.3.4']"
+
+content_hash: ""

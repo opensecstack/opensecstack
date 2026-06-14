@@ -1,0 +1,36 @@
+﻿id: sample-track
+version: 1.0.0
+title:
+  sq: "Pjesa e mostrës"
+  en: "Sample track"
+description:
+  sq: "Përshkrim i mostrës."
+  en: "Sample description."
+audience:
+  - all-staff
+nis2_mappings:
+  primary: art21.g
+  secondary:
+    - art21.i
+prerequisites: []
+duration_minutes: 60
+language_source: sq
+modules:
+  - id: intro
+    order: 1
+    title:
+      sq: "Hyrje"
+      en: "Intro"
+    lessons:
+      - 01-welcome
+    quiz: knowledge-check
+    lab: sample-lab
+certification:
+  offered: true
+  level: baseline
+  expires_after_months: 12
+content_hash: ""
+changelog:
+  - version: 1.0.0
+    date: 2026-04-26
+    changes: ["Initial draft."]

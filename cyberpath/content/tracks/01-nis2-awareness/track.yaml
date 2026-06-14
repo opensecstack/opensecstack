@@ -1,0 +1,58 @@
+﻿id: nis2-article-21-awareness
+version: 1.0.0
+title: "NIS2 Article 21 Awareness"
+description: "A conceptual awareness track covering all ten mandatory cybersecurity measures defined in NIS2 Article 21(2). Learners explore governance obligations, risk management requirements, supply chain controls, and incident reporting timelines, then complete a self-assessment checklist to map current controls against the directive."
+
+audience:
+  - ciso
+  - compliance-officer
+  - it-manager
+  - board-member
+
+nis2_mappings:
+  primary: art21.a
+  secondary:
+    - art21.b
+    - art21.c
+    - art21.d
+    - art21.e
+    - art21.f
+    - art21.g
+    - art21.h
+    - art21.i
+    - art21.j
+
+prerequisites: []
+
+duration_minutes: 120
+language_source: en
+
+modules:
+  - id: nis2-overview
+    order: 1
+    title: "NIS2 Article 21 Overview"
+    lessons:
+      - 01-nis2-article21-overview
+    quiz: ~
+    lab: ~
+
+  - id: nis2-controls
+    order: 2
+    title: "NIS2 Controls Deep Dive"
+    lessons:
+      - 02-nis2-controls-deep-dive
+    quiz: nis2-awareness-check
+    lab: compliance-checklist
+
+certification:
+  offered: true
+  level: awareness
+  expires_after_months: 12
+
+content_hash: ""
+
+changelog:
+  - version: 1.0.0
+    date: 2026-05-07
+    changes:
+      - "Initial release for v1.0.0."

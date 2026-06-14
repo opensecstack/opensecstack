@@ -1,0 +1,156 @@
+﻿id: apiguard-scan-lab
+version: 1.0.0
+title: "APIGuard API Scanning and Remediation"
+runtime: wasm
+image: "ghcr.io/opensecstack/cyberpath-labs/apiguard-lab:1.0.0"
+entry_command: "/usr/local/bin/apiguard-lab-shell"
+time_limit_seconds: 2700
+
+objectives:
+  - "Run an authenticated APIGuard scan against the vulnerable target API"
+  - "Identify and classify at least one BOLA finding in the scan report"
+  - "Apply the provided code patch to remediate the BOLA vulnerability"
+  - "Re-run the scan and confirm the BOLA finding is resolved"
+  - "Document your findings summary in the lab report file"
+
+instructions: |
+  ## Setup
+
+  The lab environment provides:
+  - A deliberately vulnerable REST API running at `http://localhost:8080`
+  - The `apiguard` CLI pre-installed
+  - The OpenAPI specification at `/lab/openapi.yaml`
+  - A lab authentication token in the environment variable `$LAB_TOKEN`
+  - The API source code at `/lab/api/` (read-write)
+
+  ## Step 1 — Initial scan
+
+  Run the authenticated APIGuard scan:
+
+  ```bash
+  apiguard scan \
+    --target http://localhost:8080 \
+    --auth-header "Authorization: Bearer $LAB_TOKEN" \
+    --spec /lab/openapi.yaml \
+    --output /lab/scan-report.json
+  ```
+
+  Review the findings:
+
+  ```bash
+  apiguard report summarise /lab/scan-report.json
+  ```
+
+  ## Step 2 — Identify the BOLA finding
+
+  Find the BOLA finding in the JSON report:
+
+  ```bash
+  apiguard report filter /lab/scan-report.json --category API1:2023
+  ```
+
+  Note the affected endpoint, the evidence request, and the evidence response.
+  Write a brief description of the vulnerability in `/lab/findings.txt`.
+
+  ## Step 3 — Apply the remediation patch
+
+  The vulnerable handler is in `/lab/api/handlers/orders.go`.
+  Open it and locate the `GetOrder` function. Apply the authorization check:
+
+  ```bash
+  # View the vulnerable code
+  cat /lab/api/handlers/orders.go
+  ```
+
+  Edit the file to add an ownership check before returning the order.
+  A reference implementation is available at `/lab/patches/orders-fixed.go`.
+
+  After editing, restart the API server:
+
+  ```bash
+  apiguard-lab restart-api
+  ```
+
+  ## Step 4 — Verification scan
+
+  Re-run the scan to confirm the fix:
+
+  ```bash
+  apiguard scan \
+    --target http://localhost:8080 \
+    --auth-header "Authorization: Bearer $LAB_TOKEN" \
+    --spec /lab/openapi.yaml \
+    --output /lab/scan-report-v2.json
+
+  apiguard report compare /lab/scan-report.json /lab/scan-report-v2.json
+  ```
+
+  ## Step 5 — Lab report
+
+  Complete the lab report template:
+
+  ```bash
+  cat /lab/report-template.txt
+  # Fill in your findings, the BOLA endpoint, your fix description, and the verification result
+  # Save to /lab/report-complete.txt
+  ```
+
+  ## Validate
+
+  ```bash
+  apiguard lab validate
+  ```
+
+validation:
+  - id: initial-scan-complete
+    type: file_exists
+    target: "/lab/scan-report.json"
+    weight: 2
+    diagnostic: "Initial scan report not found. Run 'apiguard scan'."
+
+  - id: bola-identified
+    type: file_contains
+    target: "/lab/findings.txt"
+    contains: "BOLA"
+    min_length: 30
+    weight: 2
+    diagnostic: "findings.txt must describe the BOLA finding. Review 'apiguard report filter'."
+
+  - id: verification-scan-complete
+    type: file_exists
+    target: "/lab/scan-report-v2.json"
+    weight: 2
+    diagnostic: "Verification scan report not found. Re-run 'apiguard scan' after remediation."
+
+  - id: bola-resolved
+    type: apiguard_finding_absent
+    target: "/lab/scan-report-v2.json"
+    category: "API1:2023"
+    endpoint: "GET /api/v1/orders/{id}"
+    weight: 3
+    diagnostic: "BOLA finding is still present in the verification scan. Check your authorization logic in handlers/orders.go."
+
+  - id: report-complete
+    type: file_exists
+    target: "/lab/report-complete.txt"
+    min_length: 100
+    weight: 1
+    diagnostic: "Completed report file not found or too short."
+
+success_criteria:
+  min_score: 7
+  required_rules:
+    - initial-scan-complete
+    - bola-resolved
+
+network:
+  egress_whitelist: []
+
+hints:
+  - trigger: idle_seconds:300
+    text: "Remember to filter the report for API1:2023 to find the specific BOLA finding."
+
+  - trigger: idle_seconds:900
+    text: "Check /lab/patches/orders-fixed.go for the reference implementation if you're stuck on the fix."
+
+content_hash: ""

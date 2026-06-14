@@ -1,0 +1,144 @@
+﻿id: ir-triage-lab
+version: 1.0.0
+title: "IRFlow Incident Triage Exercise"
+runtime: wasm
+image: "ghcr.io/opensecstack/cyberpath-labs/ir-triage:1.0.0"
+entry_command: "/usr/local/bin/irflow-lab-shell"
+time_limit_seconds: 2700
+
+objectives:
+  - "Analyse a provided set of SIEM alert excerpts and determine incident vs. non-incident"
+  - "Open an IRFlow incident record and assign correct severity (P1–P4)"
+  - "Select appropriate short-term containment actions from the playbook"
+  - "Document evidence references in the IRFlow incident record"
+  - "Draft the initial NIS2 Article 23 notification fields"
+
+instructions: |
+  ## Scenario
+
+  You are an on-call SOC analyst for Albtech S.A., an essential entity under NIS2.
+  It is 02:17 on a Tuesday morning. Three SIEM alerts have fired in the last 40 minutes.
+  You will find them in the `/alerts/` directory of your lab environment.
+
+  Your task is to work through the following steps using the IRFlow CLI (`irflow` command):
+
+  ### Step 1 — Review the alerts
+  Read each alert file in `/alerts/`:
+  - `alert-001.json` — Authentication anomaly
+  - `alert-002.json` — Outbound DNS to known-bad domain
+  - `alert-003.json` — Scheduled task creation on production server
+
+  Determine which alerts are related and whether they collectively represent a security incident.
+
+  ### Step 2 — Open an IRFlow incident
+  If you determine an incident exists, use the IRFlow CLI to open a new incident record:
+
+  ```bash
+  irflow incident create \
+    --title "YOUR INCIDENT TITLE" \
+    --severity P1|P2|P3|P4 \
+    --category malware|data_breach|phishing|other \
+    --assignee analyst-lab
+  ```
+
+  The command will return an incident ID (e.g., `INC-LAB-00001`). Record this ID.
+
+  ### Step 3 — Attach evidence
+  Attach the relevant alert files as evidence to your incident:
+
+  ```bash
+  irflow evidence attach \
+    --incident INC-LAB-00001 \
+    --file /alerts/alert-001.json \
+    --description "SIEM auth anomaly alert"
+  ```
+
+  ### Step 4 — Select containment actions
+  Review the available playbook actions:
+
+  ```bash
+  irflow playbook list --category network-containment
+  ```
+
+  Apply the appropriate containment action for the affected host (hostname `srv-prod-04`):
+
+  ```bash
+  irflow playbook apply \
+    --incident INC-LAB-00001 \
+    --action PLAYBOOK_ACTION_ID \
+    --target srv-prod-04
+  ```
+
+  ### Step 5 — Write the initial NIS2 notification
+  Complete the NIS2 notification fields in the incident record:
+
+  ```bash
+  irflow incident update \
+    --incident INC-LAB-00001 \
+    --nis2-significant true \
+    --nis2-notification-draft "Suspected malware deployment affecting 1 production server. Initial detection via SIEM. Containment in progress."
+  ```
+
+  ### Completing the lab
+  When all steps are done, run the validation check:
+
+  ```bash
+  irflow lab validate --incident INC-LAB-00001
+  ```
+
+  The validation output will confirm which objectives are complete.
+
+validation:
+  - id: incident-created
+    type: irflow_incident_exists
+    target: "INC-LAB-00001"
+    weight: 2
+    diagnostic: "IRFlow incident record not found. Run 'irflow incident create'."
+
+  - id: severity-set
+    type: irflow_field_set
+    target: "INC-LAB-00001"
+    field: "severity"
+    accepted_values: ["P1", "P2"]
+    weight: 2
+    diagnostic: "Severity should be P1 or P2 for this scenario. Review the alerts and reconsider your classification."
+
+  - id: evidence-attached
+    type: irflow_evidence_count
+    target: "INC-LAB-00001"
+    min_count: 2
+    weight: 2
+    diagnostic: "Attach at least 2 evidence files. Run 'irflow evidence attach'."
+
+  - id: containment-applied
+    type: irflow_playbook_task_completed
+    target: "INC-LAB-00001"
+    task_category: "network-containment"
+    weight: 2
+    diagnostic: "No network containment action has been applied. Run 'irflow playbook apply'."
+
+  - id: nis2-notification-drafted
+    type: irflow_field_set
+    target: "INC-LAB-00001"
+    field: "nis2_notification_draft"
+    min_length: 50
+    weight: 2
+    diagnostic: "NIS2 notification draft is missing or too short. Run 'irflow incident update --nis2-notification-draft'."
+
+success_criteria:
+  min_score: 8
+  required_rules:
+    - incident-created
+    - severity-set
+
+network:
+  egress_whitelist: []
+
+hints:
+  - trigger: idle_seconds:180
+    text: "You haven't opened an incident record yet. Try: irflow incident create --help"
+
+  - trigger: idle_seconds:600
+    text: "Remember: attach evidence BEFORE applying playbook actions."
+
+content_hash: ""

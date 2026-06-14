@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("id: fuzz-track\nversion: 1.0.0\ntitle:\n  sq: \"Test\"\n  en: \"Test\"\ndescription:\n  sq: \"Desc\"\n  en: \"Desc\"\naudience:\n  - all-staff\nnis2_mappings:\n  primary: art21.g\nprerequisites: []\nduration_minutes: 30\nlanguage_source: sq\nmodules: []\ncertification:\n  offered: false\n  level: baseline\n  expires_after_months: 12\ncontent_hash: \"\"\n")

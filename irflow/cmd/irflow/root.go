@@ -17,4 +17,5 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 	rootCmd.AddCommand(migrateCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(authCmd)
 }

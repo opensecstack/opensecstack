@@ -1,0 +1,59 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosec
+    - goimports
+    - misspell
+    - noctx
+    - bodyclose
+    - sqlclosecheck
+    - rowserrcheck
+    - copyloopvar
+    - godot
+
+linters-settings:
+  gosec:
+    excludes:
+      - G104  # Errors unhandled in defer (already covered by errcheck)
+      - G404  # Insecure random — we use crypto/rand where it matters
+  errcheck:
+    check-type-assertions: true
+    # check-blank is intentionally off — several handlers parse query-string
+    # integers with strconv.Atoi and fall back to a default on error. Forcing
+    # an error variable there adds noise without catching a real bug.
+    check-blank: false
+  goimports:
+    local-prefixes: github.com/opensecstack/opensecstack
+  godot:
+    scope: declarations
+
+issues:
+  exclude-rules:
+    # Test files get some slack — mocks and fixtures intentionally discard errors.
+    - path: "_test\\.go$"
+      linters:
+        - errcheck
+        - gosec
+        - godot
+    # Integration test helpers live under a build tag; their loose error
+    # handling mirrors the cleanup-only patterns they implement.
+    - path: "_integration_test\\.go$"
+      linters:
+        - errcheck
+        - gosec
+    # cmd/ wires things together — cobra patterns deliberately swallow some
+    # config errors for UX purposes.
+    - path: "cmd/"
+      linters:
+        - errcheck
+  max-issues-per-linter: 0
+  max-same-issues: 0

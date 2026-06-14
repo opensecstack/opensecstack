@@ -1,102 +1,155 @@
 # IRFlow
 
-**IRFlow** is the incident response workflow engine for the [OpenSecStack](https://github.com/opensecstack/opensecstack) ecosystem. It manages the full incident lifecycle — from detection through containment, eradication, recovery, and closure — while enforcing CITADEL governance and NIS2 Art. 23 compliance at every step.
+**IRFlow** is the incident response workflow engine for the
+[OpenSecStack](https://github.com/opensecstack/opensecstack) ecosystem. It
+manages the full incident lifecycle — from detection through containment,
+eradication, recovery, and closure — while enforcing CITADEL governance and
+tracking NIS2 Article 23 deadlines at every step.
 
-## Key Features
+Current release: **v1.0.0** — see [CHANGELOG.md](CHANGELOG.md).
 
-- **CITADEL Governance** — every mutation (create, transition, action) is submitted as a MARSHAL Kerkese with dual-control verification and WORM-sealed audit trail.
-- **NIS2 Art. 23 Compliance** — automatic notification-deadline tracking based on severity, with alerts when thresholds approach.
-- **Structured Playbooks** — status-machine workflow (`open -> investigating -> contained -> eradicating -> recovering -> closed`) with guarded transitions.
-- **IOC Enrichment** — attach indicators of compromise (IP, domain, hash, URL) with confidence scores and STIX bundles.
-- **Timeline** — append-only chronological log of every action and event for post-incident review.
-- **Multi-source Intake** — incidents can originate from APIGuard, CITADEL, ThreatFlow, or manual creation.
+## Features
+
+- **Incident lifecycle** — guarded state machine (`open → investigating → contained → eradicating → recovering → closed`), actions, IOC enrichment, append-only timeline.
+- **CITADEL MARSHAL** — every governed action is evaluated through the 5-gate engine; `REFUSE` / `HARD_STOP` outcomes prevent local persistence (HTTP 403).
+- **CITADEL WORM** — incident creation is anchored in the tamper-evident audit chain.
+- **NIS2 Compass** — regulatory-significant incidents (P1/P2/P3) are notified asynchronously to the Article 21(2)(b) Incident Handling control.
+- **Playbook automation** — graph-based executor with `OnSuccess` / `OnFailure` branching, per-step timeouts, and cycle protection.
+- **Webhook ingestion** — HMAC-SHA256 signed inbound events from APIGuard, CITADEL, and ThreatFlow (replay-protected ±5 min).
+- **JWT auth + RBAC** — HS256 bearer tokens with 5 canonical roles (`admin`, `operator`, `verifier`, `viewer`, `service`).
+- **Observability** — Prometheus metrics at `/metrics`, structured audit log with `request_id` propagation.
+- **Testing** — unit tests plus a full HTTP E2E suite behind an `integration` build tag.
 
 ## Architecture
 
 ```
-                    +-----------+
-                    |  APIGuard |
-                    +-----+-----+
-                          |
-  +----------+      +-----v-----+      +-----------+
-  | ThreatFlow+----->   IRFlow   +----->  CITADEL   |
-  +----------+      |  :8083    |      |  MARSHAL   |
-                    +-----+-----+      +-----------+
-                          |
-                    +-----v-----+
-                    | NIS2Compass|
-                    +-----------+
+           +-----------+                                +-----------+
+           |  APIGuard |---- webhook (HMAC) ----------->|           |
+           +-----------+                                |           |
+                                                        |           |---- Kerkese evaluate ----> CITADEL MARSHAL
+           +-----------+                                |  IRFlow   |
+           | ThreatFlow|---- webhook (HMAC) ----------->|  :8083   |---- anchor -----------------> CITADEL WORM
+           +-----------+                                |           |
+                                                        |           |---- Article 23 notify -----> NIS2 Compass
+           +-----------+                                |           |
+           |  CITADEL  |---- webhook (HMAC) ----------->|           |
+           +-----------+                                +-----+-----+
+                                                              |
+                                                        Postgres 16
 ```
 
-## API Endpoints
+## API (summary)
 
-| Method | Path                                  | Description                       |
-|--------|---------------------------------------|-----------------------------------|
-| GET    | `/healthz`                            | Health check                      |
-| POST   | `/api/v1/incidents`                   | Create incident                   |
-| GET    | `/api/v1/incidents`                   | List incidents (paginated)        |
-| GET    | `/api/v1/incidents/{id}`              | Get incident                      |
-| PATCH  | `/api/v1/incidents/{id}`              | Patch incident                    |
-| DELETE | `/api/v1/incidents/{id}`              | Delete incident                   |
-| POST   | `/api/v1/incidents/{id}/actions`      | Submit governed action            |
-| GET    | `/api/v1/incidents/{id}/actions`      | List actions                      |
-| POST   | `/api/v1/incidents/{id}/iocs`         | Add IOC enrichment                |
-| GET    | `/api/v1/incidents/{id}/iocs`         | List IOCs                         |
-| GET    | `/api/v1/incidents/{id}/timeline`     | Get timeline                      |
+Full catalogue in [docs/api.md](docs/api.md). Every `/api/v1/*` route
+requires a valid JWT unless otherwise noted.
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/health` | public | Liveness |
+| GET | `/health/detail` | public | Liveness + DB ping + version info |
+| GET | `/metrics` | public | Prometheus scrape endpoint |
+| POST | `/api/v1/webhooks/{apiguard\|citadel\|threatflow}` | HMAC | Inbound events |
+| GET | `/api/v1/incidents` | JWT | Paginated + filtered list |
+| POST | `/api/v1/incidents` | JWT + write | Create incident |
+| GET | `/api/v1/incidents/{id}` | JWT | Fetch one |
+| PATCH | `/api/v1/incidents/{id}` | JWT + write | Partial update (enforces transition rules) |
+| DELETE | `/api/v1/incidents/{id}` | JWT + admin | Delete |
+| POST | `/api/v1/incidents/{id}/actions` | JWT + write | Governed action (evaluated via MARSHAL) |
+| GET | `/api/v1/incidents/{id}/actions` | JWT | List actions |
+| GET | `/api/v1/incidents/{id}/timeline` | JWT | Chronological timeline |
+| POST/GET | `/api/v1/incidents/{id}/iocs` | JWT + write / read | Attach / list IOCs |
+| GET | `/api/v1/playbooks` | JWT | Playbook list |
+| POST | `/api/v1/playbooks` | JWT + write | Create playbook |
+| GET/PATCH | `/api/v1/playbooks/{id}` | JWT / JWT + write | Fetch / update |
+| DELETE | `/api/v1/playbooks/{id}` | JWT + admin | Delete |
+| POST | `/api/v1/playbooks/{id}/execute` | JWT + write | Async execution; returns 202 with `Execution` |
+| GET | `/api/v1/playbooks/{id}/executions` | JWT | Executions for a playbook |
+| GET | `/api/v1/executions/{id}` | JWT | Fetch a single execution |
+| GET | `/api/v1/stats` | JWT | Dashboard aggregation |
+
+## Authentication
+
+IRFlow authenticates operators via [sinauth](../sinauth/docs/integration/irflow.md) SSO — the SIN identity provider (OAuth 2.0 / OIDC, authorization code + PKCE).
+Access tokens are RS256-signed JWTs issued by `https://auth.sin.to`; IRFlow validates them against the sinauth JWKS endpoint at `https://auth.sin.to/.well-known/jwks.json`.
+See the [sinauth integration guide](../sinauth/docs/integration/irflow.md) for token validation setup, RBAC mapping, and MFA configuration.
 
 ## Configuration
 
-IRFlow reads configuration from environment variables (prefix `IRFLOW_`), a `irflow.yaml` file, or CLI flags.
+Every setting is loaded from environment (prefix `IRFLOW_`), an optional
+`irflow.yaml`, or defaults. See [.env.example](.env.example) for the full
+list.
 
-| Variable                      | Default         | Description                       |
-|-------------------------------|-----------------|-----------------------------------|
-| `IRFLOW_SERVER_HOST`          | `0.0.0.0`      | Listen address                    |
-| `IRFLOW_SERVER_PORT`          | `8083`          | Listen port                       |
-| `IRFLOW_DB_HOST`              | `localhost`     | PostgreSQL host                   |
-| `IRFLOW_DB_PORT`              | `5432`          | PostgreSQL port                   |
-| `IRFLOW_DB_NAME`              | `irflow`        | Database name                     |
-| `IRFLOW_DB_USER`              | `irflow`        | Database user                     |
-| `IRFLOW_DB_PASSWORD`          |                 | Database password                 |
-| `IRFLOW_DB_SSL_MODE`          | `disable`       | PostgreSQL SSL mode               |
-| `IRFLOW_CITADEL_API_URL`     | `http://localhost:8082` | CITADEL endpoint          |
-| `IRFLOW_CITADEL_KEY_ID`      |                 | CITADEL API key ID                |
-| `IRFLOW_CITADEL_KEY_SECRET`  |                 | CITADEL API key secret            |
-| `IRFLOW_CITADEL_PROJECT_ID`  |                 | CITADEL project ID                |
-| `IRFLOW_CITADEL_DRY_RUN`    | `true`          | Skip actual CITADEL calls         |
-| `IRFLOW_NIS2_API_URL`        | `http://localhost:8081` | NIS2 Compass endpoint     |
-| `IRFLOW_NIS2_API_KEY`        |                 | NIS2 Compass API key              |
-| `IRFLOW_WEBHOOK_SECRET`      |                 | Webhook HMAC secret               |
-| `IRFLOW_WEBHOOK_CALLBACK_URL`|                 | Webhook callback URL              |
+Minimum production configuration:
 
-## Quick Start
+```bash
+IRFLOW_DB_PASSWORD=...                  # required
+IRFLOW_AUTH_SECRET=...                  # required to enforce JWT; empty → dev mode
+IRFLOW_CITADEL_API_URL=https://...      # required to enforce MARSHAL
+IRFLOW_CITADEL_KEY_SECRET=...
+IRFLOW_NIS2_API_URL=https://...         # required to notify NIS2
+IRFLOW_NIS2_API_KEY=...
+IRFLOW_NIS2_ASSESSMENT_ID=...
+IRFLOW_WEBHOOK_APIGUARD_SECRET=...      # per-source webhook secrets
+IRFLOW_WEBHOOK_CITADEL_SECRET=...
+IRFLOW_WEBHOOK_THREATFLOW_SECRET=...
+```
+
+## Quick start
 
 ```bash
 # Build
 make build
 
-# Run database migrations (PostgreSQL must be running)
-psql -U irflow -d irflow -f migrations/001_initial.sql
+# Apply database migrations
+./bin/irflow migrate
 
 # Start the server
-make run
+./bin/irflow serve
 
-# Or with Docker
+# Issue a dev JWT (local testing only)
+export IRFLOW_AUTH_SECRET=local-secret
+./bin/irflow auth issue --user alice --role operator --ttl 1h
+
+# Hit a protected endpoint
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8083/api/v1/incidents
+```
+
+Docker:
+
+```bash
 docker build -t irflow .
-docker run -p 8083:8083 irflow
+docker run -p 8083:8083 --env-file .env irflow
 ```
 
 ## Documentation
 
 | Document | Description |
-|----------|-------------|
-| [API Reference](docs/api.md) | IRFlow REST API reference |
+|---|---|
+| [docs/api.md](docs/api.md) | Complete REST API reference with examples |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
+| [ROADMAP.md](ROADMAP.md) | Post-1.0 direction |
+| [SECURITY.md](SECURITY.md) | Vulnerability reporting + threat model |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Dev workflow and coding conventions |
 
 ## Development
 
 ```bash
-make test    # run tests with race detector
-make lint    # run golangci-lint
+make test    # unit tests with race detector
+make lint    # golangci-lint
 ```
+
+### Integration tests
+
+The integration suite boots the full HTTP stack against a real PostgreSQL.
+
+```bash
+make compose-test-up      # ephemeral Postgres on :54832
+make test-integration     # runs with -tags=integration
+make compose-test-down
+```
+
+Integration tests `t.Skip()` when `IRFLOW_TEST_DB_URL` is unset, so CI jobs
+without Docker keep passing.
 
 ## Licence
 

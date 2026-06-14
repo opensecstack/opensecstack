@@ -40,25 +40,25 @@ const (
 
 // Incident is the primary domain entity for an incident record.
 type Incident struct {
-	ID                string     `json:"id"`
-	Title             string     `json:"title"`
-	Description       string     `json:"description"`
-	Severity          Severity   `json:"severity"`
-	Status            Status     `json:"status"`
-	Source            Source     `json:"source"`
-	SourceRef         string     `json:"source_ref"`
-	ProjectID         string     `json:"project_id"`
-	CommanderID       string     `json:"commander_id"`
-	LeadID            string     `json:"lead_id"`
-	RootCause         string     `json:"root_cause"`
-	CorrectiveAction  string     `json:"corrective_action"`
-	WORMEntryID       string     `json:"worm_entry_id"`
-	NIS2NotifyRequired bool      `json:"nis2_notify_required"`
-	NIS2NotifiedAt    *time.Time `json:"nis2_notified_at,omitempty"`
-	ContainedAt       *time.Time `json:"contained_at,omitempty"`
-	ClosedAt          *time.Time `json:"closed_at,omitempty"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
+	ID                 string     `json:"id"`
+	Title              string     `json:"title"`
+	Description        string     `json:"description"`
+	Severity           Severity   `json:"severity"`
+	Status             Status     `json:"status"`
+	Source             Source     `json:"source"`
+	SourceRef          string     `json:"source_ref"`
+	ProjectID          string     `json:"project_id"`
+	CommanderID        string     `json:"commander_id"`
+	LeadID             string     `json:"lead_id"`
+	RootCause          string     `json:"root_cause"`
+	CorrectiveAction   string     `json:"corrective_action"`
+	WORMEntryID        string     `json:"worm_entry_id"`
+	NIS2NotifyRequired bool       `json:"nis2_notify_required"`
+	NIS2NotifiedAt     *time.Time `json:"nis2_notified_at,omitempty"`
+	ContainedAt        *time.Time `json:"contained_at,omitempty"`
+	ClosedAt           *time.Time `json:"closed_at,omitempty"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 // IncidentAction records a governed action taken during incident response.
@@ -79,7 +79,7 @@ type IncidentAction struct {
 type IOCEnrichment struct {
 	ID         string          `json:"id"`
 	IncidentID string          `json:"incident_id"`
-	IOCType    string          `json:"ioc_type"`  // ip, domain, hash, url
+	IOCType    string          `json:"ioc_type"` // ip, domain, hash, url
 	IOCValue   string          `json:"ioc_value"`
 	Confidence float64         `json:"confidence"`
 	Source     string          `json:"source"`
@@ -96,6 +96,14 @@ type TimelineEntry struct {
 	Summary    string          `json:"summary"`
 	Details    json.RawMessage `json:"details,omitempty"`
 	CreatedAt  time.Time       `json:"created_at"`
+}
+
+// Stats is the aggregated incident dashboard summary returned by GET /stats.
+type Stats struct {
+	Total      int            `json:"total"`
+	BySeverity map[string]int `json:"by_severity"`
+	ByStatus   map[string]int `json:"by_status"`
+	BySource   map[string]int `json:"by_source"`
 }
 
 // ---------- Request / Response DTOs ----------

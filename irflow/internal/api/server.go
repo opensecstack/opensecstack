@@ -1,27 +1,90 @@
 package api
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/opensecstack/opensecstack/irflow/internal/incident"
 	"go.uber.org/zap"
+
+	"github.com/opensecstack/opensecstack/irflow/internal/auth"
+	"github.com/opensecstack/opensecstack/irflow/internal/incident"
+	"github.com/opensecstack/opensecstack/irflow/internal/metrics"
+	"github.com/opensecstack/opensecstack/irflow/internal/playbook"
 )
+
+// Pinger verifies backing-store connectivity for health checks.
+type Pinger interface {
+	Ping(ctx context.Context) error
+}
+
+// WebhookSecrets carries per-source HMAC signing keys for inbound webhooks.
+// When a source's secret is empty, that webhook endpoint returns 503 so a
+// misconfigured IRFlow can never accept unauthenticated events.
+type WebhookSecrets struct {
+	APIGuard    string
+	CITADEL     string
+	ThreatFlow  string
+	MaxBodySize int64
+	ClockSkew   time.Duration
+}
+
+// Options bundles every dependency Server needs. Using a struct here means
+// future phases can add fields without breaking existing callers.
+type Options struct {
+	Logger    *zap.Logger
+	Incidents *incident.Service
+	Playbooks *playbook.Service
+	Pinger    Pinger
+	Webhooks  WebhookSecrets
+	Auth      auth.Config
+	Metrics   *metrics.Metrics
+}
 
 // Server is the main HTTP server for the IRFlow API.
 type Server struct {
 	router    chi.Router
 	logger    *zap.Logger
 	incidents *incident.Service
+	playbooks *playbook.Service
+	pinger    Pinger
+	webhooks  WebhookSecrets
+	auth      auth.Config
+	metrics   *metrics.Metrics
 }
 
-// NewServer creates a new Server with middleware and routes configured.
-func NewServer(logger *zap.Logger, incidents *incident.Service) *Server {
+// NewServer constructs a Server from an Options struct. All fields are
+// optional — the server routes that require a given dependency will return
+// 503 when that dependency is nil.
+func NewServer(opts Options) *Server {
+	if opts.Logger == nil {
+		opts.Logger = zap.NewNop()
+	}
+	if opts.Webhooks.MaxBodySize == 0 {
+		opts.Webhooks.MaxBodySize = 1 << 20
+	}
+	if opts.Webhooks.ClockSkew == 0 {
+		opts.Webhooks.ClockSkew = 5 * time.Minute
+	}
+	opts.Auth.Logger = opts.Logger
+	// Zero-value auth is treated as dev mode with a warning. Production
+	// deployments must either set a non-empty Secret (which enables JWT
+	// enforcement) or explicitly set Disabled=true to acknowledge the risk.
+	if opts.Auth.Secret == "" && !opts.Auth.Disabled {
+		opts.Auth.Disabled = true
+		opts.Logger.Warn("auth: middleware auto-disabled — no signing secret configured; all API routes are open")
+	}
 	s := &Server{
 		router:    chi.NewRouter(),
-		logger:    logger,
-		incidents: incidents,
+		logger:    opts.Logger,
+		incidents: opts.Incidents,
+		playbooks: opts.Playbooks,
+		pinger:    opts.Pinger,
+		webhooks:  opts.Webhooks,
+		auth:      opts.Auth,
+		metrics:   opts.Metrics,
 	}
 	s.setupMiddleware()
 	s.setupRoutes()
@@ -38,45 +101,65 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.RealIP)
 	s.router.Use(middleware.Recoverer)
 	s.router.Use(middleware.Compress(5))
+	if s.metrics != nil {
+		s.router.Use(s.metrics.HTTPMiddleware())
+		s.router.Use(s.metrics.InFlightMiddleware())
+	}
+	// AuditLog wraps the request BEFORE auth runs so we capture rejections too.
+	s.router.Use(auth.AuditLog(s.logger))
 }
 
 func (s *Server) setupRoutes() {
+	// ---------- Public routes ----------
 	s.router.Get("/health", s.handleHealth)
 	s.router.Get("/health/detail", s.handleHealthDetail)
+	if s.metrics != nil {
+		s.router.Method(http.MethodGet, "/metrics", s.metrics.Handler())
+	}
 
+	// Webhooks authenticate themselves via HMAC signature (see webhook package)
+	// rather than JWT, so they live outside the JWT-protected group.
+	s.router.Route("/api/v1/webhooks", func(r chi.Router) {
+		r.Post("/apiguard", s.handleAPIGuardWebhook)
+		r.Post("/citadel", s.handleCITADELWebhook)
+		r.Post("/threatflow", s.handleThreatFlowWebhook)
+	})
+
+	// ---------- JWT-protected routes ----------
 	s.router.Route("/api/v1", func(r chi.Router) {
+		r.Use(auth.Middleware(s.auth))
+
 		// Incident CRUD and sub-resources.
 		r.Route("/incidents", func(r chi.Router) {
 			r.Get("/", s.handleListIncidents)
-			r.Post("/", s.handleCreateIncident)
+			r.With(auth.RequireWrite()).Post("/", s.handleCreateIncident)
 			r.Route("/{incidentID}", func(r chi.Router) {
 				r.Get("/", s.handleGetIncident)
-				r.Patch("/", s.handlePatchIncident)
-				r.Delete("/", s.handleDeleteIncident)
-				r.Post("/actions", s.handleSubmitAction)
+				r.With(auth.RequireWrite()).Patch("/", s.handlePatchIncident)
+				r.With(auth.RequireDelete()).Delete("/", s.handleDeleteIncident)
+				r.With(auth.RequireWrite()).Post("/actions", s.handleSubmitAction)
 				r.Get("/actions", s.handleListActions)
 				r.Get("/timeline", s.handleGetTimeline)
-				r.Post("/iocs", s.handleAddIOC)
+				r.With(auth.RequireWrite()).Post("/iocs", s.handleAddIOC)
 				r.Get("/iocs", s.handleListIOCs)
 			})
 		})
 
-		// Playbook management (not yet implemented).
+		// Playbook management.
 		r.Route("/playbooks", func(r chi.Router) {
 			r.Get("/", s.handleListPlaybooks)
-			r.Post("/", s.handleCreatePlaybook)
+			r.With(auth.RequireWrite()).Post("/", s.handleCreatePlaybook)
 			r.Route("/{playbookID}", func(r chi.Router) {
 				r.Get("/", s.handleGetPlaybook)
-				r.Patch("/", s.handlePatchPlaybook)
-				r.Delete("/", s.handleDeletePlaybook)
-				r.Post("/execute", s.handleExecutePlaybook)
+				r.With(auth.RequireWrite()).Patch("/", s.handlePatchPlaybook)
+				r.With(auth.RequireDelete()).Delete("/", s.handleDeletePlaybook)
+				r.With(auth.RequireWrite()).Post("/execute", s.handleExecutePlaybook)
+				r.Get("/executions", s.handleListExecutions)
 			})
 		})
 
-		// Inbound webhooks from other opensecstack services.
-		r.Post("/webhooks/apiguard", s.handleAPIGuardWebhook)
-		r.Post("/webhooks/citadel", s.handleCITADELWebhook)
-		r.Post("/webhooks/threatflow", s.handleThreatFlowWebhook)
+		// Execution inspection.
+		r.Get("/executions/{executionID}", s.handleGetExecution)
 
 		// Dashboard statistics.
 		r.Get("/stats", s.handleGetStats)

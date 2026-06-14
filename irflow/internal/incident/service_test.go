@@ -128,6 +128,21 @@ func (m *mockStore) GetTimeline(_ context.Context, incidentID string) ([]Timelin
 	return m.timeline[incidentID], nil
 }
 
+func (m *mockStore) Stats(_ context.Context) (*Stats, error) {
+	stats := &Stats{
+		BySeverity: map[string]int{},
+		ByStatus:   map[string]int{},
+		BySource:   map[string]int{},
+	}
+	for _, inc := range m.incidents {
+		stats.Total++
+		stats.BySeverity[string(inc.Severity)]++
+		stats.ByStatus[string(inc.Status)]++
+		stats.BySource[string(inc.Source)]++
+	}
+	return stats, nil
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

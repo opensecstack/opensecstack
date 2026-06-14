@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/opensecstack/irflow/internal/incident"
 )
 
@@ -416,6 +417,64 @@ func (s *PGStore) ListIOCs(ctx context.Context, incidentID string) ([]incident.I
 // ---------------------------------------------------------------------------
 // Timeline
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Stats
+// ---------------------------------------------------------------------------
+
+// Stats returns aggregated incident counts grouped by severity, status, and source.
+// A single query is used per dimension; all three run against the same connection
+// pool but are not transactional (dashboard-grade consistency).
+func (s *PGStore) Stats(ctx context.Context) (*incident.Stats, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	stats := &incident.Stats{
+		BySeverity: map[string]int{"P1": 0, "P2": 0, "P3": 0, "P4": 0},
+		ByStatus: map[string]int{
+			"open": 0, "investigating": 0, "contained": 0,
+			"eradicating": 0, "recovering": 0, "closed": 0,
+		},
+		BySource: map[string]int{
+			"apiguard": 0, "citadel": 0, "threatflow": 0, "manual": 0,
+		},
+	}
+
+	if err := s.pool.QueryRow(ctx, "SELECT COUNT(*) FROM incidents").Scan(&stats.Total); err != nil {
+		return nil, fmt.Errorf("counting incidents: %w", err)
+	}
+
+	for _, group := range []struct {
+		column string
+		target map[string]int
+	}{
+		{"severity", stats.BySeverity},
+		{"status", stats.ByStatus},
+		{"source", stats.BySource},
+	} {
+		q := fmt.Sprintf("SELECT %s, COUNT(*) FROM incidents GROUP BY %s", group.column, group.column)
+		rows, err := s.pool.Query(ctx, q)
+		if err != nil {
+			return nil, fmt.Errorf("aggregating incidents by %s: %w", group.column, err)
+		}
+		for rows.Next() {
+			var key string
+			var count int
+			if err := rows.Scan(&key, &count); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("scanning %s aggregate: %w", group.column, err)
+			}
+			group.target[key] = count
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("iterating %s aggregate: %w", group.column, err)
+		}
+		rows.Close()
+	}
+
+	return stats, nil
+}
 
 // GetTimeline returns all timeline entries for a given incident.
 func (s *PGStore) GetTimeline(ctx context.Context, incidentID string) ([]incident.TimelineEntry, error) {

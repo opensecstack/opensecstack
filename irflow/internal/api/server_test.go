@@ -11,8 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/opensecstack/opensecstack/irflow/internal/incident"
 	"go.uber.org/zap"
+
+	"github.com/opensecstack/opensecstack/irflow/internal/incident"
 )
 
 // ---------------------------------------------------------------------------
@@ -127,6 +128,21 @@ func (m *apiMockStore) GetTimeline(_ context.Context, incidentID string) ([]inci
 	return m.timeline[incidentID], nil
 }
 
+func (m *apiMockStore) Stats(_ context.Context) (*incident.Stats, error) {
+	stats := &incident.Stats{
+		BySeverity: map[string]int{},
+		ByStatus:   map[string]int{},
+		BySource:   map[string]int{},
+	}
+	for _, inc := range m.incidents {
+		stats.Total++
+		stats.BySeverity[string(inc.Severity)]++
+		stats.ByStatus[string(inc.Status)]++
+		stats.BySource[string(inc.Source)]++
+	}
+	return stats, nil
+}
+
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
@@ -135,7 +151,7 @@ func newTestServer() (*Server, *apiMockStore) {
 	store := newAPIMockStore()
 	svc := incident.NewService(store)
 	logger, _ := zap.NewDevelopment()
-	srv := NewServer(logger, svc)
+	srv := NewServer(Options{Logger: logger, Incidents: svc})
 	return srv, store
 }
 
@@ -438,7 +454,10 @@ func TestSubmitAction_400_SoD(t *testing.T) {
 // Stub endpoint tests
 // ---------------------------------------------------------------------------
 
-func TestPlaybooks_501_NotImplemented(t *testing.T) {
+// When the Server is constructed without a playbook service (e.g. the
+// incident-only unit tests), playbook routes should return 503 rather than
+// 500 or route-not-found errors.
+func TestPlaybooks_503_WhenServiceNil(t *testing.T) {
 	srv, _ := newTestServer()
 
 	endpoints := []struct {
@@ -454,13 +473,15 @@ func TestPlaybooks_501_NotImplemented(t *testing.T) {
 		rec := httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
 
-		if rec.Code != http.StatusNotImplemented {
-			t.Errorf("%s %s: status = %d, want %d", ep.method, ep.path, rec.Code, http.StatusNotImplemented)
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s %s: status = %d, want %d", ep.method, ep.path, rec.Code, http.StatusServiceUnavailable)
 		}
 	}
 }
 
-func TestWebhooks_501_NotImplemented(t *testing.T) {
+// When no webhook secret is configured, every source must return 503 so a
+// misconfigured IRFlow cannot accept unauthenticated events.
+func TestWebhooks_503_WhenSecretNotConfigured(t *testing.T) {
 	srv, _ := newTestServer()
 
 	endpoints := []string{
@@ -475,8 +496,8 @@ func TestWebhooks_501_NotImplemented(t *testing.T) {
 		rec := httptest.NewRecorder()
 		srv.ServeHTTP(rec, req)
 
-		if rec.Code != http.StatusNotImplemented {
-			t.Errorf("POST %s: status = %d, want %d", path, rec.Code, http.StatusNotImplemented)
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Errorf("POST %s: status = %d, want %d", path, rec.Code, http.StatusServiceUnavailable)
 		}
 	}
 }

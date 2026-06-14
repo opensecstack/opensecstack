@@ -1,0 +1,23 @@
+# Ephemeral PostgreSQL for integration tests.
+# Usage:
+#   docker compose -f docker-compose.test.yml up -d
+#   export IRFLOW_TEST_DB_URL="postgres://irflow:irflow_test@localhost:54832/irflow_test?sslmode=disable"
+#   make test-integration
+#   docker compose -f docker-compose.test.yml down -v
+
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: irflow
+      POSTGRES_PASSWORD: irflow_test
+      POSTGRES_DB: irflow_test
+    ports:
+      - "54832:5432"
+    tmpfs:
+      - /var/lib/postgresql/data:rw,size=256m
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "irflow", "-d", "irflow_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

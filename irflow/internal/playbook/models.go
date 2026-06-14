@@ -1,16 +1,25 @@
 package playbook
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+// Sentinel errors for the playbook domain.
+var (
+	ErrNotFound = errors.New("playbook not found")
+	ErrInvalid  = errors.New("invalid playbook")
+)
 
 type StepType string
 
 const (
 	StepTypeAction      StepType = "action"      // Execute a CITADEL Kerkese
-	StepTypeNotify      StepType = "notify"       // Send notification (email, webhook, Slack)
-	StepTypeWait        StepType = "wait"         // Wait for condition or timeout
-	StepTypeConditional StepType = "conditional"  // Branch based on condition
-	StepTypeEnrich      StepType = "enrich"       // Pull IOCs from ThreatFlow
-	StepTypeScan        StepType = "scan"         // Trigger APIGuard re-scan
+	StepTypeNotify      StepType = "notify"      // Send notification (email, webhook, Slack)
+	StepTypeWait        StepType = "wait"        // Wait for condition or timeout
+	StepTypeConditional StepType = "conditional" // Branch based on condition
+	StepTypeEnrich      StepType = "enrich"      // Pull IOCs from ThreatFlow
+	StepTypeScan        StepType = "scan"        // Trigger APIGuard re-scan
 )
 
 type PlaybookStatus string
@@ -47,7 +56,7 @@ type Playbook struct {
 
 // Trigger defines when a playbook should be auto-executed.
 type Trigger struct {
-	EventType string `json:"event_type"`         // e.g. "apiguard.finding.critical"
+	EventType string `json:"event_type"`          // e.g. "apiguard.finding.critical"
 	Severity  string `json:"severity,omitempty"`  // filter by incident severity
 	Source    string `json:"source,omitempty"`    // filter by incident source
 	Condition string `json:"condition,omitempty"` // CEL expression for advanced matching
@@ -72,6 +81,7 @@ type Execution struct {
 	Status      ExecutionStatus `json:"status" db:"status"`
 	CurrentStep string          `json:"current_step" db:"current_step"`
 	StepResults []StepResult    `json:"step_results"`
+	Error       string          `json:"error,omitempty" db:"error"`
 	StartedAt   time.Time       `json:"started_at" db:"started_at"`
 	CompletedAt *time.Time      `json:"completed_at" db:"completed_at"`
 }
@@ -84,4 +94,39 @@ type StepResult struct {
 	Error     string    `json:"error,omitempty"`
 	StartedAt time.Time `json:"started_at"`
 	EndedAt   time.Time `json:"ended_at"`
+}
+
+// ---------- Request / Response DTOs ----------
+
+// CreatePlaybookRequest is the payload for creating a new playbook.
+type CreatePlaybookRequest struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Version     string         `json:"version"`
+	Status      PlaybookStatus `json:"status"`
+	Trigger     Trigger        `json:"trigger"`
+	Steps       []Step         `json:"steps"`
+	CreatedBy   string         `json:"created_by"`
+}
+
+// PatchPlaybookRequest is the payload for partially updating a playbook.
+type PatchPlaybookRequest struct {
+	Name        *string         `json:"name,omitempty"`
+	Description *string         `json:"description,omitempty"`
+	Version     *string         `json:"version,omitempty"`
+	Status      *PlaybookStatus `json:"status,omitempty"`
+	Trigger     *Trigger        `json:"trigger,omitempty"`
+	Steps       *[]Step         `json:"steps,omitempty"`
+}
+
+// ExecutePlaybookRequest is the payload for running a playbook against an incident.
+type ExecutePlaybookRequest struct {
+	IncidentID string `json:"incident_id"`
+}
+
+// ListOptions controls pagination and filtering for playbook listing.
+type ListOptions struct {
+	Page    int
+	PerPage int
+	Status  string
 }

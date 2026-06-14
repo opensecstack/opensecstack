@@ -2,12 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/opensecstack/opensecstack/irflow/internal/incident"
 	"go.uber.org/zap"
+
+	"github.com/opensecstack/opensecstack/irflow/internal/incident"
 )
 
 // ---------------------------------------------------------------------------
@@ -17,7 +19,10 @@ import (
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	// Encode failures are ignored: the status and headers are already on the
+	// wire, there is no recovery path, and the client will see a truncated
+	// response (which it must already tolerate for any connection-level issue).
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
@@ -189,8 +194,22 @@ func (s *Server) handleSubmitAction(w http.ResponseWriter, r *http.Request) {
 
 	action, err := s.incidents.SubmitAction(r.Context(), id, &req)
 	if err != nil {
-		s.logger.Error("failed to submit action", zap.String("incidentID", id), zap.Error(err))
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		switch {
+		case errors.Is(err, incident.ErrMarshalHardStop):
+			s.logger.Warn("marshal HARD_STOP on action",
+				zap.String("incidentID", id), zap.Error(err))
+			writeError(w, http.StatusForbidden, err.Error())
+		case errors.Is(err, incident.ErrMarshalRefused):
+			s.logger.Info("marshal refused action",
+				zap.String("incidentID", id), zap.Error(err))
+			writeError(w, http.StatusForbidden, err.Error())
+		case errors.Is(err, incident.ErrNotFound):
+			writeError(w, http.StatusNotFound, "incident not found")
+		default:
+			s.logger.Error("failed to submit action",
+				zap.String("incidentID", id), zap.Error(err))
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
 		return
 	}
 

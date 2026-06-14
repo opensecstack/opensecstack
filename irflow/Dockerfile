@@ -8,8 +8,15 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
+
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+
 RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags "-X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo 0.1.0-dev)" \
+    -ldflags "-X github.com/opensecstack/opensecstack/irflow/internal/version.Version=${VERSION} \
+              -X github.com/opensecstack/opensecstack/irflow/internal/version.GitCommit=${GIT_COMMIT} \
+              -X github.com/opensecstack/opensecstack/irflow/internal/version.BuildDate=${BUILD_DATE}" \
     -o /bin/irflow ./cmd/irflow
 
 # ---- Runtime stage ----

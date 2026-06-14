@@ -1,7 +1,16 @@
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+-- IRFlow initial schema.
+--
+-- IDs are VARCHAR rather than UUID because the service generates
+-- application-level IDs with a readable prefix (inc-, act-, ioc-) that embed
+-- a nanosecond timestamp for chronological ordering.
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version VARCHAR(50) PRIMARY KEY,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 CREATE TABLE incidents (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id VARCHAR(50) PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     severity VARCHAR(2) NOT NULL CHECK (severity IN ('P1','P2','P3','P4')),
@@ -23,8 +32,8 @@ CREATE TABLE incidents (
 );
 
 CREATE TABLE incident_actions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+    id VARCHAR(50) PRIMARY KEY,
+    incident_id VARCHAR(50) NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
     action_type VARCHAR(20) NOT NULL,
     operator_id VARCHAR(100) NOT NULL,
     verifier_id VARCHAR(100) NOT NULL,
@@ -36,8 +45,8 @@ CREATE TABLE incident_actions (
 );
 
 CREATE TABLE ioc_enrichments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+    id VARCHAR(50) PRIMARY KEY,
+    incident_id VARCHAR(50) NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
     ioc_type VARCHAR(20) NOT NULL,
     ioc_value VARCHAR(500) NOT NULL,
     confidence DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -47,8 +56,8 @@ CREATE TABLE ioc_enrichments (
 );
 
 CREATE TABLE timeline_entries (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+    id VARCHAR(50) PRIMARY KEY,
+    incident_id VARCHAR(50) NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
     entry_type VARCHAR(20) NOT NULL,
     actor_id VARCHAR(100) NOT NULL DEFAULT '',
     summary TEXT NOT NULL DEFAULT '',

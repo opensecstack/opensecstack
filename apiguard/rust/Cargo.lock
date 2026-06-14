@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "analyser"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "clap",
  "regex",
@@ -171,7 +171,7 @@ dependencies = [
 
 [[package]]
 name = "cvss"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "clap",
  "serde",
@@ -448,7 +448,14 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "modules"
-version = "0.1.0"
+version = "1.0.0"
+dependencies = [
+ "clap",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "once_cell"
@@ -464,7 +471,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "parser"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -602,9 +609,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.149"
+version = "1.0.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
+checksum = "e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9"
 dependencies = [
  "itoa",
  "memchr",
@@ -681,7 +688,7 @@ dependencies = [
 
 [[package]]
 name = "testgen"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "clap",
  "parser",

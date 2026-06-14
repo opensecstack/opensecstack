@@ -1,0 +1,5 @@
+bin/
+benches/
+*_test.go
+*.md
+.git

@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: citadel
+      POSTGRES_PASSWORD: citadel_secret
+      POSTGRES_DB: citadel
+    ports:
+      - "5434:5432"
+    volumes:
+      - citadel_pgdata:/var/lib/postgresql/data
+      - ./migrations/001_initial.sql:/docker-entrypoint-initdb.d/001_initial.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U citadel -d citadel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  citadel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8099:8099"
+    environment:
+      CITADEL_PORT: 8099
+      CITADEL_LOG_LEVEL: info
+      CITADEL_DB_URL: postgres://citadel:citadel_secret@postgres:5432/citadel?sslmode=disable
+      CITADEL_CITADEL_MASTER_KEY: ""
+      CITADEL_CITADEL_ANCHOR_INTERVAL: 100
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8099/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  citadel_pgdata:

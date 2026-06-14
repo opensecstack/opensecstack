@@ -1,0 +1,127 @@
+name: CITADEL CI
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'citadel/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'citadel/**'
+
+defaults:
+  run:
+    working-directory: citadel
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: citadel/go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@aaa42aa0628b4ae2578232a66b541047968fac86 # v4
+        with:
+          working-directory: citadel
+          args: --timeout=5m
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: citadel
+          POSTGRES_PASSWORD: citadel_secret
+          POSTGRES_DB: citadel
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U citadel -d citadel"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: citadel/go.sum
+      - name: Apply migrations
+        env:
+          PGPASSWORD: citadel_secret
+        run: |
+          apt-get update && apt-get install -y postgresql-client
+          psql -h localhost -p 5434 -U citadel -d citadel -f migrations/001_initial.sql
+      - name: Unit + integration tests
+        env:
+          CITADEL_DB_URL: postgres://citadel:citadel_secret@localhost:5434/citadel?sslmode=disable
+        run: |
+          go test -coverprofile=coverage.out -count=1 ./...
+          go tool cover -func=coverage.out | tail -1
+
+  benchmarks:
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: citadel/go.sum
+      - name: Bench smoke check (1 run)
+        run: go test -tags bench -bench=. -benchmem -count=1 -run=^$ ./benches/
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: citadel/go.sum
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+      - name: gosec
+        uses: securego/gosec@master
+        with:
+          args: '-no-fail -fmt sarif -out gosec-results.sarif ./citadel/...'
+      - name: Upload gosec SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gosec-results.sarif
+
+  docker-build:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [lint, test, security]
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - name: Build CITADEL image
+        run: |
+          docker build \
+            --build-arg VERSION=${{ github.ref_name }} \
+            --build-arg GIT_COMMIT=${{ github.sha }} \
+            --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+            -t citadel:${{ github.sha }} \
+            citadel/
+      - name: Scan with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: citadel:${{ github.sha }}
+          format: sarif
+          output: trivy-citadel.sarif
+          severity: CRITICAL,HIGH
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-citadel.sarif

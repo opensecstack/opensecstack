@@ -1,0 +1,54 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosec
+    - goimports
+    - misspell
+    - noctx
+    - bodyclose
+    - sqlclosecheck
+    - rowserrcheck
+    - copyloopvar
+    - godot
+
+linters-settings:
+  gosec:
+    excludes:
+      - G104  # Errors unhandled in defer (already covered by errcheck)
+      - G404  # Insecure random — we use crypto/rand where it matters
+  errcheck:
+    check-type-assertions: true
+    # check-blank intentionally off — several handlers parse query-string
+    # ints with strconv.Atoi and fall back to defaults on error.
+    check-blank: false
+  goimports:
+    local-prefixes: github.com/opensecstack/citadel
+  godot:
+    scope: declarations
+
+issues:
+  exclude-rules:
+    - path: "_test\\.go$"
+      linters:
+        - errcheck
+        - gosec
+        - godot
+    - path: "benches/"
+      linters:
+        - errcheck
+        - gosec
+        - godot
+    - path: "cmd/"
+      linters:
+        - errcheck
+  max-issues-per-linter: 0
+  max-same-issues: 0

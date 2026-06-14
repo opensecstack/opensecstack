@@ -1,0 +1,31 @@
+CITADEL — Cryptographic Governance Engine
+Copyright (C) 2026 OpenSecStack Contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+The full text of the AGPL-3.0 licence is available at:
+https://www.gnu.org/licenses/agpl-3.0.txt
+
+Why AGPL-3.0 for CITADEL
+========================
+
+CITADEL is the trust root of the OpenSecStack ecosystem. Its WORM audit
+chain and MARSHAL governance gates are what downstream platforms — and
+ultimately regulators — rely on for tamper-evident evidence. AGPL-3.0
+ensures that any modified version operated as a network service must
+publish its source to its users. This prevents a closed-source fork of
+the governance layer from diverging silently from the upstream audit
+semantics. Tool platforms in this repository (APIGuard, ThreatFlow,
+SDKs) remain Apache-2.0 — the copyleft obligation is scoped to the
+governance core by design.

@@ -1,0 +1,13 @@
+# Dev image with Air hot-reload. BUILD CONTEXT = repo root (../ from deploy),
+# because go.mod uses `replace => ../sdk/...` which must resolve at build time.
+# Source (cmd/internal) is volume-mounted over /src/citadel in docker-compose.
+FROM golang:1.25-alpine
+RUN apk add --no-cache git ca-certificates curl && \
+    go install github.com/air-verse/air@latest
+WORKDIR /src
+COPY sdk/go ./sdk/go
+COPY citadel/ ./citadel/
+WORKDIR /src/citadel
+RUN go mod download
+EXPOSE 8099
+CMD ["air", "-c", ".air.toml"]

@@ -1,0 +1,13 @@
+{
+  "name": "Community Dev",
+  "image": "mcr.microsoft.com/devcontainers/go:1.22",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "20" },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "postCreateCommand": "go mod download && cd web && npm install",
+  "forwardPorts": [8090, 5174, 5433],
+  "remoteEnv": {
+    "COMMUNITY_DEV_MODE": "true"
+  }
+}

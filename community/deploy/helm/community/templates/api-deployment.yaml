@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "community.fullname" . }}-api
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "community.fullname" . }}-api
+  template:
+    metadata:
+      labels:
+        app: {{ include "community.fullname" . }}-api
+    spec:
+      containers:
+        - name: api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8090
+          env:
+            - name: COMMUNITY_HTTP_ADDR
+              value: {{ .Values.config.httpAddr | quote }}
+            - name: COMMUNITY_NODE
+              value: {{ .Values.config.node | quote }}
+            - name: COMMUNITY_JWT_ISSUER
+              value: {{ .Values.config.jwtIssuer | quote }}
+            - name: COMMUNITY_TOKEN_TTL
+              value: {{ .Values.config.tokenTtl | quote }}
+            - name: COMMUNITY_DB_MAX_CONNS
+              value: {{ .Values.config.dbMaxConns | quote }}
+            - name: COMMUNITY_CITADEL_KEY_ID
+              value: {{ .Values.config.citadelKeyId | quote }}
+            - name: COMMUNITY_CITADEL_DRY_RUN
+              value: {{ .Values.config.citadelDryRun | quote }}
+            - name: COMMUNITY_DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "community.fullname" . }}-secrets
+                  key: dbUrl
+            - name: COMMUNITY_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "community.fullname" . }}-secrets
+                  key: jwtSecret
+            - name: COMMUNITY_PASSWORD_PEPPER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "community.fullname" . }}-secrets
+                  key: passwordPepper
+            - name: COMMUNITY_USERS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "community.fullname" . }}-secrets
+                  key: users
+            - name: COMMUNITY_CITADEL_HMAC_SECRETS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "community.fullname" . }}-secrets
+                  key: citadelHmacSecrets
+            - name: COMMUNITY_CITADEL_API_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "community.fullname" . }}-secrets
+                  key: citadelApiUrl
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: 8090
+            initialDelaySeconds: 10
+            periodSeconds: 30

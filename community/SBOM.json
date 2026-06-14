@@ -1,0 +1,15 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-05-10T00:00:00Z",
+    "component": {
+      "type": "application",
+      "name": "community",
+      "version": "0.0.0-dev",
+      "purl": "pkg:golang/github.com/opensecstack/community@0.0.0-dev"
+    }
+  },
+  "components": []
+}

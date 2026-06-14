@@ -1,0 +1,398 @@
+openapi: 3.0.3
+info:
+  title: Community API
+  version: 0.1.0
+  description: |
+    OpenSecStack Community — dev.to-inspired publishing platform for opensecstack operators.
+    AGPL-3.0-or-later.
+
+servers:
+  - url: http://localhost:8090
+    description: Local dev
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    User:
+      type: object
+      required: [id, username, display_name, bio, role, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        display_name: { type: string }
+        bio: { type: string }
+        avatar_url: { type: string, nullable: true }
+        platform_badge: { type: string, nullable: true }
+        role: { type: string, enum: [viewer, author, moderator, admin] }
+        created_at: { type: string, format: date-time }
+    Post:
+      type: object
+      required: [id, author_id, author_username, title, slug, state, tags, reaction_count, comment_count, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        author_id: { type: string, format: uuid }
+        author_username: { type: string }
+        author_display_name: { type: string }
+        author_avatar_url: { type: string, nullable: true }
+        author_platform_badge: { type: string, nullable: true }
+        title: { type: string }
+        slug: { type: string }
+        body: { type: string }
+        cover_image_url: { type: string, nullable: true }
+        state: { type: string, enum: [draft, published] }
+        published_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        tags: { type: array, items: { type: string } }
+        reaction_count: { type: integer }
+        comment_count: { type: integer }
+    PostCreateRequest:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        body: { type: string }
+        cover_image_url: { type: string }
+        tags: { type: array, items: { type: string } }
+    Tag:
+      type: object
+      required: [id, name, slug, color, post_count]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        color: { type: string }
+        post_count: { type: integer }
+    Comment:
+      type: object
+      required: [id, post_id, author_id, author_username, body, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        post_id: { type: string, format: uuid }
+        parent_id: { type: string, format: uuid, nullable: true }
+        author_id: { type: string, format: uuid }
+        author_username: { type: string }
+        author_display_name: { type: string }
+        author_avatar_url: { type: string, nullable: true }
+        body: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CommentCreateRequest:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string }
+        parent_id: { type: string, format: uuid }
+    ReactionCreateRequest:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [heart, unicorn, fire] }
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string }
+    LoginResponse:
+      type: object
+      required: [token, role, sub, expires_at]
+      properties:
+        token: { type: string }
+        role: { type: string }
+        sub: { type: string }
+        expires_at: { type: string, format: date-time }
+    HealthResponse:
+      type: object
+      required: [status, db, version, uptime_seconds]
+      properties:
+        status: { type: string }
+        db: { type: boolean }
+        version: { type: string }
+        uptime_seconds: { type: integer }
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/v1/health:
+    get:
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthResponse" }
+
+  /api/v1/auth/login:
+    post:
+      summary: Issue JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "401": { description: Invalid credentials }
+
+  /api/v1/feed:
+    get:
+      summary: Published post feed (newest first)
+      security: []
+      parameters:
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  posts: { type: array, items: { $ref: "#/components/schemas/Post" } }
+                  count: { type: integer }
+
+  /api/v1/posts:
+    get:
+      summary: List posts
+      security: []
+      parameters:
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  posts: { type: array, items: { $ref: "#/components/schemas/Post" } }
+                  count: { type: integer }
+    post:
+      summary: Create a draft post (author+ role)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PostCreateRequest" }
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  slug: { type: string }
+        "400": { description: Validation error }
+        "401": { description: Unauthorized }
+
+  /api/v1/posts/{slug}:
+    parameters:
+      - { name: slug, in: path, required: true, schema: { type: string } }
+    get:
+      summary: Get a post by slug
+      security: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Post" }
+        "404": { description: Not found }
+
+  /api/v1/posts/{id}/publish:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: Publish a draft post
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  state: { type: string }
+        "403": { description: Forbidden }
+        "404": { description: Not found or not draft }
+
+  /api/v1/posts/{id}/reactions:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      summary: Add a reaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReactionCreateRequest" }
+      responses:
+        "204": { description: Added }
+        "400": { description: Invalid kind }
+        "401": { description: Unauthorized }
+
+  /api/v1/posts/{id}/reactions/{kind}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: kind, in: path, required: true, schema: { type: string, enum: [heart, unicorn, fire] } }
+    delete:
+      summary: Remove a reaction
+      responses:
+        "204": { description: Removed }
+
+  /api/v1/posts/{id}/comments:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: List comments on a post
+      security: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  comments: { type: array, items: { $ref: "#/components/schemas/Comment" } }
+                  count: { type: integer }
+    post:
+      summary: Add a comment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CommentCreateRequest" }
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+
+  /api/v1/comments/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      summary: Delete a comment (author or moderator+)
+      responses:
+        "204": { description: Deleted }
+        "403": { description: Forbidden }
+
+  /api/v1/tags:
+    get:
+      summary: List tags (sorted by post count)
+      security: []
+      parameters:
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tags: { type: array, items: { $ref: "#/components/schemas/Tag" } }
+                  count: { type: integer }
+
+  /api/v1/tags/{slug}/posts:
+    parameters:
+      - { name: slug, in: path, required: true, schema: { type: string } }
+    get:
+      summary: List posts by tag
+      security: []
+      parameters:
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  posts: { type: array, items: { $ref: "#/components/schemas/Post" } }
+                  count: { type: integer }
+
+  /api/v1/users/{username}:
+    parameters:
+      - { name: username, in: path, required: true, schema: { type: string } }
+    get:
+      summary: Get user profile
+      security: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "404": { description: Not found }
+
+  /api/v1/users/{username}/posts:
+    parameters:
+      - { name: username, in: path, required: true, schema: { type: string } }
+    get:
+      summary: List a user's published posts
+      security: []
+      parameters:
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  posts: { type: array, items: { $ref: "#/components/schemas/Post" } }
+                  count: { type: integer }
+
+  /api/v1/users/me:
+    put:
+      summary: Update own profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name: { type: string }
+                bio: { type: string }
+                avatar_url: { type: string }
+                platform_badge: { type: string }
+      responses:
+        "204": { description: Updated }
+        "401": { description: Unauthorized }
+
+  /api/v1/search:
+    get:
+      summary: Full-text search across posts
+      security: []
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  posts: { type: array, items: { $ref: "#/components/schemas/Post" } }
+                  count: { type: integer }
+        "400": { description: Missing q parameter }

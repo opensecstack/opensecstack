@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -53,19 +54,48 @@ type ScannerConfig struct {
 
 // AuthConfig holds authentication settings.
 type AuthConfig struct {
-	JWTSecret     string        `mapstructure:"jwt_secret" json:"-"`
-	// PreviousJWTSecret supports zero-downtime JWT secret rotation.
-	// Rotation strategy: set PreviousJWTSecret to the old key and JWTSecret to
-	// the new key. The middleware will accept tokens signed with either secret
-	// so that in-flight tokens issued under the old key remain valid until they
-	// expire naturally. Once all old tokens have expired, clear PreviousJWTSecret.
+	JWTSecret string `mapstructure:"jwt_secret" json:"-"`
+	// SinauthURL is the base URL of the sinauth OIDC issuer used for RS256 SSO
+	// token verification. Set via APIGUARD_AUTH_SINAUTH_URL or auth.sinauth_url
+	// in config. When non-empty, Bearer tokens with alg=RS256 are verified via
+	// the sinauth SDK; HS256 tokens continue to use the existing HMAC path.
+	// Default: "http://localhost:8100"
+	SinauthURL string `mapstructure:"sinauth_url"`
+	// PreviousJWTSecret supports zero-downtime JWT secret rotation (legacy two-slot
+	// mechanism). Prefer JWTSecrets for multi-key rotation. Kept for backward compat.
 	// Set via APIGUARD_AUTH_PREVIOUS_JWT_SECRET or auth.previous_jwt_secret in config.
-	PreviousJWTSecret string        `mapstructure:"previous_jwt_secret" json:"-"`
+	PreviousJWTSecret string `mapstructure:"previous_jwt_secret" json:"-"`
+	// JWTSecrets is the multi-secret rotation list. Index 0 is the active signing
+	// key; subsequent entries are grace-period verification-only keys (up to 3 total).
+	// Set via APIGUARD_AUTH_JWT_SECRETS (comma-separated) or auth.jwt_secrets in config.
+	// When JWTSecrets is non-empty it takes precedence over JWTSecret/PreviousJWTSecret.
+	// When only JWTSecret is set it is treated as a single-entry list for compat.
+	JWTSecrets    []string      `mapstructure:"jwt_secrets" json:"-"`
 	TokenExpiry   time.Duration `mapstructure:"token_expiry"`
 	EnableAPIKeys bool          `mapstructure:"enable_api_keys"`
 	// APIKeys is the list of pre-shared keys accepted by POST /api/v1/auth/token.
 	// Set via APIGUARD_AUTH_API_KEYS (comma-separated) or auth.api_keys in config.
 	APIKeys []string `mapstructure:"api_keys" json:"-"`
+}
+
+// EffectiveJWTSecrets returns the canonical ordered list of JWT secrets to use
+// for the SecretProvider. Resolution order (first non-empty wins):
+//  1. JWTSecrets (multi-secret list from APIGUARD_AUTH_JWT_SECRETS or config)
+//  2. JWTSecret + PreviousJWTSecret (legacy two-slot config — backward compat)
+//
+// The returned slice has at most 3 entries; empty strings are excluded.
+func (a AuthConfig) EffectiveJWTSecrets() []string {
+	if len(a.JWTSecrets) > 0 {
+		return a.JWTSecrets
+	}
+	var out []string
+	if a.JWTSecret != "" {
+		out = append(out, a.JWTSecret)
+	}
+	if a.PreviousJWTSecret != "" {
+		out = append(out, a.PreviousJWTSecret)
+	}
+	return out
 }
 
 // String returns a safe representation of AuthConfig with secrets redacted.
@@ -106,6 +136,16 @@ type RateLimitConfig struct {
 	// X-Forwarded-For is ignored and RemoteAddr is always used.
 	// Set via APIGUARD_RATELIMIT_TRUSTED_PROXIES (comma-separated).
 	TrustedProxies []string `mapstructure:"trusted_proxies"`
+
+	// TrustedProxyDepth controls how many proxy hops to skip when reading the
+	// real client IP from X-Forwarded-For. A value of 1 (the default) means
+	// trust the leftmost IP in XFF, which is correct for a single-proxy setup.
+	// Set to 2 when two trusted proxies sit in front of the server (e.g. an
+	// external LB in front of an nginx ingress) — the server will then use the
+	// second-from-right IP in XFF, skipping the innermost proxy hop.
+	// Values less than 1 are treated as 1.
+	// Set via APIGUARD_RATELIMIT_TRUSTED_PROXY_DEPTH.
+	TrustedProxyDepth int `mapstructure:"trusted_proxy_depth"`
 }
 
 // CitadelConfig holds CITADEL governance integration settings.
@@ -158,9 +198,11 @@ func Load() *Config {
 		Auth: AuthConfig{
 			JWTSecret:         viper.GetString("auth.jwt_secret"),
 			PreviousJWTSecret: viper.GetString("auth.previous_jwt_secret"),
+			JWTSecrets:        viper.GetStringSlice("auth.jwt_secrets"),
 			TokenExpiry:       viper.GetDuration("auth.token_expiry"),
 			EnableAPIKeys:     viper.GetBool("auth.enable_api_keys"),
 			APIKeys:           viper.GetStringSlice("auth.api_keys"),
+			SinauthURL:        viper.GetString("auth.sinauth_url"),
 		},
 		Report: ReportConfig{
 			DefaultFormat: viper.GetString("report.default_format"),
@@ -174,7 +216,8 @@ func Load() *Config {
 			Origins: viper.GetStringSlice("cors.origins"),
 		},
 		RateLimit: RateLimitConfig{
-			TrustedProxies: viper.GetStringSlice("ratelimit.trusted_proxies"),
+			TrustedProxies:    viper.GetStringSlice("ratelimit.trusted_proxies"),
+			TrustedProxyDepth: viper.GetInt("ratelimit.trusted_proxy_depth"),
 		},
 		Citadel: CitadelConfig{
 			APIURL:    viper.GetString("citadel.api_url"),
@@ -226,6 +269,12 @@ func setDefaults() {
 	// Auth defaults.
 	viper.SetDefault("auth.token_expiry", 24*time.Hour)
 	viper.SetDefault("auth.enable_api_keys", false)
+	// auth.jwt_secrets: comma-separated multi-secret list (APIGUARD_AUTH_JWT_SECRETS).
+	// When empty, the server falls back to auth.jwt_secret / auth.previous_jwt_secret.
+	viper.SetDefault("auth.jwt_secrets", []string{})
+	// auth.sinauth_url: sinauth OIDC issuer for RS256 SSO token verification.
+	// Set APIGUARD_AUTH_SINAUTH_URL to override. Empty disables RS256 path.
+	viper.SetDefault("auth.sinauth_url", "http://localhost:8100")
 
 	// Report defaults.
 	viper.SetDefault("report.default_format", "json")
@@ -243,6 +292,9 @@ func setDefaults() {
 	// Rate-limiter defaults: no trusted proxies — always use RemoteAddr.
 	// Set APIGUARD_RATELIMIT_TRUSTED_PROXIES=10.0.0.1,10.0.0.2 to trust specific upstream proxies.
 	viper.SetDefault("ratelimit.trusted_proxies", []string{})
+	// TrustedProxyDepth=1 means use the leftmost XFF entry (single-proxy setup).
+	// Increase when multiple trusted proxies sit in front of the server.
+	viper.SetDefault("ratelimit.trusted_proxy_depth", 1)
 
 	// CITADEL defaults: empty = forwarding disabled.
 	// Set APIGUARD_CITADEL_URL=http://citadel-api:8099 to enable.
@@ -256,5 +308,8 @@ func setDefaults() {
 	viper.SetDefault("citadel.dry_run", true)
 
 	viper.SetEnvPrefix("APIGUARD")
+	// Map nested config keys (e.g. db.url) to env vars (APIGUARD_DB_URL).
+	// Without this, AutomaticEnv cannot resolve dotted keys from the environment.
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	viper.AutomaticEnv()
 }

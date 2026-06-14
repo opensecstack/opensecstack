@@ -2,8 +2,10 @@ package middleware
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -309,8 +311,9 @@ func TestRateLimiter_NoTrustedProxies(t *testing.T) {
 	}
 }
 
-// TestRateLimiter_XFFMultipleValues verifies that when XFF contains multiple
-// comma-separated values only the first (leftmost, i.e. original client) is used.
+// TestRateLimiter_XFFMultipleValues verifies depth=1 XFF resolution with a
+// two-entry XFF chain: "client, proxy". depth=1 strips 1 hop from the right,
+// so idx=max(0, 2-1-1)=0 → the leftmost entry is the original client.
 func TestRateLimiter_XFFMultipleValues(t *testing.T) {
 	const rate = 2
 	rl := NewRateLimiterWithProxies(rate, []string{"10.10.10.1/32"})
@@ -318,16 +321,217 @@ func TestRateLimiter_XFFMultipleValues(t *testing.T) {
 
 	h := rl.Middleware(rlOKHandler)
 
-	// Exhaust allowance for 1.1.1.1 (leftmost XFF entry).
+	// XFF has exactly two entries: original client and the single trusted proxy.
+	// depth=1 → idx=max(0,2-1-1)=0 → "1.1.1.1" is the rate-limit key.
 	for i := 0; i < rate; i++ {
-		rr := doRequest(t, h, "10.10.10.1:9999", "1.1.1.1, 2.2.2.2, 3.3.3.3")
+		rr := doRequest(t, h, "10.10.10.1:9999", "1.1.1.1, 10.10.10.1")
 		if rr.Code != http.StatusOK {
 			t.Fatalf("request %d: got %d, want 200", i+1, rr.Code)
 		}
 	}
 
-	rr := doRequest(t, h, "10.10.10.1:9999", "1.1.1.1, 2.2.2.2, 3.3.3.3")
+	rr := doRequest(t, h, "10.10.10.1:9999", "1.1.1.1, 10.10.10.1")
 	if rr.Code != http.StatusTooManyRequests {
-		t.Errorf("1.1.1.1 (leftmost XFF) should be rate-limited; got %d", rr.Code)
+		t.Errorf("1.1.1.1 (original client) should be rate-limited; got %d", rr.Code)
+	}
+}
+
+// doRequestWithXRealIP fires a GET request with both XFF and X-Real-IP headers set.
+func doRequestWithXRealIP(t *testing.T, h http.Handler, remoteAddr, xff, xri string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = remoteAddr
+	if xff != "" {
+		req.Header.Set("X-Forwarded-For", xff)
+	}
+	if xri != "" {
+		req.Header.Set("X-Real-IP", xri)
+	}
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	return rr
+}
+
+// TestClientIPFromRequest_XRealIPFallback verifies that X-Real-IP is used when
+// no X-Forwarded-For header is present and the direct peer is a trusted proxy.
+func TestClientIPFromRequest_XRealIPFallback(t *testing.T) {
+	proxies := ParseTrustedProxyCIDRs([]string{"10.0.0.1/32"})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "10.0.0.1:1234"
+	req.Header.Set("X-Real-IP", "5.6.7.8")
+	// No X-Forwarded-For set.
+
+	got := ClientIPFromRequest(req, proxies)
+	if got != "5.6.7.8" {
+		t.Errorf("ClientIPFromRequest = %q, want %q", got, "5.6.7.8")
+	}
+}
+
+// TestClientIPFromRequest_XFFPreferredOverXRealIP verifies that when both
+// X-Forwarded-For and X-Real-IP are present, XFF takes priority.
+func TestClientIPFromRequest_XFFPreferredOverXRealIP(t *testing.T) {
+	proxies := ParseTrustedProxyCIDRs([]string{"10.0.0.1/32"})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "10.0.0.1:1234"
+	req.Header.Set("X-Forwarded-For", "1.2.3.4")
+	req.Header.Set("X-Real-IP", "5.6.7.8")
+
+	got := ClientIPFromRequest(req, proxies)
+	if got != "1.2.3.4" {
+		t.Errorf("ClientIPFromRequest = %q, want XFF value %q", got, "1.2.3.4")
+	}
+}
+
+// TestClientIPFromRequest_XRealIPIgnoredForUntrustedPeer verifies that
+// X-Real-IP is ignored when the direct peer is not a trusted proxy.
+func TestClientIPFromRequest_XRealIPIgnoredForUntrustedPeer(t *testing.T) {
+	proxies := ParseTrustedProxyCIDRs([]string{"10.0.0.1/32"})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "192.168.99.1:1234" // not in trusted list
+	req.Header.Set("X-Real-IP", "5.6.7.8")
+
+	got := ClientIPFromRequest(req, proxies)
+	if got != "192.168.99.1" {
+		t.Errorf("ClientIPFromRequest = %q, want RemoteAddr %q", got, "192.168.99.1")
+	}
+}
+
+// TestClientIPFromRequestWithDepth_Depth2 verifies depth=2 XFF stripping.
+//
+// XFF is appended left-to-right: original client is leftmost, each proxy adds
+// its own IP to the right. With depth=2, two trusted proxy hops are expected,
+// so the real client is at index max(0, len-1-2) = max(0, len-3).
+//
+//	XFF "client"                  (len=1): idx=max(0,1-1-2)=0 → "client"
+//	XFF "client, proxy1, proxy2"  (len=3): idx=max(0,3-1-2)=0 → "client"
+//	XFF "a, b, proxy1, proxy2"    (len=4): idx=max(0,4-1-2)=1 → "b"
+func TestClientIPFromRequestWithDepth_Depth2(t *testing.T) {
+	proxies := ParseTrustedProxyCIDRs([]string{"10.0.0.1/32"})
+
+	cases := []struct {
+		xff  string
+		want string
+	}{
+		// 1 entry, depth=2 clamps to index 0.
+		{"client", "client"},
+		// 3 entries, depth=2 → idx=max(0,3-1-2)=0 → "client"
+		{"client, proxy1, proxy2", "client"},
+		// 4 entries, depth=2 → idx=max(0,4-1-2)=1 → "b"
+		{"a, b, proxy1, proxy2", "b"},
+	}
+
+	for _, tc := range cases {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = "10.0.0.1:1234"
+		req.Header.Set("X-Forwarded-For", tc.xff)
+
+		got := ClientIPFromRequestWithDepth(req, proxies, 2)
+		if got != tc.want {
+			t.Errorf("XFF=%q depth=2: got %q, want %q", tc.xff, got, tc.want)
+		}
+	}
+}
+
+// TestClientIPFromRequestWithDepth_Depth1IsDefault verifies that depth=1
+// (the default) returns the original client IP from XFF.
+//
+// With depth=1 and XFF="client, proxy1" (len=2):
+// idx = max(0, 2-1-1) = 0 → "client".
+func TestClientIPFromRequestWithDepth_Depth1IsDefault(t *testing.T) {
+	proxies := ParseTrustedProxyCIDRs([]string{"10.0.0.1/32"})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "10.0.0.1:1234"
+	// XFF: original client on the left, the trusted proxy added itself on the right.
+	req.Header.Set("X-Forwarded-For", "1.2.3.4, 10.0.0.1")
+
+	got1 := ClientIPFromRequest(req, proxies)
+	got2 := ClientIPFromRequestWithDepth(req, proxies, 1)
+	if got1 != "1.2.3.4" {
+		t.Errorf("ClientIPFromRequest = %q, want 1.2.3.4", got1)
+	}
+	if got2 != got1 {
+		t.Errorf("depth=1 result %q differs from ClientIPFromRequest result %q", got2, got1)
+	}
+}
+
+// TestClientIPFromRequestWithDepth_ZeroClampedToOne verifies that depth=0
+// is treated as depth=1 (safe default).
+func TestClientIPFromRequestWithDepth_ZeroClampedToOne(t *testing.T) {
+	proxies := ParseTrustedProxyCIDRs([]string{"10.0.0.1/32"})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "10.0.0.1:1234"
+	// XFF: original client on the left, the trusted proxy added itself on the right.
+	req.Header.Set("X-Forwarded-For", "1.2.3.4, 10.0.0.1")
+
+	got := ClientIPFromRequestWithDepth(req, proxies, 0)
+	if got != "1.2.3.4" {
+		t.Errorf("depth=0: got %q, want 1.2.3.4 (clamped to depth=1)", got)
+	}
+}
+
+// TestMustParseTrustedProxyCIDRs_WarnsOnInvalidEntry verifies that
+// MustParseTrustedProxyCIDRs emits a WARN log for invalid entries and still
+// parses valid ones correctly.
+func TestMustParseTrustedProxyCIDRs_WarnsOnInvalidEntry(t *testing.T) {
+	var buf strings.Builder
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	nets := MustParseTrustedProxyCIDRs([]string{"not-an-ip", "10.0.0.0/8"}, logger)
+
+	if len(nets) != 1 {
+		t.Fatalf("got %d nets, want 1 (invalid entry skipped)", len(nets))
+	}
+	if nets[0].String() != "10.0.0.0/8" {
+		t.Errorf("net = %s, want 10.0.0.0/8", nets[0])
+	}
+
+	logged := buf.String()
+	if !strings.Contains(logged, "trusted proxy CIDR is invalid") {
+		t.Errorf("expected WARN log for invalid CIDR, got: %s", logged)
+	}
+	if !strings.Contains(logged, "not-an-ip") {
+		t.Errorf("expected log to mention the invalid entry, got: %s", logged)
+	}
+}
+
+// TestRateLimiter_DepthBasedXFFStripping verifies that NewRateLimiterWithProxiesAndDepth
+// with depth=2 keys rate limiting on the original client IP, stripping 2 proxy
+// hops from the right of XFF.
+//
+// XFF="1.2.3.4, proxy1, proxy2" depth=2 → idx=max(0,3-1-2)=0 → "1.2.3.4"
+func TestRateLimiter_DepthBasedXFFStripping(t *testing.T) {
+	const rate = 2
+	rl := NewRateLimiterWithProxiesAndDepth(rate, []string{"10.0.0.1/32"}, 2)
+	defer rl.Stop()
+
+	h := rl.Middleware(rlOKHandler)
+
+	xff := "1.2.3.4, 192.168.0.1, 10.0.0.1" // client, inner proxy, trusted edge proxy
+
+	// Exhaust allowance for the resolved client IP (1.2.3.4).
+	for i := 0; i < rate; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = "10.0.0.1:9999"
+		req.Header.Set("X-Forwarded-For", xff)
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("request %d: got %d, want 200", i+1, rr.Code)
+		}
+	}
+
+	// Next request for the same resolved client (1.2.3.4) should be rate-limited.
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "10.0.0.1:9999"
+	req.Header.Set("X-Forwarded-For", xff)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusTooManyRequests {
+		t.Errorf("depth=2 client 1.2.3.4 should be rate-limited; got %d", rr.Code)
 	}
 }

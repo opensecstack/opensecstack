@@ -96,6 +96,14 @@ See the [docs/](docs/) directory for full documentation.
 | [CLI Reference](docs/cli-reference.md) | Single Go binary covering the scan pipeline, report generation, and rule management |
 | [Configuration Reference](docs/configuration.md) | Every configurable setting across CLI flags, environment variables, and config files |
 
+### Authentication
+
+APIGuard authenticates users via sinauth SSO using OpenID Connect (authorization_code + PKCE).
+ID and access tokens are RS256-signed and validated against the sinauth JWKS endpoint.
+The web dashboard uses `sinauth.ts` for popup-based login and an `AuthCallback` page.
+Auth events are forwarded to the CITADEL WORM audit chain, and a `POST /api/v1/auth/logout` endpoint maintains an access-token denylist.
+See the [sinauth integration guide](../sinauth/docs/integration/apiguard.md) for setup details.
+
 ### Security & Compliance
 
 | Document | Description |

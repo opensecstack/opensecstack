@@ -61,7 +61,7 @@ export const api = {
       if (!res.ok) {
         if (res.status === 401) {
           localStorage.removeItem('apiguard_token')
-          window.location.reload()
+          window.dispatchEvent(new CustomEvent('apiguard:logout'))
         }
         const err = await res.json().catch(() => ({ error: res.statusText }))
         throw new Error(err.error ?? res.statusText)
@@ -105,7 +105,7 @@ export const api = {
       if (!res.ok) {
         if (res.status === 401) {
           localStorage.removeItem('apiguard_token')
-          window.location.reload()
+          window.dispatchEvent(new CustomEvent('apiguard:logout'))
         }
         const err = await res.json().catch(() => ({ error: res.statusText }))
         throw new Error(err.error ?? res.statusText)
@@ -128,7 +128,7 @@ export const api = {
       if (!res.ok) {
         if (res.status === 401) {
           localStorage.removeItem('apiguard_token')
-          window.location.reload()
+          window.dispatchEvent(new CustomEvent('apiguard:logout'))
         }
         const err = await res.json().catch(() => ({ error: res.statusText }))
         throw new Error(err.error ?? res.statusText)

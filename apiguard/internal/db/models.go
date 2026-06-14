@@ -135,6 +135,10 @@ const (
 	AuditActionReportExported       AuditAction = "report_exported"
 	AuditActionAPIKeyCreated        AuditAction = "api_key_created"
 	AuditActionAPIKeyRevoked        AuditAction = "api_key_revoked"
+	AuditActionAPIKeyUsed           AuditAction = "api_key_used"
+	AuditActionUserLogin            AuditAction = "user_login"
+	AuditActionUserLogout           AuditAction = "user_logout"
+	AuditActionJWTSecretRotated     AuditAction = "jwt_secret_rotated"
 )
 
 // AuditLog represents a row in the audit_log table.

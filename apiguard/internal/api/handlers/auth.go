@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -14,9 +15,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
 	"github.com/opensecstack/apiguard/internal/api/middleware"
+	"github.com/opensecstack/apiguard/internal/citadel"
 	"github.com/opensecstack/apiguard/internal/config"
 	"github.com/opensecstack/apiguard/internal/db"
 )
@@ -30,7 +33,10 @@ type Auth struct {
 	logger         zerolog.Logger
 	cfg            *config.Config
 	db             *db.DB
-	trustedProxies []*net.IPNet // parsed from cfg.RateLimit.TrustedProxies
+	citadel        *citadel.Client
+	sp             *middleware.SecretProvider
+	denylist       *middleware.TokenDenylist // access-token denylist for logout
+	trustedProxies []*net.IPNet              // parsed from cfg.RateLimit.TrustedProxies
 }
 
 // NewAuth creates a new Auth handler.
@@ -44,12 +50,38 @@ func NewAuth(logger zerolog.Logger, cfg *config.Config) *Auth {
 
 // NewAuthWithDB creates a new Auth handler that can also validate keys stored
 // in the database, falling back to the static config keys when DB is unavailable.
-func NewAuthWithDB(logger zerolog.Logger, cfg *config.Config, database *db.DB) *Auth {
+// Pass a non-nil denylist to enable access-token logout via POST /auth/logout.
+func NewAuthWithDB(logger zerolog.Logger, cfg *config.Config, database *db.DB, citadelClient *citadel.Client, sp *middleware.SecretProvider, denylist *middleware.TokenDenylist) *Auth {
 	return &Auth{
 		logger:         logger.With().Str("handler", "auth").Logger(),
 		cfg:            cfg,
 		db:             database,
+		citadel:        citadelClient,
+		sp:             sp,
+		denylist:       denylist,
 		trustedProxies: parseTrustedProxies(cfg),
+	}
+}
+
+func (a *Auth) auditLog(ctx context.Context, action db.AuditAction, resourceType string, resourceID *uuid.UUID, ip, ua, actor, actorType string) {
+	if a.db == nil {
+		return
+	}
+	entry := &db.AuditLog{
+		ActorID:      actor,
+		ActorType:    actorType,
+		Action:       action,
+		ResourceType: resourceType,
+		ResourceID:   resourceID,
+	}
+	if ip != "" {
+		entry.IPAddress = sql.NullString{String: ip, Valid: true}
+	}
+	if ua != "" {
+		entry.UserAgent = sql.NullString{String: ua, Valid: true}
+	}
+	if err := a.db.AppendAuditLog(ctx, entry, a.citadel); err != nil {
+		a.logger.Warn().Err(err).Str("action", string(action)).Msg("audit log write failed")
 	}
 }
 
@@ -119,6 +151,8 @@ func (a *Auth) Token(w http.ResponseWriter, r *http.Request) {
 		ExpiresIn: int64(expiry.Seconds()),
 		TokenType: "Bearer",
 	})
+	a.auditLog(r.Context(), db.AuditActionUserLogin, "auth", nil,
+		middleware.ClientIPFromRequest(r, a.trustedProxies), r.UserAgent(), subject, "api_key")
 }
 
 // validAPIKey returns true when key matches either an active DB-managed key or
@@ -136,6 +170,8 @@ func (a *Auth) validAPIKey(key string) bool {
 		if err != nil {
 			a.logger.Warn().Err(err).Msg("db api key lookup failed, falling back to config keys")
 		} else if found {
+			// Log api_key_used — best-effort, fire-and-forget
+			a.auditLog(context.Background(), db.AuditActionAPIKeyUsed, "api_keys", nil, "", "", keyHash, "api_key")
 			return true
 		}
 	}
@@ -310,8 +346,13 @@ func (a *Auth) RefreshToken(w http.ResponseWriter, r *http.Request) {
 
 // RevokeRefreshToken handles DELETE /api/v1/auth/refresh.
 // It extracts a refresh token from the Authorization header and adds its
-// SHA-256 hash to the in-memory revocation set so that subsequent uses are
-// rejected by the RefreshToken handler.
+// SHA-256 hash to the revocation set (in-memory + DB) so that subsequent
+// uses are rejected by the RefreshToken handler.
+//
+// Status codes:
+//   - 401 — missing/malformed Authorization header or invalid token signature
+//   - 200 — token was already revoked (idempotent; no action taken)
+//   - 204 — token successfully revoked now
 func (a *Auth) RevokeRefreshToken(w http.ResponseWriter, r *http.Request) {
 	if a.cfg.Auth.JWTSecret == "" {
 		writeError(w, http.StatusServiceUnavailable, "authentication not configured: jwt_secret is missing")
@@ -333,7 +374,30 @@ func (a *Auth) RevokeRefreshToken(w http.ResponseWriter, r *http.Request) {
 
 	tokenHash := refreshTokenHash(tokenStr)
 
-	// Persist the revocation to the database so it survives restarts.
+	// Fast path: check in-memory cache before hitting the DB.
+	if _, alreadyRevoked := revokedRefreshTokens.Load(tokenHash); alreadyRevoked {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// DB path: check persistent store (covers tokens revoked by another instance
+	// or before the current process started).
+	if a.db != nil {
+		revoked, err := db.IsRefreshTokenRevoked(r.Context(), a.db.Pool, tokenHash)
+		if err != nil {
+			a.logger.Error().Err(err).Msg("failed to check refresh token revocation status in DB")
+			writeError(w, http.StatusInternalServerError, "failed to revoke token")
+			return
+		}
+		if revoked {
+			// Populate in-memory cache so the next check is fast.
+			revokedRefreshTokens.Store(tokenHash, struct{}{})
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+	}
+
+	// Not yet revoked — persist now.
 	if a.db != nil {
 		if err := db.RevokeRefreshToken(r.Context(), a.db.Pool, tokenHash); err != nil {
 			a.logger.Error().Err(err).Msg("failed to persist refresh token revocation to DB")
@@ -344,7 +408,78 @@ func (a *Auth) RevokeRefreshToken(w http.ResponseWriter, r *http.Request) {
 
 	// Also store in the in-memory cache for fast subsequent checks.
 	revokedRefreshTokens.Store(tokenHash, struct{}{})
+	a.auditLog(r.Context(), db.AuditActionUserLogout, "auth", nil,
+		middleware.ClientIPFromRequest(r, a.trustedProxies), r.UserAgent(), tokenHash, "api_key")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// Logout handles POST /api/v1/auth/logout.
+// It adds the caller's access token to the in-memory denylist so that
+// subsequent requests bearing the same token are rejected by JWTAuth middleware
+// before they reach any protected handler.
+//
+// No database persistence is needed: the denylist entry TTL is capped to the
+// token's remaining lifetime, so the entry is irrelevant (and reaped) once the
+// token would have expired anyway.
+//
+// Status codes:
+//   - 401 — missing/malformed Authorization header or invalid access token
+//   - 200 — token successfully added to denylist (or denylist not configured)
+func (a *Auth) Logout(w http.ResponseWriter, r *http.Request) {
+	if a.cfg.Auth.JWTSecret == "" {
+		writeError(w, http.StatusServiceUnavailable, "authentication not configured: jwt_secret is missing")
+		return
+	}
+
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		writeError(w, http.StatusUnauthorized, "Bearer token required in Authorization header")
+		return
+	}
+	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+
+	// Validate the access token to confirm the caller owns it and to extract
+	// the expiry so we can set the correct denylist TTL.
+	claims, err := validateAccessToken(tokenStr, a.cfg.Auth.JWTSecret, a.sp)
+	if err != nil {
+		a.logger.Warn().Err(err).Str("remote_addr", middleware.ClientIPFromRequest(r, a.trustedProxies)).Msg("invalid access token presented for logout")
+		writeError(w, http.StatusUnauthorized, "invalid or expired access token")
+		return
+	}
+
+	if a.denylist != nil {
+		expiresAt := time.Unix(claims.Exp, 0)
+		a.denylist.Add(middleware.HashToken(tokenStr), expiresAt)
+	}
+
+	a.auditLog(r.Context(), db.AuditActionUserLogout, "auth", nil,
+		middleware.ClientIPFromRequest(r, a.trustedProxies), r.UserAgent(), claims.Sub, "user")
+	writeJSON(w, http.StatusOK, map[string]string{"message": "logged out"})
+}
+
+// validateAccessToken verifies an access token against the primary secret and,
+// when a SecretProvider is available, all grace-period secrets too.
+func validateAccessToken(tokenStr, primarySecret string, sp *middleware.SecretProvider) (*middleware.Claims, error) {
+	secrets := []string{primarySecret}
+	if sp != nil {
+		for _, b := range sp.All() {
+			s := string(b)
+			if s != primarySecret {
+				secrets = append(secrets, s)
+			}
+		}
+	}
+	var (
+		claims *middleware.Claims
+		err    error
+	)
+	for _, secret := range secrets {
+		claims, err = middleware.ValidateAccessToken(tokenStr, secret)
+		if err == nil {
+			return claims, nil
+		}
+	}
+	return nil, err
 }
 
 // ListRefreshTokens handles GET /api/v1/auth/refresh.
@@ -450,4 +585,45 @@ type jwtClaims struct {
 // jwtBase64Decode decodes a base64url-encoded string (without padding).
 func jwtBase64Decode(s string) ([]byte, error) {
 	return base64.RawURLEncoding.DecodeString(s)
+}
+
+func actorFromJWT(r *http.Request) string {
+	if claims, ok := middleware.ClaimsFromContext(r.Context()); ok && claims.Sub != "" {
+		return claims.Sub
+	}
+	return "unknown"
+}
+
+type rotateSecretRequest struct {
+	NewSecret string `json:"new_secret"`
+}
+
+// RotateSecret handles POST /api/v1/admin/auth/rotate.
+// It prepends newSecret as the active signing key, demoting existing secrets to
+// grace-period verification-only keys (up to 3 total). Tokens signed with any
+// retained secret remain valid until they expire naturally.
+// Requires: new_secret >= 32 bytes. Never echoes the secret back.
+func (a *Auth) RotateSecret(w http.ResponseWriter, r *http.Request) {
+	if a.sp == nil {
+		writeError(w, http.StatusServiceUnavailable, "secret rotation not available")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1*1024*1024)
+	var req rotateSecretRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if len(req.NewSecret) < 32 {
+		writeError(w, http.StatusUnprocessableEntity, "new_secret must be at least 32 characters")
+		return
+	}
+	actor := actorFromJWT(r)
+	a.sp.Rotate([]byte(req.NewSecret))
+	a.auditLog(r.Context(), db.AuditActionJWTSecretRotated, "auth", nil,
+		middleware.ClientIPFromRequest(r, a.trustedProxies), r.UserAgent(), actor, "user")
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"rotated":        true,
+		"active_secrets": a.sp.Len(),
+	})
 }

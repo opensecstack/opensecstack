@@ -8,6 +8,7 @@ import (
 	"github.com/opensecstack/apiguard/internal/api/handlers"
 	"github.com/opensecstack/apiguard/internal/api/middleware"
 	"github.com/opensecstack/apiguard/internal/config"
+	"github.com/opensecstack/sdk/go/sinauth"
 )
 
 // RegisterRoutes sets up all API routes on the given router.
@@ -15,6 +16,10 @@ import (
 // must be created by the caller (stored on the Server) so their Stop() methods
 // can be called on shutdown. trustedProxies is forwarded to JWTAuth so auth
 // failures log the real client IP.
+//
+// denylist is the access-token denylist shared between the Logout handler and
+// the JWT validation middleware. Pass nil to disable access-token logout
+// (refresh-token revocation is always available regardless).
 func RegisterRoutes(
 	r chi.Router,
 	health *handlers.Health,
@@ -28,11 +33,14 @@ func RegisterRoutes(
 	webhooks *handlers.Webhooks,
 	metrics *middleware.MetricsCollector,
 	cfg *config.Config,
-	authLimiter *middleware.RateLimiter,
-	scanLimiter *middleware.RateLimiter,
-	reportLimiter *middleware.RateLimiter,
-	refreshLimiter *middleware.RateLimiter,
-	apiKeyLimiter *middleware.RateLimiter,
+	authLimiter    middleware.Limiter,
+	scanLimiter    middleware.Limiter,
+	reportLimiter  middleware.Limiter,
+	refreshLimiter middleware.Limiter,
+	apiKeyLimiter  middleware.Limiter,
+	secrets        *middleware.SecretProvider,
+	denylist       *middleware.TokenDenylist,
+	sinauthClient  *sinauth.Client,
 	trustedProxies []*net.IPNet,
 ) {
 	// Dedicated rate limiter for the /metrics endpoint (30 req/min per IP).
@@ -73,7 +81,14 @@ func RegisterRoutes(
 
 		// ── Protected endpoints (Bearer JWT required) ────────────────────────
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.JWTAuthWithRotation(cfg.Auth.JWTSecret, cfg.Auth.PreviousJWTSecret, trustedProxies))
+			// Use the sinauth+denylist-aware variant: RS256 tokens from sinauth
+			// are verified first; HS256 tokens fall back to the HMAC provider.
+			r.Use(middleware.JWTAuthWithProviderDenylistAndSinauth(secrets, denylist, sinauthClient, trustedProxies))
+
+			// Access-token logout — must be inside the JWT-protected group so
+			// only a valid (not-yet-denied) token can be submitted for denylist
+			// entry. Rate-limited by the authLimiter to match token issuance.
+			r.With(authLimiter.Middleware).Post("/auth/logout", auth.Logout)
 
 			// Scans — scan creation is expensive; apply a dedicated rate limiter.
 			r.With(scanLimiter.Middleware).Post("/scans", scans.Create)
@@ -104,6 +119,9 @@ func RegisterRoutes(
 				r.With(apiKeyLimiter.Middleware).Post("/", apiKeys.Create) // rate-limited: 5 req/min
 				r.Delete("/{id}", apiKeys.Revoke)
 			})
+
+			// JWT secret rotation (protected — any authenticated user with admin intent).
+			r.Post("/admin/auth/rotate", auth.RotateSecret)
 		})
 	})
 }

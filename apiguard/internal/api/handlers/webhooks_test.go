@@ -35,7 +35,7 @@ func makeWebhookEvent(eventType string) []byte {
 
 func TestCITADELWebhook_ValidSignature_200(t *testing.T) {
 	logger := zerolog.Nop()
-	wh := NewWebhooks(logger, testWebhookSecret)
+	wh := NewWebhooks(logger, testWebhookSecret, nil)
 
 	body := makeWebhookEvent("citadel.vigil_amber")
 	sig := signBody(body, testWebhookSecret)
@@ -54,7 +54,7 @@ func TestCITADELWebhook_ValidSignature_200(t *testing.T) {
 
 func TestCITADELWebhook_InvalidSignature_401(t *testing.T) {
 	logger := zerolog.Nop()
-	wh := NewWebhooks(logger, testWebhookSecret)
+	wh := NewWebhooks(logger, testWebhookSecret, nil)
 
 	body := makeWebhookEvent("citadel.vigil_amber")
 	wrongSig := signBody(body, "wrong-secret")
@@ -73,7 +73,7 @@ func TestCITADELWebhook_InvalidSignature_401(t *testing.T) {
 
 func TestCITADELWebhook_MissingSignature_401(t *testing.T) {
 	logger := zerolog.Nop()
-	wh := NewWebhooks(logger, testWebhookSecret)
+	wh := NewWebhooks(logger, testWebhookSecret, nil)
 
 	body := makeWebhookEvent("citadel.vigil_amber")
 
@@ -92,7 +92,7 @@ func TestCITADELWebhook_MissingSignature_401(t *testing.T) {
 func TestCITADELWebhook_HardStop_Logged(t *testing.T) {
 	var buf bytes.Buffer
 	logger := zerolog.New(&buf)
-	wh := NewWebhooks(logger, testWebhookSecret)
+	wh := NewWebhooks(logger, testWebhookSecret, nil)
 
 	body := makeWebhookEvent("citadel.hard_stop")
 	sig := signBody(body, testWebhookSecret)
@@ -121,7 +121,7 @@ func TestCITADELWebhook_HardStop_Logged(t *testing.T) {
 func TestCITADELWebhook_VIGILRed_Logged(t *testing.T) {
 	var buf bytes.Buffer
 	logger := zerolog.New(&buf)
-	wh := NewWebhooks(logger, testWebhookSecret)
+	wh := NewWebhooks(logger, testWebhookSecret, nil)
 
 	body := makeWebhookEvent("citadel.vigil_red")
 	sig := signBody(body, testWebhookSecret)
@@ -148,7 +148,7 @@ func TestCITADELWebhook_VIGILRed_Logged(t *testing.T) {
 
 func TestCITADELWebhook_UnknownEvent_200(t *testing.T) {
 	logger := zerolog.Nop()
-	wh := NewWebhooks(logger, testWebhookSecret)
+	wh := NewWebhooks(logger, testWebhookSecret, nil)
 
 	body := makeWebhookEvent("citadel.some_future_event")
 	sig := signBody(body, testWebhookSecret)
@@ -167,7 +167,7 @@ func TestCITADELWebhook_UnknownEvent_200(t *testing.T) {
 
 func TestCITADELWebhook_MalformedBody_400(t *testing.T) {
 	logger := zerolog.Nop()
-	wh := NewWebhooks(logger, testWebhookSecret)
+	wh := NewWebhooks(logger, testWebhookSecret, nil)
 
 	body := []byte(`{this is not valid json}`)
 	sig := signBody(body, testWebhookSecret)
@@ -188,7 +188,7 @@ func TestCITADELWebhook_MalformedBody_400(t *testing.T) {
 // webhook secret configured, all requests are rejected.
 func TestCITADELWebhook_EmptySecret_401(t *testing.T) {
 	logger := zerolog.Nop()
-	wh := NewWebhooks(logger, "") // no secret configured
+	wh := NewWebhooks(logger, "", nil) // no secret configured
 
 	body := makeWebhookEvent("citadel.vigil_amber")
 	sig := signBody(body, "")
@@ -209,7 +209,7 @@ func TestCITADELWebhook_EmptySecret_401(t *testing.T) {
 // without the "sha256=" prefix is rejected.
 func TestCITADELWebhook_MalformedSignatureFormat_401(t *testing.T) {
 	logger := zerolog.Nop()
-	wh := NewWebhooks(logger, testWebhookSecret)
+	wh := NewWebhooks(logger, testWebhookSecret, nil)
 
 	body := makeWebhookEvent("citadel.vigil_amber")
 

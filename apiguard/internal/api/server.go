@@ -20,6 +20,7 @@ import (
 	"github.com/opensecstack/apiguard/internal/config"
 	"github.com/opensecstack/apiguard/internal/db"
 	"github.com/opensecstack/apiguard/internal/scanner"
+	"github.com/opensecstack/sdk/go/sinauth"
 )
 
 // Server is the APIGuard HTTP server.
@@ -31,12 +32,15 @@ type Server struct {
 	db              *db.DB
 	scanner         *scanner.Scanner
 	citadel         *citadel.Client
-	globalLimiter   *middleware.RateLimiter
-	authLimiter     *middleware.RateLimiter
-	scanLimiter     *middleware.RateLimiter
-	reportLimiter   *middleware.RateLimiter
-	refreshLimiter  *middleware.RateLimiter
-	apiKeyLimiter   *middleware.RateLimiter
+	globalLimiter   middleware.Limiter
+	authLimiter     middleware.Limiter
+	scanLimiter     middleware.Limiter
+	reportLimiter   middleware.Limiter
+	refreshLimiter  middleware.Limiter
+	apiKeyLimiter   middleware.Limiter
+	secretProvider  *middleware.SecretProvider
+	tokenDenylist   *middleware.TokenDenylist // access-token denylist for logout
+	sinauthClient   *sinauth.Client           // nil when sinauth_url is unset
 	metrics         *middleware.MetricsCollector
 	shutdownCtx     context.Context
 	shutdownCancel  context.CancelFunc
@@ -56,6 +60,23 @@ func NewServer(cfg *config.Config, database *db.DB, sc *scanner.Scanner) *Server
 	// client is a no-op — all EvaluateScan/EmitWORM/LogEvent calls return immediately.
 	cc := citadel.New(cfg.Citadel.APIURL, cfg.Citadel.KeyID, cfg.Citadel.KeySecret)
 
+	sp := middleware.NewSecretProvider(cfg.Auth.EffectiveJWTSecrets()...)
+	denylist := middleware.NewTokenDenylist()
+
+	// Initialise the sinauth client for RS256 SSO token verification.
+	// When APIGUARD_AUTH_SINAUTH_URL is empty the client is nil and only HS256
+	// tokens are accepted. A failed initialisation is non-fatal: the server
+	// starts without RS256 support and logs a warning.
+	var sc2 *sinauth.Client
+	if cfg.Auth.SinauthURL != "" {
+		var err error
+		sc2, err = sinauth.New(cfg.Auth.SinauthURL)
+		if err != nil {
+			logger.Warn().Err(err).Str("sinauth_url", cfg.Auth.SinauthURL).
+				Msg("sinauth client init failed; RS256 tokens will be rejected")
+		}
+	}
+
 	shutdownCtx, shutdownCancel := context.WithCancel(context.Background())
 	s := &Server{
 		router:         chi.NewRouter(),
@@ -65,6 +86,9 @@ func NewServer(cfg *config.Config, database *db.DB, sc *scanner.Scanner) *Server
 		db:             database,
 		scanner:        sc,
 		citadel:        cc,
+		secretProvider: sp,
+		tokenDenylist:  denylist,
+		sinauthClient:  sc2,
 		shutdownCtx:    shutdownCtx,
 		shutdownCancel: shutdownCancel,
 	}
@@ -154,6 +178,9 @@ func (s *Server) Start() error {
 		s.reportLimiter.Stop()
 		s.refreshLimiter.Stop()
 		s.apiKeyLimiter.Stop()
+		if s.tokenDenylist != nil {
+			s.tokenDenylist.Stop()
+		}
 		s.db.Close()
 		s.logger.Info().Msg("server stopped cleanly")
 		return nil
@@ -169,7 +196,7 @@ func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.CorrelationID) // must be first so all subsequent middleware can read the correlation ID
 	s.router.Use(chimw.RequestID)
 	s.router.Use(chimw.RealIP)
-	s.router.Use(middleware.RequestLogger(s.logger, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies)))
+	s.router.Use(middleware.RequestLogger(s.logger, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies), s.config.RateLimit.TrustedProxyDepth))
 	s.router.Use(chimw.Recoverer)
 	s.router.Use(chimw.Timeout(60 * time.Second))
 	s.router.Use(middleware.SecurityHeaders)
@@ -178,29 +205,34 @@ func (s *Server) setupMiddleware() {
 	if rateLimit <= 0 {
 		rateLimit = 120
 	}
-	s.globalLimiter = middleware.NewRateLimiterWithProxies(rateLimit, s.config.RateLimit.TrustedProxies)
+	s.globalLimiter = middleware.NewLimiter(s.config.Redis.URL, s.config.Redis.Password, s.config.Redis.DB, rateLimit, "global", s.config.RateLimit.TrustedProxies, s.config.RateLimit.TrustedProxyDepth)
 	s.router.Use(s.globalLimiter.Middleware) // requests per minute per IP
 	s.router.Use(middleware.CORS(s.config.CORS.Origins)) // CORS must run before JWT auth
 }
 
 func (s *Server) registerRoutes() {
 	h := handlers.NewHealthWithDB(s.logger, s.db)
-	a := handlers.NewAuthWithDB(s.logger, s.config, s.db)
+	a := handlers.NewAuthWithDB(s.logger, s.config, s.db, s.citadel, s.secretProvider, s.tokenDenylist)
 	sc := handlers.NewScansWithCitadel(s.logger, s.db, s.scanner, s.citadel, s.shutdownCtx, s.config)
 	s.scansHandler = sc // store for WaitScans() on shutdown
 	f := handlers.NewFindingsWithCitadel(s.logger, s.db, s.citadel, s.config)
-	sp := handlers.NewSpecs(s.logger, "")
+	specsH := handlers.NewSpecs(s.logger, "")
 	au := handlers.NewAudit(s.logger, s.db)
 	ak := handlers.NewAPIKeys(s.logger, s.db, s.citadel, s.config)
 	inv := handlers.NewInventory(s.logger, s.db)
-	wh := handlers.NewWebhooks(s.logger, s.config.Citadel.WebhookSecret)
+	wh := handlers.NewWebhooks(s.logger, s.config.Citadel.WebhookSecret, s.shutdownCancel)
 
 	// Create per-route limiters here so they can be stopped on shutdown.
-	s.authLimiter = middleware.NewRateLimiter(20)    // 20 req/min per IP on auth endpoints
-	s.scanLimiter = middleware.NewRateLimiter(60)    // 60 req/min per IP on scan creation
-	s.reportLimiter = middleware.NewRateLimiter(10)  // 10 req/min per IP on report generation
-	s.refreshLimiter = middleware.NewRateLimiter(20) // 20 req/min per IP on refresh revocation
-	s.apiKeyLimiter = middleware.NewRateLimiter(5)   // 5 req/min per IP on API key creation
+	proxies := s.config.RateLimit.TrustedProxies
+	depth := s.config.RateLimit.TrustedProxyDepth
+	redisURL := s.config.Redis.URL
+	redisPass := s.config.Redis.Password
+	redisDB := s.config.Redis.DB
+	s.authLimiter = middleware.NewLimiter(redisURL, redisPass, redisDB, 20, "auth", proxies, depth)
+	s.scanLimiter = middleware.NewLimiter(redisURL, redisPass, redisDB, 60, "scan", proxies, depth)
+	s.reportLimiter = middleware.NewLimiter(redisURL, redisPass, redisDB, 10, "report", proxies, depth)
+	s.refreshLimiter = middleware.NewLimiter(redisURL, redisPass, redisDB, 20, "refresh", proxies, depth)
+	s.apiKeyLimiter = middleware.NewLimiter(redisURL, redisPass, redisDB, 5, "apikey", proxies, depth)
 
-	RegisterRoutes(s.router, h, a, sc, f, sp, au, ak, inv, wh, s.metrics, s.config, s.authLimiter, s.scanLimiter, s.reportLimiter, s.refreshLimiter, s.apiKeyLimiter, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies))
+	RegisterRoutes(s.router, h, a, sc, f, specsH, au, ak, inv, wh, s.metrics, s.config, s.authLimiter, s.scanLimiter, s.reportLimiter, s.refreshLimiter, s.apiKeyLimiter, s.secretProvider, s.tokenDenylist, s.sinauthClient, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies))
 }

@@ -22,16 +22,20 @@ type WebhookEvent struct {
 
 // Webhooks handles inbound webhook events from CITADEL.
 type Webhooks struct {
-	logger zerolog.Logger
-	secret string
+	logger       zerolog.Logger
+	secret       string
+	emergencyStop func() // called on citadel.hard_stop to cancel in-flight scans
 }
 
 // NewWebhooks creates a new Webhooks handler.
 // secret is the HMAC-SHA256 shared secret used to verify the X-Webhook-Signature header.
-func NewWebhooks(logger zerolog.Logger, secret string) *Webhooks {
+// emergencyStop is called when a hard_stop event is received; pass s.shutdownCancel from
+// the server to trigger a graceful shutdown and cancel all in-flight scans.
+func NewWebhooks(logger zerolog.Logger, secret string, emergencyStop func()) *Webhooks {
 	return &Webhooks{
-		logger: logger.With().Str("handler", "webhooks").Logger(),
-		secret: secret,
+		logger:        logger.With().Str("handler", "webhooks").Logger(),
+		secret:        secret,
+		emergencyStop: emergencyStop,
 	}
 }
 
@@ -76,8 +80,10 @@ func (wh *Webhooks) HandleCITADEL(w http.ResponseWriter, r *http.Request) {
 			Str("event_type", event.EventType).
 			RawJSON("payload", event.Payload).
 			Time("event_timestamp", event.Timestamp).
-			Msg("CRITICAL: CITADEL hard_stop received — operator action required")
-		// TODO: implement scan pause when hard_stop is received
+			Msg("CRITICAL: CITADEL hard_stop received — cancelling all in-flight scans and initiating graceful shutdown")
+		if wh.emergencyStop != nil {
+			wh.emergencyStop()
+		}
 
 	case "citadel.vigil_red":
 		wh.logger.Error().

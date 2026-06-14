@@ -1,13 +1,23 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
 )
+
+// Limiter is the interface satisfied by both RateLimiter and RedisRateLimiter.
+// Server and route registration code uses this interface so implementations
+// can be swapped without changing caller code.
+type Limiter interface {
+	Middleware(next http.Handler) http.Handler
+	Stop()
+}
 
 // RateLimiter holds the state for an in-memory sliding-window rate limiter.
 type RateLimiter struct {
@@ -16,6 +26,7 @@ type RateLimiter struct {
 	rate           int           // maximum requests allowed per window
 	window         time.Duration // window duration
 	trustedProxies []*net.IPNet  // upstream proxy IPs whose XFF header is trusted
+	proxyDepth     int           // number of proxy hops to skip in XFF (≥1)
 	done           chan struct{}  // closed by Stop() to signal the cleanup goroutine to exit
 	stopOnce       sync.Once     // ensures Stop() is idempotent
 }
@@ -31,36 +42,75 @@ func NewRateLimiter(requestsPerMinute int) *RateLimiter {
 	return NewRateLimiterWithProxies(requestsPerMinute, nil)
 }
 
-// ParseTrustedProxyCIDRs parses a list of CIDR strings (or plain IPs, which are
-// treated as /32) into a slice of *net.IPNet values. Entries that fail to parse
-// are silently skipped. This is the canonical implementation shared by the rate
-// limiter, request logger, and handler packages.
-func ParseTrustedProxyCIDRs(cidrs []string) []*net.IPNet {
+// MustParseTrustedProxyCIDRs parses a list of CIDR strings (or plain IPs,
+// treated as /32) into a slice of *net.IPNet values. Invalid entries are
+// skipped and a WARN-level message is emitted via logger for each bad entry.
+// Pass slog.Default() to use the process-wide logger, or a custom logger for
+// component-scoped output. This is the canonical implementation shared by the
+// rate limiter, request logger, and handler packages.
+func MustParseTrustedProxyCIDRs(cidrs []string, logger *slog.Logger) []*net.IPNet {
 	var nets []*net.IPNet
-	for _, cidr := range cidrs {
+	for _, raw := range cidrs {
+		cidr := raw
 		if !containsSlash(cidr) {
 			cidr = cidr + "/32"
 		}
 		_, ipNet, err := net.ParseCIDR(cidr)
-		if err == nil {
-			nets = append(nets, ipNet)
+		if err != nil {
+			logger.Warn("trusted proxy CIDR is invalid and will be ignored",
+				slog.String("entry", raw),
+				slog.String("error", err.Error()),
+			)
+			continue
 		}
+		nets = append(nets, ipNet)
 	}
 	return nets
 }
 
+// ParseTrustedProxyCIDRs parses a list of CIDR strings (or plain IPs, which are
+// treated as /32) into a slice of *net.IPNet values. Invalid entries are silently
+// skipped. Prefer MustParseTrustedProxyCIDRs when a logger is available so that
+// misconfigured entries surface as warnings rather than disappearing silently.
+func ParseTrustedProxyCIDRs(cidrs []string) []*net.IPNet {
+	return MustParseTrustedProxyCIDRs(cidrs, slog.New(discardSlogHandler{}))
+}
+
+// discardSlogHandler is a slog.Handler that discards all log records, used
+// internally by ParseTrustedProxyCIDRs to satisfy the logger parameter of
+// MustParseTrustedProxyCIDRs without emitting any output.
+type discardSlogHandler struct{}
+
+func (discardSlogHandler) Enabled(_ context.Context, _ slog.Level) bool  { return false }
+func (discardSlogHandler) Handle(_ context.Context, _ slog.Record) error  { return nil }
+func (discardSlogHandler) WithAttrs(_ []slog.Attr) slog.Handler           { return discardSlogHandler{} }
+func (discardSlogHandler) WithGroup(_ string) slog.Handler                { return discardSlogHandler{} }
+
 // NewRateLimiterWithProxies creates a RateLimiter that only trusts the
 // X-Forwarded-For header when the direct peer (r.RemoteAddr) is one of the
 // listed trusted proxy CIDRs. Pass nil or an empty slice to always use
-// RemoteAddr directly (safe default).
+// RemoteAddr directly (safe default). proxyDepth ≥ 1 controls how many hops
+// to skip from the right of XFF; values < 1 are clamped to 1.
 func NewRateLimiterWithProxies(requestsPerMinute int, trustedProxyCIDRs []string) *RateLimiter {
+	return NewRateLimiterWithProxiesAndDepth(requestsPerMinute, trustedProxyCIDRs, 1)
+}
+
+// NewRateLimiterWithProxiesAndDepth is like NewRateLimiterWithProxies but also
+// accepts a proxyDepth that controls how many XFF hops to skip. Use depth > 1
+// when multiple trusted proxies are chained (e.g. an external LB in front of
+// an nginx ingress).
+func NewRateLimiterWithProxiesAndDepth(requestsPerMinute int, trustedProxyCIDRs []string, proxyDepth int) *RateLimiter {
 	nets := ParseTrustedProxyCIDRs(trustedProxyCIDRs)
+	if proxyDepth < 1 {
+		proxyDepth = 1
+	}
 
 	rl := &RateLimiter{
 		visitors:       make(map[string]*rlVisitor),
 		rate:           requestsPerMinute,
 		window:         time.Minute,
 		trustedProxies: nets,
+		proxyDepth:     proxyDepth,
 		done:           make(chan struct{}),
 	}
 
@@ -172,78 +222,115 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-// ClientIPFromRequest extracts the real client IP using the same trusted-proxy
-// logic as the RateLimiter. X-Forwarded-For is only honoured when the direct
-// peer (r.RemoteAddr) is one of the provided trustedProxies. Pass nil to always
-// use RemoteAddr.
+// ClientIPFromRequest extracts the real client IP using trusted-proxy logic.
+//
+// Resolution order when the direct peer is a trusted proxy:
+//  1. X-Forwarded-For (depth-aware): XFF is a left-to-right append chain —
+//     the original client IP is leftmost, each proxy adds its own IP to the
+//     right. depth is the number of trusted proxy hops that will have appended
+//     to XFF. The real client is therefore at index max(0, len-1-depth) from
+//     the left. Examples:
+//       XFF="client, proxy1"          depth=1 → parts[max(0,2-1-1)=0] = "client"
+//       XFF="client, proxy1, proxy2"  depth=2 → parts[max(0,3-1-2)=0] = "client"
+//       XFF="client, proxy1, proxy2"  depth=1 → parts[max(0,3-1-1)=1] = "proxy1"
+//     If depth exceeds the list length the leftmost (index 0) entry is returned.
+//  2. X-Real-IP: accepted as a fallback when no XFF header is present (common
+//     with nginx upstreams that set only X-Real-IP).
+//  3. RemoteAddr: always used when no trusted proxy matches or no proxy header
+//     yields a non-empty value.
+//
+// Pass nil trustedProxies to always use RemoteAddr (safe default).
+// depth < 1 is treated as 1.
 func ClientIPFromRequest(r *http.Request, trustedProxies []*net.IPNet) string {
+	return clientIPFromRequestWithDepth(r, trustedProxies, 1)
+}
+
+// ClientIPFromRequestWithDepth is like ClientIPFromRequest but also accepts a
+// proxyDepth for multi-hop XFF stripping. Use depth > 1 when multiple trusted
+// proxies are chained. depth < 1 is clamped to 1.
+func ClientIPFromRequestWithDepth(r *http.Request, trustedProxies []*net.IPNet, depth int) string {
+	return clientIPFromRequestWithDepth(r, trustedProxies, depth)
+}
+
+// clientIPFromRequestWithDepth is the single shared implementation used by
+// both the exported helpers and the RateLimiter's internal method.
+func clientIPFromRequestWithDepth(r *http.Request, trustedProxies []*net.IPNet, depth int) string {
+	if depth < 1 {
+		depth = 1
+	}
+
 	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		remoteHost = r.RemoteAddr
 	}
 
-	if len(trustedProxies) > 0 {
-		remoteIP := net.ParseIP(remoteHost)
-		if remoteIP != nil {
-			for _, ipNet := range trustedProxies {
-				if ipNet.Contains(remoteIP) {
-					if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-						ip := xff
-						if idx := indexByte(xff, ','); idx >= 0 {
-							ip = xff[:idx]
-						}
-						ip = trimSpace(ip)
-						if ip != "" {
-							return ip
-						}
-					}
-					break
-				}
+	if len(trustedProxies) == 0 {
+		return remoteHost
+	}
+
+	remoteIP := net.ParseIP(remoteHost)
+	if remoteIP == nil || !isTrustedProxyIP(remoteIP, trustedProxies) {
+		return remoteHost
+	}
+
+	// Peer is a trusted proxy — attempt to resolve the real client IP.
+
+	// 1. X-Forwarded-For with depth-based stripping.
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := splitXFF(xff)
+		if len(parts) > 0 {
+			// XFF is appended left-to-right: the original client is leftmost and
+			// each proxy appends its own address. With `depth` trusted proxy hops,
+			// those hops added `depth` entries to the right of the real client IP.
+			// The real client is therefore at index max(0, len-1-depth).
+			idx := len(parts) - 1 - depth
+			if idx < 0 {
+				idx = 0
+			}
+			if ip := trimSpace(parts[idx]); ip != "" {
+				return ip
 			}
 		}
 	}
 
+	// 2. X-Real-IP fallback (nginx and some other proxies set only this header).
+	if xri := trimSpace(r.Header.Get("X-Real-IP")); xri != "" {
+		return xri
+	}
+
+	// 3. Fall back to the direct peer address.
 	return remoteHost
 }
 
-// clientIP extracts the real client IP. X-Forwarded-For is only trusted when
-// the direct connection peer (r.RemoteAddr) is in the configured trusted proxy
-// list. When no trusted proxies are configured, RemoteAddr is always used.
+// clientIP is the RateLimiter's internal helper; it delegates to the shared
+// implementation using the limiter's configured trusted proxies and depth.
 func (rl *RateLimiter) clientIP(r *http.Request) string {
-	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		remoteHost = r.RemoteAddr
-	}
-
-	// Only trust XFF if the direct peer is a known trusted proxy.
-	if len(rl.trustedProxies) > 0 {
-		remoteIP := net.ParseIP(remoteHost)
-		if remoteIP != nil && rl.isTrustedProxy(remoteIP) {
-			if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-				// X-Forwarded-For may be comma-separated; take the first (leftmost) entry.
-				ip := xff
-				if idx := indexByte(xff, ','); idx >= 0 {
-					ip = xff[:idx]
-				}
-				ip = trimSpace(ip)
-				if ip != "" {
-					return ip
-				}
-			}
-		}
-	}
-
-	return remoteHost
+	return clientIPFromRequestWithDepth(r, rl.trustedProxies, rl.proxyDepth)
 }
 
-// isTrustedProxy reports whether ip is within one of the configured proxy ranges.
-func (rl *RateLimiter) isTrustedProxy(ip net.IP) bool {
-	for _, net := range rl.trustedProxies {
-		if net.Contains(ip) {
+// isTrustedProxyIP reports whether ip is contained in any of the given networks.
+func isTrustedProxyIP(ip net.IP, nets []*net.IPNet) bool {
+	for _, n := range nets {
+		if n.Contains(ip) {
 			return true
 		}
 	}
 	return false
+}
+
+// splitXFF splits a comma-separated X-Forwarded-For header value into its
+// component IP strings, preserving leading/trailing spaces (callers trim).
+func splitXFF(xff string) []string {
+	var parts []string
+	start := 0
+	for i := 0; i < len(xff); i++ {
+		if xff[i] == ',' {
+			parts = append(parts, xff[start:i])
+			start = i + 1
+		}
+	}
+	parts = append(parts, xff[start:])
+	return parts
 }
 
 // containsSlash reports whether s contains a '/' character (used to detect CIDRs).

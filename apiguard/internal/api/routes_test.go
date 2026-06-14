@@ -32,6 +32,7 @@ func newTestRouter(t *testing.T) (http.Handler, func()) {
 	auditH := handlers.NewAudit(logger, nil)
 	apiKeysH := handlers.NewAPIKeys(logger, nil, nil, cfg)
 	inventoryH := handlers.NewInventory(logger, nil)
+	webhooksH := handlers.NewWebhooks(logger, "", func() {})
 
 	authLimiter := middleware.NewRateLimiter(100)
 	scanLimiter := middleware.NewRateLimiter(100)
@@ -40,6 +41,8 @@ func newTestRouter(t *testing.T) (http.Handler, func()) {
 	apiKeyLimiter := middleware.NewRateLimiter(100)
 
 	metrics := middleware.NewMetricsCollector()
+	secrets := middleware.NewSecretProvider()
+	denylist := middleware.NewTokenDenylist()
 
 	r := chi.NewRouter()
 	RegisterRoutes(
@@ -52,6 +55,7 @@ func newTestRouter(t *testing.T) (http.Handler, func()) {
 		auditH,
 		apiKeysH,
 		inventoryH,
+		webhooksH,
 		metrics,
 		cfg,
 		authLimiter,
@@ -59,6 +63,9 @@ func newTestRouter(t *testing.T) (http.Handler, func()) {
 		reportLimiter,
 		refreshLimiter,
 		apiKeyLimiter,
+		secrets,
+		denylist,
+		nil, // sinauthClient: disabled in tests
 		[]*net.IPNet{},
 	)
 
@@ -68,6 +75,7 @@ func newTestRouter(t *testing.T) (http.Handler, func()) {
 		reportLimiter.Stop()
 		refreshLimiter.Stop()
 		apiKeyLimiter.Stop()
+		denylist.Stop()
 	}
 
 	return r, cleanup

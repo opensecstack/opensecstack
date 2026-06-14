@@ -7,25 +7,46 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+
+- sinauth SSO integration — authenticate via the SIN identity provider (OAuth 2.0 / OIDC, authorization_code + PKCE).
+- Access-token denylist with a `POST /api/v1/auth/logout` endpoint for immediate token invalidation on sign-out.
+- `sinauth.ts` client and `AuthCallback` page added to the web dashboard for popup-based SSO login.
+
+### Changed
+
+- Backend auth handler now forwards authentication events to the CITADEL WORM audit chain.
+
+---
+
+## [1.0.0] - 2026-05-10
+
+### Added
 - JWT secret rotation support (`auth.previous_jwt_secret`) for zero-downtime key rotation
+- `POST /api/v1/admin/auth/secrets/rotate` — live secret rotation without server restart
 - Refresh token revocation: `GET /auth/refresh` (list) and `DELETE /auth/refresh` (revoke all)
 - Token type validation — enforced `typ: "access"` claim to prevent token confusion attacks
 - Atomic rate limiting via Redis Lua sliding-window script with in-memory fallback
-- Trusted proxy support for correct client IP resolution behind load balancers
+- Trusted proxy support for correct client IP resolution behind load balancers (`APIGUARD_RATELIMIT_TRUSTED_PROXIES`)
 - CITADEL webhook integration — HMAC-SHA256 signed audit events, 3-attempt exponential backoff
 - SHA-256 API key hashing with constant-time comparison (`hmac.Equal`)
-- Audit log for all API key lifecycle events
+- Audit log for full API key lifecycle: `api_key_created`, `api_key_used`, `api_key_revoked`
+- Audit events for auth lifecycle: `user_login`, `user_logout`, `jwt_secret_rotated`
 - `revoked_refresh_tokens` database table
 - `api_keys` table with hashed keys, scopes, and metadata
+- `cmd/apiguard` binary — `server`, `scan`, `report`, `rule validate`, `rule test`, `version` commands
+- `cmd/migrate` — standalone migration runner (`up` / `down`) with `schema_migrations` tracking
+- CITADEL `hard_stop` webhook handler — cancels in-flight scans and initiates graceful shutdown
 
 ### Changed
-- Rate limiter upgraded from simple in-memory counter to atomic Redis Lua script
+- Rate limiter upgraded from simple in-memory counter to atomic Redis Lua script with graceful fallback
+- All 6 rate limiters now respect trusted proxy CIDRs for correct per-client-IP accounting
 - CORS now defaults to deny-all in production; origins must be explicitly allowlisted
-- API key subject claims now embed SHA-256 hash for identity traceability
+- API key subject claims embed SHA-256 hash for identity traceability and revocation checking
 
 ### Fixed
 - Sequence handling in PostgreSQL migrations
 - Audit log query ordering
+- Stale "Planned" notice removed from API Inventory documentation (endpoints are implemented)
 
 ---
 

@@ -1,11 +1,13 @@
-import { useState } from 'react'
-import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Scans from './pages/Scans'
 import ScanDetail from './pages/ScanDetail'
 import Findings from './pages/Findings'
 import AuditLog from './pages/AuditLog'
 import Login from './pages/Login'
+import Landing from './pages/Landing'
+import AuthCallback from './pages/AuthCallback'
 import './App.css'
 
 function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
@@ -39,6 +41,7 @@ function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
           <Route path="/scans/:id" element={<ScanDetail />} />
           <Route path="/findings" element={<Findings />} />
           <Route path="/audit" element={<AuditLog />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
     </div>
@@ -47,6 +50,12 @@ function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
 
 export default function App() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('apiguard_token'))
+
+  useEffect(() => {
+    const handle = () => setToken(null)
+    window.addEventListener('apiguard:logout', handle)
+    return () => window.removeEventListener('apiguard:logout', handle)
+  }, [])
 
   function handleLogin(t: string) {
     setToken(t)
@@ -59,10 +68,15 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {token
-        ? <AuthenticatedApp onLogout={handleLogout} />
-        : <Login onLogin={handleLogin} />
-      }
+      <Routes>
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        {!token && <Route path="/login" element={<Login onLogin={handleLogin} />} />}
+        <Route path="*" element={
+          token
+            ? <AuthenticatedApp onLogout={handleLogout} />
+            : <Landing onLogin={handleLogin} />
+        } />
+      </Routes>
     </BrowserRouter>
   )
 }

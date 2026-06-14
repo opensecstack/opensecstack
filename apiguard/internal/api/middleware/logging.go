@@ -11,9 +11,15 @@ import (
 
 // RequestLogger returns a middleware that logs each HTTP request using zerolog.
 // trustedProxies is the list of upstream proxy CIDRs whose X-Forwarded-For
-// header should be trusted when determining the real client IP. Pass nil to
-// always use r.RemoteAddr (safe default).
-func RequestLogger(logger zerolog.Logger, trustedProxies []*net.IPNet) func(next http.Handler) http.Handler {
+// and X-Real-IP headers should be trusted when determining the real client IP.
+// Pass nil to always use r.RemoteAddr (safe default).
+// proxyDepth controls depth-based XFF stripping (see ClientIPFromRequestWithDepth);
+// values < 1 are treated as 1.
+func RequestLogger(logger zerolog.Logger, trustedProxies []*net.IPNet, proxyDepth ...int) func(next http.Handler) http.Handler {
+	depth := 1
+	if len(proxyDepth) > 0 && proxyDepth[0] > 1 {
+		depth = proxyDepth[0]
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -23,7 +29,7 @@ func RequestLogger(logger zerolog.Logger, trustedProxies []*net.IPNet) func(next
 				logger.Info().
 					Str("method", r.Method).
 					Str("path", r.URL.Path).
-					Str("client_ip", ClientIPFromRequest(r, trustedProxies)).
+					Str("client_ip", ClientIPFromRequestWithDepth(r, trustedProxies, depth)).
 					Str("request_id", chimw.GetReqID(r.Context())).
 					Int("status", ww.Status()).
 					Int("bytes", ww.BytesWritten()).

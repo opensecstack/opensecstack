@@ -11,6 +11,9 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- sinauth SSO integration — authenticate via the SIN identity provider (OAuth 2.0 / OIDC, authorization_code + PKCE).
+- `app/sinauth.py` — OIDC token validation module; verifies RS256 tokens against the sinauth JWKS endpoint.
+- `sinauth.ts` client added to the web dashboard for popup-based SSO login.
 - Compliance score history: `ComplianceSnapshot` model records a snapshot every time a score is computed; new `GET /api/v1/assessments/<id>/history` endpoint returns all snapshots ordered by time
 - NCA export format: `app/reporters/nca_reporter.py` generates a structured XML report for submission to National Competent Authorities; available via `POST /api/v1/assessments/<id>/report?format=nca`
 - Alembic migration 014: creates `compliance_snapshots` table

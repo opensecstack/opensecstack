@@ -34,6 +34,14 @@ def token():
     api_key_id = getattr(g, 'api_key_id', None)
     if api_key_id:
         identity = 'api_key:' + api_key_id
+        # Commit the last_used_at update and api_key_used audit entry that
+        # validate_api_key wrote to the session — without this commit they are
+        # silently rolled back at request teardown.
+        from ..extensions import db as _db
+        try:
+            _db.session.commit()
+        except Exception:
+            _db.session.rollback()
     else:
         identity = 'api_key:' + hashlib.sha256(api_key.encode()).hexdigest()[:16]
 

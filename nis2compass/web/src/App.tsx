@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import Login from './pages/Login'
+import Landing from './pages/Landing'
+import AuthCallback from './pages/AuthCallback'
 import OrganisationList from './pages/OrganisationList'
 import OrganisationDetail from './pages/OrganisationDetail'
 import AssessmentList from './pages/AssessmentList'
@@ -109,11 +111,15 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {auth ? (
-        <AuthenticatedApp role={auth.role} onLogout={handleLogout} />
-      ) : (
-        <Login onLogin={handleLogin} />
-      )}
+      <Routes>
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        {!auth && <Route path="/login" element={<Login onLogin={handleLogin} />} />}
+        <Route path="*" element={
+          auth
+            ? <AuthenticatedApp role={auth.role} onLogout={handleLogout} />
+            : <Landing onLogin={handleLogin} />
+        } />
+      </Routes>
     </BrowserRouter>
   )
 }

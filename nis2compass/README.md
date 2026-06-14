@@ -33,6 +33,15 @@ The development Compose file exposes Postgres on `localhost:5433` and Redis on `
 
 ---
 
+## Authentication
+
+NIS2 Compass authenticates users via sinauth SSO using OpenID Connect (authorization_code + PKCE).
+RS256-signed tokens are validated against the sinauth JWKS endpoint via `app/sinauth.py`.
+The web dashboard uses `sinauth.ts` for popup-based login and handles the OIDC callback.
+See the [sinauth integration guide](../sinauth/docs/integration/nis2compass.md) for setup details.
+
+---
+
 ## Environment Variables
 
 ### Production (`docker-compose.yml`)

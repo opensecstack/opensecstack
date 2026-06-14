@@ -24,7 +24,7 @@ def upgrade() -> None:
         sa.Column('actor',              sa.String(255), nullable=False),
         sa.Column('resource_type',      sa.String(100), nullable=False),
         sa.Column('resource_id',        postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('risk_class',         sa.Enum('INFO', 'WARNING', 'CRITICAL', name='audit_risk_class'), nullable=False, server_default='INFO'),
+        sa.Column('risk_class',         postgresql.ENUM('INFO', 'WARNING', 'CRITICAL', name='audit_risk_class', create_type=False), nullable=False, server_default='INFO'),
         sa.Column('metadata',           postgresql.JSONB, nullable=False, server_default='{}'),
         sa.Column('object_fingerprint', sa.CHAR(64),     nullable=True),
         sa.Column('prev_hash',          sa.CHAR(64),     nullable=True),

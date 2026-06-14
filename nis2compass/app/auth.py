@@ -66,6 +66,13 @@ def validate_api_key(api_key: str) -> tuple[bool, str, str]:
             'DB unavailable during API key validation — revocation state unverifiable, '
             'falling back to bootstrap env-var keys: %s', exc
         )
+        # Roll back the failed transaction so the session is clean if the
+        # caller later uses db.session in the same request.
+        try:
+            from .extensions import db as _db
+            _db.session.rollback()
+        except Exception:
+            pass
         # In production, fail closed: do not allow access when we cannot
         # confirm that the key has not been revoked.
         if current_app.config.get('ENV') == 'production':
@@ -209,7 +216,14 @@ def _db_is_revoked(jti: str) -> bool:
         return record.expires_at > datetime.now(timezone.utc)
     except Exception:
         # Cannot confirm revocation — fail open (consistent with existing
-        # DB-unavailable behaviour in validate_api_key for non-prod)
+        # DB-unavailable behaviour in validate_api_key for non-prod).
+        # Roll back the failed transaction so the session is clean for the
+        # route handler that will run after require_auth returns.
+        try:
+            from .extensions import db as _db
+            _db.session.rollback()
+        except Exception:
+            pass
         return False
 
 
@@ -275,6 +289,20 @@ def require_auth(f):
             return jsonify({'error': 'Missing or invalid Authorization header', 'code': 'UNAUTHORIZED'}), 401
         token = auth_header[len('Bearer '):]
 
+        sinauth_url = current_app.config.get('SINAUTH_URL', '')
+        sinauth_issuer = current_app.config.get('SINAUTH_ISSUER', sinauth_url)
+
+        if sinauth_url:
+            from .sinauth import is_rs256_token, verify_sinauth_token
+            if is_rs256_token(token):
+                payload = verify_sinauth_token(token, sinauth_url, sinauth_issuer)
+                if payload is None:
+                    return jsonify({'error': 'Token is invalid or expired', 'code': 'UNAUTHORIZED'}), 401
+                g.actor = payload.get('sub', 'unknown')
+                g.token_scope = 'read_write'  # sinauth tokens get full scope
+                g.token_role = payload.get('role', 'assessor')
+                return f(*args, **kwargs)
+
         try:
             payload = verify_token(token, 'access')
         except jwt.ExpiredSignatureError:
@@ -298,7 +326,14 @@ def require_auth(f):
                 if record.expires_at is not None and record.expires_at <= datetime.now(timezone.utc):
                     return jsonify({'error': 'API key expired', 'code': 'UNAUTHORIZED'}), 401
             except Exception:
-                pass  # DB unavailable — fall through (fail-open for non-prod)
+                # DB unavailable — fall through (fail-open for non-prod).
+                # Roll back the failed transaction so the session is clean
+                # for the route handler that follows.
+                try:
+                    from .extensions import db as _db
+                    _db.session.rollback()
+                except Exception:
+                    pass
 
         g.actor = payload.get('sub', 'unknown')
         g.token_scope = payload.get('scope', 'read_write')

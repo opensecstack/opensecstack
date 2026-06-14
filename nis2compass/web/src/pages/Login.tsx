@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react'
-import { api } from '../api'
+import { useState } from 'react'
+import { loginWithPopup } from '../sinauth'
 import './Login.css'
 
 interface Props {
@@ -7,19 +7,16 @@ interface Props {
 }
 
 export default function Login({ onLogin }: Props) {
-  const [apiKey, setApiKey] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    if (!apiKey.trim()) return
+  async function handleSignIn() {
     setLoading(true)
     setError(null)
     try {
-      const token = await api.auth.login(apiKey.trim())
-      localStorage.setItem('nis2compass_token', token)
-      onLogin(token)
+      const tokens = await loginWithPopup()
+      localStorage.setItem('nis2compass_token', tokens.access_token)
+      onLogin(tokens.access_token)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
@@ -35,24 +32,11 @@ export default function Login({ onLogin }: Props) {
           <span className="login-logo-text">NIS2 Compass</span>
         </div>
         <h1 className="login-title">Sign in</h1>
-        <p className="login-subtitle">Enter your API key to access the compliance dashboard.</p>
-        <form onSubmit={handleSubmit} className="login-form">
-          <label className="login-label" htmlFor="api-key">API Key</label>
-          <input
-            id="api-key"
-            className="login-input"
-            type="password"
-            placeholder="nis2_apk_..."
-            value={apiKey}
-            onChange={e => setApiKey(e.target.value)}
-            autoComplete="current-password"
-            disabled={loading}
-          />
-          {error && <p className="login-error">{error}</p>}
-          <button className="login-btn" type="submit" disabled={loading || !apiKey.trim()}>
-            {loading ? 'Signing in...' : 'Sign in'}
-          </button>
-        </form>
+        <p className="login-subtitle">Access the compliance dashboard via your OpenSecStack account.</p>
+        {error && <p className="login-error">{error}</p>}
+        <button className="login-btn" onClick={handleSignIn} disabled={loading}>
+          {loading ? 'Opening…' : 'Sign in with sinauth'}
+        </button>
       </div>
     </div>
   )

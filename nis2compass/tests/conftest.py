@@ -45,5 +45,5 @@ def auth_headers(client):
         json={'api_key': 'test-api-key'},
     )
     assert resp.status_code == 200, f'Auth failed: {resp.get_json()}'
-    token = resp.get_json()['token']
+    token = resp.get_json()['access_token']
     return {'Authorization': f'Bearer {token}'}

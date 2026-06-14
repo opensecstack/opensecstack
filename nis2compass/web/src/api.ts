@@ -59,14 +59,15 @@ export const api = {
         const err = await res.json().catch(() => ({ error: res.statusText }))
         throw new Error(err.error ?? res.statusText)
       }
-      const data: { token: string } = await res.json()
-      return data.token
+      const data: { access_token: string } = await res.json()
+      return data.access_token
     },
   },
 
   organisations: {
     list: (page = 1, perPage = 100) =>
-      request<Organisation[]>(`/organisations?page=${page}&per_page=${perPage}`),
+      request<{ data: Organisation[] }>(`/organisations?page=${page}&per_page=${perPage}`)
+        .then(r => r.data ?? []),
     get: (id: string) => request<Organisation>(`/organisations/${id}`),
     create: (data: {
       name: string
@@ -103,9 +104,9 @@ export const api = {
 
   assessments: {
     list: (orgId: string, page = 1, perPage = 50) =>
-      request<Assessment[]>(
+      request<{ data: Assessment[] }>(
         `/organisations/${orgId}/assessments?page=${page}&per_page=${perPage}`,
-      ),
+      ).then(r => r.data ?? []),
     get: (id: string) => request<Assessment>(`/assessments/${id}`),
     create: (
       orgId: string,
@@ -130,7 +131,7 @@ export const api = {
 
   controls: {
     list: (assessmentId: string) =>
-      request<Control[]>(`/assessments/${assessmentId}/controls`),
+      request<{ data: Control[] }>(`/assessments/${assessmentId}/controls`).then(r => r.data ?? []),
     get: (assessmentId: string, measureRef: string) =>
       request<Control>(`/assessments/${assessmentId}/controls/${measureRef}`),
     patch: (
@@ -158,7 +159,7 @@ export const api = {
 
   artifacts: {
     list: (assessmentId: string) =>
-      request<Artifact[]>(`/assessments/${assessmentId}/artifacts`),
+      request<{ data: Artifact[] }>(`/assessments/${assessmentId}/artifacts`).then(r => r.data ?? []),
 
     download: async (artifactId: string): Promise<Blob> => {
       const token = localStorage.getItem(TOKEN_KEY)
@@ -234,7 +235,7 @@ export const api = {
   },
 
   apiKeys: {
-    list: () => request<ApiKey[]>('/api-keys'),
+    list: () => request<{ data: ApiKey[] }>('/api-keys').then(r => r.data ?? []),
     create: (data: { label: string; scope?: string }) =>
       request<ApiKey>('/api-keys', {
         method: 'POST',
@@ -264,9 +265,9 @@ export const api = {
       if (params?.after) q.set('after', params.after)
       if (params?.page) q.set('page', String(params.page))
       if (params?.per_page) q.set('per_page', String(params.per_page))
-      const { data, headers } = await requestWithHeaders<AuditEntry[]>(`/audit?${q}`)
-      const total = parseInt(headers.get('X-Total-Count') ?? '0', 10)
-      return { entries: data, total }
+      const { data, headers } = await requestWithHeaders<{ data: AuditEntry[]; total?: number }>(`/audit?${q}`)
+      const total = parseInt(headers.get('X-Total-Count') ?? '', 10) || data.total || 0
+      return { entries: data.data ?? [], total }
     },
   },
 }

@@ -22,7 +22,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     NIS2_UPLOAD_DIR=/app/uploads
 
 # Runtime lib for psycopg2
-RUN apt-get update && apt-get install -y --no-install-recommends libpq5 \
+RUN apt-get update && apt-get install -y --no-install-recommends libpq5 libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root user

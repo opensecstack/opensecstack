@@ -52,7 +52,7 @@ class TestComputeChainHash:
         resource_id = 'NULL'
         prev_hash = 'NULL'
         timestamp = '2026-01-01T00:00:00'
-        raw = f'{entry_id}{action}{actor}{resource_type}{resource_id}{prev_hash}{timestamp}'
+        raw = f'{entry_id}||{action}||{actor}||{resource_type}||{resource_id}||{prev_hash}||{timestamp}'
         expected = hashlib.sha256(raw.encode('utf-8')).hexdigest()
         result = _compute_chain_hash(entry_id, action, actor, resource_type, None, None, timestamp)
         assert result == expected

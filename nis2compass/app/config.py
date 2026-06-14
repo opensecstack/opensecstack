@@ -132,6 +132,12 @@ class Config:
     UPLOAD_DIR = os.getenv('NIS2_UPLOAD_DIR', '/app/uploads')
 
     # ------------------------------------------------------------------ #
+    # sinauth SSO (optional — leave SINAUTH_URL empty to disable)          #
+    # ------------------------------------------------------------------ #
+    SINAUTH_URL = os.environ.get('SINAUTH_URL', '')
+    SINAUTH_ISSUER = os.environ.get('SINAUTH_ISSUER', os.environ.get('SINAUTH_URL', ''))
+
+    # ------------------------------------------------------------------ #
     # CITADEL audit forwarding (optional)                                  #
     # ------------------------------------------------------------------ #
     CITADEL_API_URL = os.environ.get('CITADEL_API_URL', '')

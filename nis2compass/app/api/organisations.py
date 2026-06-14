@@ -138,6 +138,7 @@ def create_organisation():
 
     try:
         db.session.flush()  # get the generated id before audit write
+        org_dict = org.to_dict()  # serialize while still attached (before commit detaches)
         write_audit(
             db.session,
             action='organisation_created',
@@ -146,7 +147,7 @@ def create_organisation():
             resource_id=org.id,
             risk_class='INFO',
             metadata={'name': org.name, 'entity_type': org.entity_type},
-            obj=org.to_dict(),
+            obj=org_dict,
         )
         db.session.commit()
     except IntegrityError as e:
@@ -159,7 +160,7 @@ def create_organisation():
             return jsonify({'error': 'An organisation with this name already exists for your account', 'code': 'CONFLICT'}), 409
         raise
 
-    return jsonify(org.to_dict()), 201
+    return jsonify(org_dict), 201
 
 
 # ------------------------------------------------------------------ #
@@ -237,6 +238,7 @@ def update_organisation(org_id):
                 return jsonify({'error': 'contact_email is not a valid email address', 'code': 'INVALID_INPUT'}), 400
         org.contact_email = email
 
+    after = org.to_dict()  # serialize while still attached (before commit detaches)
     write_audit(
         db.session,
         action='organisation_updated',
@@ -244,10 +246,10 @@ def update_organisation(org_id):
         resource_type='organisation',
         resource_id=org.id,
         risk_class='INFO',
-        metadata={'before': before, 'after': org.to_dict()},
+        metadata={'before': before, 'after': after},
     )
     db.session.commit()
-    return jsonify(org.to_dict()), 200
+    return jsonify(after), 200
 
 
 # ------------------------------------------------------------------ #

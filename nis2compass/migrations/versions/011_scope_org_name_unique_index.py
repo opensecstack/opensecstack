@@ -19,7 +19,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.drop_index('idx_organisations_name', table_name='organisations')
+    # The pre-existing global index may never have been created in some
+    # histories, so drop conditionally before creating the scoped one.
+    op.execute("DROP INDEX IF EXISTS idx_organisations_name")
     op.create_index(
         'idx_organisations_name',
         'organisations',
@@ -29,7 +31,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index('idx_organisations_name', table_name='organisations')
+    op.execute("DROP INDEX IF EXISTS idx_organisations_name")
     op.create_index(
         'idx_organisations_name',
         'organisations',

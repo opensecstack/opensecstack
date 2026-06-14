@@ -98,10 +98,10 @@ def create_api_key():
         risk_class='WARNING',
         metadata={'label': label, 'scope': scope},
     )
+    result = api_key.to_dict()  # serialize while still attached (before commit detaches)
     db.session.commit()
 
     # Return the plaintext key ONCE in the response — it is never stored
-    result = api_key.to_dict()
     result['key'] = plaintext
     result['warning'] = 'This is the only time the plaintext key will be shown. Store it securely.'
     return jsonify(result), 201

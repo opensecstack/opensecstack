@@ -22,17 +22,23 @@ ThreatFlow ingests IOC feeds from external and internal sources, maps indicators
 
 | Capability | Status | Details |
 |-----------|--------|---------|
-| IOC ingestion (manual) | Scaffold | POST /api/v1/iocs |
-| IOC ingestion (TAXII 2.1 polling) | Planned | Scheduled feed polling |
-| STIX 2.1 bundle ingestion | Scaffold | POST /api/v1/stix/bundles |
-| STIX 2.1 bundle export | Planned | GET with content negotiation |
-| MITRE ATT&CK mapping | Planned | Automatic TTP tagging |
-| IOC deduplication | Planned | Hash-based + fuzzy matching |
-| Feed confidence scoring | Planned | Bayesian scoring per source |
-| APIGuard integration | Planned | IOC extraction from scan targets |
-| IRFlow integration | Planned | Context enrichment for incidents |
-| CITADEL MARSHAL governance | Planned | All mutations MARSHAL-gated |
-| CITADEL WORM logging | Planned | All operations chain-hashed |
+| IOC ingestion (manual) | v1.0 | `POST /api/v1/iocs` with pattern-hash dedup |
+| IOC ingestion (TAXII 2.1 polling) | v1.0 | Scheduler polls enabled feeds at the configured interval |
+| CSV feed polling (abuse.ch, OTX) | v1.0 | Column auto-detection, `#`-comment stripping |
+| MISP feed polling | v1.0 | `/events/restSearch` consumer, `to_ids=true` filter |
+| STIX 2.1 bundle ingestion | v1.0 | Parser + validator + importer with dedup |
+| STIX 2.1 bundle fetch | v1.0 | `GET /api/v1/stix/bundles/{id}` returns envelope + objects |
+| MITRE ATT&CK mapping | v1.0 | 19 embedded techniques + 16 auto rules + feed-provided extraction |
+| IOC correlation engine | v1.0 | 5 rules (duplicate, resolves-to, subdomain-of, same-network, shares-cve) |
+| Feed confidence base | v1.0 | Per-feed `confidence_base` propagated to IOCs on ingest |
+| APIGuard + IRFlow + NIS2 integration | v1.0 | HMAC-signed outbound webhooks + `POST /sightings` ingress |
+| Match lookup | v1.0 | `GET /match?type=X&value=Y` with Redis cache |
+| CITADEL MARSHAL governance | v1.0 | Every mutation gated (`IOC_INGEST`, `STIX_BUNDLE_IMPORT`, ...) |
+| CITADEL WORM logging | v1.0 | Bounded async queue with graceful drain |
+| JWT auth + API keys + RBAC | v1.0 | HS256 tokens; 4 roles; SHA-256 hashed keys |
+| Redis match cache | v1.0 | 10-minute TTL, invalidated on upsert/revoke |
+| Rate limiting | v1.0 | Per-IP token bucket, configurable rps + burst |
+| Integration + E2E tests | v1.0 | `make test-e2e` exercises the full paper flow |
 
 ---
 
@@ -116,6 +122,14 @@ ThreatFlow is configured via environment variables with the `THREATFLOW_` prefix
 | `THREATFLOW_LOG_FORMAT` | `json` | Log format (json, text) |
 
 See [docs/configuration.md](docs/configuration.md) for the full reference.
+
+---
+
+## Authentication
+
+ThreatFlow authenticates operators via [sinauth](../sinauth/docs/integration/threatflow.md) SSO — the SIN identity provider (OAuth 2.0 / OIDC, authorization code + PKCE).
+Access tokens are RS256-signed JWTs issued by `https://auth.sin.to`; ThreatFlow validates them against the sinauth JWKS endpoint at `https://auth.sin.to/.well-known/jwks.json`.
+See the [sinauth integration guide](../sinauth/docs/integration/threatflow.md) for token validation setup, RBAC mapping, and MFA configuration.
 
 ---
 

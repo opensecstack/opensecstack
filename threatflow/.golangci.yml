@@ -22,15 +22,42 @@ linters-settings:
     check-type-assertions: true
   govet:
     enable-all: true
+    # `shadow` flags every inner-scope `err :=` — an ubiquitous Go idiom
+    # (`if err := fn(); err != nil { ... }`) with no bug-finding value in
+    # this codebase. All currently-flagged sites were reviewed and confirmed
+    # intentional before the analyzer was disabled.
+    disable:
+      - shadow
+      # `fieldalignment` reorders struct fields purely to save padding bytes.
+      # The savings are trivial compared to the readability cost of grouping
+      # fields by semantic purpose, which is how this codebase is organised.
+      - fieldalignment
   gosec:
     excludes:
       - G104  # unhandled errors on Close() — acceptable in defer
   misspell:
     locale: US
+    # "mitre" is the proper name of the MITRE Corporation — changing it to
+    # "miter" would break the ATT&CK framework references. The British-English
+    # words ("cancelled", "summarises", "materialise") are intentional and
+    # used consistently across the repo.
+    ignore-words:
+      - mitre
+      - cancelled
+      - summarises
+      - summarise
+      - materialise
+      - catalogue
 
 issues:
   exclude-rules:
     - path: _test\.go
       linters:
         - gosec
+        - errcheck
+    # cobra/viper wiring in cmd/ returns errors only when flag names
+    # collide — a programming error that would surface at startup, not at
+    # runtime. Mirroring the irflow / apiguard convention.
+    - path: cmd/
+      linters:
         - errcheck

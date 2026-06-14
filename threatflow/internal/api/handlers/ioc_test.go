@@ -13,7 +13,7 @@ import (
 )
 
 func TestIOCList_ReturnsEmptyList(t *testing.T) {
-	h := NewIOC(zerolog.Nop())
+	h := NewIOC(zerolog.Nop(), nil, nil, nil, nil, nil)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/iocs", nil)
 
@@ -31,7 +31,7 @@ func TestIOCList_ReturnsEmptyList(t *testing.T) {
 }
 
 func TestIOCIngest_AcceptsValidJSON(t *testing.T) {
-	h := NewIOC(zerolog.Nop())
+	h := NewIOC(zerolog.Nop(), nil, nil, nil, nil, nil)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/iocs", strings.NewReader(`{"type":"ip","value":"1.2.3.4"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -44,7 +44,7 @@ func TestIOCIngest_AcceptsValidJSON(t *testing.T) {
 }
 
 func TestIOCIngest_RejectsMalformedJSON(t *testing.T) {
-	h := NewIOC(zerolog.Nop())
+	h := NewIOC(zerolog.Nop(), nil, nil, nil, nil, nil)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/iocs", strings.NewReader(`{not json`))
 	req.Header.Set("Content-Type", "application/json")
@@ -57,7 +57,7 @@ func TestIOCIngest_RejectsMalformedJSON(t *testing.T) {
 }
 
 func TestIOCGet_ReturnsNotFound(t *testing.T) {
-	h := NewIOC(zerolog.Nop())
+	h := NewIOC(zerolog.Nop(), nil, nil, nil, nil, nil)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/iocs/missing-id", nil)
 	// Inject chi route param
@@ -73,7 +73,7 @@ func TestIOCGet_ReturnsNotFound(t *testing.T) {
 }
 
 func TestSTIXListBundles_ReturnsEmpty(t *testing.T) {
-	h := NewIOC(zerolog.Nop())
+	h := NewSTIX(zerolog.Nop(), nil, nil, nil, nil)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/stix/bundles", nil)
 
@@ -85,15 +85,28 @@ func TestSTIXListBundles_ReturnsEmpty(t *testing.T) {
 }
 
 func TestSTIXIngestBundle_Accepts(t *testing.T) {
-	h := NewIOC(zerolog.Nop())
+	h := NewSTIX(zerolog.Nop(), nil, nil, nil, nil)
 	rec := httptest.NewRecorder()
-	body := `{"type":"bundle","id":"bundle--1234","objects":[]}`
+	body := `{"type":"bundle","id":"bundle--44444444-4444-4444-4444-444444444444","spec_version":"2.1","objects":[]}`
 	req := httptest.NewRequest(http.MethodPost, "/stix/bundles", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	h.IngestBundle(rec, req)
 
 	if rec.Code != http.StatusAccepted {
-		t.Fatalf("want 202, got %d", rec.Code)
+		t.Fatalf("want 202, got %d; body: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSTIXIngestBundle_RejectsBadJSON(t *testing.T) {
+	h := NewSTIX(zerolog.Nop(), nil, nil, nil, nil)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/stix/bundles", strings.NewReader(`{not json`))
+	req.Header.Set("Content-Type", "application/json")
+
+	h.IngestBundle(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", rec.Code)
 	}
 }

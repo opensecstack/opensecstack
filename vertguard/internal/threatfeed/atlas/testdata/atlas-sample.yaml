@@ -1,0 +1,36 @@
+id: ATLAS
+name: ATLAS
+version: 4.5.0
+
+matrices:
+  - id: ATLAS
+    name: ATLAS Machine Learning Threat Matrix
+    tactics:
+      - id: AML.TA0005
+        name: Execution
+      - id: AML.TA0011
+        name: Collection
+      - id: AML.TA0013
+        name: Exfiltration
+    techniques:
+      - id: AML.T0051
+        name: LLM Prompt Injection
+        description: Adversarial prompt input that overrides or supplements the original prompt.
+        tactics:
+          - AML.TA0005
+      - id: AML.T0051.000
+        name: "LLM Prompt Injection: Direct"
+        description: Direct prompt injection.
+        tactics:
+          - AML.TA0005
+        subtechnique-of: AML.T0051
+      - id: AML.T0057
+        name: LLM Data Leakage
+        description: The LLM reveals sensitive data.
+        tactics:
+          - AML.TA0011
+      - id: AML.TX9999
+        name: Synthetic Test Technique
+        description: Used by VertGuard sync tests.
+        tactics:
+          - AML.TA0013

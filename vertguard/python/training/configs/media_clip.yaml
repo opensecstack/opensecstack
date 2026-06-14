@@ -1,0 +1,25 @@
+model_type: gradient_boosting
+output_dir: /var/lib/vertguard/models/media-clip
+features:
+  - has_c2pa_manifest
+  - c2pa_signature_valid
+  - file_size_mb
+  - mime_is_video
+  - mime_is_image
+training:
+  n_estimators: 200
+  max_depth: 4
+  learning_rate: 0.05
+  subsample: 0.8
+  random_state: 42
+  test_size: 0.2
+datasets:
+  - name: fakeddit
+    path: data/media/fakeddit
+    label_col: is_synthetic
+  - name: dfdc_metadata
+    path: data/media/dfdc_metadata
+    label_col: is_deepfake
+eval:
+  metrics: [auc_roc, precision, recall, f1]
+  threshold: 0.55

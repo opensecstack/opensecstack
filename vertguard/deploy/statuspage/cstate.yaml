@@ -1,0 +1,104 @@
+# ─────────────────────────────────────────────────────────────────────
+# VertGuard public status page — cstate configuration
+# Closes security-checklist gap 10.5.
+#
+# cstate is an open-source, Hugo-based status page:
+#   https://github.com/cstate/cstate
+#
+# Deploy instructions (static hosting):
+#   1. Install Hugo: https://gohugo.io/getting-started/installing/
+#   2. Clone cstate theme: git submodule add https://github.com/cstate/cstate themes/cstate
+#   3. Copy this file to <cstate-site>/config.yaml
+#   4. Run: hugo --minify
+#   5. Publish ./public/ to GitHub Pages, Netlify, Cloudflare Pages, or S3.
+#
+# Automated availability checks are in .github/workflows/statuspage.yml.
+# That workflow curls each service's health endpoint and opens a GitHub
+# Issue if a component returns a non-200 response.
+# ─────────────────────────────────────────────────────────────────────
+
+title: VertGuard Status
+baseURL: https://status.vertguard.io
+languageCode: en-us
+theme: cstate
+
+params:
+  # Displayed at the top of the page and in the browser tab.
+  title: VertGuard Status
+  description: >
+    Real-time status for the VertGuard AI-attack defence platform.
+    Incidents and maintenance windows are posted here as they are detected.
+
+  # Support / contact link shown in the footer.
+  supportLink: https://github.com/opensecstack/vertguard/security/advisories
+
+  # Colour scheme: good (green), notice (yellow), disrupted (orange), down (red).
+  # cstate default palette — override with custom CSS if branding requires it.
+  alwaysKeepBrandColor: true
+
+  # Incident categories shown in history view.
+  incidentCategories:
+    - Incident
+    - Degraded Performance
+    - Partial Outage
+    - Full Outage
+    - Maintenance
+
+  # ─── Monitored systems ───────────────────────────────────────────
+  # Each entry maps to a "component" tile on the status page.
+  # Health endpoint URLs are used by .github/workflows/statuspage.yml
+  # for automated availability checks.
+  systems:
+    - name: API
+      description: REST API (scan, identity, media, threatfeed)
+      # Health endpoint for automated pinging (filled in by operator).
+      healthEndpoint: https://api.vertguard.io/api/v1/health
+      category: Core
+
+    - name: ML Service
+      description: gRPC ML inference service (GAN / CLIP detectors)
+      # ML side-car exposes /healthz via HTTP-to-gRPC proxy.
+      healthEndpoint: https://api.vertguard.io/api/v1/health/ml
+      category: Core
+
+    - name: CITADEL
+      description: WORM evidence emission — tamper-evident audit anchor
+      # CITADEL health is proxied through the API circuit-breaker status.
+      healthEndpoint: https://api.vertguard.io/api/v1/health/citadel
+      category: Integrity
+
+    - name: ThreatFlow
+      description: IOC feed ingestion and webhook fan-out
+      healthEndpoint: https://api.vertguard.io/api/v1/health/threatfeed
+      category: Feeds
+
+    - name: Dashboard
+      description: Web UI — operator console and scan history
+      healthEndpoint: https://status.vertguard.io/dashboard-probe
+      category: Frontend
+
+  # ─── Incident page settings ──────────────────────────────────────
+  # Show the last N days of incidents on the front page.
+  daysUntilStale: 14
+  # Show full incident history on the /history page.
+  enableHistory: true
+  # Require a resolved date on incidents (good practice for SLA tracking).
+  requiresResolvedAt: false
+
+  # ─── Branding ────────────────────────────────────────────────────
+  logo: /img/vertguard-logo.svg
+  favicon: /img/favicon.ico
+  # primaryColor follows the VertGuard brand; overridden in assets/custom.css.
+  primaryColor: "#1a1f36"
+
+# Hugo build settings
+markup:
+  goldmark:
+    renderer:
+      unsafe: false
+
+outputs:
+  home:
+    - HTML
+    - RSS
+    - JSON

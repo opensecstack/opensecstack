@@ -1,0 +1,26 @@
+VertGuard ML inference {{ .Chart.AppVersion }} deployed as "{{ include "vertguard-ml.fullname" . }}".
+
+Backend: {{ .Values.config.backend }}
+gRPC:    vertguard-ml.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
+
+The parent VertGuard chart auto-wires VERTGUARD_ML_GRPC_URL when
+`ml.enabled=true` — no manual config required on the Go side.
+
+Smoke test (in-cluster):
+  kubectl --namespace {{ .Release.Namespace }} run -it --rm grpchealth \
+    --image=ghcr.io/grpc-ecosystem/grpc-health-probe:v0.4.25 --restart=Never -- \
+    -addr=vertguard-ml.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}
+
+{{- if eq .Values.config.backend "stub" }}
+
+NOTE: stub backend is active. ML scores are deterministic placeholders
+suitable for wire-protocol verification only. Promote to `distilbert`
+or `onnx` once the model registry has a v1 model. See
+docs/ml-training-guide.md and docs/ml-model-registry.md.
+{{- end }}
+
+Documentation:
+- Architecture: docs/ml-architecture.md
+- Training:     docs/ml-training-guide.md
+- Registry:     docs/ml-model-registry.md
+- Runbook:      docs/operator-runbook.md (playbook 3.10)

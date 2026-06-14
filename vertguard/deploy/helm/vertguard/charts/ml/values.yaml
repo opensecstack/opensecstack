@@ -1,0 +1,162 @@
+# Default values for the VertGuard ML inference subchart.
+# Activated by setting `ml.enabled=true` at the parent level.
+
+# -- Replicas. Stub backend is light (no model in memory); bump when you
+# move to DistilBERT/ONNX so a single pod doesn't gate scan latency.
+replicaCount: 1
+
+image:
+  repository: ghcr.io/opensecstack/vertguard-ml
+  # Empty = .Chart.AppVersion, kept in lockstep with the Go image.
+  tag: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# -- Pod-level security context. Image runs as UID 65532 to mirror the
+# Go service's distroless nonroot UID for operator consistency.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  # Service port — wire-compatible with the Go ML client default
+  # (VERTGUARD_ML_GRPC_URL=vertguard-ml:50051).
+  port: 50051
+  annotations: {}
+
+# -- Resources. DistilBERT inference is memory-hungry even on CPU
+# (batch=1, seq_len=128, fp32 ≈ 600 MB resident). Limits accommodate
+# warm-up + tokenizer cache + ONNX runtime arenas.
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 2Gi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 6
+  # CPU is the cheap signal; the latency histogram is the truthful one.
+  # Operators wire a Prometheus Adapter rule to expose
+  # `vertguard_ml_latency_seconds_bucket` as an external metric.
+  targetCPUUtilizationPercentage: 75
+  # External metric block. Inactive unless the Prometheus Adapter is
+  # configured; the HPA template renders both metrics when set.
+  latency:
+    enabled: false
+    # Trigger scale-up when p95 inference latency crosses 60 ms.
+    targetAverageValueMilliseconds: 60
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# -- NetworkPolicy: restrict ingress to the parent VertGuard pods +
+# Prometheus scrape namespace. Default-on once the parent has the policy.
+networkPolicy:
+  enabled: true
+  # Selector matching the parent VertGuard Deployment's pod labels —
+  # mirrors the helper `vertguard.selectorLabels` used by the parent.
+  parent:
+    matchLabels:
+      app.kubernetes.io/name: vertguard
+  # Namespace where Prometheus runs. Empty = no scrape ingress.
+  prometheusNamespace: monitoring
+
+metrics:
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+  # Scrape port for /metrics — distinct from gRPC.
+  port: 9100
+
+# -- Probes via grpc_health_probe. The binary is shipped in the image.
+probes:
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# -- Operators steering DistilBERT/torch-gpu workloads to a GPU node
+# pool typically set:
+#   nodeSelector: { node-role.opensecstack.io/gpu: "true" }
+#   tolerations:  [{ key: "nvidia.com/gpu", operator: "Exists", effect: "NoSchedule" }]
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+extraEnv: []
+extraEnvFrom: []
+
+# ─────────────────────────────────────────────────────────────────────
+# Application configuration — rendered as VERTGUARD_ML_<KEY>.
+# Backend: stub (default v1) | distilbert | onnx | torch-gpu.
+# See docs/ml-architecture.md for the full backend matrix.
+# ─────────────────────────────────────────────────────────────────────
+config:
+  backend: stub
+  models_path: /var/lib/vertguard/models
+  max_batch_size: 8
+  log_level: info
+  # Path inside the pod where a model registry CSI volume / sidecar
+  # writes weights. See docs/ml-model-registry.md for the registry
+  # protocol.
+  registry_url: ""
+  # Hash check the loaded model against the model card before serving.
+  registry_verify_signatures: true
+
+# -- Optional: a Secret for model-registry credentials when the ONNX
+# backend pulls from S3/MinIO. Sealed-secrets path documented in
+# docs/secrets-management.md.
+secret:
+  create: false
+  # When create=false, the deployment may reference an existingSecret.
+  existingSecret: ""
+  # Used only when create=true (dev only; ends up in the release manifest).
+  registryAccessKey: ""
+  registrySecretKey: ""
+
+# -- Persistent volume for model weights. Mounted at config.models_path
+# when enabled. Operators using a sidecar registry-puller leave this off.
+persistence:
+  enabled: false
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+
+podAnnotations: {}

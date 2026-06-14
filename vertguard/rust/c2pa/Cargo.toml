@@ -1,0 +1,25 @@
+[package]
+name         = "vertguard-c2pa"
+description  = "C2PA provenance verification for VertGuard Module 1 (Phase 4.1)"
+version.workspace     = true
+edition.workspace     = true
+license.workspace     = true
+authors.workspace     = true
+repository.workspace  = true
+readme.workspace      = true
+
+[lib]
+name       = "vertguard_c2pa"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+thiserror  = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+
+# Upstream C2PA crate — bring in during Phase 4.1 implementation:
+# c2pa = "0.31"
+
+[features]
+default = []
+ffi     = []

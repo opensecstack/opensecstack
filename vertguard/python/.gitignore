@@ -1,0 +1,15 @@
+# Generated proto stubs — keep package markers, ignore code.
+vertguard_ml/proto/ml/
+!vertguard_ml/proto/__init__.py
+
+# Python build artefacts.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.dist/
+build/
+dist/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

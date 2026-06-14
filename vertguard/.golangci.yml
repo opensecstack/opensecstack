@@ -1,0 +1,45 @@
+run:
+  timeout: 5m
+  go: "1.24"
+
+linters:
+  enable:
+    - errcheck
+    - gosec
+    - goimports
+    - staticcheck
+    - bodyclose
+    - misspell
+    - revive
+    - unused
+    - ineffassign
+    - gofmt
+  disable:
+    # These fire on test files with intentional patterns; enable
+    # per-package if noise stays low.
+    - govet
+
+linters-settings:
+  misspell:
+    locale: UK
+    ignore-words:
+      - cancelled
+      - catalogue
+      - summarise
+      - materialise
+      - recognised
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+
+issues:
+  exclude-dirs:
+    - rust
+    - python
+    - web
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gosec
+        - errcheck

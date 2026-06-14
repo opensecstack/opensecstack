@@ -1,0 +1,40 @@
+{{- if .Values.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "vertguard-ml.fullname" . }}
+  labels:
+    {{- include "vertguard-ml.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "vertguard-ml.fullname" . }}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    {{- with .Values.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ . }}
+    {{- end }}
+    {{- if .Values.autoscaling.latency.enabled }}
+    # WHY external: requires Prometheus Adapter to expose
+    # vertguard_ml_latency_seconds_bucket as an external metric named
+    # `vertguard_ml_p95_latency_ms`. See docs/ml-architecture.md for
+    # the recording rule.
+    - type: External
+      external:
+        metric:
+          name: vertguard_ml_p95_latency_ms
+          selector:
+            matchLabels:
+              service: vertguard-ml
+        target:
+          type: AverageValue
+          averageValue: {{ .Values.autoscaling.latency.targetAverageValueMilliseconds }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,165 @@
+name: VertGuard Status Page — Availability Check
+
+# Closes security-checklist gap 10.5.
+#
+# Runs on a schedule and on manual dispatch.  For each monitored system
+# it curls the health endpoint and opens a GitHub Issue if the component
+# returns a non-200 response or if the connection times out.
+#
+# One issue is opened per failing component per run; subsequent runs will
+# not open a duplicate issue if one is still open (checked via gh issue list).
+#
+# Required secrets / variables:
+#   STATUSPAGE_API_TOKEN — optional; used if the health endpoints require auth.
+#   STATUSPAGE_HEALTH_BASE — base URL for health checks, e.g.
+#                            https://api.vertguard.io
+#                            Defaults to the value hardcoded below for local dev.
+
+on:
+  schedule:
+    # Every 5 minutes. Adjust cadence to match your SLA / alert fatigue tolerance.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 'Override health check base URL (default: https://api.vertguard.io)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  # Fallback base URL if the secret / input is not set.
+  DEFAULT_BASE_URL: https://api.vertguard.io
+  # Seconds to wait for each curl before declaring a timeout.
+  CURL_TIMEOUT: 10
+
+jobs:
+  availability-check:
+    name: Check component availability
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: API
+            path: /api/v1/health
+            label: component:api
+          - component: ML Service
+            path: /api/v1/health/ml
+            label: component:ml
+          - component: CITADEL
+            path: /api/v1/health/citadel
+            label: component:citadel
+          - component: ThreatFlow
+            path: /api/v1/health/threatfeed
+            label: component:threatfeed
+
+    steps:
+      - name: Resolve base URL
+        id: base
+        run: |
+          INPUT_URL="${{ github.event.inputs.base_url }}"
+          SECRET_URL="${{ secrets.STATUSPAGE_HEALTH_BASE }}"
+          if [ -n "$INPUT_URL" ]; then
+            echo "url=$INPUT_URL" >> "$GITHUB_OUTPUT"
+          elif [ -n "$SECRET_URL" ]; then
+            echo "url=$SECRET_URL" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=$DEFAULT_BASE_URL" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check ${{ matrix.component }} health
+        id: check
+        run: |
+          TARGET="${{ steps.base.outputs.url }}${{ matrix.path }}"
+          echo "Pinging: $TARGET"
+
+          HTTP_CODE=$(curl \
+            --silent \
+            --output /dev/null \
+            --write-out "%{http_code}" \
+            --max-time "$CURL_TIMEOUT" \
+            --retry 2 \
+            --retry-delay 2 \
+            --retry-connrefused \
+            "$TARGET" || echo "000")
+
+          echo "http_code=$HTTP_CODE" >> "$GITHUB_OUTPUT"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "status=healthy" >> "$GITHUB_OUTPUT"
+            echo "::notice::${{ matrix.component }} is healthy (HTTP $HTTP_CODE)"
+          else
+            echo "status=degraded" >> "$GITHUB_OUTPUT"
+            echo "::warning::${{ matrix.component }} returned HTTP $HTTP_CODE (or timed out)"
+          fi
+
+      - name: Check for existing open issue
+        id: existing
+        if: steps.check.outputs.status == 'degraded'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Avoid duplicate issues: check if one is already open for this component.
+          COUNT=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --label "statuspage,${{ matrix.label }}" \
+            --state open \
+            --json number \
+            --jq 'length')
+          echo "open_count=$COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Open GitHub Issue for degraded component
+        if: >
+          steps.check.outputs.status == 'degraded' &&
+          steps.existing.outputs.open_count == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          COMPONENT="${{ matrix.component }}"
+          HTTP_CODE="${{ steps.check.outputs.http_code }}"
+          TARGET="${{ steps.check.outputs.target }}"
+
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "[Status] $COMPONENT is DOWN — HTTP $HTTP_CODE" \
+            --label "statuspage,${{ matrix.label }},incident" \
+            --body "$(cat <<EOF
+          ## $COMPONENT availability alert
+
+          **Detected at:** $TIMESTAMP
+          **Component:** $COMPONENT
+          **Health endpoint:** $TARGET
+          **HTTP response:** $HTTP_CODE (expected 200)
+
+          ### Immediate actions
+
+          1. Check pod status: \`kubectl get pods -n vertguard -l app=vertguard\`
+          2. Review recent logs: \`kubectl logs -n vertguard -l app=vertguard --tail=100\`
+          3. Verify ingress / load balancer routing.
+          4. If CITADEL or ThreatFlow — check circuit-breaker metrics at \`/metrics\`.
+
+          ### Resolution
+
+          Once the component recovers, close this issue and update the status
+          page incident (deploy/statuspage/cstate.yaml) with a resolved timestamp.
+
+          ### References
+
+          - Operator runbook: \`docs/operator-runbook.md\`
+          - Tabletop runbook: \`docs/security/tabletop-runbook.md\`
+          - Status page config: \`deploy/statuspage/cstate.yaml\`
+
+          *Opened automatically by \`.github/workflows/statuspage.yml\`*
+          EOF
+          )"
+
+      - name: Annotate healthy component
+        if: steps.check.outputs.status == 'healthy'
+        run: |
+          echo "Component ${{ matrix.component }} is healthy — no action required."

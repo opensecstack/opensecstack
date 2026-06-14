@@ -1,0 +1,21 @@
+{{/*
+Non-sensitive runtime config rendered as VERTGUARD_ML_<KEY> env vars.
+Sensitive material (registry creds) lives in the secret manifest.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vertguard-ml.fullname" . }}-config
+  labels:
+    {{- include "vertguard-ml.labels" . | nindent 4 }}
+data:
+  VERTGUARD_ML_GRPC_PORT: {{ .Values.service.port | quote }}
+  VERTGUARD_ML_METRICS_PORT: {{ .Values.metrics.port | quote }}
+  VERTGUARD_ML_BACKEND: {{ .Values.config.backend | quote }}
+  VERTGUARD_ML_MODELS_PATH: {{ .Values.config.models_path | quote }}
+  VERTGUARD_ML_MAX_BATCH_SIZE: {{ .Values.config.max_batch_size | quote }}
+  VERTGUARD_ML_LOG_LEVEL: {{ .Values.config.log_level | quote }}
+  {{- if .Values.config.registry_url }}
+  VERTGUARD_ML_REGISTRY_URL: {{ .Values.config.registry_url | quote }}
+  VERTGUARD_ML_REGISTRY_VERIFY_SIGNATURES: {{ .Values.config.registry_verify_signatures | quote }}
+  {{- end }}

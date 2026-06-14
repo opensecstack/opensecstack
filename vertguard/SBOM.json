@@ -1,0 +1,333 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "version": 1,
+  "serialNumber": "urn:uuid:00000000-0000-0000-0000-000000000000",
+  "metadata": {
+    "timestamp": "2026-05-10T00:00:00Z",
+    "tools": [
+      {
+        "vendor": "opensecstack",
+        "name": "vertguard-sbom-gen",
+        "version": "manual"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "bom-ref": "vertguard",
+      "name": "vertguard",
+      "version": "1.0.0",
+      "description": "AI-native threat detection API — prompt injection, phishing, identity verification, media authenticity.",
+      "purl": "pkg:golang/github.com/opensecstack/vertguard@1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/go-chi/chi/v5@v5.1.0",
+      "name": "github.com/go-chi/chi/v5",
+      "version": "v5.1.0",
+      "description": "Lightweight, idiomatic and composable router for building Go HTTP services.",
+      "purl": "pkg:golang/github.com/go-chi/chi/v5@v5.1.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/google/uuid@v1.6.0",
+      "name": "github.com/google/uuid",
+      "version": "v1.6.0",
+      "description": "Go package for UUIDs based on RFC 4122.",
+      "purl": "pkg:golang/github.com/google/uuid@v1.6.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/jackc/pgx/v5@v5.7.1",
+      "name": "github.com/jackc/pgx/v5",
+      "version": "v5.7.1",
+      "description": "PostgreSQL driver and toolkit for Go.",
+      "purl": "pkg:golang/github.com/jackc/pgx/v5@v5.7.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/prometheus/client_golang@v1.20.5",
+      "name": "github.com/prometheus/client_golang",
+      "version": "v1.20.5",
+      "description": "Prometheus instrumentation library for Go applications.",
+      "purl": "pkg:golang/github.com/prometheus/client_golang@v1.20.5",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/rs/zerolog@v1.33.0",
+      "name": "github.com/rs/zerolog",
+      "version": "v1.33.0",
+      "description": "Zero-allocation JSON logger for Go.",
+      "purl": "pkg:golang/github.com/rs/zerolog@v1.33.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/spf13/viper@v1.19.0",
+      "name": "github.com/spf13/viper",
+      "version": "v1.19.0",
+      "description": "Go configuration with fangs — env, YAML, TOML, HCL, and more.",
+      "purl": "pkg:golang/github.com/spf13/viper@v1.19.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/golang.org/x/time@v0.5.0",
+      "name": "golang.org/x/time",
+      "version": "v0.5.0",
+      "description": "Go supplementary time packages (rate limiter etc.).",
+      "purl": "pkg:golang/golang.org/x/time@v0.5.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/google.golang.org/grpc@v1.66.0",
+      "name": "google.golang.org/grpc",
+      "version": "v1.66.0",
+      "description": "The Go implementation of gRPC.",
+      "purl": "pkg:golang/google.golang.org/grpc@v1.66.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/google.golang.org/protobuf@v1.34.2",
+      "name": "google.golang.org/protobuf",
+      "version": "v1.34.2",
+      "description": "Go support for Protocol Buffers.",
+      "purl": "pkg:golang/google.golang.org/protobuf@v1.34.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/gopkg.in/yaml.v3@v3.0.1",
+      "name": "gopkg.in/yaml.v3",
+      "version": "v3.0.1",
+      "description": "YAML support for the Go language.",
+      "purl": "pkg:golang/gopkg.in/yaml.v3@v3.0.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/fsnotify/fsnotify@v1.7.0",
+      "name": "github.com/fsnotify/fsnotify",
+      "version": "v1.7.0",
+      "description": "Cross-platform file system notifications for Go.",
+      "purl": "pkg:golang/github.com/fsnotify/fsnotify@v1.7.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/jackc/pgpassfile@v1.0.0",
+      "name": "github.com/jackc/pgpassfile",
+      "version": "v1.0.0",
+      "description": "Golang library for reading pgpass files.",
+      "purl": "pkg:golang/github.com/jackc/pgpassfile@v1.0.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/jackc/puddle/v2@v2.2.2",
+      "name": "github.com/jackc/puddle/v2",
+      "version": "v2.2.2",
+      "description": "Generic resource pool for Go.",
+      "purl": "pkg:golang/github.com/jackc/puddle/v2@v2.2.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/klauspost/compress@v1.17.9",
+      "name": "github.com/klauspost/compress",
+      "version": "v1.17.9",
+      "description": "Optimized Go compression packages.",
+      "purl": "pkg:golang/github.com/klauspost/compress@v1.17.9",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/mitchellh/mapstructure@v1.5.0",
+      "name": "github.com/mitchellh/mapstructure",
+      "version": "v1.5.0",
+      "description": "Go library for decoding generic map values into native Go structures.",
+      "purl": "pkg:golang/github.com/mitchellh/mapstructure@v1.5.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/github.com/spf13/pflag@v1.0.5",
+      "name": "github.com/spf13/pflag",
+      "version": "v1.0.5",
+      "description": "Drop-in replacement for Go's flag package, implementing POSIX/GNU-style flags.",
+      "purl": "pkg:golang/github.com/spf13/pflag@v1.0.5",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/golang.org/x/crypto@v0.27.0",
+      "name": "golang.org/x/crypto",
+      "version": "v0.27.0",
+      "description": "Go supplementary cryptography packages.",
+      "purl": "pkg:golang/golang.org/x/crypto@v0.27.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/golang.org/x/net@v0.28.0",
+      "name": "golang.org/x/net",
+      "version": "v0.28.0",
+      "description": "Go supplementary network packages.",
+      "purl": "pkg:golang/golang.org/x/net@v0.28.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/golang.org/x/sync@v0.8.0",
+      "name": "golang.org/x/sync",
+      "version": "v0.8.0",
+      "description": "Go supplementary synchronization primitives.",
+      "purl": "pkg:golang/golang.org/x/sync@v0.8.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:golang/golang.org/x/sys@v0.25.0",
+      "name": "golang.org/x/sys",
+      "version": "v0.25.0",
+      "description": "Go supplementary OS-level packages.",
+      "purl": "pkg:golang/golang.org/x/sys@v0.25.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ]
+    }
+  ]
+}

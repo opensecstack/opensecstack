@@ -1,0 +1,29 @@
+apiVersion: v2
+name: vertguard-ml
+description: |
+  VertGuard ML inference service — gRPC server fronting prompt-injection
+  and phishing classifiers (stub | DistilBERT | ONNX). Subchart of the
+  parent `vertguard` chart; rendered only when `ml.enabled=true`.
+type: application
+# Version stays aligned with the parent chart so a release tag yields one
+# bundled artefact. Bump in lockstep.
+version: 0.1.0
+appVersion: "0.1.0-alpha.0"
+kubeVersion: ">=1.27.0-0"
+
+keywords:
+  - security
+  - ai-security
+  - llm-security
+  - ml-inference
+  - grpc
+  - opensecstack
+
+home: https://github.com/opensecstack/vertguard
+sources:
+  - https://github.com/opensecstack/vertguard
+
+maintainers:
+  - name: OpenSecStack
+    email: maintainers@opensecstack.org
+    url: https://opensecstack.org

@@ -1,0 +1,37 @@
+[package]
+name = "c2pa-verify"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+# Phase 4.2 implementation: real C2PA cryptographic verification via the
+# upstream `c2pa-rs` crate. We pin to 0.30 (the version VertGuard's docs
+# already reference) for v1 — smaller dep tree than 0.49 and the
+# `Reader::from_file` / `validation_status` API surface we use is stable
+# across the 0.30 → 0.49 range.
+#
+# TODO(VG-011-c, post-Phase-4.2.1): re-evaluate moving to c2pa 0.49+ once
+# the trust-list integration story stabilises upstream.
+#
+# The CLI's JSON output shape is byte-identical to the Phase 4.1 stub,
+# so the Go-side `media.Result` deserializer requires no changes.
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+
+# OpenSSL is the signing/verification backend. On Debian-based images
+# install pkg-config + libssl-dev; on MSYS2 (MinGW dev hosts) install
+# mingw-w64-x86_64-openssl (already part of mingw-w64-x86_64-toolchain).
+c2pa = { version = "0.30", default-features = false, features = ["openssl_sign", "file_io"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[[bin]]
+name = "c2pa-verify"
+path = "src/main.rs"

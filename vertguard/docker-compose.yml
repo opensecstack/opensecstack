@@ -1,0 +1,67 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: vertguard
+      POSTGRES_PASSWORD: vertguard_dev
+      POSTGRES_DB: vertguard
+    ports:
+      - "5438:5432"
+    volumes:
+      - vertguard_pgdata:/var/lib/postgresql/data
+      - ./internal/db/migrations/001_initial.sql:/docker-entrypoint-initdb.d/001_initial.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vertguard -d vertguard"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  vertguard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8091:8091"
+    environment:
+      VERTGUARD_PORT: 8091
+      VERTGUARD_LOG_LEVEL: info
+      VERTGUARD_DB_HOST: postgres
+      VERTGUARD_DB_PORT: 5432
+      VERTGUARD_DB_NAME: vertguard
+      VERTGUARD_DB_USER: vertguard
+      VERTGUARD_DB_PASSWORD: vertguard_dev
+      VERTGUARD_DB_SSL_MODE: disable
+      VERTGUARD_AUTH_SECRET: "dev-secret-replace-in-production-32-chars-minimum"
+      # Standalone mode by default (no CITADEL / ThreatFlow in local dev)
+      VERTGUARD_CITADEL_API_URL: ""
+      VERTGUARD_THREATFLOW_API_URL: ""
+      # Module 3: prompt injection
+      VERTGUARD_PROMPT_CLEAN_THRESHOLD: "0.3"
+      VERTGUARD_PROMPT_BLOCK_THRESHOLD: "0.7"
+      # Module 1: C2PA trust store
+      VERTGUARD_C2PA_TRUSTSTORE: /etc/vertguard/c2pa-truststore
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8091/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  dashboard:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "3009:3009"
+    environment:
+      VERTGUARD_API_URL: http://vertguard:8091
+    depends_on:
+      vertguard:
+        condition: service_healthy
+
+volumes:
+  vertguard_pgdata:

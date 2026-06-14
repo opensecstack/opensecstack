@@ -1,0 +1,45 @@
+{{- if .Values.mtls.enabled }}
+# ─────────────────────────────────────────────────────────────────────
+# In-cluster mTLS between the VertGuard API and the ML gRPC side-car
+# Closes security-checklist gap 1.4.
+#
+# Service-mesh selection:
+#   • Istio  — apply this file (PeerAuthentication + DestinationRule)
+#   • Linkerd — apply deploy/linkerd/mtls-policy.yaml instead
+#
+# Both meshes are STRICT: plaintext connections to the ML pod port 50051
+# will be rejected at the proxy layer, eliminating in-cluster MITM risk.
+# ─────────────────────────────────────────────────────────────────────
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: vertguard-ml-mtls
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vertguard.labels" . | nindent 4 }}
+  annotations:
+    security.vertguard.io/gap: "1.4"
+    security.vertguard.io/closed-by: "deploy/helm/vertguard/templates/mtls-policy.yaml"
+spec:
+  selector:
+    matchLabels:
+      app: vertguard-ml
+  mtls:
+    mode: STRICT
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: vertguard-api-to-ml
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vertguard.labels" . | nindent 4 }}
+  annotations:
+    security.vertguard.io/gap: "1.4"
+    security.vertguard.io/closed-by: "deploy/helm/vertguard/templates/mtls-policy.yaml"
+spec:
+  host: vertguard-ml
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+{{- end }}

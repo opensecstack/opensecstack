@@ -1,0 +1,124 @@
+{
+  "common": {
+    "app_name": "VertGuard",
+    "tagline": "Skaner për injektim promptesh & phishing",
+    "nav": {
+      "dashboard": "Paneli",
+      "scan": "Skanim",
+      "threatfeed": "Burimi i kërcënimeve",
+      "metrics": "Metrika",
+      "video": "Video",
+      "logout": "Dil"
+    },
+    "actions": {
+      "submit": "Dërgo",
+      "cancel": "Anulo",
+      "login": "Hyr",
+      "continue": "Vazhdo",
+      "scan": "Skano"
+    },
+    "labels": {
+      "username": "Përdorues",
+      "password": "Fjalëkalim",
+      "loading": "Duke u ngarkuar…",
+      "error": "Gabim"
+    }
+  },
+  "dashboard": {
+    "title": "Paneli",
+    "modules": "Modulet",
+    "fields": {
+      "status": "Statusi",
+      "database": "Baza e të dhënave",
+      "version": "Versioni",
+      "commit": "Commit"
+    },
+    "errors": {
+      "health_failed": "Kontrolli i shëndetit dështoi: {{detail}}"
+    }
+  },
+  "scan": {
+    "title": "Skanim promptesh",
+    "placeholder": "Ngjit një prompt për inspektim…",
+    "scanning": "Duke skanuar…",
+    "summary": "besueshmëri {{confidence}} · {{duration}} ms · {{count}} përputhje",
+    "table": {
+      "pattern": "Modeli",
+      "category": "Kategoria",
+      "atlas": "ATLAS",
+      "confidence": "Besueshmëria"
+    }
+  },
+  "threatfeed": {
+    "title": "Burimi i Kërcënimeve",
+    "tabs": {
+      "ioc_feed": "Burimi IOC",
+      "atlas_coverage": "Mbulimi ATLAS"
+    },
+    "errors": {
+      "load_failed": "Gabim: {{detail}}"
+    },
+    "ioc": {
+      "search_placeholder": "Filtro sipas vlerës IOC…",
+      "count_label": "IOC-të",
+      "empty": "Nuk u gjetën IOC-të.",
+      "col": {
+        "value": "Vlera IOC",
+        "type": "Lloji",
+        "severity": "Ashpërsia",
+        "source": "Burimi",
+        "first_seen": "Parë Herën e Parë",
+        "last_seen": "Parë Herën e Fundit"
+      }
+    },
+    "atlas": {
+      "coverage_summary": "{{covered}} / {{total}} teknika të mbuluara ({{pct}}%)",
+      "show_covered_only": "Shfaq vetëm të mbuluarat",
+      "show_all": "Shfaq të gjitha",
+      "empty": "Nuk ka teknika që përputhen me filtrin aktual.",
+      "col": {
+        "tactic": "Taktika",
+        "technique_id": "ID e Teknikës",
+        "technique_name": "Emri i Teknikës",
+        "covered": "E mbuluar"
+      }
+    }
+  },
+  "metrics": {
+    "title": "Metrika",
+    "intro": "VertGuard ekspozon metrika Prometheus në /metrics.",
+    "open": "Hap /metrics",
+    "footnote": "Lidh Grafana / Prometheus veçmas. Pika fundore JSON për metrikat planifikohet për v0.5."
+  },
+  "video": {
+    "title": "Zbulimi i Deepfake-ve Video",
+    "description": "Nis një sesion për të vlerësuar kадрet e live WebRTC për aktivitet deepfake.",
+    "start_session": "Nis Sesionin",
+    "stop_session": "Ndalo Sesionin",
+    "session_id_label": "Sesioni:",
+    "last_frames": "{{count}} kuadri(t) e fundit",
+    "waiting_frames": "Duke pritur kuadret…",
+    "status": {
+      "idle": "Pasiv",
+      "connecting": "Duke u lidhur…",
+      "live": "Live",
+      "error": "Gabim",
+      "stopped": "Ndaluar"
+    },
+    "table": {
+      "frame": "Kuadri",
+      "verdict": "Verdikti",
+      "confidence": "Besueshmëria",
+      "latency": "Vonesa"
+    },
+    "errors": {
+      "session_failed": "Dështoi krijimi i sesionit: {{detail}}",
+      "ws_error": "Gabim në lidhjen WebSocket."
+    }
+  },
+  "not_found": {
+    "title": "404",
+    "body": "Faqja nuk u gjet.",
+    "back": "Kthehu te paneli"
+  }
+}

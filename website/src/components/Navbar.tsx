@@ -4,7 +4,7 @@ import { useThemeToggle } from '../hooks/useThemeToggle'
 import { platforms } from '../data/platforms'
 import { useI18n } from '../i18n/useI18n'
 
-/** Sun icon (shown in dark mode -- click to switch to light) */
+/** Sun icon (shown in dark mode -- click to switch to light). */
 function SunIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -22,12 +22,45 @@ function SunIcon() {
   )
 }
 
-/** Moon icon (shown in light mode -- click to switch to dark) */
+/** Moon icon (shown in light mode -- click to switch to dark). */
 function MoonIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </svg>
+  )
+}
+
+/** Monitor icon (shown when following the system preference). */
+function MonitorIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <line x1="8" y1="21" x2="16" y2="21" />
+      <line x1="12" y1="17" x2="12" y2="21" />
+    </svg>
+  )
+}
+
+/** Three-bar hamburger icon (mobile menu trigger). */
+function MenuIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {open ? (
+        <>
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </>
+      ) : (
+        <>
+          <line x1="3" y1="6" x2="21" y2="6" />
+          <line x1="3" y1="12" x2="21" y2="12" />
+          <line x1="3" y1="18" x2="21" y2="18" />
+        </>
+      )}
     </svg>
   )
 }
@@ -52,10 +85,34 @@ function buildSearchItems(): SearchItem[] {
   return items
 }
 
+/**
+ * useIsMobile watches window width and returns true below the given
+ * breakpoint. Resizing the window updates the value live so the navbar
+ * swaps layouts when someone rotates a tablet or drags the browser
+ * window smaller during a demo.
+ */
+function useIsMobile(breakpoint = 820): boolean {
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth < breakpoint
+  })
+
+  useEffect(() => {
+    function onResize() {
+      setIsMobile(window.innerWidth < breakpoint)
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [breakpoint])
+
+  return isMobile
+}
+
 export default function Navbar() {
-  const { mode, toggle: toggleTheme } = useThemeToggle()
-  const { lang, t, toggle: toggleLang } = useI18n()
+  const { theme, resolved, setTheme } = useThemeToggle()
+  const { t } = useI18n()
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
 
   const links = [
     { label: t('nav.platforms'), href: '#platforms' },
@@ -64,6 +121,7 @@ export default function Navbar() {
     { label: t('nav.citadel'), href: '#citadel' },
     { label: t('nav.sdks'), href: '#sdks' },
     { label: t('nav.roadmap'), href: '#roadmap' },
+    { label: 'Docs', href: '/docs' },
   ]
 
   // ---- Search state ----
@@ -73,13 +131,29 @@ export default function Navbar() {
   const inputRef = useRef<HTMLInputElement>(null)
   const searchItems = useMemo(buildSearchItems, [])
 
+  // ---- Mobile menu state ----
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  // ---- Theme dropdown state ----
+  const [themeOpen, setThemeOpen] = useState(false)
+  const themeRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (themeRef.current && !themeRef.current.contains(e.target as Node)) {
+        setThemeOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
   const filtered = useMemo(() => {
     if (!query.trim()) return []
     const q = query.toLowerCase()
     return searchItems.filter(item => item.label.toLowerCase().includes(q))
   }, [query, searchItems])
 
-  // Close on outside click
+  // Close on outside click.
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
@@ -90,17 +164,24 @@ export default function Navbar() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  // Close on Escape
+  // Close on Escape (search dropdown + mobile drawer).
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         setOpen(false)
+        setMenuOpen(false)
         inputRef.current?.blur()
       }
     }
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
   }, [])
+
+  // Close the mobile drawer when the viewport grows back to desktop width,
+  // otherwise the drawer stays visible as an orphan panel.
+  useEffect(() => {
+    if (!isMobile) setMenuOpen(false)
+  }, [isMobile])
 
   function handleSelect(item: SearchItem) {
     setOpen(false)
@@ -113,7 +194,15 @@ export default function Navbar() {
     }
   }
 
-  const isDark = mode === 'dark'
+  function handleNavClick(href: string) {
+    setMenuOpen(false)
+    // Route paths (e.g. /docs) navigate; in-page anchors scroll.
+    if (href.startsWith('/')) { navigate(href); return }
+    const el = document.querySelector(href)
+    if (el) el.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const isDark = resolved === 'dark'
 
   return (
     <nav style={{
@@ -123,8 +212,9 @@ export default function Navbar() {
       borderBottom: isDark
         ? '1px solid rgba(0,240,255,0.06)'
         : '1px solid rgba(0,0,0,0.06)',
-      padding: '0 2rem', height: 56,
-      display: 'flex', alignItems: 'center', gap: '2rem',
+      padding: isMobile ? '0 1rem' : '0 2rem',
+      height: 56,
+      display: 'flex', alignItems: 'center', gap: isMobile ? '0.75rem' : '2rem',
     }}>
       {/* Logo */}
       <a href="#" style={{
@@ -132,163 +222,308 @@ export default function Navbar() {
         background: 'linear-gradient(135deg, #00f0ff, #7c3aed)',
         WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
         textDecoration: 'none',
+        marginRight: isMobile ? 'auto' : undefined,
       }}>
         SIN
       </a>
 
-      {/* Nav links */}
-      <div style={{ display: 'flex', gap: '1.5rem', marginLeft: 'auto', fontSize: '0.85rem' }}>
-        {links.map(l => (
-          <a key={l.href} href={l.href} style={{
-            color: isDark ? '#8892a8' : '#64748b',
-            textDecoration: 'none',
-            transition: 'color 0.2s, text-shadow 0.2s',
-          }}>
-            {l.label}
-          </a>
-        ))}
-      </div>
-
-      {/* Search */}
-      <div ref={wrapperRef} style={{ position: 'relative' }}>
-        <div style={{
-          display: 'flex', alignItems: 'center',
-          background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
-          border: isDark
-            ? '1px solid rgba(0,240,255,0.1)'
-            : '1px solid rgba(0,0,0,0.08)',
-          borderRadius: 8, padding: '0 10px', height: 32,
-        }}>
-          <span style={{ fontSize: '0.8rem', marginRight: 6, color: '#64748b', lineHeight: 1 }}>
-            {'\u2315'}
-          </span>
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            placeholder={t('nav.search.placeholder')}
-            onChange={e => { setQuery(e.target.value); setOpen(true) }}
-            onFocus={() => { if (query.trim()) setOpen(true) }}
-            style={{
-              background: 'transparent', border: 'none', outline: 'none',
-              color: isDark ? '#e2e8f0' : '#1e293b',
-              fontSize: '0.8rem', width: 150,
-              fontFamily: 'inherit',
-            }}
-          />
-        </div>
-
-        {/* Dropdown */}
-        {open && filtered.length > 0 && (
-          <div style={{
-            position: 'absolute', top: 38, left: 0, minWidth: 220,
-            background: isDark ? 'rgba(10,10,20,0.92)' : 'rgba(255,255,255,0.95)',
-            backdropFilter: 'blur(20px) saturate(150%)',
-            border: isDark
-              ? '1px solid rgba(0,240,255,0.12)'
-              : '1px solid rgba(0,0,0,0.08)',
-            borderRadius: 10, padding: '6px 0',
-            boxShadow: isDark
-              ? '0 8px 30px rgba(0,0,0,0.5)'
-              : '0 8px 30px rgba(0,0,0,0.12)',
-            zIndex: 200,
-          }}>
-            {filtered.map(item => (
-              <button
-                key={item.label}
-                onClick={() => handleSelect(item)}
-                style={{
-                  display: 'block', width: '100%', padding: '8px 14px',
-                  background: 'transparent', border: 'none', cursor: 'pointer',
-                  color: isDark ? '#c8d0e0' : '#334155',
-                  fontSize: '0.82rem', textAlign: 'left',
-                  fontFamily: 'inherit',
-                  transition: 'background 0.15s, color 0.15s',
-                }}
-                onMouseEnter={e => {
-                  const btn = e.currentTarget
-                  btn.style.background = isDark ? 'rgba(0,240,255,0.08)' : 'rgba(124,58,237,0.06)'
-                  btn.style.color = isDark ? '#00f0ff' : '#7c3aed'
-                }}
-                onMouseLeave={e => {
-                  const btn = e.currentTarget
-                  btn.style.background = 'transparent'
-                  btn.style.color = isDark ? '#c8d0e0' : '#334155'
-                }}
-              >
-                {item.label}
-                {item.route && (
-                  <span style={{ marginLeft: 8, fontSize: '0.7rem', color: '#64748b' }}>
-                    {item.route}
-                  </span>
-                )}
-              </button>
+      {/* ---------- Desktop layout ---------- */}
+      {!isMobile && (
+        <>
+          <div style={{ display: 'flex', gap: '1.5rem', marginLeft: 'auto', fontSize: '0.85rem' }}>
+            {links.map(l => (
+              <a key={l.href} href={l.href} style={{
+                color: isDark ? '#8892a8' : '#64748b',
+                textDecoration: 'none',
+                transition: 'color 0.2s, text-shadow 0.2s',
+              }}>
+                {l.label}
+              </a>
             ))}
           </div>
-        )}
-      </div>
 
-      {/* Theme toggle */}
-      <button
-        onClick={toggleTheme}
-        aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          width: 34, height: 34, borderRadius: 9,
-          background: isDark ? 'rgba(0,240,255,0.06)' : 'rgba(124,58,237,0.06)',
-          border: isDark
-            ? '1px solid rgba(0,240,255,0.2)'
-            : '1px solid rgba(124,58,237,0.2)',
-          color: isDark ? '#00f0ff' : '#7c3aed',
-          cursor: 'pointer',
-          transition: 'all 0.2s',
-        }}
-      >
-        {isDark ? <SunIcon /> : <MoonIcon />}
-      </button>
+          {/* Search */}
+          <div ref={wrapperRef} style={{ position: 'relative' }}>
+            <div style={{
+              display: 'flex', alignItems: 'center',
+              background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
+              border: isDark
+                ? '1px solid rgba(0,240,255,0.1)'
+                : '1px solid rgba(0,0,0,0.08)',
+              borderRadius: 8, padding: '0 10px', height: 32,
+            }}>
+              <span style={{ fontSize: '0.8rem', marginRight: 6, color: '#64748b', lineHeight: 1 }}>
+                {'\u2315'}
+              </span>
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                placeholder={t('nav.search.placeholder')}
+                onChange={e => { setQuery(e.target.value); setOpen(true) }}
+                onFocus={() => { if (query.trim()) setOpen(true) }}
+                aria-label="Search the site"
+                style={{
+                  background: 'transparent', border: 'none', outline: 'none',
+                  color: isDark ? '#e2e8f0' : '#1e293b',
+                  fontSize: '0.8rem', width: 150,
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
 
-      {/* Language toggle */}
-      <button
-        onClick={toggleLang}
-        title={lang === 'en' ? 'Switch to Albanian' : 'Switch to English'}
-        style={{
-          padding: '5px 10px', borderRadius: 7, fontSize: '0.75rem', fontWeight: 700,
-          background: 'rgba(124,58,237,0.08)',
-          border: '1px solid rgba(124,58,237,0.25)',
-          color: '#a78bfa', cursor: 'pointer',
-          fontFamily: 'inherit',
-          transition: 'all 0.2s',
-          letterSpacing: '0.04em',
-        }}
-      >
-        {lang === 'en' ? 'EN' : 'AL'}
-      </button>
+            {open && filtered.length > 0 && (
+              <div style={{
+                position: 'absolute', top: 38, left: 0, minWidth: 220,
+                background: isDark ? 'rgba(10,10,20,0.92)' : 'rgba(255,255,255,0.95)',
+                backdropFilter: 'blur(20px) saturate(150%)',
+                border: isDark
+                  ? '1px solid rgba(0,240,255,0.12)'
+                  : '1px solid rgba(0,0,0,0.08)',
+                borderRadius: 10, padding: '6px 0',
+                boxShadow: isDark
+                  ? '0 8px 30px rgba(0,0,0,0.5)'
+                  : '0 8px 30px rgba(0,0,0,0.12)',
+                zIndex: 200,
+              }}>
+                {filtered.map(item => (
+                  <button
+                    key={item.label}
+                    onClick={() => handleSelect(item)}
+                    style={{
+                      display: 'block', width: '100%', padding: '8px 14px',
+                      background: 'transparent', border: 'none', cursor: 'pointer',
+                      color: isDark ? '#c8d0e0' : '#334155',
+                      fontSize: '0.82rem', textAlign: 'left',
+                      fontFamily: 'inherit',
+                      transition: 'background 0.15s, color 0.15s',
+                    }}
+                    onMouseEnter={e => {
+                      const btn = e.currentTarget
+                      btn.style.background = isDark ? 'rgba(0,240,255,0.08)' : 'rgba(124,58,237,0.06)'
+                      btn.style.color = isDark ? '#00f0ff' : '#7c3aed'
+                    }}
+                    onMouseLeave={e => {
+                      const btn = e.currentTarget
+                      btn.style.background = 'transparent'
+                      btn.style.color = isDark ? '#c8d0e0' : '#334155'
+                    }}
+                  >
+                    {item.label}
+                    {item.route && (
+                      <span style={{ marginLeft: 8, fontSize: '0.7rem', color: '#64748b' }}>
+                        {item.route}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-      {/* CitadelOS link */}
-      <Link to="/citadelos" style={{
-        padding: '7px 14px', borderRadius: 9, fontSize: '0.8rem', fontWeight: 600,
-        background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)',
-        color: '#ef4444', textDecoration: 'none', transition: 'all 0.2s',
-      }}>
-        {t('nav.citadelos')}
-      </Link>
+          <div ref={themeRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setThemeOpen(o => !o)}
+              aria-label="Theme"
+              aria-haspopup="menu"
+              aria-expanded={themeOpen}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 34, height: 34, borderRadius: 9,
+                background: isDark ? 'rgba(0,240,255,0.06)' : 'rgba(124,58,237,0.06)',
+                border: isDark
+                  ? '1px solid rgba(0,240,255,0.2)'
+                  : '1px solid rgba(124,58,237,0.2)',
+                color: isDark ? '#00f0ff' : '#7c3aed',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              {theme === 'light' ? <SunIcon /> : theme === 'dark' ? <MoonIcon /> : <MonitorIcon />}
+            </button>
+            {themeOpen && (
+              <div role="menu" style={{
+                position: 'absolute', top: 42, right: 0, minWidth: 150,
+                background: isDark ? 'rgba(10,10,20,0.97)' : 'rgba(255,255,255,0.98)',
+                border: isDark ? '1px solid rgba(0,240,255,0.18)' : '1px solid rgba(0,0,0,0.1)',
+                borderRadius: 10, padding: 6,
+                boxShadow: isDark ? '0 8px 30px rgba(0,0,0,0.5)' : '0 8px 30px rgba(0,0,0,0.12)',
+                backdropFilter: 'blur(12px)', zIndex: 200,
+              }}>
+                {([
+                  { key: 'light', label: 'Light', icon: <SunIcon /> },
+                  { key: 'dark', label: 'Dark', icon: <MoonIcon /> },
+                  { key: 'system', label: 'System', icon: <MonitorIcon /> },
+                ] as const).map(opt => {
+                  const active = theme === opt.key
+                  return (
+                    <button
+                      key={opt.key}
+                      role="menuitemradio"
+                      aria-checked={active}
+                      onClick={() => { setTheme(opt.key); setThemeOpen(false) }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                        padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                        background: active ? (isDark ? 'rgba(0,240,255,0.1)' : 'rgba(124,58,237,0.08)') : 'transparent',
+                        color: active ? (isDark ? '#00f0ff' : '#7c3aed') : (isDark ? '#c8d0e0' : '#334155'),
+                        fontSize: '0.85rem', fontWeight: active ? 600 : 500, fontFamily: 'inherit',
+                        transition: 'background 0.15s',
+                      }}
+                    >
+                      <span style={{ display: 'flex', width: 16 }}>{opt.icon}</span>
+                      <span style={{ flex: 1, textAlign: 'left' }}>{opt.label}</span>
+                      {active && <span style={{ fontSize: '0.9rem' }}>✓</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
 
-      {/* GitHub link */}
-      <a
-        href="https://github.com/opensecstack/opensecstack"
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{
-          padding: '7px 18px', borderRadius: 9, fontSize: '0.8rem', fontWeight: 600,
-          background: 'rgba(0,240,255,0.06)',
-          border: '1px solid rgba(0,240,255,0.2)',
-          color: '#00f0ff', textDecoration: 'none',
-          transition: 'all 0.2s',
-          boxShadow: '0 0 12px rgba(0,240,255,0.08)',
-        }}
-      >
-        {t('nav.github')}
-      </a>
+          <Link to="/citadelos" style={{
+            padding: '7px 14px', borderRadius: 9, fontSize: '0.8rem', fontWeight: 600,
+            background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)',
+            color: '#ef4444', textDecoration: 'none', transition: 'all 0.2s',
+          }}>
+            {t('nav.citadelos')}
+          </Link>
+
+          <a
+            href="https://github.com/opensecstack/opensecstack"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              padding: '7px 18px', borderRadius: 9, fontSize: '0.8rem', fontWeight: 600,
+              background: 'rgba(0,240,255,0.06)',
+              border: '1px solid rgba(0,240,255,0.2)',
+              color: '#00f0ff', textDecoration: 'none',
+              transition: 'all 0.2s',
+              boxShadow: '0 0 12px rgba(0,240,255,0.08)',
+            }}
+          >
+            {t('nav.github')}
+          </a>
+        </>
+      )}
+
+      {/* ---------- Mobile layout ---------- */}
+      {isMobile && (
+        <>
+          {/* Compact theme toggle (stays visible in the top bar so it's one
+              tap away, not buried in the drawer). */}
+          <button
+            onClick={() => setTheme(theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light')}
+            aria-label={`Theme: ${theme}. Tap to change.`}
+            title={`Theme: ${theme}`}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 34, height: 34, borderRadius: 9,
+              background: isDark ? 'rgba(0,240,255,0.06)' : 'rgba(124,58,237,0.06)',
+              border: isDark
+                ? '1px solid rgba(0,240,255,0.2)'
+                : '1px solid rgba(124,58,237,0.2)',
+              color: isDark ? '#00f0ff' : '#7c3aed',
+              cursor: 'pointer',
+            }}
+          >
+            {theme === 'light' ? <SunIcon /> : theme === 'dark' ? <MoonIcon /> : <MonitorIcon />}
+          </button>
+
+          <button
+            onClick={() => setMenuOpen(v => !v)}
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={menuOpen}
+            aria-controls="mobile-menu"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 40, height: 40, borderRadius: 9,
+              background: isDark ? 'rgba(0,240,255,0.06)' : 'rgba(0,0,0,0.04)',
+              border: isDark
+                ? '1px solid rgba(0,240,255,0.2)'
+                : '1px solid rgba(0,0,0,0.12)',
+              color: isDark ? '#00f0ff' : '#1e293b',
+              cursor: 'pointer',
+            }}
+          >
+            <MenuIcon open={menuOpen} />
+          </button>
+
+          {/* Drawer — positioned absolutely beneath the fixed bar so it
+              hangs below without forcing layout shifts elsewhere. */}
+          {menuOpen && (
+            <div
+              id="mobile-menu"
+              role="menu"
+              style={{
+                position: 'fixed', top: 56, left: 0, right: 0,
+                maxHeight: 'calc(100vh - 56px)',
+                overflowY: 'auto',
+                padding: '1rem 1.25rem 1.5rem',
+                background: isDark ? 'rgba(3,3,8,0.96)' : 'rgba(248,250,252,0.98)',
+                backdropFilter: 'blur(24px) saturate(150%)',
+                borderBottom: isDark
+                  ? '1px solid rgba(0,240,255,0.1)'
+                  : '1px solid rgba(0,0,0,0.08)',
+                display: 'flex', flexDirection: 'column', gap: '0.5rem',
+                zIndex: 99,
+              }}
+            >
+              {links.map(l => (
+                <a
+                  key={l.href}
+                  href={l.href}
+                  role="menuitem"
+                  onClick={e => { e.preventDefault(); handleNavClick(l.href) }}
+                  style={{
+                    padding: '0.75rem 0.25rem',
+                    color: isDark ? '#c8d0e0' : '#334155',
+                    textDecoration: 'none',
+                    fontSize: '1rem',
+                    borderBottom: isDark
+                      ? '1px solid rgba(255,255,255,0.04)'
+                      : '1px solid rgba(0,0,0,0.05)',
+                  }}
+                >
+                  {l.label}
+                </a>
+              ))}
+
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+                <Link
+                  to="/citadelos"
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    flex: 1, minWidth: 120, textAlign: 'center',
+                    padding: '0.6rem 0.75rem', borderRadius: 9,
+                    fontSize: '0.8rem', fontWeight: 600,
+                    background: 'rgba(239,68,68,0.08)',
+                    border: '1px solid rgba(239,68,68,0.3)',
+                    color: '#ef4444', textDecoration: 'none',
+                  }}
+                >
+                  {t('nav.citadelos')}
+                </Link>
+                <a
+                  href="https://github.com/opensecstack/opensecstack"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    flex: 1, minWidth: 100, textAlign: 'center',
+                    padding: '0.6rem 0.75rem', borderRadius: 9,
+                    fontSize: '0.8rem', fontWeight: 600,
+                    background: 'rgba(0,240,255,0.08)',
+                    border: '1px solid rgba(0,240,255,0.3)',
+                    color: '#00f0ff', textDecoration: 'none',
+                  }}
+                >
+                  {t('nav.github')}
+                </a>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </nav>
   )
 }

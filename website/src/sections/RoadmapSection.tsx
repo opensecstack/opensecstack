@@ -2,11 +2,10 @@ import { motion } from 'framer-motion'
 import ScrollSection from '../components/ScrollSection'
 
 const phases = [
-  { n: 1, title: 'Foundation',               status: 'done',  items: ['APIGuard v0.1', 'CITADEL core', 'Go + Python SDKs'] },
-  { n: 2, title: 'Full OWASP + CI/CD',       status: 'done',  items: ['10/10 OWASP modules', 'Ecosystem CI pipeline', 'Security scanning'] },
-  { n: 3, title: 'Dashboard + Multi-tenant',  status: 'done',  items: ['NIS2 Compass MVP', 'React frontends', 'Report generation'] },
-  { n: 4, title: 'Governance Integration',    status: 'done',  items: ['MARSHAL 5-gate', 'WORM chain', 'SDK parity', 'vantage-hash'] },
-  { n: 5, title: 'Production + Ecosystem',    status: 'next',  items: ['v1.0.0 audit', 'IRFlow', 'ThreatFlow', 'OpenScrub', 'CyberPath'] },
+  { n: 1, title: 'Ecosystem v1.0.0',          status: 'done',  items: ['11 platforms + SDK', 'CITADEL governance layer', '4-language SDK (Go · Python · TypeScript · Rust)', 'All platforms Apache 2.0 / AGPL-3.0'] },
+  { n: 2, title: 'v1.1 — Security Hardening', status: 'next',  items: ['JWKS endpoint', 'mTLS between platforms', 'PQ algorithm-identifier fields', 'Third-party security audit'] },
+  { n: 3, title: 'v2.0 — Post-Quantum',       status: 'plan',  items: ['Hybrid Ed25519 + ML-DSA signatures', 'VIGIL ecosystem health monitor', 'QuintHash (PQ-resistant primitives)'] },
+  { n: 4, title: 'v3.0 — Sovereignty Stack',  status: 'plan',  items: ['ML-DSA default (aligned with NIS3)', 'vantage-hash extracted library', 'Phase 5 Tier A governance tooling'] },
 ]
 
 export default function RoadmapSection() {
@@ -18,7 +17,7 @@ export default function RoadmapSection() {
         {phases.map((p, i) => {
           const isDone = p.status === 'done'
           const isNext = p.status === 'next'
-          const borderColor = isDone ? '#10b981' : isNext ? '#00f0ff' : '#1e293b'
+          const borderColor = isDone ? '#10b981' : isNext ? '#00f0ff' : '#334155'
           return (
             <motion.div
               key={p.n}
@@ -41,8 +40,8 @@ export default function RoadmapSection() {
                   Phase {p.n}
                 </span>
                 <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>{p.title}</span>
-                <span className={`badge ${isDone ? 'badge-active' : 'badge-planned'}`}>
-                  {isDone ? 'Completed' : 'Next'}
+                <span className={`badge ${isDone ? 'badge-active' : isNext ? 'badge-planned' : 'badge-planned'}`}>
+                  {isDone ? 'Completed' : isNext ? 'Next' : 'Planned'}
                 </span>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>

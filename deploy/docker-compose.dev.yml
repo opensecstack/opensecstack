@@ -1,96 +1,23 @@
 version: "3.8"
 
-# Development stack with hot reload for all platforms
+# Full opensecstack dev stack — all 10 platforms in dev mode
 # Usage: docker compose -f deploy/docker-compose.dev.yml up
 #   or:  make dev
+#
+# Default credentials (dev only — never use in production):
+#   username: admin   password: admin
+#   API key:  dev-api-key
+#
+# Notes:
+#   - OpenScrub: eBPF/XDP is stubbed in dev mode (no root/Linux kernel required)
+#   - CyberPath / SecureLab: mount /var/run/docker.sock for lab/attack containers
+#   - VertGuard ML (gRPC Python): disabled in dev — verdict returns UNAVAILABLE
+#   - All CITADEL calls use dry-run mode (events logged but not committed to WORM)
 
 services:
-  # --- APIGuard (dev mode) ---
-  apiguard-api:
-    build:
-      context: ../apiguard
-      dockerfile: Dockerfile.dev
-    ports:
-      - "8080:8080"
-    environment:
-      - APIGUARD_DB_URL=postgres://apiguard:changeme@postgres:5432/apiguard?sslmode=disable
-      - APIGUARD_JWT_SECRET=dev-secret-do-not-use-in-production-min32chars
-      - APIGUARD_REDIS_URL=redis://redis:6379/0
-      - APIGUARD_CITADEL_URL=http://citadel-api:8099
-    volumes:
-      - ../apiguard/cmd:/app/cmd
-      - ../apiguard/internal:/app/internal
-      - ../apiguard/rust:/app/rust
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
 
-  apiguard-web:
-    build:
-      context: ../apiguard/web
-      dockerfile: Dockerfile.dev
-    ports:
-      - "3000:3000"
-    volumes:
-      - ../apiguard/web/src:/app/src
-    depends_on:
-      - apiguard-api
+  # ── Infrastructure ──────────────────────────────────────────────────────────
 
-  # --- NIS2 Compass (dev mode) ---
-  nis2compass-api:
-    build:
-      context: ../nis2compass
-      dockerfile: Dockerfile
-    ports:
-      - "8090:8090"
-    environment:
-      - FLASK_ENV=development
-      - FLASK_DEBUG=1
-      - NIS2_DB_URL=postgresql+psycopg2://nis2compass:changeme@postgres:5432/nis2compass
-      - NIS2_REDIS_URL=redis://redis:6379/1
-      - NIS2_SECRET_KEY=dev-secret-key-do-not-use-in-production
-      - NIS2_JWT_SECRET=dev-jwt-secret-do-not-use-in-production
-      - CITADEL_API_URL=http://citadel-api:8099
-    volumes:
-      - ../nis2compass/app:/app/app
-      - ../nis2compass/alembic:/app/alembic
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      nis2-migrate:
-        condition: service_completed_successfully
-
-  nis2compass-web:
-    build:
-      context: ../nis2compass/web
-      dockerfile: Dockerfile
-    ports:
-      - "3001:3000"
-    volumes:
-      - ../nis2compass/web/src:/app/src
-    depends_on:
-      - nis2compass-api
-
-  nis2-migrate:
-    image: python:3.12-slim
-    working_dir: /app
-    volumes:
-      - ../nis2compass:/app:ro
-    command: >
-      sh -c "pip install -q alembic psycopg2-binary sqlalchemy &&
-             alembic upgrade head"
-    environment:
-      - NIS2_DB_URL=postgresql+psycopg2://nis2compass:changeme@postgres:5432/nis2compass
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: on-failure
-
-  # --- Shared Infrastructure ---
   postgres:
     image: postgres:16-alpine
     ports:
@@ -102,6 +29,8 @@ services:
     volumes:
       - pgdata-dev:/var/lib/postgresql/data
       - ./scripts/init-nis2-db.sql:/docker-entrypoint-initdb.d/02-init-nis2.sql:ro
+      - ./scripts/init-threatflow-db.sql:/docker-entrypoint-initdb.d/03-init-threatflow.sql:ro
+      - ./scripts/init-dev-dbs.sql:/docker-entrypoint-initdb.d/10-init-dev-dbs.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U apiguard"]
       interval: 5s
@@ -111,12 +40,662 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6380:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  # ── CITADEL (governance — starts first) ─────────────────────────────────────
+
+  citadel-migrate:
+    image: postgres:16-alpine
+    environment:
+      PGHOST: postgres
+      PGUSER: citadel
+      PGPASSWORD: changeme
+      PGDATABASE: citadel
+      GLOB: "*.sql"
+    volumes:
+      - ../citadel/migrations:/migrations:ro
+      - ./scripts/run-migrations.sh:/run-migrations.sh:ro
+    entrypoint: ["sh", "/run-migrations.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  citadel-api:
+    build:
+      context: ..
+      dockerfile: citadel/Dockerfile.dev
+    ports:
+      - "8099:8099"
+    environment:
+      - CITADEL_DB_URL=postgres://citadel:changeme@postgres:5432/citadel?sslmode=disable
+      - CITADEL_HTTP_ADDR=:8099
+      - CITADEL_DEV_MODE=true
+      - CITADEL_MASTER_KEY=dev-master-key-do-not-use-in-production-32b
+    volumes:
+      - ../citadel/cmd:/src/citadel/cmd
+      - ../citadel/internal:/src/citadel/internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      citadel-migrate:
+        condition: service_completed_successfully
+
+  # ── sinauth (SSO identity provider — every platform logs in through this) ────
+
+  sinauth-migrate:
+    build:
+      context: ../sinauth
+      dockerfile: Dockerfile
+    command: ["migrate", "--dir", "/migrations"]
+    volumes:
+      - ../sinauth/migrations:/migrations:ro
+    environment:
+      - SINAUTH_DEV_MODE=true
+      - SINAUTH_DB_URL=postgres://sinauth:changeme@postgres:5432/sinauth?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  sinauth-api:
+    build:
+      context: ../sinauth
+      dockerfile: Dockerfile
+    ports:
+      - "8100:8100"
+    environment:
+      - SINAUTH_DEV_MODE=true
+      - SINAUTH_HTTP_ADDR=:8100
+      - SINAUTH_SIGNING_KEY_PATH=/tmp/sinauth.pem
+      # Dev only: self-registered users with no explicit RBAC assignment get
+      # admin in issued tokens so the demo's privileged pages are reachable.
+      # Production leaves this unset (defaults to least-privilege "viewer").
+      - SINAUTH_DEFAULT_ROLE=admin
+      - SINAUTH_DB_URL=postgres://sinauth:changeme@postgres:5432/sinauth?sslmode=disable
+      - SINAUTH_ISSUER=http://sinauth-api:8100
+      - SINAUTH_SITE_URL=http://localhost:5173
+      - SINAUTH_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:3006,http://localhost:3009,http://localhost:3085,http://localhost:3087,http://localhost:3088,http://localhost:5173
+    healthcheck:
+      test: ["CMD", "/sinauth", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      sinauth-migrate:
+        condition: service_completed_successfully
+
+  sinauth-web:
+    build:
+      context: ../sinauth/web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    environment:
+      - SINAUTH_API_PROXY=http://sinauth-api:8100
+    volumes:
+      - ../sinauth/web/src:/app/src
+    depends_on:
+      - sinauth-api
+
+  # ── APIGuard ────────────────────────────────────────────────────────────────
+
+  apiguard-migrate:
+    image: postgres:16-alpine
+    environment:
+      PGHOST: postgres
+      PGUSER: apiguard
+      PGPASSWORD: changeme
+      PGDATABASE: apiguard
+      GLOB: "*.up.sql"
+    volumes:
+      - ../apiguard/migrations:/migrations:ro
+      - ./scripts/run-migrations.sh:/run-migrations.sh:ro
+    entrypoint: ["sh", "/run-migrations.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  apiguard-api:
+    build:
+      context: ..
+      dockerfile: apiguard/Dockerfile.dev
+    ports:
+      - "8080:8080"
+    environment:
+      - APIGUARD_DB_URL=postgres://apiguard:changeme@postgres:5432/apiguard?sslmode=disable
+      - APIGUARD_AUTH_JWT_SECRETS=dev-secret-do-not-use-in-production-min32chars
+      - APIGUARD_AUTH_JWT_SECRET=dev-secret-do-not-use-in-production-min32chars
+      - APIGUARD_REDIS_URL=redis://redis:6379/0
+      - APIGUARD_CITADEL_URL=http://citadel-api:8099
+      - APIGUARD_CITADEL_DRY_RUN=true
+      - APIGUARD_AUTH_API_KEYS=dev-api-key
+      - APIGUARD_AUTH_ENABLE_API_KEYS=true
+      - APIGUARD_AUTH_SINAUTH_URL=http://sinauth-api:8100
+    volumes:
+      - ../apiguard/cmd:/src/apiguard/cmd
+      - ../apiguard/internal:/src/apiguard/internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      citadel-api:
+        condition: service_started
+      sinauth-api:
+        condition: service_healthy
+      apiguard-migrate:
+        condition: service_completed_successfully
+
+  apiguard-web:
+    build:
+      context: ../apiguard/web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    environment:
+      - DEV_API_PROXY=http://apiguard-api:8080
+    volumes:
+      - ../apiguard/web/src:/app/src
+    depends_on:
+      - apiguard-api
+
+  # ── NIS2 Compass ────────────────────────────────────────────────────────────
+
+  nis2-migrate:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - ../nis2compass:/app:ro
+    command: >
+      sh -c "pip install -q alembic psycopg2-binary sqlalchemy &&
+             alembic upgrade head"
+    environment:
+      - NIS2_DB_URL=postgresql+psycopg2://nis2compass:changeme@postgres:5432/nis2compass
+      - NIS2_DB_HOST=postgres
+      - NIS2_DB_PORT=5432
+      - NIS2_DB_USER=nis2compass
+      - NIS2_DB_PASSWORD=changeme
+      - NIS2_DB_NAME=nis2compass
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  nis2compass-api:
+    build:
+      context: ../nis2compass
+      dockerfile: Dockerfile
+    ports:
+      - "8090:8090"
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - NIS2_DB_URL=postgresql+psycopg2://nis2compass:changeme@postgres:5432/nis2compass
+      - NIS2_REDIS_URL=redis://redis:6379/1
+      - NIS2_SECRET_KEY=dev-only-secret-0123456789abcdef0123456789abcdef
+      - NIS2_JWT_SECRET=dev-jwt-secret-do-not-use-in-production-min32
+      - NIS2_CORS_ORIGINS=http://localhost:3001
+      - SINAUTH_URL=http://sinauth-api:8100
+      - CITADEL_API_URL=http://citadel-api:8099
+      - CITADEL_DRY_RUN=true
+    volumes:
+      - ../nis2compass/app:/app/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nis2-migrate:
+        condition: service_completed_successfully
+
+  nis2compass-web:
+    build:
+      context: ../nis2compass/web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3001:3001"
+    environment:
+      - DEV_API_PROXY=http://nis2compass-api:8090
+    volumes:
+      - ../nis2compass/web/src:/app/src
+    depends_on:
+      - nis2compass-api
+
+  # ── ThreatFlow ──────────────────────────────────────────────────────────────
+
+  threatflow-migrate:
+    build:
+      context: ..
+      dockerfile: threatflow/Dockerfile.dev
+    working_dir: /src/threatflow
+    environment:
+      - THREATFLOW_DB_URL=postgres://threatflow:threatflow@postgres:5432/threatflow?sslmode=disable
+    command: ["sh", "-c", "go run ./cmd/threatflow migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  threatflow-api:
+    build:
+      context: ..
+      dockerfile: threatflow/Dockerfile.dev
+    ports:
+      - "8084:8084"
+    environment:
+      - THREATFLOW_DB_URL=postgres://threatflow:threatflow@postgres:5432/threatflow?sslmode=disable
+      - THREATFLOW_AUTH_JWT_SECRET=dev-secret-do-not-use-in-production-min32chars
+      - THREATFLOW_PORT=8084
+      - THREATFLOW_CITADEL_API_URL=http://citadel-api:8099
+      - THREATFLOW_CITADEL_DRY_RUN=true
+    volumes:
+      - ../threatflow/cmd:/src/threatflow/cmd
+      - ../threatflow/internal:/src/threatflow/internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      citadel-api:
+        condition: service_started
+      threatflow-migrate:
+        condition: service_completed_successfully
+
+  # ── IRFlow ──────────────────────────────────────────────────────────────────
+
+  irflow-migrate:
+    image: postgres:16-alpine
+    environment:
+      PGHOST: postgres
+      PGUSER: irflow
+      PGPASSWORD: changeme
+      PGDATABASE: irflow
+      GLOB: "*.sql"
+    volumes:
+      - ../irflow/migrations:/migrations:ro
+      - ./scripts/run-migrations.sh:/run-migrations.sh:ro
+    entrypoint: ["sh", "/run-migrations.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  irflow-api:
+    build:
+      context: ..
+      dockerfile: irflow/Dockerfile.dev
+    ports:
+      - "8083:8083"
+    environment:
+      - IRFLOW_DB_HOST=postgres
+      - IRFLOW_DB_PORT=5432
+      - IRFLOW_DB_NAME=irflow
+      - IRFLOW_DB_USER=irflow
+      - IRFLOW_DB_PASSWORD=changeme
+      - IRFLOW_AUTH_SECRET=dev-secret-do-not-use-in-production-min32chars
+      - IRFLOW_AUTH_DEV_MODE=true
+      - IRFLOW_HTTP_ADDR=:8083
+      - IRFLOW_CITADEL_API_URL=http://citadel-api:8099
+      - IRFLOW_CITADEL_DRY_RUN=true
+      - IRFLOW_NIS2_API_URL=http://nis2compass-api:8090
+    volumes:
+      - ../irflow/cmd:/src/irflow/cmd
+      - ../irflow/internal:/src/irflow/internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      citadel-api:
+        condition: service_started
+      irflow-migrate:
+        condition: service_completed_successfully
+
+  # ── OpenCSIRT ───────────────────────────────────────────────────────────────
+
+  opencsirt-migrate:
+    image: postgres:16-alpine
+    environment:
+      PGHOST: postgres
+      PGUSER: opencsirt
+      PGPASSWORD: changeme
+      PGDATABASE: opencsirt
+      GLOB: "*.up.sql"
+    volumes:
+      - ../opencsirt/migrations:/migrations:ro
+      - ./scripts/run-migrations.sh:/run-migrations.sh:ro
+    entrypoint: ["sh", "/run-migrations.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  opencsirt-api:
+    build:
+      context: ..
+      dockerfile: opencsirt/Dockerfile.dev
+    ports:
+      - "8088:8088"
+    environment:
+      - OPENCSIRT_DB_URL=postgres://opencsirt:changeme@postgres:5432/opencsirt?sslmode=disable
+      - OPENCSIRT_JWT_SECRET=dev-secret-do-not-use-in-production-min32chars
+      - OPENCSIRT_DEV_MODE=true
+      - OPENCSIRT_HTTP_ADDR=:8088
+      - OPENCSIRT_USERS=admin:admin:8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
+      - OPENCSIRT_CITADEL_API_URL=http://citadel-api:8099
+      - OPENCSIRT_CITADEL_DRY_RUN=true
+      - OPENCSIRT_CITADEL_HMAC_SECRETS=dev-citadel-hmac-secret-min-32-characters!!
+      - OPENCSIRT_THREATFLOW_API_URL=http://threatflow-api:8084
+      - OPENCSIRT_VERTGUARD_API_URL=http://vertguard-api:8091
+      - OPENCSIRT_IRFLOW_WEBHOOK_SECRET=dev-irflow-webhook-secret-32charslong
+      - OPENCSIRT_PASSWORD_PEPPER=dev-pepper-do-not-use-in-production-32
+      - OPENCSIRT_SINAUTH_URL=http://sinauth-api:8100
+    volumes:
+      - ../opencsirt/cmd:/src/opencsirt/cmd
+      - ../opencsirt/internal:/src/opencsirt/internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      citadel-api:
+        condition: service_started
+      sinauth-api:
+        condition: service_healthy
+      threatflow-api:
+        condition: service_started
+      opencsirt-migrate:
+        condition: service_completed_successfully
+
+  opencsirt-web:
+    build:
+      context: ../opencsirt/web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3088:3088"
+    environment:
+      - DEV_API_PROXY=http://opencsirt-api:8088
+    volumes:
+      - ../opencsirt/web/src:/app/src
+    depends_on:
+      - opencsirt-api
+
+  # ── VertGuard ───────────────────────────────────────────────────────────────
+
+  vertguard-migrate:
+    image: postgres:16-alpine
+    environment:
+      PGHOST: postgres
+      PGUSER: vertguard
+      PGPASSWORD: changeme
+      PGDATABASE: vertguard
+      GLOB: "*.sql"
+    volumes:
+      - ../vertguard/internal/db/migrations:/migrations:ro
+      - ./scripts/run-migrations.sh:/run-migrations.sh:ro
+    entrypoint: ["sh", "/run-migrations.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  vertguard-api:
+    build:
+      context: ..
+      dockerfile: vertguard/Dockerfile.dev
+    ports:
+      - "8091:8091"
+    environment:
+      - VERTGUARD_DB_URL=postgres://vertguard:changeme@postgres:5432/vertguard?sslmode=disable
+      - VERTGUARD_AUTH_SECRET=dev-secret-do-not-use-in-production-min32chars
+      - VERTGUARD_AUTH_DEV_MODE=true
+      - VERTGUARD_HTTP_ADDR=:8091
+      - VERTGUARD_USERS=admin:admin:8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
+      - VERTGUARD_CITADEL_API_URL=http://citadel-api:8099
+      - VERTGUARD_CITADEL_DRY_RUN=true
+      - VERTGUARD_THREATFLOW_API_URL=http://threatflow-api:8084
+      # ML gRPC disabled in dev — video/audio verdicts return UNAVAILABLE
+      - VERTGUARD_ML_GRPC_URL=
+      - VERTGUARD_AUTH_SINAUTH_URL=http://sinauth-api:8100
+    volumes:
+      - ../vertguard/cmd:/src/vertguard/cmd
+      - ../vertguard/internal:/src/vertguard/internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      citadel-api:
+        condition: service_started
+      sinauth-api:
+        condition: service_healthy
+      vertguard-migrate:
+        condition: service_completed_successfully
+
+  vertguard-web:
+    build:
+      context: ../vertguard/web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3009:3009"
+    environment:
+      - DEV_API_PROXY=http://vertguard-api:8091
+    volumes:
+      - ../vertguard/web/src:/app/src
+    depends_on:
+      - vertguard-api
+
+  # ── OpenScrub ───────────────────────────────────────────────────────────────
+  # eBPF/XDP data plane is stubbed in dev mode — no root or Linux kernel required
+
+  openscrub-migrate:
+    image: postgres:16-alpine
+    environment:
+      PGHOST: postgres
+      PGUSER: openscrub
+      PGPASSWORD: changeme
+      PGDATABASE: openscrub
+      GLOB: "*.up.sql"
+    volumes:
+      - ../openscrub/migrations:/migrations:ro
+      - ./scripts/run-migrations.sh:/run-migrations.sh:ro
+    entrypoint: ["sh", "/run-migrations.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  openscrub-api:
+    build:
+      context: ..
+      dockerfile: openscrub/Dockerfile.dev
+    ports:
+      - "8087:8087"
+    environment:
+      - OPENSCRUB_DB_URL=postgres://openscrub:changeme@postgres:5432/openscrub?sslmode=disable
+      - OPENSCRUB_JWT_SECRET=dev-secret-do-not-use-in-production-min32chars
+      - OPENSCRUB_DEV_MODE=true
+      - OPENSCRUB_HTTP_ADDR=:8087
+      - OPENSCRUB_CITADEL_API_URL=http://citadel-api:8099
+      - OPENSCRUB_CITADEL_DRY_RUN=true
+      - OPENSCRUB_THREATFLOW_API_URL=http://threatflow-api:8084
+      - OPENSCRUB_SINAUTH_URL=http://sinauth-api:8100
+      - SINAUTH_URL=http://sinauth-api:8100
+    volumes:
+      - ../openscrub/cmd:/src/openscrub/cmd
+      - ../openscrub/internal:/src/openscrub/internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      citadel-api:
+        condition: service_started
+      openscrub-migrate:
+        condition: service_completed_successfully
+
+  openscrub-web:
+    build:
+      context: ../openscrub/web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3087:3087"
+    environment:
+      - DEV_API_PROXY=http://openscrub-api:8087
+    volumes:
+      - ../openscrub/web/src:/app/src
+    depends_on:
+      - openscrub-api
+
+  # ── CyberPath ───────────────────────────────────────────────────────────────
+  # Mounts Docker socket for lab container provisioning
+
+  cyberpath-api:
+    build:
+      context: ..
+      dockerfile: cyberpath/Dockerfile.dev
+    ports:
+      - "8086:8086"
+    environment:
+      - CYBERPATH_DB_URL=postgres://cyberpath:changeme@postgres:5432/cyberpath?sslmode=disable
+      - CYBERPATH_AUTH_SECRET=dev-secret-do-not-use-in-production-min32chars
+      - CYBERPATH_AUTH_DEV_MODE=true
+      - CYBERPATH_HTTP_ADDR=:8086
+      - CYBERPATH_CITADEL_API_URL=http://citadel-api:8099
+      - CYBERPATH_CITADEL_DRY_RUN=true
+      - CYBERPATH_IRFLOW_API_URL=http://irflow-api:8083
+      - CYBERPATH_NIS2_API_URL=http://nis2compass-api:8090
+      - CYBERPATH_AUTH_SINAUTH_URL=http://sinauth-api:8100
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../cyberpath/cmd:/src/cyberpath/cmd
+      - ../cyberpath/internal:/src/cyberpath/internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      citadel-api:
+        condition: service_started
+
+  cyberpath-web:
+    build:
+      context: ../cyberpath/web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3006:3006"
+    environment:
+      - DEV_API_PROXY=http://cyberpath-api:8086
+    volumes:
+      - ../cyberpath/web/src:/app/src
+
+    depends_on:
+      - cyberpath-api
+
+  # ── SIN (Community) ─────────────────────────────────────────────────────────
+
+  sin-meilisearch:
+    image: getmeili/meilisearch:v1.10
+    environment:
+      MEILI_MASTER_KEY: devkey
+      MEILI_ENV: development
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:7700/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  community-api:
+    build:
+      context: ../community
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8089:8090"
+    environment:
+      COMMUNITY_HTTP_ADDR: ":8090"
+      COMMUNITY_DB_URL: "postgres://sin:changeme@postgres:5432/sin?sslmode=disable"
+      COMMUNITY_JWT_SECRET: "dev-secret-do-not-use-in-production-min32chars"
+      COMMUNITY_JWT_ISSUER: "community"
+      COMMUNITY_TOKEN_TTL: "12h"
+      COMMUNITY_PASSWORD_PEPPER: "dev-pepper-do-not-use-in-production"
+      COMMUNITY_DEV_MODE: "true"
+      COMMUNITY_INVITE_ONLY: "false"
+      # admin:admin hash = sha256("dev-pepper-do-not-use-in-production:admin")
+      COMMUNITY_USERS: "admin:admin:6a3e15ccff16d84b412e81ee74f2167104ac30d597acdd65188a2cf5e4358de2"
+      MEILISEARCH_URL: "http://sin-meilisearch:7700"
+      MEILISEARCH_KEY: "devkey"
+      UPLOAD_DIR: "/app/uploads"
+      SITE_URL: "http://localhost:5174"
+      COMMUNITY_CITADEL_API_URL: "http://citadel-api:8099"
+      COMMUNITY_CITADEL_DRY_RUN: "true"
+      # sinauth SSO (server-side OAuth flow).
+      # SINAUTH_URL: container-to-container (token/userinfo) — use Docker service name.
+      # SINAUTH_PUBLIC_URL: browser-facing authorize redirect — must be localhost.
+      SINAUTH_URL: "http://sinauth-api:8100"
+      SINAUTH_PUBLIC_URL: "http://localhost:8100"
+      SINAUTH_CLIENT_ID: "community"
+      SINAUTH_CALLBACK_URL: "http://localhost:8089/api/v1/auth/sinauth/callback"
+      SMTP_HOST: ""
+      SMTP_FROM: "noreply@sin.to"
+    volumes:
+      - sin-uploads:/app/uploads
+      - ../community/cmd:/app/cmd
+      - ../community/internal:/app/internal
+    networks:
+      default:
+        aliases:
+          - api          # legacy: community/web/nginx.conf upstream (vite dev now uses DEV_API_PROXY)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      sin-meilisearch:
+        condition: service_healthy
+      citadel-api:
+        condition: service_started
+
+  community-web:
+    build:
+      context: ../community/web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5174:5174"
+    environment:
+      - DEV_API_PROXY=http://community-api:8090
+    volumes:
+      - ../community/web/src:/app/src
+    depends_on:
+      - community-api
+
+  # ── SecureLab ───────────────────────────────────────────────────────────────
+  # Mounts Docker socket for isolated attack scenario containers
+
+  securelab-api:
+    build:
+      context: ..
+      dockerfile: securelab/Dockerfile.dev
+    ports:
+      - "8085:8085"
+    environment:
+      - SECURELAB_DB_URL=postgres://securelab:changeme@postgres:5432/securelab?sslmode=disable
+      - SECURELAB_JWT_SECRET=dev-secret-do-not-use-in-production-min32chars
+      - SECURELAB_DEV_MODE=true
+      - SECURELAB_HTTP_ADDR=:8085
+      - SECURELAB_CITADEL_API_URL=http://citadel-api:8099
+      - SECURELAB_CITADEL_DRY_RUN=true
+      - SECURELAB_SINAUTH_URL=http://sinauth-api:8100
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../securelab/cmd:/src/securelab/cmd
+      - ../securelab/internal:/src/securelab/internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      citadel-api:
+        condition: service_started
+
+  securelab-web:
+    build:
+      context: ../securelab/web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3085:3085"
+    environment:
+      - DEV_API_PROXY=http://securelab-api:8085
+    volumes:
+      - ../securelab/web/src:/app/src
+    depends_on:
+      - securelab-api
+
 volumes:
   pgdata-dev:
+  sin-uploads:

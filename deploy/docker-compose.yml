@@ -124,6 +124,133 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # --- SIN (Community) ---
+  sin-meilisearch:
+    image: getmeili/meilisearch:v1.10
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?MEILI_MASTER_KEY must be set}
+      MEILI_ENV: production
+    volumes:
+      - sin-meilidata:/meili_data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7700/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  community-api:
+    image: ghcr.io/opensecstack/community:latest
+    build:
+      context: ../community
+      dockerfile: Dockerfile
+    ports:
+      - "8089:8090"
+    environment:
+      COMMUNITY_HTTP_ADDR: ":8090"
+      COMMUNITY_DB_URL: "postgres://sin:${SIN_DB_PASSWORD:?SIN_DB_PASSWORD must be set}@postgres:5432/sin?sslmode=disable"
+      COMMUNITY_JWT_SECRET: ${COMMUNITY_JWT_SECRET:?COMMUNITY_JWT_SECRET must be set}
+      COMMUNITY_JWT_ISSUER: "community"
+      COMMUNITY_TOKEN_TTL: "12h"
+      COMMUNITY_PASSWORD_PEPPER: ${COMMUNITY_PASSWORD_PEPPER:?COMMUNITY_PASSWORD_PEPPER must be set}
+      MEILISEARCH_URL: "http://sin-meilisearch:7700"
+      MEILISEARCH_KEY: ${MEILI_MASTER_KEY}
+      UPLOAD_DIR: "/app/uploads"
+      SITE_URL: ${COMMUNITY_SITE_URL:-https://sin.to}
+      COMMUNITY_CITADEL_API_URL: "http://citadel-api:8099"
+      COMMUNITY_CITADEL_KEY_ID: "community-1"
+      COMMUNITY_CITADEL_HMAC_SECRETS: ${CITADEL_API_KEY:-}
+      COMMUNITY_CITADEL_DRY_RUN: "false"
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-noreply@sin.to}
+    volumes:
+      - sin-uploads:/app/uploads
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      sin-meilisearch:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # --- sinauth (SSO identity provider — every platform authenticates through it) ---
+  # Keys volume is chowned to the distroless nonroot uid (65532) so sinauth-api
+  # can generate/persist its RS256 signing key on first boot without running as root.
+  sinauth-keyinit:
+    image: alpine:3.20
+    command: ["sh", "-c", "mkdir -p /keys && chown -R 65532:65532 /keys && chmod 700 /keys"]
+    volumes:
+      - sinauth-keys:/keys
+    restart: on-failure
+
+  sinauth-migrate:
+    image: ghcr.io/opensecstack/sinauth:latest
+    build:
+      context: ../sinauth
+      dockerfile: Dockerfile
+    command: ["migrate", "--dir", "/migrations"]
+    volumes:
+      - ../sinauth/migrations:/migrations:ro
+    environment:
+      - SINAUTH_DB_URL=postgres://sinauth:${SINAUTH_DB_PASSWORD:?SINAUTH_DB_PASSWORD must be set}@postgres:5432/sinauth?sslmode=disable
+      - SINAUTH_ISSUER=${SINAUTH_ISSUER:?SINAUTH_ISSUER must be set}
+      - SINAUTH_SIGNING_KEY_PATH=/keys/sinauth.pem
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: on-failure
+
+  sinauth-api:
+    image: ghcr.io/opensecstack/sinauth:latest
+    build:
+      context: ../sinauth
+      dockerfile: Dockerfile
+    ports:
+      - "8100:8100"
+    environment:
+      - SINAUTH_HTTP_ADDR=:8100
+      - SINAUTH_DB_URL=postgres://sinauth:${SINAUTH_DB_PASSWORD:?SINAUTH_DB_PASSWORD must be set}@postgres:5432/sinauth?sslmode=disable
+      - SINAUTH_ISSUER=${SINAUTH_ISSUER:?SINAUTH_ISSUER must be set}
+      - SINAUTH_SITE_URL=${SINAUTH_SITE_URL:?SINAUTH_SITE_URL must be set}
+      - SINAUTH_ALLOWED_ORIGINS=${SINAUTH_ALLOWED_ORIGINS:-}
+      - SINAUTH_SIGNING_KEY_PATH=/keys/sinauth.pem
+      - SINAUTH_SIGNING_KEY_ID=${SINAUTH_SIGNING_KEY_ID:-sinauth-1}
+    volumes:
+      - sinauth-keys:/keys
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      sinauth-migrate:
+        condition: service_completed_successfully
+      sinauth-keyinit:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  sinauth-web:
+    image: ghcr.io/opensecstack/sinauth-web:latest
+    build:
+      context: ../sinauth/web
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    networks:
+      - frontend
+    depends_on:
+      - sinauth-api
+    restart: unless-stopped
+
   # --- Shared Infrastructure ---
   postgres:
     image: postgres:16-alpine
@@ -137,6 +264,8 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./scripts/init-nis2-db.sql:/docker-entrypoint-initdb.d/02-init-nis2.sql:ro
       - ./scripts/init-threatflow-db.sql:/docker-entrypoint-initdb.d/03-init-threatflow.sql:ro
+      - ./scripts/init-sin-db.sql:/docker-entrypoint-initdb.d/04-init-sin.sql:ro
+      - ./scripts/init-sinauth-db.sql:/docker-entrypoint-initdb.d/05-init-sinauth.sql:ro
     networks:
       - backend
     healthcheck:
@@ -162,6 +291,9 @@ services:
 
 volumes:
   pgdata:
+  sin-meilidata:
+  sin-uploads:
+  sinauth-keys:
 
 networks:
   frontend:

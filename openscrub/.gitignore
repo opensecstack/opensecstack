@@ -1,0 +1,36 @@
+# Build outputs
+bin/
+dist/
+target/
+*.exe
+*.o
+*.so
+
+# eBPF compile artefacts
+ebpf/*.o
+ebpf/vmlinux.h
+
+# Node / Vite
+web/node_modules/
+web/dist/
+web/.vite/
+
+# Env / secrets
+.env
+.env.local
+*.pem
+*.key
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artefacts
+coverage.out
+*.test
+tests/integration/.tmp/

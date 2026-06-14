@@ -1,0 +1,121 @@
+version: "3.9"
+
+# OpenScrub local stack — for development and integration tests.
+# In production, the dataplane runs on the host (DaemonSet via Helm), not
+# in Docker. This compose file approximates the topology by giving the
+# dataplane container the explicit BPF/NET_ADMIN cap set (no privileged:
+# true — see docs/security/threat-model.md #4).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: openscrub
+      # Required. Set in .env — no default (so the stack fails to start
+      # if the operator forgot to pick a password). docker-compose will
+      # refuse to interpolate ${VAR:?…} forms when unset.
+      POSTGRES_PASSWORD: ${OPENSCRUB_DB_PASSWORD:?set OPENSCRUB_DB_PASSWORD in .env}
+      POSTGRES_DB: openscrub
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - openscrub-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openscrub"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  openscrub-dataplane:
+    image: opensecstack/openscrub-dataplane:1.0.0
+    network_mode: host
+    # Explicit minimum cap set; no privileged: true (which would also
+    # disable seccomp and AppArmor — see docs/security/threat-model.md #4).
+    cap_drop:
+      - ALL
+    cap_add:
+      - BPF
+      - NET_ADMIN
+      - SYS_RESOURCE
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    environment:
+      OPENSCRUB_IFACE: ${OPENSCRUB_IFACE:-eth0}
+      OPENSCRUB_XDP_MODE: ${OPENSCRUB_XDP_MODE:-skb}
+      OPENSCRUB_DATAPLANE_SOCKET: /run/openscrub/dataplane.sock
+    volumes:
+      - /sys/fs/bpf:/sys/fs/bpf
+      - openscrub-run:/run/openscrub
+
+  openscrub-api:
+    image: opensecstack/openscrub-api:1.0.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      openscrub-dataplane:
+        condition: service_started
+    ports:
+      - "8087:8087"
+    environment:
+      OPENSCRUB_HTTP_ADDR: ":8087"
+      OPENSCRUB_DB_URL: "postgres://openscrub:${OPENSCRUB_DB_PASSWORD:?set OPENSCRUB_DB_PASSWORD in .env}@postgres:5432/openscrub?sslmode=disable"
+      OPENSCRUB_DATAPLANE_TRANSPORT: uds
+      OPENSCRUB_DATAPLANE_SOCKET: /run/openscrub/dataplane.sock
+      # Required — fail-closed if unset. Generate with: openssl rand -base64 32
+      OPENSCRUB_JWT_SECRET: ${OPENSCRUB_JWT_SECRET:?set OPENSCRUB_JWT_SECRET in .env (>=32 bytes)}
+      # Login issuer creds — comma-separated user:role:sha256hex.
+      # Generate hashes with the openscrub-mkhash helper or:
+      #   echo -n "${OPENSCRUB_PASSWORD_PEPPER}:<plaintext>" | sha256sum
+      #
+      # DEV-ONLY DEFAULTS — the values below let `make integration` and
+      # `make compose-up` work out-of-the-box. Production deployments
+      # MUST override OPENSCRUB_PASSWORD_PEPPER and OPENSCRUB_USERS via
+      # .env (or, in Helm, a sealed Secret).
+      #
+      # Hash recipe: sha256hex( pepper + ":" + plaintext )
+      #   operator-dev-only -> 0e129ba1a3bfa9e08c8865e51fcf92adedd6f6e5f0f6fef4a7b4e88a053098d6
+      #   admin-dev-only    -> cba8c86cb3ddc213b83d7ce751c55fb8ee011bce8f2f2973442aee7fab0d40a2
+      OPENSCRUB_PASSWORD_PEPPER: ${OPENSCRUB_PASSWORD_PEPPER:-dev-pepper-do-not-use-in-prod}
+      OPENSCRUB_USERS: ${OPENSCRUB_USERS:-operator:operator:0e129ba1a3bfa9e08c8865e51fcf92adedd6f6e5f0f6fef4a7b4e88a053098d6,admin:admin:cba8c86cb3ddc213b83d7ce751c55fb8ee011bce8f2f2973442aee7fab0d40a2}
+      # DevMode lets the API tolerate the dev pepper above without the
+      # Validate() guard refusing to boot. NEVER set this true in prod.
+      OPENSCRUB_DEV_MODE: ${OPENSCRUB_DEV_MODE:-1}
+      OPENSCRUB_TOKEN_TTL: ${OPENSCRUB_TOKEN_TTL:-1h}
+      OPENSCRUB_NODE: ${OPENSCRUB_NODE:-openscrub-edge-dev}
+      OPENSCRUB_DB_MAX_CONNS: ${OPENSCRUB_DB_MAX_CONNS:-16}
+      OPENSCRUB_MITIGATION_MIN_DURATION: ${OPENSCRUB_MITIGATION_MIN_DURATION:-5s}
+      OPENSCRUB_THREATFLOW_API_URL: ${OPENSCRUB_THREATFLOW_API_URL:-}
+      OPENSCRUB_THREATFLOW_TOKEN: ${OPENSCRUB_THREATFLOW_TOKEN:-}
+      # Pull cadence — propagate from .env so operators can tune it
+      # without rebuilding the image. Default (15m) lives in
+      # internal/config/config.go.
+      OPENSCRUB_THREATFLOW_INTERVAL: ${OPENSCRUB_THREATFLOW_INTERVAL:-15m}
+      OPENSCRUB_CITADEL_API_URL: ${OPENSCRUB_CITADEL_API_URL:-}
+      OPENSCRUB_CITADEL_HMAC_SECRET: ${OPENSCRUB_CITADEL_HMAC_SECRET:-}
+      # 3-slot HMAC rotation list (primary,next,previous). Takes
+      # precedence over OPENSCRUB_CITADEL_HMAC_SECRET when set.
+      OPENSCRUB_CITADEL_HMAC_SECRETS: ${OPENSCRUB_CITADEL_HMAC_SECRETS:-}
+      OPENSCRUB_CITADEL_KEY_ID: ${OPENSCRUB_CITADEL_KEY_ID:-}
+      OPENSCRUB_CITADEL_KEY_IDS: ${OPENSCRUB_CITADEL_KEY_IDS:-}
+      OPENSCRUB_CITADEL_DRY_RUN: ${OPENSCRUB_CITADEL_DRY_RUN:-false}
+    volumes:
+      - openscrub-run:/run/openscrub
+
+  openscrub-web:
+    image: opensecstack/openscrub-web:1.0.0
+    depends_on:
+      - openscrub-api
+    ports:
+      - "3087:80"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+volumes:
+  openscrub-pg:
+  openscrub-run:

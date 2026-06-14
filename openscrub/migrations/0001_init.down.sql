@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS mitigations;
+DROP TABLE IF EXISTS ioc_ingest_log;
+DROP TABLE IF EXISTS rules;

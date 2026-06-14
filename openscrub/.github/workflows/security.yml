@@ -1,0 +1,75 @@
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Re-scan every Monday — vulnerability DBs (govulncheck, cargo audit)
+    # publish new advisories continuously and a static "passed at PR
+    # time" result becomes stale within a week.
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  go-security:
+    name: Go security scanners
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+      - name: Install scanners
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+      # Two gosec invocations: the SARIF dump for code-scanning is
+      # non-blocking (so partial parse failures still ship results),
+      # but the gating run after it MUST exit non-zero on findings —
+      # a green CI badge is meaningless if the scanner is muted.
+      - name: gosec (SARIF for code-scanning)
+        run: gosec -severity medium -confidence medium -fmt sarif -out gosec.sarif ./... || true
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: gosec.sarif
+          category: gosec
+      - name: gosec (blocking gate)
+        run: gosec -severity medium -confidence medium ./...
+      - name: govulncheck
+        run: govulncheck ./...
+      - name: staticcheck
+        run: staticcheck ./...
+
+  rust-security:
+    name: cargo audit + cargo deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust/dataplane
+      - run: cargo install cargo-audit --locked
+      - run: cd rust/dataplane && cargo audit
+      - run: cargo install cargo-deny --locked
+      - run: cd rust/dataplane && cargo deny check
+
+  npm-audit:
+    name: npm audit (web)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: cd web && npm ci
+      - run: cd web && npm audit --omit=dev --audit-level=high

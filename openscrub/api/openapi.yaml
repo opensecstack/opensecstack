@@ -1,0 +1,320 @@
+openapi: 3.1.0
+info:
+  title: OpenScrub Control Plane API
+  description: |
+    HTTP API for the OpenScrub DDoS-mitigation control plane. Operators
+    manage blocklist + ratelimit + syncookie rules; observability tools
+    poll Prometheus metrics; CITADEL receives evidence events out-of-band.
+  version: 1.0.0-rc.1
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+servers:
+  - url: http://localhost:8087
+    description: Local dev
+  - url: https://openscrub.{site}.opensecstack.io
+    description: Production edge node
+    variables:
+      site:
+        default: edge-fra-1
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/auth/login:
+    post:
+      summary: Exchange username/password for a short-lived JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string, format: password }
+      responses:
+        "200":
+          description: Token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  token_type:   { type: string, enum: [Bearer] }
+                  expires_at:   { type: string, format: date-time }
+                  role:         { type: string }
+                  sub:          { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Issuer disabled (no users seeded)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /api/v1/health:
+    get:
+      summary: Liveness + readiness probe
+      security: []
+      responses:
+        "200":
+          description: Health document
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+  /api/v1/metrics:
+    get:
+      summary: Prometheus exposition (JWT-gated)
+      description: |
+        Counters reveal operational state (rule counts, IOC pull cadence,
+        CITADEL queue depth) so this endpoint requires a Bearer token.
+        Provision a long-lived "readonly" JWT for Prometheus and load it
+        from a file (see deploy/prometheus.yml).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: text/plain Prometheus body
+          content:
+            text/plain: {}
+        "401":
+          description: missing or invalid Bearer token
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /api/v1/metrics/snapshot:
+    get:
+      summary: JSON metrics snapshot for the dashboard
+      description: |
+        Point-in-time view of the counters needed by the OpenScrub web
+        dashboard's overview page. Counters are monotonic since process
+        start; the frontend derives rates from successive snapshots.
+        Read-only — analyst+ role required.
+      responses:
+        "200":
+          description: Snapshot
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MetricsSnapshot" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/mitigations:
+    get:
+      summary: List observed mitigation windows
+      parameters:
+        - in: query
+          name: since
+          schema: { type: string, format: date-time }
+        - in: query
+          name: rule_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 200 }
+      responses:
+        "200":
+          description: Mitigation list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mitigations:
+                    type: array
+                    items: { $ref: "#/components/schemas/Mitigation" }
+                  count: { type: integer }
+  /api/v1/rules:
+    get:
+      summary: List rules
+      description: |
+        Returns a paginated list of rules. Pagination uses `offset` + `limit`
+        with stable ordering by `created_at DESC, id DESC`. Clients walk
+        pages by incrementing `offset` by the page size (typically equal to
+        `limit`). The `count` field in the response reflects the number of
+        rows returned for the current page (not the grand total); clients
+        should keep paging until a short page is returned.
+      parameters:
+        - in: query
+          name: type
+          schema: { type: string, enum: [blocklist, ratelimit, syncookie] }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 200 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        "200":
+          description: Rule list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rules:
+                    type: array
+                    items: { $ref: "#/components/schemas/Rule" }
+                  count: { type: integer }
+    post:
+      summary: Create a rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRuleRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Rule" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /api/v1/rules/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Get one rule
+      responses:
+        "200":
+          description: Rule
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Rule" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      summary: Withdraw a rule
+      parameters:
+        - in: query
+          name: reason
+          schema: { type: string, maxLength: 500 }
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Health:
+      type: object
+      required:
+        - status
+        - version
+        - db_ping
+        - dataplane_attached
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        version: { type: string }
+        db_ping: { type: boolean }
+        dataplane_attached: { type: boolean }
+    Rule:
+      type: object
+      required: [id, type, ttl_seconds, source, created_at, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [blocklist, ratelimit, syncookie] }
+        cidr: { type: string, description: "CIDR (blocklist + ratelimit)" }
+        pps: { type: integer, minimum: 1, description: "Required for ratelimit" }
+        port: { type: integer, minimum: 1, maximum: 65535, description: "Required for syncookie" }
+        ttl_seconds: { type: integer, minimum: 1 }
+        source: { type: string }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        created_by: { type: string, format: uuid, nullable: true }
+    CreateRuleRequest:
+      type: object
+      required: [type, ttl_seconds]
+      properties:
+        type: { type: string, enum: [blocklist, ratelimit, syncookie] }
+        cidr: { type: string }
+        pps: { type: integer, minimum: 1 }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        ttl_seconds: { type: integer, minimum: 1, maximum: 2592000 }
+        source: { type: string, default: operator }
+    MetricsSnapshot:
+      type: object
+      required:
+        - pps_passed
+        - pps_dropped
+        - pps_ratelimited
+        - syn_cookies_sent
+        - rules_active
+        - rules_v4
+        - rules_v6
+        - rules_ratelimit
+        - rules_syncookie
+        - ioc_pull_last_at
+        - ioc_pull_count
+        - citadel_queue_depth
+        - dataplane_attached
+        - snapshot_at
+      properties:
+        pps_passed:         { type: integer, format: int64, minimum: 0 }
+        pps_dropped:        { type: integer, format: int64, minimum: 0 }
+        pps_ratelimited:    { type: integer, format: int64, minimum: 0 }
+        syn_cookies_sent:   { type: integer, format: int64, minimum: 0 }
+        rules_active:       { type: integer, minimum: 0 }
+        rules_v4:           { type: integer, minimum: 0 }
+        rules_v6:           { type: integer, minimum: 0 }
+        rules_ratelimit:    { type: integer, minimum: 0 }
+        rules_syncookie:    { type: integer, minimum: 0 }
+        ioc_pull_last_at:   { type: string, format: date-time }
+        ioc_pull_count:     { type: integer, minimum: 0 }
+        citadel_queue_depth: { type: integer, minimum: 0 }
+        dataplane_attached: { type: boolean }
+        snapshot_at:        { type: string, format: date-time }
+    Mitigation:
+      type: object
+      required: [id, rule_id, started_at, packets_dropped, bytes_dropped, emitted]
+      properties:
+        id: { type: string, format: uuid }
+        rule_id: { type: string, format: uuid }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time, nullable: true }
+        packets_dropped: { type: integer, format: int64 }
+        bytes_dropped: { type: integer, format: int64 }
+        src_ip: { type: string }
+        emitted: { type: boolean }
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Insufficient role
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

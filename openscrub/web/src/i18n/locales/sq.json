@@ -1,0 +1,109 @@
+{
+  "common": {
+    "app_name": "OpenScrub",
+    "tagline": "Mitigim DDoS me XDP/eBPF",
+    "nav": {
+      "rules": "Rregullat",
+      "add_rule": "Rregull i ri",
+      "mitigations": "Mitigime live",
+      "metrics": "Metrika",
+      "logout": "Dil"
+    },
+    "actions": {
+      "save": "Ruaj",
+      "cancel": "Anulo",
+      "delete": "Fshij",
+      "refresh": "Rifresko",
+      "submit": "Dërgo",
+      "login": "Hyr"
+    },
+    "labels": {
+      "username": "Përdorues",
+      "password": "Fjalëkalim",
+      "loading": "Duke u ngarkuar…",
+      "empty": "Asnjë rezultat",
+      "error": "Gabim",
+      "page": "Faqe"
+    },
+    "footer": "OpenScrub v{{version}} · {{license}}"
+  },
+  "rules": {
+    "title": "Rregulla aktive",
+    "add_title": "Shto rregull të ri",
+    "total": "{{count}} gjithsej",
+    "fields": {
+      "cidr": "CIDR",
+      "type": "Lloji",
+      "pps": "Paketa/s (kufiri)",
+      "port": "Porti",
+      "ttl": "TTL (sekonda)",
+      "source": "Burimi",
+      "created_at": "Krijuar"
+    },
+    "types": {
+      "blocklist": "Listë bllokimi",
+      "ratelimit": "Kufizim shpejtësie",
+      "syncookie": "SYN cookie"
+    },
+    "placeholders": {
+      "cidr": "p.sh. 192.0.2.0/24"
+    },
+    "filter": {
+      "all": "Të gjitha llojet"
+    },
+    "errors": {
+      "cidr_invalid": "CIDR i pavlefshëm",
+      "pps_required": "Paketat/s janë të domosdoshme për kufizim shpejtësie",
+      "port_invalid": "Porti duhet të jetë midis 1 dhe 65535",
+      "ttl_invalid": "TTL duhet të jetë të paktën 1 sekondë"
+    },
+    "deleted": "Rregulli u fshi"
+  },
+  "mitigations": {
+    "title": "Mitigime live (rifreskim çdo 5s)",
+    "count": "{{count}} gjithsej",
+    "fields": {
+      "started_at": "Nisi",
+      "ended_at": "Përfundoi",
+      "src_ip": "IP burim",
+      "rule_id": "Rregulli",
+      "packets_dropped": "Paketa të hedhura",
+      "bytes_dropped": "Bajtë të hedhur",
+      "emitted": "Emetuar"
+    },
+    "emitted": {
+      "yes": "po",
+      "no": "jo"
+    }
+  },
+  "metrics": {
+    "title": "Metrika",
+    "dataplane_detached_warning": "Data-plane nuk është i lidhur. Rregullat nuk po zbatohen — kontrollo ngarkuesin XDP në këtë nyje.",
+    "source": "Burimi: GET /api/v1/metrics/snapshot. Për PromQL ad-hoc, pyet drejtpërdrejt instancën Prometheus përmes /api/v1/metrics.",
+    "cards": {
+      "pps_passed": "Paketa të kaluara (pps)",
+      "pps_dropped": "Paketa të hedhura (pps)",
+      "pps_ratelimited": "Paketa të kufizuara (pps)",
+      "syn_cookies_sent": "SYN cookies të dërguara",
+      "rules_active": "Rregulla aktive",
+      "rules_v4": "Rregulla (IPv4)",
+      "rules_v6": "Rregulla (IPv6)",
+      "rules_ratelimit": "Rregulla (kufizim shpejtësie)",
+      "rules_syncookie": "Rregulla (SYN cookie)",
+      "ioc_pull_count": "Tërheqje IOC",
+      "ioc_pull_last_at": "Tërheqja e fundit IOC",
+      "citadel_queue_depth": "Thellësia e radhës CITADEL",
+      "dataplane_attached": "Data-plane i lidhur",
+      "snapshot_at": "Fotoja në"
+    },
+    "bool": {
+      "yes": "po",
+      "no": "jo"
+    }
+  },
+  "not_found": {
+    "title": "404",
+    "body": "Faqja nuk u gjet.",
+    "back": "Kthehu te rregullat"
+  }
+}

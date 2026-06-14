@@ -1,0 +1,126 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go build + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race -count=1 ./...
+
+  go-security:
+    name: Go security gates (gosec/govulncheck/staticcheck)
+    runs-on: ubuntu-latest
+    needs: go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+      - run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+      # Run via the Makefile so the local `make sec-go` and CI use the
+      # same flags — divergence between the two is the usual reason
+      # "passed locally" PRs fail in CI.
+      - run: make sec-go
+
+  rust-security:
+    name: Rust security gates (cargo audit)
+    runs-on: ubuntu-latest
+    needs: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust/dataplane
+      - run: cargo install cargo-audit --locked
+      - run: make sec-rust
+
+  go-integration-postgres:
+    name: Go -tags integration (Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: openscrub
+          POSTGRES_PASSWORD: openscrub
+          POSTGRES_DB: openscrub
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U openscrub"
+          --health-interval 5s --health-timeout 3s --health-retries 12
+    env:
+      OPENSCRUB_TEST_DB_URL: postgres://openscrub:openscrub@127.0.0.1:5432/openscrub?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+      - name: Apply migrations
+        run: |
+          go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+          migrate -path ./migrations -database "$OPENSCRUB_TEST_DB_URL" up
+      - run: make test-postgres
+
+  rust:
+    name: Rust build + clippy + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust/dataplane
+      - run: cd rust/dataplane && cargo build --release
+      - run: cd rust/dataplane && cargo clippy --all-targets -- -D warnings
+      - run: cd rust/dataplane && cargo test
+
+  ebpf:
+    name: eBPF build (Linux only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang + libbpf headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang llvm libelf-dev libbpf-dev linux-headers-$(uname -r) make
+      - run: make ebpf
+
+  web:
+    name: Web build + lint + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: cd web && npm ci
+      - run: cd web && npm run lint
+      - run: cd web && npm run typecheck
+      - run: cd web && npm test
+      - run: cd web && npm run build

@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "openscrub.fullname" . }}-loader
+  labels:
+    {{- include "openscrub.labels" . | nindent 4 }}
+    app.kubernetes.io/component: loader
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "openscrub.name" . }}
+      app.kubernetes.io/component: loader
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "openscrub.name" . }}
+        app.kubernetes.io/component: loader
+    spec:
+      hostNetwork: {{ .Values.loader.hostNetwork }}
+      hostPID: {{ .Values.loader.hostPID }}
+      {{- with .Values.loader.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.loader.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: loader
+          image: "{{ .Values.image.registry }}/{{ .Values.image.loader.repository }}:{{ .Values.image.loader.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: false
+            allowPrivilegeEscalation: {{ .Values.loader.allowPrivilegeEscalation }}
+            readOnlyRootFilesystem: {{ .Values.loader.readOnlyRootFilesystem }}
+            capabilities:
+              drop:
+                {{- range .Values.loader.capabilities.drop }}
+                - {{ . }}
+                {{- end }}
+              add:
+                {{- range .Values.loader.capabilities.add }}
+                - {{ . }}
+                {{- end }}
+          env:
+            - name: OPENSCRUB_IFACE
+              value: {{ .Values.loader.iface | quote }}
+            - name: OPENSCRUB_XDP_MODE
+              value: {{ .Values.loader.xdpMode | quote }}
+            - name: OPENSCRUB_DATAPLANE_SOCKET
+              value: /run/openscrub/dataplane.sock
+          resources:
+            {{- toYaml .Values.loader.resources | nindent 12 }}
+          volumeMounts:
+            - name: bpffs
+              mountPath: /sys/fs/bpf
+              mountPropagation: Bidirectional
+            - name: run
+              mountPath: /run/openscrub
+      volumes:
+        - name: bpffs
+          hostPath:
+            path: /sys/fs/bpf
+            type: Directory
+        - name: run
+          hostPath:
+            path: /run/openscrub
+            type: DirectoryOrCreate

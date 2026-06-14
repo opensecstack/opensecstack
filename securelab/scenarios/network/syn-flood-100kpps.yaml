@@ -1,0 +1,14 @@
+name: syn-flood-100kpps
+description: "SYN flood at 100k packets per second for 30 seconds — validates DoS detection thresholds"
+mitre_technique_ids: ["T1498.001"]
+tags: [network, dos, syn-flood]
+severity: high
+timeout: 2m
+steps:
+  - kind: syn_flood
+    params:
+      target_port: 80
+      packets_per_second: 100000
+      duration: 30s
+      source_ip_spoof: true
+      source_ip_range: "10.0.0.0/8"

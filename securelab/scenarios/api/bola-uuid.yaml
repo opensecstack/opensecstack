@@ -1,0 +1,14 @@
+name: bola-uuid
+description: "BOLA via UUID enumeration — random UUID brute force against object endpoints"
+mitre_technique_ids: ["T1078"]
+tags: [api, owasp-a1, bola, uuid]
+severity: high
+timeout: 5m
+steps:
+  - kind: bola
+    params:
+      endpoint: /api/v1/documents/{id}
+      id_type: uuid
+      uuid_count: 500
+      auth_token_param: low_privilege_jwt
+      expected_leak_field: owner_id

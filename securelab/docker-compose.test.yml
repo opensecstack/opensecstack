@@ -1,0 +1,75 @@
+# SecureLab — Test Target Environments
+# Usage: docker compose -f docker-compose.test.yml up
+#
+# Provisions intentionally vulnerable target services for attack simulation
+# testing. ALL networks use --internal flag to prevent external connectivity.
+#
+# WARNING: These services contain intentional vulnerabilities (OWASP Top 10).
+# Never expose them outside the securelab-test-net network.
+
+version: "3.9"
+
+networks:
+  # Isolated internal test network — no external routing.
+  # The --internal flag ensures no traffic can leave this network.
+  securelab-test-net:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24
+
+volumes:
+  securelab-test-db:
+
+services:
+
+  # ── Target API (intentionally vulnerable Go HTTP server) ──────────────────
+  # This service intentionally implements OWASP API Security Top 10
+  # vulnerabilities for use as an attack simulation target.
+  # It must NEVER be exposed outside securelab-test-net.
+  target-api:
+    build:
+      context: ./testdata/target-api
+      dockerfile: Dockerfile
+    container_name: securelab-target-api
+    restart: unless-stopped
+    environment:
+      TARGET_DB_URL: "postgres://target:target@target-db:5432/target?sslmode=disable"
+      TARGET_ADDR: "0.0.0.0:9090"
+      # Intentional vulnerabilities enabled
+      TARGET_VULN_BOLA: "true"
+      TARGET_VULN_JWT_NONE: "true"
+      TARGET_VULN_MASS_ASSIGN: "true"
+      TARGET_VULN_SSRF: "true"
+      TARGET_VULN_RATE_LIMIT: "none"
+    depends_on:
+      target-db:
+        condition: service_healthy
+    networks:
+      - securelab-test-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Target DB ──────────────────────────────────────────────────────────────
+  target-db:
+    image: postgres:16-alpine
+    container_name: securelab-target-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: target
+      POSTGRES_USER: target
+      POSTGRES_PASSWORD: target
+    volumes:
+      - securelab-test-db:/var/lib/postgresql/data
+    networks:
+      - securelab-test-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U target"]
+      interval: 5s
+      timeout: 5s
+      retries: 10

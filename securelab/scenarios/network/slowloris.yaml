@@ -1,0 +1,14 @@
+name: slowloris
+description: "Slowloris attack with 100 connections — holds connections open by sending partial HTTP headers to exhaust server connection pool"
+mitre_technique_ids: ["T1499.002"]
+tags: [network, dos, slowloris, connection-exhaustion]
+severity: medium
+timeout: 5m
+steps:
+  - kind: slowloris
+    params:
+      target_port: 80
+      connection_count: 100
+      send_interval: 10s
+      duration: 3m
+      header_template: "X-Slowloris-{n}: value"

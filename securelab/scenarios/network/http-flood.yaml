@@ -1,0 +1,16 @@
+name: http-flood
+description: "HTTP flood with 50 concurrent goroutines — validates application-layer DDoS detection"
+mitre_technique_ids: ["T1499.002"]
+tags: [network, dos, http-flood, application-layer]
+severity: high
+timeout: 3m
+steps:
+  - kind: http_flood
+    params:
+      endpoint: /
+      method: GET
+      concurrency: 50
+      duration: 60s
+      requests_per_second: 5000
+      randomize_user_agent: true
+      randomize_path: false

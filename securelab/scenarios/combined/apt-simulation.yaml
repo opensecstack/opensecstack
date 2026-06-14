@@ -1,0 +1,37 @@
+name: apt-simulation
+description: "Multi-stage APT simulation: recon (port scan) -> auth bypass -> BOLA -> data exfiltration"
+mitre_technique_ids: ["T1046", "T1078.001", "T1078", "T1041"]
+tags: [combined, apt, multi-stage, recon, auth-bypass, bola, exfil]
+severity: critical
+timeout: 15m
+steps:
+  - kind: port_scan
+    name: "Stage 1: Recon"
+    params:
+      port_range: [1, 1024]
+      protocol: tcp
+      concurrency: 50
+      timeout_per_port: 500ms
+
+  - kind: jwt_none
+    name: "Stage 2: Auth bypass"
+    params:
+      endpoint: /api/v1/profile
+      original_token_param: valid_jwt
+      claims_override:
+        role: admin
+
+  - kind: bola
+    name: "Stage 3: BOLA object access"
+    params:
+      endpoint: /api/v1/users/{id}
+      id_range: [1, 50]
+      auth_token_param: forged_admin_jwt
+
+  - kind: data_exfil
+    name: "Stage 4: Data exfiltration"
+    params:
+      endpoint: /api/v1/admin/export
+      method: GET
+      auth_token_param: forged_admin_jwt
+      expected_data_fields: [users, emails, roles]

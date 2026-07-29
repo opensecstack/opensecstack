@@ -1,12 +1,19 @@
 # RFC-0004: VertGuard — AI-Attack Defence Platform
 
-**Status:** Draft — open for community comment
+**Status:** Accepted — comment period closed, platform implemented
 **Author:** core-maintainers
 **Date posted:** 2026-04-20
-**Comment deadline:** 2026-05-20 (30 days)
+**Comment period:** closed 2026-05-20 (30 days); feedback folded into [ADR-010](../adrs/ADR-010-vertguard-platform-strategy.md)
 **Related:** [ADR-010 VertGuard Platform Strategy](../adrs/ADR-010-vertguard-platform-strategy.md), [ROADMAP.md § Phase 4](../ROADMAP.md#phase-4--ai-attack-defence-2026-q3--2028-q4)
 
 ---
+
+**Implemented** — VertGuard shipped v1.0.0 (production) on 2026-05-10,
+closing this RFC's process. See [vertguard/CHANGELOG.md](../vertguard/CHANGELOG.md)
+`[1.0.0]`, [ECOSYSTEM.md](../ECOSYSTEM.md), and [CLAUDE.md](../CLAUDE.md)
+for current status. The proposal below is retained as a historical
+record of the RFC discussion; it still describes the platform's
+architecture accurately.
 
 ## Summary
 
@@ -199,31 +206,44 @@ v1.0 in Phase 4.3.
 
 ## Open items to resolve during comment period
 
-- [ ] Finalise name (VertGuard vs Vërtet vs alternative).
-- [ ] Confirm AGPL-3.0 licence (no alternative proposed yet).
-- [ ] Confirm port allocation 8091 (no conflict expected).
-- [ ] Decide ML topology (side-car vs shared) — technical spike during
-      Phase 4.1 planning.
-- [ ] Identify platform lead (internal promotion or external hire).
+_Resolved — comment period closed 2026-05-20; outcomes folded into_
+_[ADR-010](../adrs/ADR-010-vertguard-platform-strategy.md) and shipped_
+_in VertGuard v1.0.0:_
+
+- [x] Finalise name (VertGuard vs Vërtet vs alternative). — Shipped as **VertGuard**.
+- [x] Confirm AGPL-3.0 licence (no alternative proposed yet). — Confirmed; VertGuard is AGPL-3.0.
+- [x] Confirm port allocation 8091 (no conflict expected). — Confirmed; API on 8091.
+- [x] Decide ML topology (side-car vs shared) — technical spike during
+      Phase 4.1 planning. — Resolved during implementation; see `vertguard/docs/` for the shipped topology.
+- [x] Identify platform lead (internal promotion or external hire). — Tracked under `vertguard-platform-team` (ADR-010 deciders).
 
 ## Next steps
 
-1. **Comment period:** 30 days from publication (closes 2026-05-20).
+_This section is retained as a historical record of the plan as_
+_written; the process it describes has concluded — see the_
+_"Implemented" note at the top of this document._
+
+1. **Comment period:** 30 days from publication (closed 2026-05-20).
 2. **Comment integration:** substantive feedback folded into ADR-010
    revisions.
-3. **Final decision:** core-maintainers vote at 2026 Q2 community meeting.
-4. **Kickoff:** if approved, `opensecstack/vertguard/` directory
-   created 2026 Q3, first commit targets Phase 4.1 v0.1.0-rc1 by
-   2026 Q4.
+3. **Final decision:** core-maintainers approved the proposal (ADR-010
+   status: Accepted).
+4. **Kickoff:** `opensecstack/vertguard/` directory was created and the
+   platform shipped through v1.0.0 (production) on 2026-05-10 — see
+   [vertguard/CHANGELOG.md](../vertguard/CHANGELOG.md).
 
 ## How to comment
 
-- **GitHub Discussion:** comment on the "RFC-0004 VertGuard" thread
-  (linked in the announcement).
-- **GitHub Issues:** file an issue with label `rfc-0004` for
-  substantive technical concerns.
+_The comment period for this RFC is closed — VertGuard has shipped._
+_For questions about the current platform, use the channels below or_
+_open an issue against [vertguard/](../vertguard/) directly._
+
+- **GitHub Discussion:** see the closed "RFC-0004 VertGuard" thread for
+  historical discussion.
+- **GitHub Issues:** file an issue against the `vertguard` component
+  for current bugs or proposals.
 - **Email:** `rfcs@opensecstack.org` for private or confidential
-  feedback.
+  feedback on future RFCs.
 
 The goal of this RFC is to find flaws **before** implementation,
 when changes are cheap. Blunt feedback is welcome.

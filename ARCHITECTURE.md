@@ -29,7 +29,8 @@ opensecstack is a collection of security and governance platforms that work toge
 │                    │                    │                          │
 │                    │  Governance engine  │                          │
 │                    │  MARSHAL / WORM /   │                          │
-│                    │  VIGIL / AUGUR      │                          │
+│                    │  NDS / AUGUR        │                          │
+│                    │  (VIGIL planned)    │                          │
 │                    └────────────────────┘                          │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -42,7 +43,7 @@ opensecstack is a collection of security and governance platforms that work toge
 |----------|---------|---------|------|
 | APIGuard | Go + Rust + Python + React | API security scanning (OWASP API Top 10) | `apiguard/` |
 | NIS2Compass | Python/FastAPI + React | NIS2 Article 21(2) compliance management | `nis2compass/` |
-| CITADEL | Go | Governance engine (MARSHAL, WORM, VIGIL, AUGUR) | `.citadel/` |
+| CITADEL | Go | Governance engine (MARSHAL, WORM, NDS, AUGUR; VIGIL planned v2.0) | `citadel/` |
 | IRFlow | Go | Security incident response lifecycle | `irflow/` |
 | ThreatFlow | Go | Threat intelligence and IOC management | `threatflow/` |
 | OpenCSIRT | Go + React | CSIRT portal | `opencsirt/` |
@@ -134,27 +135,42 @@ CITADEL is the governance engine. All sensitive operations across opensecstack p
 ```
 Platform connectors (APIGuard, NIS2Compass, IRFlow)
     │
-    │ HMAC-SHA256 signed Kerkese (action requests)
+    │ HMAC-SHA256 signed request body (transport, per ADR-002)
+    │ Kerkese carries Operator/Verifier Ed25519 signatures (per ADR-004)
     ▼
-MARSHAL (5-gate evaluation)
+MARSHAL (5-gate evaluation, internal/marshal/marshal.go)
     │
-    ├── Gate 1: Authority (SoD — actor ≠ verifier)
-    ├── Gate 2: Scope (mandate and project whitelist)
-    ├── Gate 3: Determinism (action is reproducible)
-    ├── Gate 4: Evidence (required artifacts present)
-    └── Gate 5: Schema (Kerkese v2.0 validates)
+    ├── Gate 1: AuthN   (sinauth bearer token + operator Ed25519 signature)
+    ├── Gate 2: AuthZ   (RBAC — rbacMap check, always enforced; optional
+    │                    soft-launch Permify-snapshot check, ADR-007)
+    ├── Gate 3: NDS     (Separation of Duties — operator ≠ verifier,
+    │                    different role groups, verifier Ed25519 signature)
+    ├── Gate 4: AUGUR   (behavioural heuristics: off-hours action,
+    │                    >10 actions/5min by same actor, DATA_EXPORT
+    │                    without an incident_id → HARD_STOP)
+    └── Gate 5: WORM    (append-only audit commit — always runs, even
+                         on REFUSE/HARD_STOP)
          │
          ▼
-    EXECUTE | REFUSE | HARD STOP
+    EXECUTE | REFUSE | HARD_STOP
          │
          ▼
-    WORM log (append-only, hash-chained)
-         │
-    AUGUR (pre-emptive advisories from Odoo mirrors)
-    VIGIL (GREEN/AMBER/RED health monitoring)
+    WORM log (append-only, hash-chained, TripleHash: SHA-256 + SHA-512 + BLAKE3)
 ```
 
-See `.citadel/docs/architecture.md` for detail.
+AUGUR's rules evaluate the Kerkese itself (timestamp, actor/action
+frequency, action type) — it is part of MARSHAL's in-process Go
+evaluation, not a lookup against any external ERP or mirror database.
+VIGIL (GREEN/AMBER/RED ecosystem health monitoring) is **design-stage
+only — not implemented in v1.0.0**; see `citadel/docs/vigil.md`.
+
+Gates 1 and 3's identity/signature checks are soft-gated behind
+`EnforceIdentity`/`EnforceSignatures` flags (both default `false` in
+v1.0.0) — a failure downgrades to `WARN` rather than `REFUSE` until the
+flags are enabled. See `citadel/docs/marshal-engine.md` and
+[ADR-006](citadel/adrs/006-split-enforce-identity-and-signatures.md).
+
+See `citadel/docs/architecture.md` and `citadel/docs/marshal-engine.md` for detail.
 
 ---
 
@@ -214,8 +230,9 @@ Any sensitive operation (deploy, configuration change, incident response action)
 3. MARSHAL evaluates 5 gates
 4. On EXECUTE: action proceeds, WORM entry written
 5. On REFUSE: action blocked, reasons returned, may resubmit corrected Kerkese
-6. On HARD STOP: action blocked, incident auto-created in IRFlow,
-   VIGIL → RED, admin group notified
+6. On HARD_STOP: action blocked, incident auto-created in IRFlow,
+   admin group notified (VIGIL RED-state escalation is planned for v2.0 —
+   design-stage only, not implemented in v1.0.0; see `citadel/docs/vigil.md`)
 ```
 
 ---
@@ -226,7 +243,7 @@ Any sensitive operation (deploy, configuration change, incident response action)
 opensecstack/
 ├── apiguard/           API security scanning platform
 ├── nis2compass/        NIS2 compliance management
-├── .citadel/           Governance engine
+├── citadel/            Governance engine
 ├── irflow/             Incident response
 ├── threatflow/         Threat intelligence
 ├── opencsirt/          CSIRT portal

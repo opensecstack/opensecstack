@@ -155,11 +155,28 @@ All cross-platform data flows through versioned schemas in the SDK:
 | Incident Record | JSON v1 | IRFlow → NIS2 Compass, OpenCSIRT, CITADEL |
 | Compliance Evidence | JSON v1 | NIS2 Compass → CITADEL |
 | CITADEL Kerkese | JSON v2.0 | Any platform → CITADEL (MARSHAL input) |
-| Training Record | JSON v1 | CyberPath → NIS2 Compass, CITADEL |
 | Advisory | CSAF 2.0 v1 | OpenCSIRT → ThreatFlow |
 | Simulation Result | JSON v1 | SecureLab → IRFlow, OpenScrub, ThreatFlow, VertGuard |
 | AI-Attack Detection | JSON v1 | VertGuard → CITADEL, IRFlow, ThreatFlow |
 | Content Provenance | C2PA + JSON v1.3 | VertGuard → CITADEL (WORM evidence) |
+
+CyberPath's WORM audit events to CITADEL (lesson/quiz completions,
+certification issuance/revocation) already flow through the CITADEL
+Kerkese contract above — there is no separate "Training Record" SDK
+schema, and none should be added for it.
+
+CyberPath ↔ NIS2 Compass is **not** SDK-mediated: per
+[ADR-014](adrs/ADR-014-cyberpath-nis2compass-integration-direction.md),
+NIS2 Compass pulls directly from CyberPath's own REST API
+(`GET /api/v1/coverage/{user_id}`, `GET /api/v1/cyberpath/recommend`
+— see [cyberpath/docs/api.md](cyberpath/docs/api.md)), not through a
+versioned `sdk/` schema. A prior version of this table listed a
+`Training Record | JSON v1 | CyberPath → NIS2 Compass, CITADEL` row
+describing a push relationship and an SDK schema; neither ever
+existed (no `TrainingRecord` type under `sdk/`, and the push target
+endpoints were never implemented on the NIS2 Compass side). The row
+was removed rather than "fixed" — this integration correctly sits
+outside the SDK-contract table.
 
 See [ECOSYSTEM.md](ECOSYSTEM.md) for the full data-flow map and
 [ARCHITECTURE.md](ARCHITECTURE.md) for the technical deep-dive.
@@ -252,7 +269,7 @@ ecosystem compose points platforms at `http://citadel-api:8099`. See
 
 - Runs on push to `main`/`develop` and PRs targeting `main`.
 - **Path-filtered:** PRs only run jobs for changed components
-  (`apiguard/**`, `nis2compass/**`, `.citadel/**`, `sdk/**`, …); branch
+  (`apiguard/**`, `nis2compass/**`, `citadel/**`, `sdk/**`, …); branch
   pushes exercise **everything**.
 - Per-component jobs: `test-*` (Go with `-race` + Rust unit tests),
   `lint-*`. Go coverage gate is **70 %** and fails the build below it.

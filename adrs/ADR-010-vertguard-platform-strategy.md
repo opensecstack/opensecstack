@@ -1,12 +1,19 @@
 # ADR-010: VertGuard Platform Strategy
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-04-20
-**Deciders:** core-maintainers, vertguard-lead (TBD)
+**Deciders:** core-maintainers, vertguard-platform-team
 **Supersedes:** —
 **Related:** [ADR-011 Post-Quantum Agility](./ADR-011-post-quantum-agility.md), [ROADMAP.md § Phase 4](../ROADMAP.md#phase-4--ai-attack-defence-2026-q3--2028-q4)
 
 ---
+
+**Implemented** — VertGuard shipped v1.0.0 (production) on 2026-05-10.
+See [vertguard/CHANGELOG.md](../vertguard/CHANGELOG.md) `[1.0.0]`,
+[ECOSYSTEM.md](../ECOSYSTEM.md), and [CLAUDE.md](../CLAUDE.md) for
+current status. The design and phased scope below are retained as a
+historical record of the decision; they still describe the platform's
+architecture accurately.
 
 ## Context
 

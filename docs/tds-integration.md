@@ -144,7 +144,7 @@ chainHash := hash.SHA256Hex()
 archivalHash := hash.SHA512Hex()
 ```
 
-See [.citadel/docs/triple-hash.md](../.citadel/docs/triple-hash.md) for the full TripleHash specification.
+See [citadel/docs/triple-hash.md](../citadel/docs/triple-hash.md) for the full TripleHash specification.
 
 ---
 

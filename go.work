@@ -9,6 +9,7 @@ use (
 	./opencsirt
 	./openscrub
 	./sdk/go
+	./sdk/go/citadel
 	./sdk/go/sinauth
 	./securelab
 	./sinauth

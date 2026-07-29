@@ -1,12 +1,19 @@
 # ADR-012: CyberPath Platform Strategy
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-04-26
-**Deciders:** core-maintainers, cyberpath-lead (TBD)
+**Deciders:** core-maintainers, cyberpath-platform-team
 **Supersedes:** —
 **Related:** [ADR-010 VertGuard Platform Strategy](./ADR-010-vertguard-platform-strategy.md), [ADR-011 Post-Quantum Agility](./ADR-011-post-quantum-agility.md), [ROADMAP.md § Phase 2](../ROADMAP.md)
 
 ---
+
+**Implemented** — CyberPath shipped v1.0.0 (production), first stable
+release, on 2026-05-09. See [cyberpath/CHANGELOG.md](../cyberpath/CHANGELOG.md)
+`[1.0.0]`, [ECOSYSTEM.md](../ECOSYSTEM.md), and [CLAUDE.md](../CLAUDE.md)
+for current status. The design and phased scope below are retained as
+a historical record of the decision; they still describe the
+platform's architecture accurately.
 
 ## Context
 

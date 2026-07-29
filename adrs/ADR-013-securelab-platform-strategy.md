@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-05
-**Deciders:** core-maintainers, securelab-lead (TBD)
+**Deciders:** core-maintainers, securelab-platform-team
 **Supersedes:** —
 **Related:** [ADR-012 CyberPath Platform Strategy](./ADR-012-cyberpath-platform-strategy.md), [ADR-010 VertGuard Platform Strategy](./ADR-010-vertguard-platform-strategy.md), [ROADMAP.md § Phase 3](../ROADMAP.md)
 

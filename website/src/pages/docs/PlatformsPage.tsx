@@ -200,8 +200,12 @@ export default function PlatformsPage() {
           <strong>sinauth</strong> (Go + PostgreSQL, Apache 2.0) — the identity layer.
           A dedicated OAuth 2.0 / OpenID Connect authorization server that provides
           single sign-on for all platforms. RS256-signed tokens, JWKS endpoint, PKCE,
-          TOTP MFA, Google and GitHub social login. What Auth0 is globally, sinauth is
-          for the SIN ecosystem. See <a href="/docs/identity">Identity (sinauth)</a>.
+          TOTP MFA, Google and GitHub social login. As of v1.1, it also recognizes
+          organizations (government, private, e-commerce, NGO) as identity subjects
+          alongside individual users, with optional org-scoped token claims and an
+          org picker for users belonging to more than one organization. What Auth0 is
+          globally, sinauth is for the SIN ecosystem. See{' '}
+          <a href="/docs/identity">Identity (sinauth)</a>.
         </li>
         <li>
           <strong>CITADEL</strong> (Go, AGPL-3.0) — the governance layer. Every

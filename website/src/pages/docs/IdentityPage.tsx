@@ -7,6 +7,7 @@ const toc = [
   { id: 'authorization-flow', label: 'Authorization code + PKCE flow' },
   { id: 'token-format', label: 'Token format' },
   { id: 'mfa-and-social-login', label: 'MFA and social login' },
+  { id: 'organizations', label: 'Organizations' },
   { id: 'sdk-clients', label: 'SDK clients' },
   { id: 'platform-integration', label: 'Platform integration' },
 ]
@@ -153,6 +154,40 @@ ID token signing:    RS256`}
         transparent to the platforms; they receive normal RS256 tokens regardless of which
         authentication method was used.
       </p>
+
+      <h2 id="organizations">Organizations</h2>
+      <p>
+        sinauth recognizes two kinds of identity subject: an individual <strong>user</strong>,
+        and — as of v1.1 — an <strong>organization</strong>. Organizations model government
+        institutions, private companies, e-commerce businesses, and NGOs as first-class
+        identities alongside the people who act on their behalf.
+      </p>
+      <p>
+        A user can belong to one or more organizations as a member (with a role of
+        <code> owner</code>, <code>admin</code>, or <code>member</code>). Membership doesn't
+        change how a user signs in — the individual login flow above is untouched — but it
+        unlocks the option to act <em>on behalf of</em> an organization for a given session.
+        When authorizing, a client can pass an <code>organization_id</code>; if the user is a
+        member, the resulting ID token and access token carry <code>org_id</code>,{' '}
+        <code>org_role</code>, and <code>org_type</code> claims alongside the usual{' '}
+        <code>sub</code>. Omit it, and tokens are issued exactly as they always were — this is
+        additive, not a breaking change, so platforms that don't care about organizations can
+        ignore the claims entirely.
+      </p>
+      <p>
+        If a user belongs to more than one organization and doesn't specify which one, sinauth
+        shows an <strong>organization picker</strong> step instead of guessing — the same way a
+        consent screen appears on first login to a new platform. A single token never
+        represents both an individual and an organization at once.
+      </p>
+      <div className="callout-note">
+        <strong>Note:</strong> v1.1 covers organization membership, org-scoped token claims,
+        and the org picker. Machine-to-machine credentials for organizations
+        (<code>client_credentials</code>) and CITADEL-gated organization verification are
+        planned for a later release and are not available yet — see{' '}
+        <a href="/docs/governance">Governance (CITADEL)</a> for how governed actions work
+        today.
+      </div>
 
       <h2 id="sdk-clients">SDK clients</h2>
       <p>

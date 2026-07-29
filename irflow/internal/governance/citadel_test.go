@@ -139,20 +139,53 @@ func TestSign_Deterministic(t *testing.T) {
 	}
 }
 
-func TestHashUserID_StableAndDifferentForDifferentInputs(t *testing.T) {
-	// Materialise both calls so staticcheck (SA4000) doesn't flag the
-	// determinism check as an identical-both-sides compare — the *point* is
-	// that independent invocations produce the same value.
-	a1 := hashUserID("alice")
-	a2 := hashUserID("alice")
-	if a1 != a2 {
-		t.Error("hashUserID is not deterministic")
+func TestCitadel_EvaluateForwardsRealUserIDsAndTokens(t *testing.T) {
+	// citadel ADR-005: OperatorID/VerifierID must reach CITADEL as real
+	// sinauth UUID strings, not a lossy hash, and ActorToken/VerifierToken
+	// must be forwarded verbatim so Gate 1/Gate 3 can verify them.
+	var captured kerkese
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &captured)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"outcome":"EXECUTE","worm_entry_id":"w1","reasons":[]}`))
+	}))
+	defer srv.Close()
+
+	c := NewCitadelClient(CitadelClientConfig{BaseURL: srv.URL, KeySecret: "s", ProjectID: "p"})
+
+	const operatorUUID = "3f6a6e2e-8f6a-4b1a-9e2e-000000000001"
+	const verifierUUID = "3f6a6e2e-8f6a-4b1a-9e2e-000000000002"
+	_, err := c.Evaluate(context.Background(), incident.MarshalRequest{
+		IncidentID:    "inc-1",
+		ActionType:    "contain",
+		OperatorID:    operatorUUID,
+		OperatorRole:  "operator",
+		VerifierID:    verifierUUID,
+		VerifierRole:  "verifier",
+		ActorToken:    "", // proposer's original token is not retained — see ApproveAction
+		VerifierToken: "verifier-bearer-token",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if hashUserID("alice") == hashUserID("bob") {
-		t.Error("alice and bob hashed to the same ID — SoD would be bypassed")
+	if captured.Actor.UserID != operatorUUID {
+		t.Errorf("Actor.UserID = %q, want %q", captured.Actor.UserID, operatorUUID)
 	}
-	if hashUserID("") != 0 {
-		t.Errorf("empty input should hash to 0, got %d", hashUserID(""))
+	if captured.Verifier.UserID != verifierUUID {
+		t.Errorf("Verifier.UserID = %q, want %q", captured.Verifier.UserID, verifierUUID)
+	}
+	if captured.SoD.OperatorUserID != operatorUUID || captured.SoD.VerifierUserID != verifierUUID {
+		t.Errorf("SoD = %+v, want operator=%q verifier=%q", captured.SoD, operatorUUID, verifierUUID)
+	}
+	if captured.VerifierToken != "verifier-bearer-token" {
+		t.Errorf("VerifierToken = %q, want forwarded verbatim", captured.VerifierToken)
+	}
+	if captured.ActorToken != "" {
+		t.Errorf("ActorToken = %q, want empty (proposer token not retained)", captured.ActorToken)
+	}
+	if captured.KerkeseVersion != "1.0" {
+		t.Errorf("KerkeseVersion = %q, want 1.0", captured.KerkeseVersion)
 	}
 }
 

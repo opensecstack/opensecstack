@@ -13,11 +13,11 @@ const (
 	MarshalOutcomeHardStop = "HARD_STOP"
 )
 
-// ErrMarshalRefused is returned by SubmitAction when CITADEL's MARSHAL engine
+// ErrMarshalRefused is returned by ApproveAction when CITADEL's MARSHAL engine
 // rejects the action (outcome = REFUSE). The HTTP layer maps this to 403.
 var ErrMarshalRefused = errors.New("action refused by MARSHAL")
 
-// ErrMarshalHardStop is returned by SubmitAction when CITADEL issues a
+// ErrMarshalHardStop is returned by ApproveAction when CITADEL issues a
 // HARD_STOP — an immediate halt signal that overrides any dual-control grant.
 // The HTTP layer maps this to 403 and typically triggers a P1 auto-incident.
 var ErrMarshalHardStop = errors.New("action blocked by MARSHAL HARD_STOP")
@@ -31,14 +31,24 @@ type MarshalClient interface {
 
 // MarshalRequest is the IRFlow-level view of a Kerkese payload. The client
 // implementation translates this into CITADEL's richer wire format.
+//
+// OperatorID/VerifierID are sinauth UUIDs derived from two SEPARATE
+// authenticated sessions (see incident.Service.ApproveAction) — never
+// client-supplied strings. ActorToken/VerifierToken are the raw sinauth
+// bearer tokens proving those identities (citadel ADR-005); CITADEL verifies
+// them directly against sinauth's JWKS and discards them.
 type MarshalRequest struct {
-	IncidentID  string
-	ActionType  string
-	Description string
-	OperatorID  string
-	VerifierID  string
-	ProjectID   string
-	Evidence    json.RawMessage
+	IncidentID    string
+	ActionType    string
+	Description   string
+	OperatorID    string
+	OperatorRole  string
+	VerifierID    string
+	VerifierRole  string
+	ProjectID     string
+	Evidence      json.RawMessage
+	ActorToken    string
+	VerifierToken string
 }
 
 // MarshalResult is the abbreviated decision returned by MARSHAL.

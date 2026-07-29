@@ -113,22 +113,53 @@ The NIS2 notification runs asynchronously in a detached goroutine so a
 slow Compass API can never block the incident creation path — a slow
 NIS2 would otherwise violate its own Article 23 deadline.
 
-### Governed action submission
+### Governed action submission (two-person-rule)
+
+Action submission is a two-step propose/approve flow — nobody can supply
+both the Operator and Verifier identity in a single call. Each identity is
+derived from its own caller's authenticated session via
+`auth.ClaimsFromContext`, never from a request field.
+
+**Step 1 — Operator proposes:**
 
 ```
 POST /api/v1/incidents/{id}/actions
   → chi middleware + JWT + RequireWrite
-  → handleSubmitAction
-  → incident.Service.SubmitAction
-      ├─► SoD check (actor ≠ verifier — enforced at the HTTP layer)
+  → handleProposeAction
+  → incident.Service.ProposeAction(incidentID, operatorUserID, operatorRole, req)
+      └─► store.CreatePendingAction (status="pending")
+  → 201 Created + PendingAction
+```
+
+Nothing is submitted to CITADEL at this step.
+
+**Step 2 — a SECOND, distinct authenticated user (Verifier) approves:**
+
+```
+POST /api/v1/incidents/{id}/actions/{actionID}/approve
+  → chi middleware + JWT + RequireApprove
+  → handleApproveAction
+  → incident.Service.ApproveAction(incidentID, pendingActionID, verifierUserID, verifierRole, verifierToken)
+      ├─► store.GetPendingAction
+      ├─► SoD check: verifierUserID == pa.OperatorUserID → ErrSelfApproval (400)
+      │     (belt-and-braces: also enforced by a DB CHECK constraint on
+      │      pending_actions.verifier_user_id <> operator_user_id)
       ├─► store.Get (fetch incident for project_id)
-      ├─► MarshalClient.Evaluate (dual-control Kerkese)
+      ├─► MarshalClient.Evaluate (dual-control Kerkese, with the Verifier's
+      │     own bearer token as VerifierToken)
       │     ├─► outcome EXECUTE: continue
-      │     ├─► outcome REFUSE:  return ErrMarshalRefused → 403
-      │     └─► outcome HARD_STOP: return ErrMarshalHardStop → 403
-      └─► store.AddAction (persist with marshal_decision + worm_entry_id)
+      │     ├─► outcome REFUSE:  pa.status="refused"; return ErrMarshalRefused → 403
+      │     └─► outcome HARD_STOP: pa.status="blocked"; return ErrMarshalHardStop → 403
+      ├─► store.AddAction (persist real IncidentAction with marshal_decision + worm_entry_id)
+      └─► store.UpdatePendingAction (pa.status="approved", pa.action_id=action.ID)
   → 201 Created + IncidentAction
 ```
+
+A Verifier can also reject a pending action outright
+(`POST .../actions/{actionID}/reject` → `incident.Service.RejectAction`),
+which applies the same identity check but never calls CITADEL.
+`GET .../actions/pending` lists outstanding `PendingAction`s for an
+incident.
 
 ### Playbook execution
 

@@ -18,23 +18,52 @@ For the CITADEL client code, see [internal/governance/citadel.go](../internal/go
 ## Payload: the Kerkese
 
 A Kerkese (Albanian for "request") is the canonical request envelope
-CITADEL expects. IRFlow constructs one for every governed operation:
+CITADEL expects. IRFlow constructs one only on **approval** — the second
+step of the two-person-rule action flow (see
+[internal/incident/governance.go](../internal/incident/governance.go) and
+[internal/governance/citadel.go](../internal/governance/citadel.go)):
 
 ```json
 {
-  "execution_id": "uuid",
-  "project_id":   "prod",
-  "actor":   { "user_id": 42,  "role": "operator" },
-  "sod":     { "operator_user_id": 42, "verifier_user_id": 77 },
+  "kerkese_version": "1.0",
+  "ts_utc":          "2026-04-19T10:12:00Z",
+  "project_id":      "prod",
+  "execution_id":    "uuid",
   "action":  {
-    "type":       "CONTAIN",
-    "incident_id": "inc_123",
-    "payload_hash": "sha256:..."
+    "type":         "CONTAIN",
+    "description":  "block endpoint",
+    "incident_id":  "inc_123"
   },
-  "dry_run": false,
-  "ts_utc":  "2026-04-19T10:12:00Z"
+  "actor":    { "user_id": "8f14e...-sinauth-uuid", "role": "operator" },
+  "verifier": { "user_id": "3ac09...-sinauth-uuid", "role": "verifier" },
+  "sod": {
+    "operator_user_id": "8f14e...-sinauth-uuid",
+    "verifier_user_id": "3ac09...-sinauth-uuid"
+  },
+  "evidence":        { "extra": { "any": "json" } },
+  "dry_run":         false,
+  "actor_token":     "",
+  "verifier_token":  "<verifier's raw sinauth bearer token>"
 }
 ```
+
+`actor.user_id` / `verifier.user_id` and `sod.operator_user_id` /
+`sod.verifier_user_id` are real [sinauth](../../sinauth/) UUID strings —
+each derived from its own separate authenticated HTTP request (the
+Operator's `POST .../actions` and the Verifier's
+`POST .../actions/{actionID}/approve`), never a client-supplied value. This
+replaced an earlier internal representation that folded the user ID through
+a lossy `hashUserID()` string→int64 hash; that fold is gone along with the
+int64 field it existed to work around.
+
+`actor_token` is intentionally left empty: the Operator's original bearer
+token from the propose step is never retained (a bearer token is a
+short-lived secret — citadel ADR-005 — and persisting it in
+`pending_actions` across an arbitrarily long approval window would
+reintroduce risk). `verifier_token` carries the Verifier's real token from
+the approve request. CITADEL's Gate 1 treats a missing `actor_token` as a
+non-blocking WARN while `citadel.enforce_signatures` stays false (its
+documented soft-mode rollout behaviour).
 
 The full schema lives at [../../citadel/docs/kerkese-spec.md](../../citadel/docs/kerkese-spec.md).
 
@@ -57,25 +86,40 @@ Gate outcomes:
 - `HARD_STOP` — action is **not** persisted; IRFlow emits an
   incident-severity upgrade and optionally triggers the freeze playbook
 
-## Synchronous call flow
+## Two-person-rule call flow
+
+CITADEL is only ever contacted on the **approve** step — proposing an
+action never reaches CITADEL.
 
 ```
-POST /api/v1/incidents/{id}/actions
+POST /api/v1/incidents/{id}/actions                     (Operator's own session)
     ↓
-incident.Service.SubmitAction
-    ├─► SoD check (actor ≠ verifier at the IRFlow layer)
+incident.Service.ProposeAction
+    └─► store.CreatePendingAction (status="pending")     — no CITADEL call
+
+POST /api/v1/incidents/{id}/actions/{actionID}/approve   (Verifier's own session)
+    ↓
+incident.Service.ApproveAction
+    ├─► SoD check: verifierUserID == pa.OperatorUserID → ErrSelfApproval (400)
+    │      (also enforced at the DB level — see migrations/003_pending_actions.sql)
     ├─► store.Get(incident)     — to read project_id
     ├─► citadel.MarshalEvaluate(kerkese)
     │      ├─► sign Kerkese payload with IRFLOW_CITADEL_KEY_SECRET (HMAC-SHA256)
     │      ├─► POST /api/v1/marshal/evaluate
     │      └─► parse Decision{outcome, gates[], worm_entry_id}
-    ├─► on REFUSE / HARD_STOP → return typed error
-    └─► store.AddAction(marshal_decision, worm_entry_id)
+    ├─► on REFUSE / HARD_STOP → return typed error, pa.status updated accordingly
+    ├─► store.AddAction(marshal_decision, worm_entry_id)  — real IncidentAction
+    └─► store.UpdatePendingAction(status="approved", action_id=...)
 ```
 
-The IRFlow-side SoD pre-check exists so obvious mistakes (actor ==
-verifier) never leave IRFlow — saving a network round-trip and
-avoiding WORM pollution with predictably-rejected Kerkeses.
+The IRFlow-side SoD pre-check exists so obvious mistakes (the same
+identity trying to approve their own proposal) never leave IRFlow —
+saving a network round-trip and avoiding WORM pollution with
+predictably-rejected Kerkeses. Unlike the pre-check that used to compare
+two client-supplied strings on a single request, this comparison is now
+between two independently-authenticated identities across two separate
+HTTP requests, so it cannot be defeated by a caller simply supplying two
+different-looking strings for the same person.
 
 ## WORM emission — the asymmetry
 

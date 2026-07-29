@@ -64,3 +64,17 @@ type ThreatFlowIOC struct {
 	Source     string          `json:"source"`
 	STIXBundle json.RawMessage `json:"stix_bundle,omitempty"`
 }
+
+// CyberPathEvent is the payload delivered to
+// POST /api/v1/webhooks/cyberpath/remediation. It mirrors the
+// remediationEvent struct in cyberpath/internal/irflow/client.go field for
+// field — the two sides must stay in lockstep since CyberPath sends
+// encoding/json's Marshal output verbatim as the signed body.
+type CyberPathEvent struct {
+	EventID     string    `json:"event_id"`
+	EventType   string    `json:"event_type"` // "cyberpath.incident_remediation_completed"
+	IncidentID  string    `json:"incident_id"`
+	CohortID    string    `json:"cohort_id"`
+	CompletedAt time.Time `json:"completed_at"`
+	OccurredAt  time.Time `json:"occurred_at"`
+}

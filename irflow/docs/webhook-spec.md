@@ -1,9 +1,9 @@
 # IRFlow Webhook Specification
 
-IRFlow accepts signed, replay-protected webhooks from three ecosystem
-platforms: APIGuard, CITADEL, and ThreatFlow. This document is the
-canonical wire contract — senders and any custom integrations must
-match it exactly.
+IRFlow accepts signed, replay-protected webhooks from four ecosystem
+platforms: APIGuard, CITADEL, ThreatFlow, and CyberPath. This document
+is the canonical wire contract — senders and any custom integrations
+must match it exactly.
 
 For the handler code, see [internal/webhook/hmac.go](../internal/webhook/hmac.go)
 and [internal/api/webhooks.go](../internal/api/webhooks.go).
@@ -15,8 +15,9 @@ and [internal/api/webhooks.go](../internal/api/webhooks.go).
 | `POST /api/v1/webhooks/apiguard` | APIGuard | A finding crosses a severity threshold, or a scan completes |
 | `POST /api/v1/webhooks/citadel` | CITADEL | HARD_STOP decisions, WORM anchor events |
 | `POST /api/v1/webhooks/threatflow` | ThreatFlow | IOC bundle published, feed update |
+| `POST /api/v1/webhooks/cyberpath/remediation` | CyberPath | A remediation training track assigned by an incident trigger is completed |
 
-All three endpoints share the same signing scheme, differing only in
+All four endpoints share the same signing scheme, differing only in
 the payload shape. None of them require a JWT — authentication is
 entirely via HMAC.
 
@@ -66,6 +67,7 @@ sources. Configure these on IRFlow's side:
 | `IRFLOW_WEBHOOK_APIGUARD_SECRET` | APIGuard endpoint verifier |
 | `IRFLOW_WEBHOOK_CITADEL_SECRET` | CITADEL endpoint verifier |
 | `IRFLOW_WEBHOOK_THREATFLOW_SECRET` | ThreatFlow endpoint verifier |
+| `IRFLOW_WEBHOOK_CYBERPATH_SECRET` | CyberPath endpoint verifier |
 
 `IRFLOW_WEBHOOK_SECRET` exists as a legacy fallback and will be
 removed in v1.1 — do not use it for new deployments. An unconfigured
@@ -139,6 +141,29 @@ refusal at the MARSHAL API layer.
 If `incident_id` is present and matches an open incident, the IOCs are
 attached to it. If absent, they are staged as unattached enrichments
 until a later call correlates them (v1.2 feature).
+
+### CyberPath (`/api/v1/webhooks/cyberpath/remediation`)
+
+```json
+{
+  "event_id":     "9c3f8e2a-0000-4a1b-8c2d-000000000001",
+  "event_type":   "cyberpath.incident_remediation_completed",
+  "incident_id":  "inc_123",
+  "cohort_id":    "cohort_42",
+  "completed_at": "2026-04-19T10:15:00Z",
+  "occurred_at":  "2026-04-19T10:15:01Z"
+}
+```
+
+IRFlow's behaviour: when `event_type` is
+`cyberpath.incident_remediation_completed` and `incident_id` names an
+incident IRFlow recognises, a timeline entry is appended to that
+incident recording the completed remediation training and its cohort.
+Events with an unrecognised `incident_id`, no `incident_id`, or any
+other `event_type` are accepted (`202`) and logged, but do not mutate
+any incident — CyberPath cohorts are not necessarily 1:1 with IRFlow
+incidents and there is no correlation engine yet (same pattern as
+ThreatFlow's unattached-IOC queueing above).
 
 ## Error responses
 

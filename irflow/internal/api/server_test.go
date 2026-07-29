@@ -13,6 +13,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/opensecstack/opensecstack/irflow/internal/auth"
 	"github.com/opensecstack/opensecstack/irflow/internal/incident"
 )
 
@@ -22,18 +23,20 @@ import (
 // ---------------------------------------------------------------------------
 
 type apiMockStore struct {
-	incidents map[string]*incident.Incident
-	actions   map[string][]incident.IncidentAction
-	iocs      map[string][]incident.IOCEnrichment
-	timeline  map[string][]incident.TimelineEntry
+	incidents      map[string]*incident.Incident
+	actions        map[string][]incident.IncidentAction
+	iocs           map[string][]incident.IOCEnrichment
+	timeline       map[string][]incident.TimelineEntry
+	pendingActions map[string]*incident.PendingAction
 }
 
 func newAPIMockStore() *apiMockStore {
 	return &apiMockStore{
-		incidents: make(map[string]*incident.Incident),
-		actions:   make(map[string][]incident.IncidentAction),
-		iocs:      make(map[string][]incident.IOCEnrichment),
-		timeline:  make(map[string][]incident.TimelineEntry),
+		incidents:      make(map[string]*incident.Incident),
+		actions:        make(map[string][]incident.IncidentAction),
+		iocs:           make(map[string][]incident.IOCEnrichment),
+		timeline:       make(map[string][]incident.TimelineEntry),
+		pendingActions: make(map[string]*incident.PendingAction),
 	}
 }
 
@@ -114,6 +117,40 @@ func (m *apiMockStore) ListActions(_ context.Context, incidentID string) ([]inci
 	return m.actions[incidentID], nil
 }
 
+func (m *apiMockStore) CreatePendingAction(_ context.Context, pa *incident.PendingAction) error {
+	cp := *pa
+	m.pendingActions[pa.ID] = &cp
+	return nil
+}
+
+func (m *apiMockStore) GetPendingAction(_ context.Context, id string) (*incident.PendingAction, error) {
+	pa, ok := m.pendingActions[id]
+	if !ok {
+		return nil, incident.ErrPendingActionNotFound
+	}
+	cp := *pa
+	return &cp, nil
+}
+
+func (m *apiMockStore) UpdatePendingAction(_ context.Context, pa *incident.PendingAction) error {
+	if _, ok := m.pendingActions[pa.ID]; !ok {
+		return incident.ErrPendingActionNotFound
+	}
+	cp := *pa
+	m.pendingActions[pa.ID] = &cp
+	return nil
+}
+
+func (m *apiMockStore) ListPendingActions(_ context.Context, incidentID string) ([]incident.PendingAction, error) {
+	var out []incident.PendingAction
+	for _, pa := range m.pendingActions {
+		if pa.IncidentID == incidentID {
+			out = append(out, *pa)
+		}
+	}
+	return out, nil
+}
+
 func (m *apiMockStore) AddIOC(_ context.Context, ioc *incident.IOCEnrichment) error {
 	cp := *ioc
 	m.iocs[ioc.IncidentID] = append(m.iocs[ioc.IncidentID], cp)
@@ -122,6 +159,12 @@ func (m *apiMockStore) AddIOC(_ context.Context, ioc *incident.IOCEnrichment) er
 
 func (m *apiMockStore) ListIOCs(_ context.Context, incidentID string) ([]incident.IOCEnrichment, error) {
 	return m.iocs[incidentID], nil
+}
+
+func (m *apiMockStore) AddTimelineEntry(_ context.Context, entry *incident.TimelineEntry) error {
+	cp := *entry
+	m.timeline[entry.IncidentID] = append(m.timeline[entry.IncidentID], cp)
+	return nil
 }
 
 func (m *apiMockStore) GetTimeline(_ context.Context, incidentID string) ([]incident.TimelineEntry, error) {
@@ -153,6 +196,37 @@ func newTestServer() (*Server, *apiMockStore) {
 	logger, _ := zap.NewDevelopment()
 	srv := NewServer(Options{Logger: logger, Incidents: svc})
 	return srv, store
+}
+
+// testAuthSecret is the HS256 signing key used by newAuthedTestServer. Real
+// bearer tokens (rather than newTestServer's dev-mode auto-claims) are
+// required to exercise the propose/approve two-person-rule flow, since dev
+// mode injects the SAME synthetic identity ("dev") for every request —
+// which would make every approval a (rejected) self-approval.
+const testAuthSecret = "server-test-secret"
+
+// newAuthedTestServer is like newTestServer but wires real JWT enforcement,
+// so tests can issue distinct tokens for an Operator and a Verifier.
+func newAuthedTestServer() (*Server, *apiMockStore) {
+	store := newAPIMockStore()
+	svc := incident.NewService(store)
+	logger, _ := zap.NewDevelopment()
+	srv := NewServer(Options{
+		Logger:    logger,
+		Incidents: svc,
+		Auth:      auth.Config{Secret: testAuthSecret, Logger: logger},
+	})
+	return srv, store
+}
+
+// issueTestToken signs an HS256 token for subject/role using testAuthSecret.
+func issueTestToken(t *testing.T, subject, role string) string {
+	t.Helper()
+	tok, err := auth.Issue(testAuthSecret, auth.Claims{Subject: subject, Role: role}, time.Hour)
+	if err != nil {
+		t.Fatalf("issuing test token: %v", err)
+	}
+	return tok
 }
 
 // seedIncident creates an incident directly in the mock store and returns it.
@@ -403,50 +477,174 @@ func TestDeleteIncident_204(t *testing.T) {
 	}
 }
 
-func TestSubmitAction_201(t *testing.T) {
-	srv, store := newTestServer()
+func TestProposeAction_201(t *testing.T) {
+	srv, store := newAuthedTestServer()
+	seedIncident(store, "action-id", "Action incident", incident.SeverityP1)
+	operatorTok := issueTestToken(t, "user-alice", auth.RoleOperator)
+
+	payload := `{"action_type":"contain","description":"Isolated the host"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/incidents/action-id/actions", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+operatorTok)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+
+	var pa incident.PendingAction
+	decodeJSON(t, rec, &pa)
+	if pa.IncidentID != "action-id" {
+		t.Errorf("IncidentID = %q, want %q", pa.IncidentID, "action-id")
+	}
+	if pa.OperatorUserID != "user-alice" {
+		t.Errorf("OperatorUserID = %q, want %q (derived from the caller's own token, not a request field)", pa.OperatorUserID, "user-alice")
+	}
+	if pa.Status != incident.PendingActionStatusPending {
+		t.Errorf("Status = %q, want %q", pa.Status, incident.PendingActionStatusPending)
+	}
+}
+
+func TestProposeAction_401_Unauthenticated(t *testing.T) {
+	srv, store := newAuthedTestServer()
 	seedIncident(store, "action-id", "Action incident", incident.SeverityP1)
 
-	payload := `{
-		"action_type": "contain",
-		"operator_id": "user-alice",
-		"verifier_id": "user-bob",
-		"description": "Isolated the host"
-	}`
+	payload := `{"action_type":"contain"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/incidents/action-id/actions", bytes.NewBufferString(payload))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+// proposeAction is a small test helper: proposes an action as operatorToken
+// and returns the decoded PendingAction.
+func proposeAction(t *testing.T, srv *Server, incidentID, operatorToken string) incident.PendingAction {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/incidents/"+incidentID+"/actions",
+		bytes.NewBufferString(`{"action_type":"contain","description":"test action"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+operatorToken)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
-		t.Errorf("status = %d, want %d; body = %s", rec.Code, http.StatusCreated, rec.Body.String())
+		t.Fatalf("propose: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var pa incident.PendingAction
+	decodeJSON(t, rec, &pa)
+	return pa
+}
+
+func TestApproveAction_201(t *testing.T) {
+	srv, store := newAuthedTestServer()
+	seedIncident(store, "action-id", "Action incident", incident.SeverityP1)
+	operatorTok := issueTestToken(t, "user-alice", auth.RoleOperator)
+	verifierTok := issueTestToken(t, "user-bob", auth.RoleVerifier)
+
+	pa := proposeAction(t, srv, "action-id", operatorTok)
+
+	req := httptest.NewRequest(http.MethodPost,
+		"/api/v1/incidents/action-id/actions/"+pa.ID+"/approve", nil)
+	req.Header.Set("Authorization", "Bearer "+verifierTok)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusCreated, rec.Body.String())
 	}
 
 	var action incident.IncidentAction
 	decodeJSON(t, rec, &action)
-	if action.IncidentID != "action-id" {
-		t.Errorf("IncidentID = %q, want %q", action.IncidentID, "action-id")
+	if action.OperatorID != "user-alice" || action.VerifierID != "user-bob" {
+		t.Errorf("OperatorID/VerifierID = %q/%q, want user-alice/user-bob", action.OperatorID, action.VerifierID)
 	}
 }
 
-func TestSubmitAction_400_SoD(t *testing.T) {
-	srv, store := newTestServer()
+func TestApproveAction_400_SelfApproval(t *testing.T) {
+	// The single most important guarantee this flow exists to provide: the
+	// same authenticated identity that proposed an action can never also
+	// approve it, even though they hold a valid bearer token.
+	srv, store := newAuthedTestServer()
 	seedIncident(store, "sod-id", "SoD incident", incident.SeverityP1)
+	operatorTok := issueTestToken(t, "user-alice", auth.RoleOperator)
 
-	// operator_id == verifier_id should be rejected by the handler.
-	payload := `{
-		"action_type": "contain",
-		"operator_id": "user-alice",
-		"verifier_id": "user-alice",
-		"description": "Self-verified"
-	}`
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/incidents/sod-id/actions", bytes.NewBufferString(payload))
-	req.Header.Set("Content-Type", "application/json")
+	pa := proposeAction(t, srv, "sod-id", operatorTok)
+
+	req := httptest.NewRequest(http.MethodPost,
+		"/api/v1/incidents/sod-id/actions/"+pa.ID+"/approve", nil)
+	req.Header.Set("Authorization", "Bearer "+operatorTok) // same token — self-approval
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d (SoD violation)", rec.Code, http.StatusBadRequest)
+		t.Errorf("status = %d, want %d (self-approval must be rejected)", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestApproveAction_401_Unauthenticated(t *testing.T) {
+	srv, store := newAuthedTestServer()
+	seedIncident(store, "action-id", "Action incident", incident.SeverityP1)
+	operatorTok := issueTestToken(t, "user-alice", auth.RoleOperator)
+
+	pa := proposeAction(t, srv, "action-id", operatorTok)
+
+	req := httptest.NewRequest(http.MethodPost,
+		"/api/v1/incidents/action-id/actions/"+pa.ID+"/approve", nil)
+	// No Authorization header at all.
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestRejectAction_200(t *testing.T) {
+	srv, store := newAuthedTestServer()
+	seedIncident(store, "action-id", "Action incident", incident.SeverityP1)
+	operatorTok := issueTestToken(t, "user-alice", auth.RoleOperator)
+	verifierTok := issueTestToken(t, "user-bob", auth.RoleVerifier)
+
+	pa := proposeAction(t, srv, "action-id", operatorTok)
+
+	req := httptest.NewRequest(http.MethodPost,
+		"/api/v1/incidents/action-id/actions/"+pa.ID+"/reject", nil)
+	req.Header.Set("Authorization", "Bearer "+verifierTok)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var rejected incident.PendingAction
+	decodeJSON(t, rec, &rejected)
+	if rejected.Status != incident.PendingActionStatusRejected {
+		t.Errorf("Status = %q, want %q", rejected.Status, incident.PendingActionStatusRejected)
+	}
+}
+
+func TestListPendingActions_200(t *testing.T) {
+	srv, store := newAuthedTestServer()
+	seedIncident(store, "action-id", "Action incident", incident.SeverityP1)
+	operatorTok := issueTestToken(t, "user-alice", auth.RoleOperator)
+	proposeAction(t, srv, "action-id", operatorTok)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/incidents/action-id/actions/pending", nil)
+	req.Header.Set("Authorization", "Bearer "+operatorTok)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var pending []incident.PendingAction
+	decodeJSON(t, rec, &pending)
+	if len(pending) != 1 {
+		t.Errorf("len(pending) = %d, want 1", len(pending))
 	}
 }
 

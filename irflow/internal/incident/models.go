@@ -35,6 +35,7 @@ const (
 	SourceAPIGuard   Source = "apiguard"
 	SourceCitadel    Source = "citadel"
 	SourceThreatFlow Source = "threatflow"
+	SourceCyberPath  Source = "cyberpath"
 	SourceManual     Source = "manual"
 )
 
@@ -132,13 +133,79 @@ type PatchIncidentRequest struct {
 	CorrectiveAction *string   `json:"corrective_action,omitempty"`
 }
 
-// SubmitActionRequest is the payload for submitting a governed action.
-type SubmitActionRequest struct {
+// ---------- Two-person-rule (SoD) pending actions ----------
+
+// PendingActionStatus is the lifecycle state of a proposed governed action
+// awaiting a second, distinct authenticated Verifier's decision.
+type PendingActionStatus string
+
+const (
+	// PendingActionStatusPending awaits a Verifier's approve/reject decision.
+	PendingActionStatusPending PendingActionStatus = "pending"
+	// PendingActionStatusApproved was approved by a Verifier and (if MARSHAL
+	// is configured) received an EXECUTE outcome; a real IncidentAction now
+	// exists (see PendingAction.ActionID).
+	PendingActionStatusApproved PendingActionStatus = "approved"
+	// PendingActionStatusRejected was explicitly rejected by a Verifier
+	// without ever being submitted to CITADEL.
+	PendingActionStatusRejected PendingActionStatus = "rejected"
+	// PendingActionStatusRefused was submitted to CITADEL MARSHAL on
+	// approval but received a REFUSE outcome.
+	PendingActionStatusRefused PendingActionStatus = "refused"
+	// PendingActionStatusBlocked was submitted to CITADEL MARSHAL on
+	// approval but received a HARD_STOP outcome.
+	PendingActionStatusBlocked PendingActionStatus = "blocked"
+)
+
+// PendingAction is a governed incident-response action proposed by an
+// authenticated Operator and awaiting approval from a SECOND, distinct
+// authenticated Verifier before it is evaluated by CITADEL MARSHAL and
+// persisted as a real IncidentAction.
+//
+// This is IRFlow's two-person-rule (Separation of Duties) workflow: the
+// Operator's identity (OperatorUserID/OperatorRole) is captured at proposal
+// time directly from their own authenticated session (see
+// auth.ClaimsFromContext), never from client-supplied request fields. The
+// Verifier's identity (VerifierUserID/VerifierRole) is captured the same way,
+// but from a SEPARATE HTTP request the Verifier must make with their own
+// bearer token — a single caller can never supply both identities.
+type PendingAction struct {
+	ID              string              `json:"id"`
+	IncidentID      string              `json:"incident_id"`
+	ActionType      string              `json:"action_type"`
+	Description     string              `json:"description"`
+	Evidence        json.RawMessage     `json:"evidence,omitempty"`
+	OperatorUserID  string              `json:"operator_user_id"`
+	OperatorRole    string              `json:"operator_role"`
+	VerifierUserID  string              `json:"verifier_user_id,omitempty"`
+	VerifierRole    string              `json:"verifier_role,omitempty"`
+	Status          PendingActionStatus `json:"status"`
+	MarshalDecision string              `json:"marshal_decision,omitempty"`
+	WORMEntryID     string              `json:"worm_entry_id,omitempty"`
+	ActionID        string              `json:"action_id,omitempty"`
+	Reasons         []string            `json:"reasons,omitempty"`
+	CreatedAt       time.Time           `json:"created_at"`
+	DecidedAt       *time.Time          `json:"decided_at,omitempty"`
+}
+
+// ProposeActionRequest is the payload an authenticated Operator submits to
+// propose a governed action. Deliberately carries no operator/verifier
+// identity fields — the Operator is the authenticated caller, and the
+// Verifier does not exist yet (they are chosen implicitly by whichever
+// distinct authenticated user later calls the approve endpoint).
+type ProposeActionRequest struct {
 	ActionType  string          `json:"action_type"`
-	OperatorID  string          `json:"operator_id"`
-	VerifierID  string          `json:"verifier_id"`
 	Description string          `json:"description"`
 	Evidence    json.RawMessage `json:"evidence,omitempty"`
+}
+
+// ApproveActionRequest is the payload an authenticated Verifier submits to
+// approve a pending action. Reserved for future fields (e.g. a free-text
+// approval note) — empty today because the Verifier's identity comes from
+// their own authenticated bearer token (see auth.ClaimsFromContext /
+// auth.BearerToken), never from this request body.
+type ApproveActionRequest struct {
+	Note string `json:"note,omitempty"`
 }
 
 // ---------- NIS2 Notification Thresholds ----------

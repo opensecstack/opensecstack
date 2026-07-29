@@ -27,6 +27,7 @@ type WebhookSecrets struct {
 	APIGuard    string
 	CITADEL     string
 	ThreatFlow  string
+	CyberPath   string
 	MaxBodySize int64
 	ClockSkew   time.Duration
 }
@@ -123,6 +124,7 @@ func (s *Server) setupRoutes() {
 		r.Post("/apiguard", s.handleAPIGuardWebhook)
 		r.Post("/citadel", s.handleCITADELWebhook)
 		r.Post("/threatflow", s.handleThreatFlowWebhook)
+		r.Post("/cyberpath/remediation", s.handleCyberPathWebhook)
 	})
 
 	// ---------- JWT-protected routes ----------
@@ -137,8 +139,15 @@ func (s *Server) setupRoutes() {
 				r.Get("/", s.handleGetIncident)
 				r.With(auth.RequireWrite()).Patch("/", s.handlePatchIncident)
 				r.With(auth.RequireDelete()).Delete("/", s.handleDeleteIncident)
-				r.With(auth.RequireWrite()).Post("/actions", s.handleSubmitAction)
-				r.Get("/actions", s.handleListActions)
+				r.Route("/actions", func(r chi.Router) {
+					r.Get("/", s.handleListActions)
+					r.Get("/pending", s.handleListPendingActions)
+					r.With(auth.RequireWrite()).Post("/", s.handleProposeAction)
+					r.Route("/{actionID}", func(r chi.Router) {
+						r.With(auth.RequireApprove()).Post("/approve", s.handleApproveAction)
+						r.With(auth.RequireApprove()).Post("/reject", s.handleRejectAction)
+					})
+				})
 				r.Get("/timeline", s.handleGetTimeline)
 				r.With(auth.RequireWrite()).Post("/iocs", s.handleAddIOC)
 				r.Get("/iocs", s.handleListIOCs)

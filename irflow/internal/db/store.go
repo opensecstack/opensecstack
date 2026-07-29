@@ -332,6 +332,189 @@ func (s *PGStore) ListActions(ctx context.Context, incidentID string) ([]inciden
 }
 
 // ---------------------------------------------------------------------------
+// Pending actions (two-person-rule / Separation of Duties)
+// ---------------------------------------------------------------------------
+
+// CreatePendingAction inserts a new pending action proposed by an Operator.
+func (s *PGStore) CreatePendingAction(ctx context.Context, pa *incident.PendingAction) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	if pa.ID == "" {
+		pa.ID = fmt.Sprintf("pact-%d", time.Now().UnixNano())
+	}
+	if pa.CreatedAt.IsZero() {
+		pa.CreatedAt = time.Now().UTC()
+	}
+	if pa.Status == "" {
+		pa.Status = incident.PendingActionStatusPending
+	}
+
+	var evidenceBytes []byte
+	if pa.Evidence != nil {
+		evidenceBytes = []byte(pa.Evidence)
+	}
+	reasonsBytes, err := json.Marshal(pa.Reasons)
+	if err != nil {
+		return fmt.Errorf("marshalling pending action reasons: %w", err)
+	}
+
+	query := `
+		INSERT INTO pending_actions (
+			id, incident_id, action_type, description, evidence,
+			operator_user_id, operator_role, verifier_user_id, verifier_role,
+			status, marshal_decision, worm_entry_id, action_id, reasons,
+			created_at, decided_at
+		) VALUES (
+			$1, $2, $3, $4, $5,
+			$6, $7, $8, $9,
+			$10, $11, $12, $13, $14,
+			$15, $16
+		)`
+
+	_, err = s.pool.Exec(ctx, query,
+		pa.ID, pa.IncidentID, pa.ActionType, pa.Description, evidenceBytes,
+		pa.OperatorUserID, pa.OperatorRole, pa.VerifierUserID, pa.VerifierRole,
+		string(pa.Status), pa.MarshalDecision, pa.WORMEntryID, pa.ActionID, reasonsBytes,
+		pa.CreatedAt, pa.DecidedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("inserting pending action: %w", err)
+	}
+
+	return nil
+}
+
+// GetPendingAction retrieves a single pending action by ID.
+func (s *PGStore) GetPendingAction(ctx context.Context, id string) (*incident.PendingAction, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	query := `
+		SELECT id, incident_id, action_type, description, evidence,
+		       operator_user_id, operator_role, verifier_user_id, verifier_role,
+		       status, marshal_decision, worm_entry_id, action_id, reasons,
+		       created_at, decided_at
+		FROM pending_actions
+		WHERE id = $1`
+
+	var pa incident.PendingAction
+	var evidenceBytes, reasonsBytes []byte
+	var status string
+	err := s.pool.QueryRow(ctx, query, id).Scan(
+		&pa.ID, &pa.IncidentID, &pa.ActionType, &pa.Description, &evidenceBytes,
+		&pa.OperatorUserID, &pa.OperatorRole, &pa.VerifierUserID, &pa.VerifierRole,
+		&status, &pa.MarshalDecision, &pa.WORMEntryID, &pa.ActionID, &reasonsBytes,
+		&pa.CreatedAt, &pa.DecidedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, incident.ErrPendingActionNotFound
+		}
+		return nil, fmt.Errorf("querying pending action %s: %w", id, err)
+	}
+	pa.Status = incident.PendingActionStatus(status)
+	if evidenceBytes != nil {
+		pa.Evidence = json.RawMessage(evidenceBytes)
+	}
+	if len(reasonsBytes) > 0 {
+		_ = json.Unmarshal(reasonsBytes, &pa.Reasons)
+	}
+
+	return &pa, nil
+}
+
+// UpdatePendingAction persists a decision (approve/reject/refuse/block) on an
+// existing pending action.
+func (s *PGStore) UpdatePendingAction(ctx context.Context, pa *incident.PendingAction) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	var evidenceBytes []byte
+	if pa.Evidence != nil {
+		evidenceBytes = []byte(pa.Evidence)
+	}
+	reasonsBytes, err := json.Marshal(pa.Reasons)
+	if err != nil {
+		return fmt.Errorf("marshalling pending action reasons: %w", err)
+	}
+
+	query := `
+		UPDATE pending_actions SET
+			verifier_user_id = $2, verifier_role = $3, status = $4,
+			marshal_decision = $5, worm_entry_id = $6, action_id = $7,
+			reasons = $8, decided_at = $9, evidence = $10
+		WHERE id = $1`
+
+	ct, err := s.pool.Exec(ctx, query,
+		pa.ID, pa.VerifierUserID, pa.VerifierRole, string(pa.Status),
+		pa.MarshalDecision, pa.WORMEntryID, pa.ActionID, reasonsBytes, pa.DecidedAt, evidenceBytes,
+	)
+	if err != nil {
+		return fmt.Errorf("updating pending action %s: %w", pa.ID, err)
+	}
+	if ct.RowsAffected() == 0 {
+		return incident.ErrPendingActionNotFound
+	}
+
+	return nil
+}
+
+// ListPendingActions returns every pending action proposed against an
+// incident, regardless of status, ordered by creation time.
+func (s *PGStore) ListPendingActions(ctx context.Context, incidentID string) ([]incident.PendingAction, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	query := `
+		SELECT id, incident_id, action_type, description, evidence,
+		       operator_user_id, operator_role, verifier_user_id, verifier_role,
+		       status, marshal_decision, worm_entry_id, action_id, reasons,
+		       created_at, decided_at
+		FROM pending_actions
+		WHERE incident_id = $1
+		ORDER BY created_at`
+
+	rows, err := s.pool.Query(ctx, query, incidentID)
+	if err != nil {
+		return nil, fmt.Errorf("listing pending actions for incident %s: %w", incidentID, err)
+	}
+	defer rows.Close()
+
+	var out []incident.PendingAction
+	for rows.Next() {
+		var pa incident.PendingAction
+		var evidenceBytes, reasonsBytes []byte
+		var status string
+		if err := rows.Scan(
+			&pa.ID, &pa.IncidentID, &pa.ActionType, &pa.Description, &evidenceBytes,
+			&pa.OperatorUserID, &pa.OperatorRole, &pa.VerifierUserID, &pa.VerifierRole,
+			&status, &pa.MarshalDecision, &pa.WORMEntryID, &pa.ActionID, &reasonsBytes,
+			&pa.CreatedAt, &pa.DecidedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scanning pending action row: %w", err)
+		}
+		pa.Status = incident.PendingActionStatus(status)
+		if evidenceBytes != nil {
+			pa.Evidence = json.RawMessage(evidenceBytes)
+		}
+		if len(reasonsBytes) > 0 {
+			_ = json.Unmarshal(reasonsBytes, &pa.Reasons)
+		}
+		out = append(out, pa)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating pending action rows: %w", err)
+	}
+	if out == nil {
+		out = []incident.PendingAction{}
+	}
+
+	return out, nil
+}
+
+// ---------------------------------------------------------------------------
 // IOC Enrichments
 // ---------------------------------------------------------------------------
 
@@ -474,6 +657,38 @@ func (s *PGStore) Stats(ctx context.Context) (*incident.Stats, error) {
 	}
 
 	return stats, nil
+}
+
+// AddTimelineEntry appends a chronological event to an incident's timeline.
+func (s *PGStore) AddTimelineEntry(ctx context.Context, entry *incident.TimelineEntry) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	if entry.ID == "" {
+		entry.ID = fmt.Sprintf("tl-%d", time.Now().UnixNano())
+	}
+	if entry.CreatedAt.IsZero() {
+		entry.CreatedAt = time.Now().UTC()
+	}
+
+	var detailBytes []byte
+	if entry.Details != nil {
+		detailBytes = []byte(entry.Details)
+	}
+
+	query := `
+		INSERT INTO timeline_entries (
+			id, incident_id, entry_type, actor_id, summary, details, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7)`
+
+	_, err := s.pool.Exec(ctx, query,
+		entry.ID, entry.IncidentID, entry.EntryType, entry.ActorID,
+		entry.Summary, detailBytes, entry.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("inserting timeline entry for incident %s: %w", entry.IncidentID, err)
+	}
+	return nil
 }
 
 // GetTimeline returns all timeline entries for a given incident.

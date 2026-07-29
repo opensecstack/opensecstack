@@ -22,8 +22,13 @@ type Store interface {
 	Delete(ctx context.Context, id string) error
 	AddAction(ctx context.Context, action *IncidentAction) error
 	ListActions(ctx context.Context, incidentID string) ([]IncidentAction, error)
+	CreatePendingAction(ctx context.Context, pa *PendingAction) error
+	GetPendingAction(ctx context.Context, id string) (*PendingAction, error)
+	UpdatePendingAction(ctx context.Context, pa *PendingAction) error
+	ListPendingActions(ctx context.Context, incidentID string) ([]PendingAction, error)
 	AddIOC(ctx context.Context, ioc *IOCEnrichment) error
 	ListIOCs(ctx context.Context, incidentID string) ([]IOCEnrichment, error)
+	AddTimelineEntry(ctx context.Context, entry *TimelineEntry) error
 	GetTimeline(ctx context.Context, incidentID string) ([]TimelineEntry, error)
 	Stats(ctx context.Context) (*Stats, error)
 }
@@ -52,7 +57,7 @@ type Service struct {
 // ServiceOption configures optional dependencies.
 type ServiceOption func(*Service)
 
-// WithMarshal enables CITADEL MARSHAL evaluation on SubmitAction.
+// WithMarshal enables CITADEL MARSHAL evaluation on ApproveAction.
 func WithMarshal(c MarshalClient) ServiceOption { return func(s *Service) { s.marshal = c } }
 
 // WithWORM enables CITADEL WORM audit-trail emission on incident lifecycle events.
@@ -251,20 +256,77 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return s.store.Delete(ctx, id)
 }
 
-// SubmitAction records a governed action against an incident. When a MARSHAL
-// client is configured, CITADEL's five-gate engine evaluates the action
-// before it is persisted; a REFUSE or HARD_STOP outcome prevents storage and
-// surfaces a typed error.
-func (s *Service) SubmitAction(ctx context.Context, incidentID string, req *SubmitActionRequest) (*IncidentAction, error) {
+// ProposeAction records an Operator's proposal for a governed action against
+// an incident. The proposal is NOT evaluated by CITADEL and does NOT create
+// an IncidentAction yet — it is persisted as a PendingAction awaiting a
+// SECOND, distinct authenticated user's decision via ApproveAction or
+// RejectAction. operatorUserID/operatorRole must come from the caller's own
+// authenticated session (see auth.ClaimsFromContext), never from
+// client-supplied request fields — that is the entire point of this
+// two-step flow.
+func (s *Service) ProposeAction(ctx context.Context, incidentID, operatorUserID, operatorRole string, req *ProposeActionRequest) (*PendingAction, error) {
+	if _, err := s.store.Get(ctx, incidentID); err != nil {
+		return nil, err
+	}
+
+	pa := &PendingAction{
+		ID:             fmt.Sprintf("pact-%d", time.Now().UnixNano()),
+		IncidentID:     incidentID,
+		ActionType:     req.ActionType,
+		Description:    req.Description,
+		Evidence:       req.Evidence,
+		OperatorUserID: operatorUserID,
+		OperatorRole:   operatorRole,
+		Status:         PendingActionStatusPending,
+		CreatedAt:      time.Now().UTC(),
+	}
+	if err := s.store.CreatePendingAction(ctx, pa); err != nil {
+		return nil, fmt.Errorf("creating pending action: %w", err)
+	}
+	return pa, nil
+}
+
+// ApproveAction lets a SECOND, distinct authenticated user (the Verifier)
+// approve a pending action. verifierUserID/verifierRole must come from the
+// approver's own authenticated session, and verifierToken must be their own
+// raw sinauth bearer token — never anything supplied by the Operator who
+// proposed the action. When a MARSHAL client is configured, CITADEL's
+// five-gate engine evaluates the action (with both real user IDs and the
+// Verifier's real token) before it is persisted; a REFUSE or HARD_STOP
+// outcome prevents storage and surfaces a typed error.
+func (s *Service) ApproveAction(ctx context.Context, incidentID, pendingActionID, verifierUserID, verifierRole, verifierToken string) (*IncidentAction, error) {
+	pa, err := s.store.GetPendingAction(ctx, pendingActionID)
+	if err != nil {
+		return nil, err
+	}
+	if pa.IncidentID != incidentID {
+		return nil, ErrPendingActionNotFound
+	}
+	if pa.Status != PendingActionStatusPending {
+		return nil, ErrAlreadyDecided
+	}
+	// Separation of Duties, enforced cryptographically: the Verifier must be
+	// a genuinely distinct authenticated identity from the Operator who
+	// proposed the action. Both sides are real sinauth UUIDs derived from
+	// two separate authenticated HTTP requests — never a client-supplied
+	// string that could collide by construction.
+	if verifierUserID == pa.OperatorUserID {
+		return nil, ErrSelfApproval
+	}
+
+	now := time.Now().UTC()
+	pa.VerifierUserID = verifierUserID
+	pa.VerifierRole = verifierRole
+
 	action := &IncidentAction{
-		ID:          fmt.Sprintf("act-%d", time.Now().UnixNano()),
+		ID:          fmt.Sprintf("act-%d", now.UnixNano()),
 		IncidentID:  incidentID,
-		ActionType:  req.ActionType,
-		OperatorID:  req.OperatorID,
-		VerifierID:  req.VerifierID,
-		Description: req.Description,
-		Evidence:    req.Evidence,
-		CreatedAt:   time.Now().UTC(),
+		ActionType:  pa.ActionType,
+		OperatorID:  pa.OperatorUserID,
+		VerifierID:  verifierUserID,
+		Description: pa.Description,
+		Evidence:    pa.Evidence,
+		CreatedAt:   now,
 	}
 
 	if s.marshal != nil {
@@ -274,30 +336,60 @@ func (s *Service) SubmitAction(ctx context.Context, incidentID string, req *Subm
 			return nil, err
 		}
 		result, err := s.marshal.Evaluate(ctx, MarshalRequest{
-			IncidentID:  incidentID,
-			ActionType:  req.ActionType,
-			Description: req.Description,
-			OperatorID:  req.OperatorID,
-			VerifierID:  req.VerifierID,
-			ProjectID:   inc.ProjectID,
-			Evidence:    req.Evidence,
+			IncidentID:   incidentID,
+			ActionType:   pa.ActionType,
+			Description:  pa.Description,
+			OperatorID:   pa.OperatorUserID,
+			OperatorRole: pa.OperatorRole,
+			VerifierID:   verifierUserID,
+			VerifierRole: verifierRole,
+			ProjectID:    inc.ProjectID,
+			Evidence:     pa.Evidence,
+			// ActorToken is intentionally left empty here: the Operator's
+			// original bearer token from the propose step is never retained
+			// — a bearer token is a short-lived secret (citadel ADR-005),
+			// and persisting it in pending_actions across an arbitrarily
+			// long approval window would reintroduce the kind of risk this
+			// rollout exists to close. CITADEL's Gate 1 treats a missing
+			// ActorToken as a non-blocking WARN while
+			// citadel.enforce_signatures stays false (its documented
+			// soft-mode rollout behaviour) — the Operator's identity itself
+			// is still real, derived from their own authenticated session
+			// at proposal time, not from client-supplied input.
+			VerifierToken: verifierToken,
 		})
 		if err != nil {
 			s.metrics.GovernanceCall("citadel_marshal", "failure")
 			s.logger.Error("marshal evaluate failed",
-				zap.String("incident_id", incidentID), zap.Error(err))
+				zap.String("incident_id", incidentID),
+				zap.String("pending_action_id", pa.ID), zap.Error(err))
 			return nil, fmt.Errorf("marshal evaluate: %w", err)
 		}
 		s.metrics.GovernanceCall("citadel_marshal", "success")
 
 		action.MarshalDecision = result.Outcome
 		action.WORMEntryID = result.WORMEntryID
+		pa.MarshalDecision = result.Outcome
+		pa.WORMEntryID = result.WORMEntryID
+		pa.Reasons = result.Reasons
 
 		switch result.Outcome {
 		case MarshalOutcomeHardStop:
+			pa.Status = PendingActionStatusBlocked
+			pa.DecidedAt = &now
+			if uErr := s.store.UpdatePendingAction(ctx, pa); uErr != nil {
+				s.logger.Warn("failed to persist blocked pending action",
+					zap.String("pending_action_id", pa.ID), zap.Error(uErr))
+			}
 			s.metrics.ActionSubmitted(MarshalOutcomeHardStop)
 			return nil, fmt.Errorf("%w: %v", ErrMarshalHardStop, result.Reasons)
 		case MarshalOutcomeRefuse:
+			pa.Status = PendingActionStatusRefused
+			pa.DecidedAt = &now
+			if uErr := s.store.UpdatePendingAction(ctx, pa); uErr != nil {
+				s.logger.Warn("failed to persist refused pending action",
+					zap.String("pending_action_id", pa.ID), zap.Error(uErr))
+			}
 			s.metrics.ActionSubmitted(MarshalOutcomeRefuse)
 			return nil, fmt.Errorf("%w: %v", ErrMarshalRefused, result.Reasons)
 		}
@@ -306,12 +398,70 @@ func (s *Service) SubmitAction(ctx context.Context, incidentID string, req *Subm
 	if err := s.store.AddAction(ctx, action); err != nil {
 		return nil, fmt.Errorf("adding action: %w", err)
 	}
+
+	pa.Status = PendingActionStatusApproved
+	pa.ActionID = action.ID
+	pa.DecidedAt = &now
+	if err := s.store.UpdatePendingAction(ctx, pa); err != nil {
+		// The IncidentAction is already durably stored — this is a
+		// best-effort bookkeeping update on the proposal record, not fatal.
+		s.logger.Warn("failed to persist approved pending action",
+			zap.String("pending_action_id", pa.ID), zap.Error(err))
+	}
+
 	outcome := action.MarshalDecision
 	if outcome == "" {
 		outcome = "LOCAL"
 	}
 	s.metrics.ActionSubmitted(outcome)
 	return action, nil
+}
+
+// RejectAction lets a SECOND, distinct authenticated user (the Verifier)
+// reject a pending action outright, without ever submitting it to CITADEL.
+func (s *Service) RejectAction(ctx context.Context, incidentID, pendingActionID, verifierUserID, verifierRole string) (*PendingAction, error) {
+	pa, err := s.store.GetPendingAction(ctx, pendingActionID)
+	if err != nil {
+		return nil, err
+	}
+	if pa.IncidentID != incidentID {
+		return nil, ErrPendingActionNotFound
+	}
+	if pa.Status != PendingActionStatusPending {
+		return nil, ErrAlreadyDecided
+	}
+	if verifierUserID == pa.OperatorUserID {
+		return nil, ErrSelfApproval
+	}
+
+	now := time.Now().UTC()
+	pa.VerifierUserID = verifierUserID
+	pa.VerifierRole = verifierRole
+	pa.Status = PendingActionStatusRejected
+	pa.DecidedAt = &now
+	if err := s.store.UpdatePendingAction(ctx, pa); err != nil {
+		return nil, fmt.Errorf("updating pending action: %w", err)
+	}
+	return pa, nil
+}
+
+// ListPendingActions returns every pending action proposed against an
+// incident, regardless of status.
+func (s *Service) ListPendingActions(ctx context.Context, incidentID string) ([]PendingAction, error) {
+	return s.store.ListPendingActions(ctx, incidentID)
+}
+
+// GetPendingAction retrieves a single pending action, scoped to incidentID so
+// a caller cannot probe another incident's pending action by ID alone.
+func (s *Service) GetPendingAction(ctx context.Context, incidentID, pendingActionID string) (*PendingAction, error) {
+	pa, err := s.store.GetPendingAction(ctx, pendingActionID)
+	if err != nil {
+		return nil, err
+	}
+	if pa.IncidentID != incidentID {
+		return nil, ErrPendingActionNotFound
+	}
+	return pa, nil
 }
 
 // AddIOC attaches an indicator of compromise to an incident.
@@ -330,6 +480,21 @@ func (s *Service) AddIOC(ctx context.Context, incidentID string, ioc *IOCEnrichm
 // ListIOCs returns all IOC enrichments for an incident.
 func (s *Service) ListIOCs(ctx context.Context, incidentID string) ([]IOCEnrichment, error) {
 	return s.store.ListIOCs(ctx, incidentID)
+}
+
+// AddTimelineEntry appends a chronological event to an incident's timeline.
+// The incident must already exist; callers that only have an incident ID
+// from an inbound webhook should Get() it first to confirm a match.
+func (s *Service) AddTimelineEntry(ctx context.Context, incidentID string, entry *TimelineEntry) (*TimelineEntry, error) {
+	entry.ID = fmt.Sprintf("tl-%d", time.Now().UnixNano())
+	entry.IncidentID = incidentID
+	if entry.CreatedAt.IsZero() {
+		entry.CreatedAt = time.Now().UTC()
+	}
+	if err := s.store.AddTimelineEntry(ctx, entry); err != nil {
+		return nil, fmt.Errorf("adding timeline entry: %w", err)
+	}
+	return entry, nil
 }
 
 // GetTimeline returns the chronological timeline for an incident.
@@ -360,4 +525,18 @@ func isValidTransition(from, to Status) bool {
 var (
 	ErrNotFound          = errors.New("incident not found")
 	ErrInvalidTransition = errors.New("invalid status transition")
+
+	// ErrPendingActionNotFound is returned when a pending action ID does not
+	// exist, or exists under a different incident than the one requested.
+	ErrPendingActionNotFound = errors.New("pending action not found")
+
+	// ErrAlreadyDecided is returned when ApproveAction/RejectAction is called
+	// on a pending action that has already been approved, rejected, refused,
+	// or blocked.
+	ErrAlreadyDecided = errors.New("pending action already decided")
+
+	// ErrSelfApproval is returned when the authenticated caller of
+	// ApproveAction/RejectAction is the same identity as the Operator who
+	// proposed the action — the cryptographic core of Separation of Duties.
+	ErrSelfApproval = errors.New("verifier must be a different authenticated user than the operator")
 )

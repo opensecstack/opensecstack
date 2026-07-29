@@ -185,6 +185,16 @@ func RequireDelete() func(http.Handler) http.Handler {
 	return requireCheck(canDelete, "delete access required")
 }
 
+// RequireApprove allows any role permitted to act as a Verifier on the
+// two-person-rule pending-action flow: admin, operator, verifier, or
+// service. Used for the approve/reject endpoints — the actual
+// Separation-of-Duties guarantee (Verifier must be a distinct identity from
+// the Operator) is enforced in incident.Service.ApproveAction/RejectAction,
+// not by this role gate.
+func RequireApprove() func(http.Handler) http.Handler {
+	return requireCheck(canApprove, "approve access required")
+}
+
 func requireCheck(check func(role string) bool, msg string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -200,6 +210,15 @@ func requireCheck(check func(role string) bool, msg string) func(http.Handler) h
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// BearerToken extracts the raw bearer token from the Authorization header of
+// r, or "" if absent. Exported so handlers that need to forward the caller's
+// own authenticated token to a downstream service (e.g. CITADEL's
+// ActorToken/VerifierToken — see citadel ADR-005) don't have to
+// re-implement Authorization-header parsing.
+func BearerToken(r *http.Request) string {
+	return bearerToken(r)
 }
 
 // bearerToken extracts the token from the Authorization header.

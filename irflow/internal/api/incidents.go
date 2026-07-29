@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
+	"github.com/opensecstack/opensecstack/irflow/internal/auth"
 	"github.com/opensecstack/opensecstack/irflow/internal/incident"
 )
 
@@ -170,43 +171,102 @@ func (s *Server) handleDeleteIncident(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
-// Submit action  POST /api/v1/incidents/{incidentID}/actions
+// Propose action  POST /api/v1/incidents/{incidentID}/actions
 // ---------------------------------------------------------------------------
+//
+// This is step one of IRFlow's two-person-rule (Separation of Duties) flow.
+// The Operator is the authenticated caller — derived from their own bearer
+// token via auth.ClaimsFromContext, never from a client-supplied request
+// field. Nothing here is submitted to CITADEL yet; the proposal is persisted
+// as a PendingAction awaiting a SECOND, distinct authenticated user's
+// decision via handleApproveAction or handleRejectAction.
 
-func (s *Server) handleSubmitAction(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleProposeAction(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "incidentID")
 	if id == "" {
 		writeError(w, http.StatusBadRequest, "incident ID is required")
 		return
 	}
 
-	var req incident.SubmitActionRequest
+	claims := auth.ClaimsFromContext(r.Context())
+	if claims == nil || claims.Subject == "" {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	var req incident.ProposeActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-
-	// Separation of Duties: operator must not be the verifier.
-	if req.OperatorID != "" && req.VerifierID != "" && req.OperatorID == req.VerifierID {
-		writeError(w, http.StatusBadRequest, "operator and verifier must be different (separation of duties)")
+	if req.ActionType == "" {
+		writeError(w, http.StatusBadRequest, "action_type is required")
 		return
 	}
 
-	action, err := s.incidents.SubmitAction(r.Context(), id, &req)
+	pa, err := s.incidents.ProposeAction(r.Context(), id, claims.Subject, claims.Role, &req)
+	if err != nil {
+		if errors.Is(err, incident.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "incident not found")
+			return
+		}
+		s.logger.Error("failed to propose action",
+			zap.String("incidentID", id), zap.Error(err))
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, pa)
+}
+
+// ---------------------------------------------------------------------------
+// Approve action  POST /api/v1/incidents/{incidentID}/actions/{actionID}/approve
+// ---------------------------------------------------------------------------
+//
+// Step two: a SECOND, distinct authenticated user (the Verifier) approves the
+// pending action with their OWN bearer token. Separation of Duties is
+// enforced cryptographically — the Verifier's sinauth UUID (from their own
+// claims) is compared against the Operator's stored UUID, not against any
+// value either caller can supply. Only on approval is the action evaluated
+// by CITADEL MARSHAL (with both real user IDs and the Verifier's real
+// bearer token) and persisted as a real IncidentAction.
+
+func (s *Server) handleApproveAction(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "incidentID")
+	actionID := chi.URLParam(r, "actionID")
+	if id == "" || actionID == "" {
+		writeError(w, http.StatusBadRequest, "incident ID and action ID are required")
+		return
+	}
+
+	claims := auth.ClaimsFromContext(r.Context())
+	if claims == nil || claims.Subject == "" {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+	verifierToken := auth.BearerToken(r)
+
+	action, err := s.incidents.ApproveAction(r.Context(), id, actionID, claims.Subject, claims.Role, verifierToken)
 	if err != nil {
 		switch {
+		case errors.Is(err, incident.ErrSelfApproval):
+			writeError(w, http.StatusBadRequest, "verifier must be a different authenticated user than the operator (separation of duties)")
+		case errors.Is(err, incident.ErrAlreadyDecided):
+			writeError(w, http.StatusConflict, "pending action has already been decided")
+		case errors.Is(err, incident.ErrPendingActionNotFound):
+			writeError(w, http.StatusNotFound, "pending action not found")
 		case errors.Is(err, incident.ErrMarshalHardStop):
-			s.logger.Warn("marshal HARD_STOP on action",
+			s.logger.Warn("marshal HARD_STOP on action approval",
 				zap.String("incidentID", id), zap.Error(err))
 			writeError(w, http.StatusForbidden, err.Error())
 		case errors.Is(err, incident.ErrMarshalRefused):
-			s.logger.Info("marshal refused action",
+			s.logger.Info("marshal refused action approval",
 				zap.String("incidentID", id), zap.Error(err))
 			writeError(w, http.StatusForbidden, err.Error())
 		case errors.Is(err, incident.ErrNotFound):
 			writeError(w, http.StatusNotFound, "incident not found")
 		default:
-			s.logger.Error("failed to submit action",
+			s.logger.Error("failed to approve action",
 				zap.String("incidentID", id), zap.Error(err))
 			writeError(w, http.StatusInternalServerError, "internal server error")
 		}
@@ -214,6 +274,70 @@ func (s *Server) handleSubmitAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, action)
+}
+
+// ---------------------------------------------------------------------------
+// Reject action  POST /api/v1/incidents/{incidentID}/actions/{actionID}/reject
+// ---------------------------------------------------------------------------
+//
+// Lets the Verifier reject a pending action outright, without ever
+// submitting it to CITADEL. Same identity rules as approval: the Verifier
+// must be a distinct authenticated user from the Operator who proposed it.
+
+func (s *Server) handleRejectAction(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "incidentID")
+	actionID := chi.URLParam(r, "actionID")
+	if id == "" || actionID == "" {
+		writeError(w, http.StatusBadRequest, "incident ID and action ID are required")
+		return
+	}
+
+	claims := auth.ClaimsFromContext(r.Context())
+	if claims == nil || claims.Subject == "" {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	pa, err := s.incidents.RejectAction(r.Context(), id, actionID, claims.Subject, claims.Role)
+	if err != nil {
+		switch {
+		case errors.Is(err, incident.ErrSelfApproval):
+			writeError(w, http.StatusBadRequest, "verifier must be a different authenticated user than the operator (separation of duties)")
+		case errors.Is(err, incident.ErrAlreadyDecided):
+			writeError(w, http.StatusConflict, "pending action has already been decided")
+		case errors.Is(err, incident.ErrPendingActionNotFound):
+			writeError(w, http.StatusNotFound, "pending action not found")
+		default:
+			s.logger.Error("failed to reject action",
+				zap.String("incidentID", id), zap.Error(err))
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, pa)
+}
+
+// ---------------------------------------------------------------------------
+// List pending actions  GET /api/v1/incidents/{incidentID}/actions/pending
+// ---------------------------------------------------------------------------
+
+func (s *Server) handleListPendingActions(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "incidentID")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "incident ID is required")
+		return
+	}
+
+	pending, err := s.incidents.ListPendingActions(r.Context(), id)
+	if err != nil {
+		s.logger.Error("failed to list pending actions",
+			zap.String("incidentID", id), zap.Error(err))
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, pending)
 }
 
 // ---------------------------------------------------------------------------
@@ -227,7 +351,7 @@ func (s *Server) handleListActions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// SubmitAction handles creation; for listing we reuse the timeline which
+	// ProposeAction/ApproveAction handle creation; for listing we reuse the timeline which
 	// includes actions.  A dedicated ListActions method can be added to the
 	// service later.  For now, return the timeline filtered to action entries.
 	timeline, err := s.incidents.GetTimeline(r.Context(), id)

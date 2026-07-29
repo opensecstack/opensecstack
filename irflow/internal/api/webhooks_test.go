@@ -31,6 +31,7 @@ func newWebhookServer(t *testing.T) (*Server, *apiMockStore) {
 			APIGuard:   webhookTestSecret,
 			CITADEL:    webhookTestSecret,
 			ThreatFlow: webhookTestSecret,
+			CyberPath:  webhookTestSecret,
 		},
 	})
 	return srv, store
@@ -257,6 +258,130 @@ func TestThreatFlowWebhook_NoIncidentIDQueuesForCorrelation(t *testing.T) {
 		if len(list) != 0 {
 			t.Errorf("IOC should not be attached to any incident without incident_id")
 		}
+	}
+}
+
+func TestCyberPathWebhook_RemediationCompletedUpdatesTimeline(t *testing.T) {
+	srv, store := newWebhookServer(t)
+
+	// Seed an incident for the remediation event to reference.
+	inc := &incident.Incident{
+		ID:        "inc-cp-1",
+		Title:     "phishing follow-up",
+		Severity:  incident.SeverityP3,
+		Status:    incident.StatusInvestigating,
+		Source:    incident.SourceManual,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	store.incidents[inc.ID] = inc
+
+	payload, _ := json.Marshal(webhook.CyberPathEvent{
+		EventID:     "evt-cp-1",
+		EventType:   "cyberpath.incident_remediation_completed",
+		IncidentID:  inc.ID,
+		CohortID:    "cohort-42",
+		CompletedAt: time.Now(),
+		OccurredAt:  time.Now(),
+	})
+
+	req := signedRequest(t, http.MethodPost, "/api/v1/webhooks/cyberpath/remediation", payload)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200. body: %s", rec.Code, rec.Body.String())
+	}
+	entries := store.timeline[inc.ID]
+	if len(entries) != 1 {
+		t.Fatalf("got %d timeline entries, want 1", len(entries))
+	}
+	if entries[0].EntryType != "cyberpath_remediation_completed" {
+		t.Errorf("entry_type = %q, want cyberpath_remediation_completed", entries[0].EntryType)
+	}
+	if entries[0].ActorID != "cyberpath" {
+		t.Errorf("actor_id = %q, want cyberpath", entries[0].ActorID)
+	}
+}
+
+func TestCyberPathWebhook_UnknownIncidentAcknowledgedNoUpdate(t *testing.T) {
+	srv, store := newWebhookServer(t)
+
+	payload, _ := json.Marshal(webhook.CyberPathEvent{
+		EventID:     "evt-cp-2",
+		EventType:   "cyberpath.incident_remediation_completed",
+		IncidentID:  "inc-does-not-exist",
+		CohortID:    "cohort-7",
+		CompletedAt: time.Now(),
+	})
+
+	req := signedRequest(t, http.MethodPost, "/api/v1/webhooks/cyberpath/remediation", payload)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202. body: %s", rec.Code, rec.Body.String())
+	}
+	if len(store.timeline["inc-does-not-exist"]) != 0 {
+		t.Errorf("timeline entry created for unknown incident")
+	}
+}
+
+func TestCyberPathWebhook_NoIncidentIDAcknowledged(t *testing.T) {
+	srv, _ := newWebhookServer(t)
+
+	payload, _ := json.Marshal(webhook.CyberPathEvent{
+		EventID:   "evt-cp-3",
+		EventType: "cyberpath.incident_remediation_completed",
+		CohortID:  "cohort-8",
+	})
+
+	req := signedRequest(t, http.MethodPost, "/api/v1/webhooks/cyberpath/remediation", payload)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Errorf("status = %d, want 202", rec.Code)
+	}
+}
+
+func TestCyberPathWebhook_UnrecognisedEventTypeAcknowledged(t *testing.T) {
+	srv, store := newWebhookServer(t)
+
+	payload, _ := json.Marshal(webhook.CyberPathEvent{
+		EventID:    "evt-cp-4",
+		EventType:  "cyberpath.cohort_started",
+		IncidentID: "inc-cp-1",
+		CohortID:   "cohort-9",
+	})
+
+	req := signedRequest(t, http.MethodPost, "/api/v1/webhooks/cyberpath/remediation", payload)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202. body: %s", rec.Code, rec.Body.String())
+	}
+	if len(store.timeline["inc-cp-1"]) != 0 {
+		t.Errorf("timeline entry created for non-remediation event type")
+	}
+}
+
+func TestCyberPathWebhook_RejectsInvalidSignature(t *testing.T) {
+	srv, store := newWebhookServer(t)
+
+	body := []byte(`{"event_id":"x","event_type":"cyberpath.incident_remediation_completed"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/cyberpath/remediation", bytes.NewReader(body))
+	req.Header.Set(webhook.HeaderSignature, "sha256=deadbeef")
+	req.Header.Set(webhook.HeaderTimestamp, strconv.FormatInt(time.Now().Unix(), 10))
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", rec.Code)
+	}
+	if len(store.timeline) != 0 {
+		t.Errorf("unauthorized request updated a timeline")
 	}
 }
 

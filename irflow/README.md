@@ -11,7 +11,8 @@ Current release: **v1.0.0** — see [CHANGELOG.md](CHANGELOG.md).
 ## Features
 
 - **Incident lifecycle** — guarded state machine (`open → investigating → contained → eradicating → recovering → closed`), actions, IOC enrichment, append-only timeline.
-- **CITADEL MARSHAL** — every governed action is evaluated through the 5-gate engine; `REFUSE` / `HARD_STOP` outcomes prevent local persistence (HTTP 403).
+- **Two-person-rule action flow** — an Operator proposes a governed action from their own authenticated session; a SECOND, distinct authenticated user (the Verifier) must approve or reject it before CITADEL MARSHAL is ever evaluated. Self-approval is rejected both at the application layer and by a DB-level `CHECK` constraint.
+- **CITADEL MARSHAL** — on approval, the action is evaluated through the 5-gate engine; `REFUSE` / `HARD_STOP` outcomes prevent local persistence (HTTP 403).
 - **CITADEL WORM** — incident creation is anchored in the tamper-evident audit chain.
 - **NIS2 Compass** — regulatory-significant incidents (P1/P2/P3) are notified asynchronously to the Article 21(2)(b) Incident Handling control.
 - **Playbook automation** — graph-based executor with `OnSuccess` / `OnFailure` branching, per-step timeouts, and cycle protection.
@@ -54,8 +55,11 @@ requires a valid JWT unless otherwise noted.
 | GET | `/api/v1/incidents/{id}` | JWT | Fetch one |
 | PATCH | `/api/v1/incidents/{id}` | JWT + write | Partial update (enforces transition rules) |
 | DELETE | `/api/v1/incidents/{id}` | JWT + admin | Delete |
-| POST | `/api/v1/incidents/{id}/actions` | JWT + write | Governed action (evaluated via MARSHAL) |
+| POST | `/api/v1/incidents/{id}/actions` | JWT + write | Operator proposes a governed action (two-person-rule step 1; not yet evaluated by MARSHAL) |
 | GET | `/api/v1/incidents/{id}/actions` | JWT | List actions |
+| GET | `/api/v1/incidents/{id}/actions/pending` | JWT | List pending (unresolved) proposed actions |
+| POST | `/api/v1/incidents/{id}/actions/{actionID}/approve` | JWT + approve | Verifier approves a pending action (two-person-rule step 2; evaluated via MARSHAL) |
+| POST | `/api/v1/incidents/{id}/actions/{actionID}/reject` | JWT + approve | Verifier rejects a pending action outright |
 | GET | `/api/v1/incidents/{id}/timeline` | JWT | Chronological timeline |
 | POST/GET | `/api/v1/incidents/{id}/iocs` | JWT + write / read | Attach / list IOCs |
 | GET | `/api/v1/playbooks` | JWT | Playbook list |

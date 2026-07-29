@@ -91,6 +91,7 @@ type WebhookConfig struct {
 	APIGuardSecret     string        `mapstructure:"apiguard_secret"`
 	CITADELSecret      string        `mapstructure:"citadel_secret"`
 	ThreatFlowSecret   string        `mapstructure:"threatflow_secret"`
+	CyberPathSecret    string        `mapstructure:"cyberpath_secret"`
 	CallbackURL        string        `mapstructure:"callback_url"`
 	MaxBodySize        int64         `mapstructure:"max_body_size"`
 	ClockSkewTolerance time.Duration `mapstructure:"clock_skew_tolerance"`
@@ -112,6 +113,10 @@ func (w WebhookConfig) ResolvedSecret(source string) string {
 	case "threatflow":
 		if w.ThreatFlowSecret != "" {
 			return w.ThreatFlowSecret
+		}
+	case "cyberpath":
+		if w.CyberPathSecret != "" {
+			return w.CyberPathSecret
 		}
 	}
 	return w.Secret
@@ -166,6 +171,7 @@ func Load() (*Config, error) {
 	v.SetDefault("webhook.apiguard_secret", "")
 	v.SetDefault("webhook.citadel_secret", "")
 	v.SetDefault("webhook.threatflow_secret", "")
+	v.SetDefault("webhook.cyberpath_secret", "")
 	v.SetDefault("webhook.callback_url", "")
 	v.SetDefault("webhook.max_body_size", 1<<20) // 1 MiB
 	v.SetDefault("webhook.clock_skew_tolerance", 5*time.Minute)

@@ -190,6 +190,7 @@ func bootServer(t *testing.T) *httptest.Server {
 			APIGuard:   e2eWebhookSecret,
 			CITADEL:    e2eWebhookSecret,
 			ThreatFlow: e2eWebhookSecret,
+			CyberPath:  e2eWebhookSecret,
 		},
 		Auth:    auth.Config{Secret: e2eAuthSecret, Logger: logger},
 		Metrics: mx,
@@ -202,7 +203,15 @@ func bootServer(t *testing.T) *httptest.Server {
 
 func issueToken(t *testing.T, role string) string {
 	t.Helper()
-	tok, err := auth.Issue(e2eAuthSecret, auth.Claims{Subject: "tester", Role: role}, 1*time.Hour)
+	return issueTokenAs(t, "tester", role)
+}
+
+// issueTokenAs issues a token for a specific subject — needed to exercise
+// the two-person-rule propose/approve flow, which requires two DISTINCT
+// authenticated identities.
+func issueTokenAs(t *testing.T, subject, role string) string {
+	t.Helper()
+	tok, err := auth.Issue(e2eAuthSecret, auth.Claims{Subject: subject, Role: role}, 1*time.Hour)
 	if err != nil {
 		t.Fatalf("issue token: %v", err)
 	}
@@ -316,12 +325,13 @@ func TestE2E_IncidentCRUDFlow(t *testing.T) {
 	}
 }
 
-func TestE2E_SubmitActionWithMarshalStub(t *testing.T) {
+func TestE2E_ProposeApproveActionWithMarshalStub(t *testing.T) {
 	ts := bootServer(t)
-	token := issueToken(t, auth.RoleOperator)
+	operatorTok := issueTokenAs(t, "alice", auth.RoleOperator)
+	verifierTok := issueTokenAs(t, "bob", auth.RoleVerifier)
 
 	// Create incident.
-	code, body := doJSON(t, ts, http.MethodPost, "/api/v1/incidents", token, map[string]string{
+	code, body := doJSON(t, ts, http.MethodPost, "/api/v1/incidents", operatorTok, map[string]string{
 		"title":    "marshal test",
 		"severity": "P2",
 		"source":   "manual",
@@ -332,22 +342,47 @@ func TestE2E_SubmitActionWithMarshalStub(t *testing.T) {
 	var inc incident.Incident
 	_ = json.Unmarshal(body, &inc)
 
-	// Submit action — stub MARSHAL returns EXECUTE.
+	// Step 1: Operator proposes the action. Operator identity comes from
+	// their own bearer token, not a request field.
 	code, body = doJSON(t, ts, http.MethodPost,
-		"/api/v1/incidents/"+inc.ID+"/actions", token, map[string]string{
+		"/api/v1/incidents/"+inc.ID+"/actions", operatorTok, map[string]string{
 			"action_type": "contain",
-			"operator_id": "alice",
-			"verifier_id": "bob",
 			"description": "block endpoint",
 		})
 	if code != http.StatusCreated {
-		t.Fatalf("submit action: status=%d body=%s", code, body)
+		t.Fatalf("propose action: status=%d body=%s", code, body)
+	}
+	var pending incident.PendingAction
+	if err := json.Unmarshal(body, &pending); err != nil {
+		t.Fatalf("decode pending action: %v", err)
+	}
+	if pending.OperatorUserID != "alice" {
+		t.Fatalf("pending.OperatorUserID = %q, want alice", pending.OperatorUserID)
+	}
+
+	// A self-approval attempt (Operator trying to approve their own
+	// proposal) must be rejected — this is the core SoD guarantee.
+	code, body = doJSON(t, ts, http.MethodPost,
+		"/api/v1/incidents/"+inc.ID+"/actions/"+pending.ID+"/approve", operatorTok, nil)
+	if code != http.StatusBadRequest {
+		t.Fatalf("self-approval: status=%d body=%s, want 400", code, body)
+	}
+
+	// Step 2: a SECOND, distinct authenticated user (the Verifier) approves.
+	// Only now is the action evaluated by (stubbed) MARSHAL and persisted.
+	code, body = doJSON(t, ts, http.MethodPost,
+		"/api/v1/incidents/"+inc.ID+"/actions/"+pending.ID+"/approve", verifierTok, nil)
+	if code != http.StatusCreated {
+		t.Fatalf("approve action: status=%d body=%s", code, body)
 	}
 	if !bytes.Contains(body, []byte(`"marshal_decision":"EXECUTE"`)) {
 		t.Errorf("action should record EXECUTE decision: %s", body)
 	}
 	if !bytes.Contains(body, []byte(`"worm_entry_id":"e2e-worm"`)) {
 		t.Errorf("action should record WORM entry id: %s", body)
+	}
+	if !bytes.Contains(body, []byte(`"operator_id":"alice"`)) || !bytes.Contains(body, []byte(`"verifier_id":"bob"`)) {
+		t.Errorf("action should record both real user IDs: %s", body)
 	}
 }
 

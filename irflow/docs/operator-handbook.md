@@ -44,9 +44,14 @@ force them via direct SQL.
 
 Every containment / export / restore action needs:
 
-1. **An operator** (you).
-2. **A verifier** (peer with `verifier` or `admin` role).
+1. **An operator** (you) — proposes the action.
+2. **A verifier** — a SECOND, distinct person (peer with `verifier`,
+   `operator`, or `admin` role) who approves or rejects it with their own
+   login. You cannot approve your own proposal — IRFlow rejects
+   self-approval both in the API and at the database level.
 3. **An open incident**.
+
+**Step 1 — you propose the action:**
 
 ```
 POST /api/v1/incidents/inc_123/actions
@@ -54,20 +59,41 @@ Content-Type: application/json
 Authorization: Bearer <operator JWT>
 
 {
-  "type":        "CONTAIN",
-  "target":      "endpoint-42",
-  "verifier_id": 77,
-  "payload":     { "method": "isolate_network" }
+  "action_type": "contain",
+  "description": "isolate endpoint-42 from the network",
+  "evidence":    { "method": "isolate_network" }
 }
+```
+
+Returns `201 Created` with a `PendingAction` in `status: "pending"`. Nothing
+has happened yet — CITADEL has not been contacted, and no `IncidentAction`
+exists. Share the pending action ID with your verifier (e.g. via the
+incident's chat thread), or point them at
+`GET /api/v1/incidents/inc_123/actions/pending`.
+
+**Step 2 — a distinct, authenticated verifier approves (or rejects):**
+
+```
+POST /api/v1/incidents/inc_123/actions/{actionID}/approve
+Authorization: Bearer <verifier JWT>
 ```
 
 Response:
 
-- `201 Created` — action accepted and passed MARSHAL.
-- `403 ErrMarshalRefused` — read the returned `reasons[]`, correct,
-  resubmit.
+- `201 Created` — action approved and passed MARSHAL; a real
+  `IncidentAction` now exists.
+- `400` (`ErrSelfApproval`) — the approving identity matches the
+  proposing operator. This is the two-person-rule working as intended:
+  find an actual second person.
+- `403 ErrMarshalRefused` — read the returned `reasons[]`, correct, and
+  propose a new action.
 - `403 ErrMarshalHardStop` — **stop**. This is a policy violation;
   open a new incident if needed.
+- `409` — the pending action was already approved/rejected/refused/blocked
+  by someone else.
+
+To reject instead of approve: `POST /api/v1/incidents/inc_123/actions/{actionID}/reject`
+(same identity rules, never reaches CITADEL).
 
 ## Running a playbook
 

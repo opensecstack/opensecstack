@@ -46,13 +46,21 @@ Timestamps outside ±5 min (configurable) are rejected with 401.
 
 ### RBAC matrix
 
-| Role | Read `/api/v1/*` | Write (POST/PATCH) | Delete |
-|---|---|---|---|
-| admin | ✓ | ✓ | ✓ |
-| operator | ✓ | ✓ | — |
-| service | ✓ | ✓ | — |
-| verifier | ✓ | — | — |
-| viewer | ✓ | — | — |
+| Role | Read `/api/v1/*` | Write (POST/PATCH) | Delete | Approve/reject actions |
+|---|---|---|---|---|
+| admin | ✓ | ✓ | ✓ | ✓ |
+| operator | ✓ | ✓ | — | ✓ |
+| service | ✓ | ✓ | — | ✓ |
+| verifier | ✓ | — | — | ✓ |
+| viewer | ✓ | — | — | — |
+
+"Approve/reject actions" is the `auth.RequireApprove()` role gate on the
+`/actions/{actionID}/approve` and `/actions/{actionID}/reject` endpoints. It
+only checks role membership — the actual Separation-of-Duties guarantee (the
+approving/rejecting caller must be a different authenticated identity than
+the Operator who proposed the action) is enforced in the service layer, not
+by role, so a lone `admin` cannot self-approve just because their role
+qualifies.
 
 ## Endpoints
 
@@ -147,30 +155,92 @@ closed        → (terminal)
 
 Invalid transitions return `400 {"error":"invalid status transition"}`.
 
-#### Actions (MARSHAL-governed)
+#### Actions (two-person-rule, MARSHAL-governed)
+
+Governed actions follow a two-step propose/approve flow — the
+Separation-of-Duties (two-person-rule) control at the heart of IRFlow's
+incident-action model. Nobody can submit both halves of a governed action:
+the Operator's and Verifier's identities each come from their own
+authenticated bearer token, on two separate HTTP requests, never from a
+client-supplied request field.
+
+##### Propose an action
 
 ```
 POST /api/v1/incidents/{id}/actions
+Authorization: Bearer <operator JWT>
+
 {
-  "action_type":  "contain|escalate|recover|close",
-  "operator_id":  "alice",
-  "verifier_id":  "bob",
-  "description":  "block endpoint",
-  "evidence":     { "any": "json" }
+  "action_type": "contain|escalate|recover|close",
+  "description": "block endpoint",
+  "evidence":    { "any": "json" }
 }
 ```
 
-Behaviour:
+The Operator is the authenticated caller (derived from the JWT `sub` claim),
+not a request field. This step does **not** call CITADEL MARSHAL and does
+**not** create an `IncidentAction` — it persists a `PendingAction` with
+`status: "pending"` awaiting a second, distinct authenticated user's
+decision. Returns `201 Created` with the `PendingAction`.
 
-- Separation of Duties enforced (400 if `operator_id == verifier_id`).
-- If CITADEL MARSHAL is configured, the action is evaluated:
-  - `EXECUTE` → 201 Created, action stored with `marshal_decision` +
-    `worm_entry_id`.
-  - `REFUSE` → 403, action **not** stored, error message includes
-    CITADEL's reasons.
-  - `HARD_STOP` → 403, action **not** stored.
-- If MARSHAL is not configured, action is stored locally with
-  `marshal_decision` empty.
+##### Approve a pending action
+
+```
+POST /api/v1/incidents/{id}/actions/{actionID}/approve
+Authorization: Bearer <verifier JWT>
+
+{ "note": "optional free-text note" }
+```
+
+The Verifier is the authenticated caller of *this* request — a different
+authenticated identity than the Operator who proposed the action. If the
+Verifier's user ID matches the Operator's, the request is rejected with
+`400` (`ErrSelfApproval`) before CITADEL is ever contacted; this check is
+also enforced at the database level via a `CHECK` constraint on
+`pending_actions.verifier_user_id <> operator_user_id`, so self-approval
+cannot slip through even a bug in the application layer.
+
+Only on approval is the action evaluated by CITADEL MARSHAL (when
+configured), using both real user IDs and the Verifier's own bearer token:
+
+- `EXECUTE` → `201 Created`, a real `IncidentAction` is stored with
+  `marshal_decision` + `worm_entry_id`; the `PendingAction` transitions to
+  `approved`.
+- `REFUSE` → `403`, nothing is stored, error message includes CITADEL's
+  reasons; the `PendingAction` transitions to `refused`.
+- `HARD_STOP` → `403`, nothing is stored; the `PendingAction` transitions to
+  `blocked`.
+- If MARSHAL is not configured, the action is stored locally with
+  `marshal_decision` empty and the `PendingAction` transitions to `approved`.
+
+Other failure modes:
+
+- `404` — pending action not found (or belongs to a different incident).
+- `409` — the pending action has already been decided (approved, rejected,
+  refused, or blocked).
+
+##### Reject a pending action
+
+```
+POST /api/v1/incidents/{id}/actions/{actionID}/reject
+Authorization: Bearer <verifier JWT>
+```
+
+Lets the Verifier reject a pending action outright, without it ever
+reaching CITADEL. Same identity rules as approval — self-rejection by the
+Operator is rejected with `400` (`ErrSelfApproval`). Returns `200 OK` with
+the `PendingAction` (`status: "rejected"`).
+
+##### List pending actions
+
+```
+GET /api/v1/incidents/{id}/actions/pending
+```
+
+Returns every `PendingAction` proposed against the incident, regardless of
+status (`pending`, `approved`, `rejected`, `refused`, `blocked`).
+
+##### List actions
 
 ```
 GET /api/v1/incidents/{id}/actions
@@ -335,10 +405,11 @@ Every failure response uses:
 
 | HTTP | When |
 |---|---|
-| 400 | Malformed JSON, invalid status transition, SoD violation, missing webhook headers |
+| 400 | Malformed JSON, invalid status transition, self-approval (`ErrSelfApproval`), missing webhook headers |
 | 401 | Missing / invalid / expired JWT; bad webhook signature; stale webhook timestamp |
 | 403 | RBAC rejection; MARSHAL `REFUSE` or `HARD_STOP` |
-| 404 | Unknown ID |
+| 404 | Unknown ID; pending action not found |
+| 409 | Pending action already decided |
 | 413 | Webhook body exceeds `IRFLOW_WEBHOOK_MAX_BODY_SIZE` |
 | 500 | Unexpected internal failure — always logged with correlation `request_id` |
 | 503 | Webhook secret not configured; DB unreachable on `/health/detail` |

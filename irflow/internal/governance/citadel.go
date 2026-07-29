@@ -61,8 +61,16 @@ func NewCitadelClient(cfg CitadelClientConfig) *CitadelClient {
 // MARSHAL evaluation
 // ---------------------------------------------------------------------------
 
-// kerkese mirrors the CITADEL wire format exactly. We keep it private so
-// callers only see the incident-package interface types.
+// kerkese mirrors the CITADEL wire format exactly (see sdk/go/citadel/types.go,
+// the canonical cross-platform contract, and citadel adrs/004 and 005). We
+// keep it private so callers only see the incident-package interface types.
+//
+// This struct is IRFlow's own copy rather than an import of
+// sdk/go/citadel.Kerkese: IRFlow's CitadelClient carries extra functionality
+// (HMAC-SHA256 request signing, a WORM /emit method) that the shared SDK
+// Client does not provide, so — following the same treatment applied to
+// apiguard's internal/citadel package — the type definitions are fixed up in
+// place to match the SDK shape rather than switching to the SDK client.
 type kerkese struct {
 	KerkeseVersion string          `json:"kerkese_version"`
 	TsUTC          time.Time       `json:"ts_utc"`
@@ -74,6 +82,21 @@ type kerkese struct {
 	Evidence       kerkeseEvidence `json:"evidence"`
 	SoD            kerkeseSoD      `json:"sod"`
 	DryRun         bool            `json:"dry_run,omitempty"`
+
+	// SigOperator/SigVerifier: hex-encoded Ed25519 signatures (citadel
+	// ADR-004). IRFlow does not currently sign requests — no per-user
+	// private-key custody UX exists yet — so these are always left empty,
+	// which CITADEL treats as a soft-mode warning (citadel.enforce_signatures
+	// = false), not a block.
+	SigOperator string `json:"sig_operator,omitempty"`
+	SigVerifier string `json:"sig_verifier,omitempty"`
+
+	// ActorToken/VerifierToken: sinauth bearer tokens proving the Operator's
+	// and Verifier's authenticated identity (citadel ADR-005). Forwarded
+	// verbatim from incident.MarshalRequest; CITADEL verifies them directly
+	// against sinauth's JWKS and discards them (never persisted).
+	ActorToken    string `json:"actor_token,omitempty"`
+	VerifierToken string `json:"verifier_token,omitempty"`
 }
 
 type kerkeseAction struct {
@@ -82,8 +105,13 @@ type kerkeseAction struct {
 	IncidentID  string `json:"incident_id,omitempty"`
 }
 
+// kerkesePerson represents both Actor (Operator) and Verifier — identical
+// shape, reused for both to avoid duplicating two structurally-equal types.
+// UserID is a sinauth UUID string (citadel ADR-005 changed this from int64;
+// IRFlow previously folded it through a lossy hashUserID() hash, which is
+// deleted along with the int64 field it existed to work around).
 type kerkesePerson struct {
-	UserID int64  `json:"user_id"`
+	UserID string `json:"user_id"`
 	Role   string `json:"role"`
 }
 
@@ -91,9 +119,11 @@ type kerkeseEvidence struct {
 	Extra map[string]any `json:"extra,omitempty"`
 }
 
+// kerkeseSoD carries the Separation of Duties identifiers as sinauth UUID
+// strings (citadel ADR-005).
 type kerkeseSoD struct {
-	OperatorUserID int64 `json:"operator_user_id"`
-	VerifierUserID int64 `json:"verifier_user_id"`
+	OperatorUserID string `json:"operator_user_id"`
+	VerifierUserID string `json:"verifier_user_id"`
 }
 
 type citadelDecision struct {
@@ -104,10 +134,22 @@ type citadelDecision struct {
 }
 
 // Evaluate submits a Kerkese to /api/v1/marshal/evaluate and translates the
-// response back into the incident-package interface type.
+// response back into the incident-package interface type. req.OperatorID and
+// req.VerifierID must already be real sinauth UUIDs derived from two
+// separate authenticated sessions (see incident.Service.ApproveAction) — this
+// method performs no identity derivation or transformation of its own.
 func (c *CitadelClient) Evaluate(ctx context.Context, req incident.MarshalRequest) (*incident.MarshalResult, error) {
+	operatorRole := req.OperatorRole
+	if operatorRole == "" {
+		operatorRole = "operator"
+	}
+	verifierRole := req.VerifierRole
+	if verifierRole == "" {
+		verifierRole = "verifier"
+	}
+
 	payload := kerkese{
-		KerkeseVersion: "v2.0",
+		KerkeseVersion: "1.0",
 		TsUTC:          time.Now().UTC(),
 		ProjectID:      c.projectID,
 		ExecutionID:    newUUIDv4(),
@@ -117,13 +159,15 @@ func (c *CitadelClient) Evaluate(ctx context.Context, req incident.MarshalReques
 			Description: req.Description,
 			IncidentID:  req.IncidentID,
 		},
-		Actor:    kerkesePerson{UserID: hashUserID(req.OperatorID), Role: "operator"},
-		Verifier: kerkesePerson{UserID: hashUserID(req.VerifierID), Role: "verifier"},
+		Actor:    kerkesePerson{UserID: req.OperatorID, Role: operatorRole},
+		Verifier: kerkesePerson{UserID: req.VerifierID, Role: verifierRole},
 		Evidence: kerkeseEvidence{},
 		SoD: kerkeseSoD{
-			OperatorUserID: hashUserID(req.OperatorID),
-			VerifierUserID: hashUserID(req.VerifierID),
+			OperatorUserID: req.OperatorID,
+			VerifierUserID: req.VerifierID,
 		},
+		ActorToken:    req.ActorToken,
+		VerifierToken: req.VerifierToken,
 	}
 	if req.ProjectID != "" {
 		payload.ProjectID = req.ProjectID
@@ -274,25 +318,4 @@ func newUUIDv4() string {
 	b[6] = (b[6] & 0x0f) | 0x40 // version 4
 	b[8] = (b[8] & 0x3f) | 0x80 // RFC 4122 variant
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
-}
-
-// hashUserID derives a stable int64 identifier from IRFlow's string user IDs.
-// CITADEL's Kerkese schema requires numeric actor/verifier IDs, so we fold
-// the string to a truncated FNV-like hash. This is a presentation-layer
-// adapter, not a security boundary.
-func hashUserID(id string) int64 {
-	if id == "" {
-		return 0
-	}
-	h := sha256.Sum256([]byte(id))
-	// Take the top 8 bytes, clamp to positive int63 to avoid surprises in
-	// downstream JSON tools that reject large uint64 values.
-	var out int64
-	for i := 0; i < 8; i++ {
-		out = (out << 8) | int64(h[i])
-	}
-	if out < 0 {
-		out = -out
-	}
-	return out
 }

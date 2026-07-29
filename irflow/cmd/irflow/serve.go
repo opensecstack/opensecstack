@@ -164,6 +164,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 			APIGuard:    cfg.Webhook.ResolvedSecret("apiguard"),
 			CITADEL:     cfg.Webhook.ResolvedSecret("citadel"),
 			ThreatFlow:  cfg.Webhook.ResolvedSecret("threatflow"),
+			CyberPath:   cfg.Webhook.ResolvedSecret("cyberpath"),
 			MaxBodySize: cfg.Webhook.MaxBodySize,
 			ClockSkew:   cfg.Webhook.ClockSkewTolerance,
 		},

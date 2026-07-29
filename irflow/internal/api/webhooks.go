@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -202,6 +203,122 @@ func (s *Server) handleThreatFlowWebhook(w http.ResponseWriter, r *http.Request)
 		"event_id":    evt.EventID,
 		"incident_id": evt.IncidentID,
 		"attached":    attached,
+	})
+}
+
+// handleCyberPathWebhook accepts remediation-completion events from
+// CyberPath. When the event names an incident_id that IRFlow recognises, a
+// timeline entry is appended recording that the referenced remediation
+// track was completed. Events naming an unknown incident_id, or event types
+// other than "cyberpath.incident_remediation_completed", are accepted and
+// logged but do not mutate any incident — CyberPath's cohorts are not
+// necessarily 1:1 with IRFlow incidents, and there is no correlation engine
+// yet (mirrors the ThreatFlow "queued for correlation" pattern below).
+func (s *Server) handleCyberPathWebhook(w http.ResponseWriter, r *http.Request) {
+	body, ok := s.verifyWebhook(w, r, s.webhooks.CyberPath, "cyberpath")
+	if !ok {
+		return
+	}
+
+	var evt webhook.CyberPathEvent
+	if err := json.Unmarshal(body, &evt); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid CyberPath payload")
+		return
+	}
+
+	if s.incidents == nil {
+		writeError(w, http.StatusServiceUnavailable, "incident service unavailable")
+		return
+	}
+
+	if strings.ToLower(evt.EventType) != "cyberpath.incident_remediation_completed" {
+		s.logger.Info("cyberpath webhook: unrecognised event type acknowledged",
+			zap.String("event_id", evt.EventID),
+			zap.String("event_type", evt.EventType),
+		)
+		writeJSON(w, http.StatusAccepted, map[string]string{
+			"status":     "acknowledged",
+			"event_id":   evt.EventID,
+			"event_type": evt.EventType,
+		})
+		return
+	}
+
+	if evt.IncidentID == "" {
+		s.logger.Info("cyberpath webhook: remediation completed without incident target",
+			zap.String("event_id", evt.EventID),
+			zap.String("cohort_id", evt.CohortID),
+		)
+		writeJSON(w, http.StatusAccepted, map[string]string{
+			"status":    "acknowledged",
+			"event_id":  evt.EventID,
+			"cohort_id": evt.CohortID,
+			"note":      "no incident_id — nothing to update",
+		})
+		return
+	}
+
+	if _, err := s.incidents.Get(r.Context(), evt.IncidentID); err != nil {
+		if errors.Is(err, incident.ErrNotFound) {
+			s.logger.Warn("cyberpath webhook: remediation event references unknown incident",
+				zap.String("event_id", evt.EventID),
+				zap.String("incident_id", evt.IncidentID),
+				zap.String("cohort_id", evt.CohortID),
+			)
+			writeJSON(w, http.StatusAccepted, map[string]string{
+				"status":      "acknowledged",
+				"event_id":    evt.EventID,
+				"incident_id": evt.IncidentID,
+				"note":        "incident not found — event logged, no timeline update",
+			})
+			return
+		}
+		s.logger.Error("cyberpath webhook: incident lookup failed",
+			zap.String("event_id", evt.EventID),
+			zap.String("incident_id", evt.IncidentID),
+			zap.Error(err),
+		)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	details, err := json.Marshal(map[string]string{
+		"cohort_id":    evt.CohortID,
+		"event_id":     evt.EventID,
+		"completed_at": evt.CompletedAt.Format(time.RFC3339),
+	})
+	if err != nil {
+		s.logger.Error("cyberpath webhook: marshal timeline details failed",
+			zap.String("event_id", evt.EventID), zap.Error(err))
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	entry := &incident.TimelineEntry{
+		EntryType: "cyberpath_remediation_completed",
+		ActorID:   "cyberpath",
+		Summary:   "CyberPath remediation training completed for cohort " + evt.CohortID,
+		Details:   details,
+	}
+	if _, err := s.incidents.AddTimelineEntry(r.Context(), evt.IncidentID, entry); err != nil {
+		s.logger.Error("cyberpath webhook: add timeline entry failed",
+			zap.String("event_id", evt.EventID),
+			zap.String("incident_id", evt.IncidentID),
+			zap.Error(err),
+		)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	s.logger.Info("cyberpath webhook: incident timeline updated",
+		zap.String("event_id", evt.EventID),
+		zap.String("incident_id", evt.IncidentID),
+		zap.String("cohort_id", evt.CohortID),
+	)
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":      "timeline_updated",
+		"event_id":    evt.EventID,
+		"incident_id": evt.IncidentID,
 	})
 }
 

@@ -9,6 +9,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Added
 - sinauth SSO integration — authenticate via the SIN identity provider (OAuth 2.0 / OIDC).
 - `auth.Config.Pepper` + `auth.NewHasher(cfg)` — thin wrapper around `github.com/opensecstack/sdk/password` for Argon2id API-key hashing. New config key `IRFLOW_AUTH_PEPPER` (≥ 16 bytes). Empty pepper at startup logs a warning; future features that need hashing (API keys, SSO token binding) call `auth.NewHasher` at their own init time and surface typed errors there
+- Two-person-rule (propose/approve) incident-action flow, replacing the old single-call `SubmitAction`: `POST /api/v1/incidents/{id}/actions` lets an authenticated Operator propose a governed action (identity from their own session, never a request field); `POST /api/v1/incidents/{id}/actions/{actionID}/approve` lets a SECOND, distinct authenticated user (the Verifier) approve it with their own bearer token — only at this step is CITADEL MARSHAL evaluated; `POST .../actions/{actionID}/reject` lets the Verifier reject outright without ever reaching CITADEL; `GET .../actions/pending` lists outstanding proposals
+- `migrations/003_pending_actions.sql` — new `pending_actions` table backing the propose/approve flow, with a `CHECK (verifier_user_id = '' OR verifier_user_id <> operator_user_id)` constraint enforcing Separation of Duties at the database level, independent of the application-layer check
+- `auth.RequireApprove()` role gate (admin, operator, verifier, service) for the new approve/reject endpoints; the actual SoD guarantee (verifier ≠ operator identity) is enforced in `incident.Service.ApproveAction`/`RejectAction`, not by this role gate
+- `incident.ErrSelfApproval` sentinel error (HTTP 400) returned when the approving/rejecting caller's authenticated identity matches the proposing Operator's
+
+### Changed
+- `internal/governance/citadel.go` — fixed a Kerkese type drift: `kerkesePerson.UserID` and the SoD identifiers are now real sinauth UUID strings, replacing a lossy `hashUserID()` string→int64 fold that IRFlow previously used to shoehorn UUIDs into an int64 field
 
 ## [1.0.0] — 2026-04-08
 

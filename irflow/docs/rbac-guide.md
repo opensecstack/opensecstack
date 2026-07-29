@@ -10,13 +10,13 @@ For the middleware that enforces them, see [internal/auth/middleware.go](../inte
 
 ## The five roles
 
-| Role | Read | Write (create/update) | Delete | Verify actions | Playbook auth |
+| Role | Read | Write (create/update) | Delete | Approve/reject pending actions | Playbook auth |
 |---|:-:|:-:|:-:|:-:|:-:|
-| `admin` | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `operator` | ✓ | ✓ | ✗ | ✗ (SoD) | ✓ |
+| `admin` | ✓ | ✓ | ✓ | ✓ (role gate only — cannot approve own proposal, see SoD below) | ✓ |
+| `operator` | ✓ | ✓ | ✗ | ✓ (role gate only — cannot approve own proposal, see SoD below) | ✓ |
 | `verifier` | ✓ | ✗ | ✗ | ✓ | ✗ |
 | `viewer` | ✓ | ✗ | ✗ | ✗ | ✗ |
-| `service` | ✓ | ✓ | ✗ | ✗ | ✓ (machine) |
+| `service` | ✓ | ✓ | ✗ | ✓ (role gate only — cannot approve own proposal, see SoD below) | ✓ (machine) |
 
 ### `admin`
 Unrestricted. Typical holders: security leads, on-call commanders
@@ -25,16 +25,22 @@ breaks the invariant that IRFlow records are append-only for audit.
 
 ### `operator`
 The daily driver of incident response. Operators create incidents,
-patch state (`open → investigating → contained`), submit actions (as
-the *initiating* half of SoD), attach IOCs, and author playbooks. They
-**cannot** verify their own actions — that requires a separate holder
-of `verifier` or `admin`.
+patch state (`open → investigating → contained`), *propose* governed
+actions (`POST /actions`, the initiating half of the two-person-rule
+flow), attach IOCs, and author playbooks. Because `canApprove` also
+covers `operator`, an operator can approve or reject a peer's proposal —
+but **cannot** approve their own: `incident.Service.ApproveAction`
+compares the authenticated caller's sinauth UUID against the proposing
+Operator's stored UUID and rejects a match with `ErrSelfApproval`,
+regardless of role.
 
 ### `verifier`
-The counterparty for Separation of Duties. Typical holders: peer
-operators, security engineers who are not on-call. A verifier can
-approve (`verify`) actions that an operator has submitted and see
-everything the operator can, but cannot themselves initiate an action.
+The default counterparty for Separation of Duties. Typical holders: peer
+operators, security engineers who are not on-call. A verifier can approve
+or reject pending actions that an operator has proposed
+(`POST /actions/{actionID}/approve` or `.../reject`) and see everything the
+operator can, but cannot themselves propose an action (`RequireWrite`
+excludes `verifier`).
 
 ### `viewer`
 Read-only. Use for dashboards, external auditors, executive summaries,
@@ -55,36 +61,63 @@ Request → [requestID] → [auditLog] → [metrics] → [JWT verify] → [role 
 ```
 
 The chain is fixed in [internal/api/server.go](../internal/api/server.go).
-Three guard helpers wrap handlers:
+Four guard helpers wrap handlers:
 
 | Guard | Effect |
 |---|---|
 | `auth.RequireRead` | Any known role passes |
-| `auth.RequireWrite` | Admin, operator, service |
+| `auth.RequireWrite` | Admin, operator, service — gates `POST /incidents`, `PATCH /incidents/{id}`, `POST /actions` (propose) |
 | `auth.RequireDelete` | Admin only |
+| `auth.RequireApprove` | Admin, operator, verifier, service — gates `POST /actions/{actionID}/approve` and `.../reject` |
 
-Verifier-specific endpoints (action verification) embed the role check
-in the handler rather than the middleware — the action flow also
-enforces actor ≠ verifier at the service layer.
+`RequireApprove` is deliberately broader than `RequireWrite` (it also
+admits `verifier`): the same coarse role (`operator`) can legitimately act
+as either party on different actions, so the role gate alone cannot
+enforce SoD — it just narrows who may attempt an approval. The actual
+guarantee is enforced one layer down, in the service.
 
-## Separation of Duties (SoD)
+## Separation of Duties (SoD) — the two-person-rule action flow
 
-The service layer rejects any action where `actor_id == verifier_id`:
+IRFlow's incident-action model is a two-step propose/approve flow, not a
+single call: an Operator proposes an action from their own authenticated
+session (`POST /api/v1/incidents/{id}/actions`), and it is only ever
+evaluated by CITADEL MARSHAL when a SECOND, distinct authenticated user
+(the Verifier) approves it with their own bearer token
+(`POST /api/v1/incidents/{id}/actions/{actionID}/approve`). A single HTTP
+caller can never supply both identities — each is derived from
+`auth.ClaimsFromContext` on its own request, never from a request body
+field.
 
 ```
-POST /api/v1/incidents/{id}/actions
-  ...
-  incident.Service.SubmitAction
-      ├─► SoD check (actor ≠ verifier)
+POST /api/v1/incidents/{id}/actions                     (Operator's session)
+  incident.Service.ProposeAction
+      └─► store.CreatePendingAction (status="pending")
+
+POST /api/v1/incidents/{id}/actions/{actionID}/approve   (Verifier's session)
+  incident.Service.ApproveAction
+      ├─► SoD check (verifierUserID == pa.OperatorUserID → ErrSelfApproval, 400)
       ├─► MarshalClient.Evaluate
       └─► store.AddAction
 ```
 
-A single user holding both `operator` and `verifier` roles **still**
-cannot self-verify — SoD compares the identities (`sub` JWT claim),
-not the roles. This is deliberate: an admin who tries to short-circuit
-the process will be caught at the service-layer SoD guard even if the
-middleware permits their role.
+The service layer rejects approval/rejection whenever the caller's user ID
+matches the proposal's `operator_user_id`. A single user holding both
+`operator` and `verifier` roles **still** cannot self-approve — the SoD
+check compares real sinauth UUIDs from two separate authenticated
+sessions, not roles. This is deliberate: an admin who tries to
+short-circuit the process is caught at the service-layer SoD guard even
+though `RequireApprove` would otherwise let their role through.
+
+The check is enforced in two independent places, so a bug in one does not
+silently break the guarantee:
+
+1. **Application layer** — `incident.Service.ApproveAction` /
+   `RejectAction` return `ErrSelfApproval` (mapped to HTTP 400) when
+   `verifierUserID == pa.OperatorUserID`.
+2. **Database layer** — `migrations/003_pending_actions.sql` adds
+   `CHECK (verifier_user_id = '' OR verifier_user_id <> operator_user_id)`
+   on the `pending_actions` table, so even a direct SQL write or a future
+   application bug cannot persist a self-approved row.
 
 ## Dev mode
 

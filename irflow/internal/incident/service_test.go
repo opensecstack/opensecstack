@@ -16,18 +16,20 @@ import (
 
 // mockStore implements Store entirely in memory for unit testing.
 type mockStore struct {
-	incidents map[string]*Incident
-	actions   map[string][]IncidentAction
-	iocs      map[string][]IOCEnrichment
-	timeline  map[string][]TimelineEntry
+	incidents      map[string]*Incident
+	actions        map[string][]IncidentAction
+	iocs           map[string][]IOCEnrichment
+	timeline       map[string][]TimelineEntry
+	pendingActions map[string]*PendingAction
 }
 
 func newMockStore() *mockStore {
 	return &mockStore{
-		incidents: make(map[string]*Incident),
-		actions:   make(map[string][]IncidentAction),
-		iocs:      make(map[string][]IOCEnrichment),
-		timeline:  make(map[string][]TimelineEntry),
+		incidents:      make(map[string]*Incident),
+		actions:        make(map[string][]IncidentAction),
+		iocs:           make(map[string][]IOCEnrichment),
+		timeline:       make(map[string][]TimelineEntry),
+		pendingActions: make(map[string]*PendingAction),
 	}
 }
 
@@ -114,6 +116,40 @@ func (m *mockStore) ListActions(_ context.Context, incidentID string) ([]Inciden
 	return m.actions[incidentID], nil
 }
 
+func (m *mockStore) CreatePendingAction(_ context.Context, pa *PendingAction) error {
+	cp := *pa
+	m.pendingActions[pa.ID] = &cp
+	return nil
+}
+
+func (m *mockStore) GetPendingAction(_ context.Context, id string) (*PendingAction, error) {
+	pa, ok := m.pendingActions[id]
+	if !ok {
+		return nil, ErrPendingActionNotFound
+	}
+	cp := *pa
+	return &cp, nil
+}
+
+func (m *mockStore) UpdatePendingAction(_ context.Context, pa *PendingAction) error {
+	if _, ok := m.pendingActions[pa.ID]; !ok {
+		return ErrPendingActionNotFound
+	}
+	cp := *pa
+	m.pendingActions[pa.ID] = &cp
+	return nil
+}
+
+func (m *mockStore) ListPendingActions(_ context.Context, incidentID string) ([]PendingAction, error) {
+	var out []PendingAction
+	for _, pa := range m.pendingActions {
+		if pa.IncidentID == incidentID {
+			out = append(out, *pa)
+		}
+	}
+	return out, nil
+}
+
 func (m *mockStore) AddIOC(_ context.Context, ioc *IOCEnrichment) error {
 	cp := *ioc
 	m.iocs[ioc.IncidentID] = append(m.iocs[ioc.IncidentID], cp)
@@ -122,6 +158,12 @@ func (m *mockStore) AddIOC(_ context.Context, ioc *IOCEnrichment) error {
 
 func (m *mockStore) ListIOCs(_ context.Context, incidentID string) ([]IOCEnrichment, error) {
 	return m.iocs[incidentID], nil
+}
+
+func (m *mockStore) AddTimelineEntry(_ context.Context, entry *TimelineEntry) error {
+	cp := *entry
+	m.timeline[entry.IncidentID] = append(m.timeline[entry.IncidentID], cp)
+	return nil
 }
 
 func (m *mockStore) GetTimeline(_ context.Context, incidentID string) ([]TimelineEntry, error) {
@@ -495,7 +537,7 @@ func TestDeleteIncident_NotFound(t *testing.T) {
 	}
 }
 
-func TestSubmitAction_Success(t *testing.T) {
+func TestProposeAndApproveAction_Success(t *testing.T) {
 	svc, store := newTestService()
 	ctx := context.Background()
 
@@ -504,14 +546,23 @@ func TestSubmitAction_Success(t *testing.T) {
 		Severity: SeverityP1,
 	})
 
-	action, err := svc.SubmitAction(ctx, inc.ID, &SubmitActionRequest{
+	pa, err := svc.ProposeAction(ctx, inc.ID, "user-alice", "operator", &ProposeActionRequest{
 		ActionType:  "contain",
-		OperatorID:  "user-alice",
-		VerifierID:  "user-bob",
 		Description: "Isolated affected host",
 	})
 	if err != nil {
-		t.Fatalf("SubmitAction returned error: %v", err)
+		t.Fatalf("ProposeAction returned error: %v", err)
+	}
+	if pa.Status != PendingActionStatusPending {
+		t.Errorf("Status = %q, want %q", pa.Status, PendingActionStatusPending)
+	}
+	if pa.OperatorUserID != "user-alice" {
+		t.Errorf("OperatorUserID = %q, want user-alice", pa.OperatorUserID)
+	}
+
+	action, err := svc.ApproveAction(ctx, inc.ID, pa.ID, "user-bob", "verifier", "bob-token")
+	if err != nil {
+		t.Fatalf("ApproveAction returned error: %v", err)
 	}
 	if action.ID == "" {
 		t.Error("expected non-empty action ID")
@@ -519,19 +570,32 @@ func TestSubmitAction_Success(t *testing.T) {
 	if action.IncidentID != inc.ID {
 		t.Errorf("IncidentID = %q, want %q", action.IncidentID, inc.ID)
 	}
+	if action.OperatorID != "user-alice" || action.VerifierID != "user-bob" {
+		t.Errorf("OperatorID/VerifierID = %q/%q, want user-alice/user-bob", action.OperatorID, action.VerifierID)
+	}
 
 	// Verify the action was stored.
 	stored := store.actions[inc.ID]
 	if len(stored) != 1 {
 		t.Fatalf("expected 1 stored action, got %d", len(stored))
 	}
+
+	// The pending action record itself should now reflect the approval.
+	updated, err := svc.GetPendingAction(ctx, inc.ID, pa.ID)
+	if err != nil {
+		t.Fatalf("GetPendingAction returned error: %v", err)
+	}
+	if updated.Status != PendingActionStatusApproved {
+		t.Errorf("pending Status = %q, want %q", updated.Status, PendingActionStatusApproved)
+	}
+	if updated.ActionID != action.ID {
+		t.Errorf("pending ActionID = %q, want %q", updated.ActionID, action.ID)
+	}
 }
 
-func TestSubmitAction_SoD(t *testing.T) {
-	// Separation of Duties enforcement: when operator == verifier the request
-	// should ideally be rejected. The SoD check is currently performed in the
-	// HTTP handler layer and will be fully enforced via CITADEL MARSHAL
-	// integration. This test documents the expected service-level behavior.
+func TestApproveAction_SelfApprovalRejected(t *testing.T) {
+	// Separation of Duties, enforced at the service layer: the same
+	// authenticated identity can never be both Operator and Verifier.
 	svc, _ := newTestService()
 	ctx := context.Background()
 
@@ -540,21 +604,61 @@ func TestSubmitAction_SoD(t *testing.T) {
 		Severity: SeverityP1,
 	})
 
-	// NOTE: The service layer currently does NOT enforce SoD; the HTTP handler
-	// rejects operator==verifier. Full SoD enforcement will be added when
-	// CITADEL MARSHAL integration is complete.
-	action, err := svc.SubmitAction(ctx, inc.ID, &SubmitActionRequest{
+	pa, err := svc.ProposeAction(ctx, inc.ID, "user-alice", "operator", &ProposeActionRequest{
 		ActionType:  "contain",
-		OperatorID:  "user-alice",
-		VerifierID:  "user-alice", // same user — should be caught by handler/CITADEL
 		Description: "Self-verified action",
 	})
 	if err != nil {
-		t.Fatalf("SubmitAction returned error: %v", err)
+		t.Fatalf("ProposeAction returned error: %v", err)
 	}
-	// At the service level the action is accepted; HTTP handler enforces SoD.
-	if action.OperatorID != action.VerifierID {
-		t.Error("expected operator == verifier for this test case")
+
+	_, err = svc.ApproveAction(ctx, inc.ID, pa.ID, "user-alice", "operator", "alice-token")
+	if !errors.Is(err, ErrSelfApproval) {
+		t.Fatalf("expected ErrSelfApproval, got: %v", err)
+	}
+}
+
+func TestApproveAction_AlreadyDecided(t *testing.T) {
+	svc, _ := newTestService()
+	ctx := context.Background()
+
+	inc, _ := svc.Create(ctx, &CreateIncidentRequest{
+		Title:    "Already decided test",
+		Severity: SeverityP2,
+	})
+
+	pa, _ := svc.ProposeAction(ctx, inc.ID, "user-alice", "operator", &ProposeActionRequest{ActionType: "contain"})
+	if _, err := svc.ApproveAction(ctx, inc.ID, pa.ID, "user-bob", "verifier", "bob-token"); err != nil {
+		t.Fatalf("first ApproveAction returned error: %v", err)
+	}
+
+	// A second decision attempt (by anyone) must fail — the pending action
+	// has already been decided.
+	if _, err := svc.ApproveAction(ctx, inc.ID, pa.ID, "user-carol", "verifier", "carol-token"); !errors.Is(err, ErrAlreadyDecided) {
+		t.Fatalf("expected ErrAlreadyDecided, got: %v", err)
+	}
+}
+
+func TestRejectAction_Success(t *testing.T) {
+	svc, _ := newTestService()
+	ctx := context.Background()
+
+	inc, _ := svc.Create(ctx, &CreateIncidentRequest{
+		Title:    "Reject test",
+		Severity: SeverityP2,
+	})
+
+	pa, _ := svc.ProposeAction(ctx, inc.ID, "user-alice", "operator", &ProposeActionRequest{ActionType: "contain"})
+
+	rejected, err := svc.RejectAction(ctx, inc.ID, pa.ID, "user-bob", "verifier")
+	if err != nil {
+		t.Fatalf("RejectAction returned error: %v", err)
+	}
+	if rejected.Status != PendingActionStatusRejected {
+		t.Errorf("Status = %q, want %q", rejected.Status, PendingActionStatusRejected)
+	}
+	if rejected.VerifierUserID != "user-bob" {
+		t.Errorf("VerifierUserID = %q, want user-bob", rejected.VerifierUserID)
 	}
 }
 
@@ -588,6 +692,41 @@ func TestAddIOC_Success(t *testing.T) {
 	stored := store.iocs[inc.ID]
 	if len(stored) != 1 {
 		t.Fatalf("expected 1 stored IOC, got %d", len(stored))
+	}
+}
+
+func TestAddTimelineEntry_Success(t *testing.T) {
+	svc, store := newTestService()
+	ctx := context.Background()
+
+	inc, _ := svc.Create(ctx, &CreateIncidentRequest{
+		Title:    "timeline entry test",
+		Severity: SeverityP2,
+	})
+
+	entry := &TimelineEntry{
+		EntryType: "cyberpath_remediation_completed",
+		ActorID:   "cyberpath",
+		Summary:   "CyberPath remediation training completed for cohort cohort-1",
+	}
+
+	created, err := svc.AddTimelineEntry(ctx, inc.ID, entry)
+	if err != nil {
+		t.Fatalf("AddTimelineEntry returned error: %v", err)
+	}
+	if created.ID == "" {
+		t.Error("expected non-empty timeline entry ID")
+	}
+	if created.IncidentID != inc.ID {
+		t.Errorf("IncidentID = %q, want %q", created.IncidentID, inc.ID)
+	}
+
+	stored := store.timeline[inc.ID]
+	if len(stored) != 1 {
+		t.Fatalf("expected 1 stored timeline entry, got %d", len(stored))
+	}
+	if stored[0].EntryType != "cyberpath_remediation_completed" {
+		t.Errorf("EntryType = %q, want cyberpath_remediation_completed", stored[0].EntryType)
 	}
 }
 
@@ -752,7 +891,7 @@ func TestCreateIncident_SetsNIS2Required(t *testing.T) {
 	}
 }
 
-func TestSubmitAction_WithEvidence(t *testing.T) {
+func TestProposeAndApproveAction_WithEvidence(t *testing.T) {
 	svc, _ := newTestService()
 	ctx := context.Background()
 
@@ -762,15 +901,18 @@ func TestSubmitAction_WithEvidence(t *testing.T) {
 	})
 
 	evidence := json.RawMessage(`{"screenshots":["s3://bucket/screenshot1.png"],"logs":"see splunk query XYZ"}`)
-	action, err := svc.SubmitAction(ctx, inc.ID, &SubmitActionRequest{
+	pa, err := svc.ProposeAction(ctx, inc.ID, "user-alice", "operator", &ProposeActionRequest{
 		ActionType:  "eradicate",
-		OperatorID:  "user-alice",
-		VerifierID:  "user-bob",
 		Description: "Removed malware from host",
 		Evidence:    evidence,
 	})
 	if err != nil {
-		t.Fatalf("SubmitAction returned error: %v", err)
+		t.Fatalf("ProposeAction returned error: %v", err)
+	}
+
+	action, err := svc.ApproveAction(ctx, inc.ID, pa.ID, "user-bob", "verifier", "bob-token")
+	if err != nil {
+		t.Fatalf("ApproveAction returned error: %v", err)
 	}
 	if action.Evidence == nil {
 		t.Error("expected evidence to be preserved")

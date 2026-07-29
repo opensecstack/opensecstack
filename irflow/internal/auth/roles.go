@@ -57,3 +57,14 @@ func canWrite(role string) bool {
 func canDelete(role string) bool {
 	return role == RoleAdmin
 }
+
+// canApprove reports whether a role may approve or reject a pending action
+// (the Verifier side of Separation of Duties). Broader than canWrite:
+// operators and verifiers both qualify, since the same coarse role can
+// legitimately act as either party on different actions. The actual SoD
+// guarantee — that a single identity cannot be both Operator and Verifier
+// on the SAME action — is enforced by user ID comparison in
+// incident.Service.ApproveAction/RejectAction, not by this role gate.
+func canApprove(role string) bool {
+	return role == RoleAdmin || role == RoleOperator || role == RoleVerifier || role == RoleService
+}

@@ -70,10 +70,10 @@ func (m *mockNIS2) NotifyIncident(_ context.Context, inc *Incident) error {
 }
 
 // ---------------------------------------------------------------------------
-// SubmitAction + MARSHAL
+// ApproveAction + MARSHAL
 // ---------------------------------------------------------------------------
 
-func TestSubmitAction_MarshalExecuteAllowsAction(t *testing.T) {
+func TestApproveAction_MarshalExecuteAllowsAction(t *testing.T) {
 	store := newMockStore()
 	seed := &Incident{ID: "inc-1", Title: "seed", Severity: SeverityP2, Status: StatusOpen, Source: SourceManual}
 	store.incidents[seed.ID] = seed
@@ -81,12 +81,15 @@ func TestSubmitAction_MarshalExecuteAllowsAction(t *testing.T) {
 	m := &mockMarshal{result: &MarshalResult{Outcome: MarshalOutcomeExecute, WORMEntryID: "worm-42"}}
 	svc := NewService(store, WithMarshal(m))
 
-	action, err := svc.SubmitAction(context.Background(), "inc-1", &SubmitActionRequest{
+	pa, err := svc.ProposeAction(context.Background(), "inc-1", "alice", "operator", &ProposeActionRequest{
 		ActionType:  "contain",
-		OperatorID:  "alice",
-		VerifierID:  "bob",
 		Description: "block endpoint",
 	})
+	if err != nil {
+		t.Fatalf("ProposeAction returned error: %v", err)
+	}
+
+	action, err := svc.ApproveAction(context.Background(), "inc-1", pa.ID, "bob", "verifier", "bob-token")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -102,9 +105,17 @@ func TestSubmitAction_MarshalExecuteAllowsAction(t *testing.T) {
 	if len(store.actions["inc-1"]) != 1 {
 		t.Errorf("got %d stored actions, want 1", len(store.actions["inc-1"]))
 	}
+	// The Kerkese CITADEL received must carry both real user IDs and the
+	// Verifier's real bearer token.
+	if m.lastReq.OperatorID != "alice" || m.lastReq.VerifierID != "bob" {
+		t.Errorf("MarshalRequest operator/verifier = %q/%q, want alice/bob", m.lastReq.OperatorID, m.lastReq.VerifierID)
+	}
+	if m.lastReq.VerifierToken != "bob-token" {
+		t.Errorf("MarshalRequest.VerifierToken = %q, want bob-token", m.lastReq.VerifierToken)
+	}
 }
 
-func TestSubmitAction_MarshalRefuseRejectsAction(t *testing.T) {
+func TestApproveAction_MarshalRefuseRejectsAction(t *testing.T) {
 	store := newMockStore()
 	store.incidents["inc-1"] = &Incident{ID: "inc-1", Status: StatusOpen, Severity: SeverityP2}
 
@@ -114,45 +125,48 @@ func TestSubmitAction_MarshalRefuseRejectsAction(t *testing.T) {
 	}}
 	svc := NewService(store, WithMarshal(m))
 
-	_, err := svc.SubmitAction(context.Background(), "inc-1", &SubmitActionRequest{
-		ActionType: "contain",
-		OperatorID: "alice",
-		VerifierID: "bob",
-	})
+	pa, _ := svc.ProposeAction(context.Background(), "inc-1", "alice", "operator", &ProposeActionRequest{ActionType: "contain"})
+
+	_, err := svc.ApproveAction(context.Background(), "inc-1", pa.ID, "bob", "verifier", "bob-token")
 	if !errors.Is(err, ErrMarshalRefused) {
 		t.Fatalf("err = %v, want ErrMarshalRefused", err)
 	}
 	if got := store.actions["inc-1"]; len(got) != 0 {
 		t.Errorf("refused action should not be stored, got %d", len(got))
 	}
+	updated, _ := store.GetPendingAction(context.Background(), pa.ID)
+	if updated.Status != PendingActionStatusRefused {
+		t.Errorf("pending Status = %q, want %q", updated.Status, PendingActionStatusRefused)
+	}
 }
 
-func TestSubmitAction_MarshalHardStopRejectsAction(t *testing.T) {
+func TestApproveAction_MarshalHardStopRejectsAction(t *testing.T) {
 	store := newMockStore()
 	store.incidents["inc-1"] = &Incident{ID: "inc-1", Status: StatusOpen, Severity: SeverityP1}
 
 	m := &mockMarshal{result: &MarshalResult{Outcome: MarshalOutcomeHardStop}}
 	svc := NewService(store, WithMarshal(m))
 
-	_, err := svc.SubmitAction(context.Background(), "inc-1", &SubmitActionRequest{
-		ActionType: "deploy_patch",
-		OperatorID: "alice",
-		VerifierID: "bob",
-	})
+	pa, _ := svc.ProposeAction(context.Background(), "inc-1", "alice", "operator", &ProposeActionRequest{ActionType: "deploy_patch"})
+
+	_, err := svc.ApproveAction(context.Background(), "inc-1", pa.ID, "bob", "verifier", "bob-token")
 	if !errors.Is(err, ErrMarshalHardStop) {
 		t.Fatalf("err = %v, want ErrMarshalHardStop", err)
 	}
+	updated, _ := store.GetPendingAction(context.Background(), pa.ID)
+	if updated.Status != PendingActionStatusBlocked {
+		t.Errorf("pending Status = %q, want %q", updated.Status, PendingActionStatusBlocked)
+	}
 }
 
-func TestSubmitAction_NoMarshalWorksAsBefore(t *testing.T) {
+func TestApproveAction_NoMarshalWorksAsBefore(t *testing.T) {
 	store := newMockStore()
+	store.incidents["inc-1"] = &Incident{ID: "inc-1", Status: StatusOpen, Severity: SeverityP2}
 	svc := NewService(store) // no marshal → local-only
 
-	action, err := svc.SubmitAction(context.Background(), "inc-1", &SubmitActionRequest{
-		ActionType: "contain",
-		OperatorID: "alice",
-		VerifierID: "bob",
-	})
+	pa, _ := svc.ProposeAction(context.Background(), "inc-1", "alice", "operator", &ProposeActionRequest{ActionType: "contain"})
+
+	action, err := svc.ApproveAction(context.Background(), "inc-1", pa.ID, "bob", "verifier", "bob-token")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

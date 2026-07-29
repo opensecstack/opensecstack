@@ -19,7 +19,7 @@ WORM append semantics, see [worm-log.md](./worm-log.md).
 
 ```
 Kerkese → Gate 1 AuthN → Gate 2 AuthZ → Gate 3 NDS → Gate 4 AUGUR → Gate 5 WORM
-           (session)      (RBAC)         (SoD)        (heuristics)   (audit)
+           (sinauth JWT)  (RBAC)         (SoD)        (heuristics)   (audit)
                                                                         ↓
                                                                    Always runs
 ```
@@ -34,33 +34,77 @@ The engine code is in [internal/marshal/marshal.go](../internal/marshal/marshal.
 
 ## Gate 1 — AuthN (Authentication)
 
-**Question:** does `actor.user_id` have a valid session, and does the
-claimed `role` match what the session recorded?
+**Question:** does `ActorToken` verify as a live sinauth bearer JWT
+whose `sub` matches `actor.user_id`? Also verifies `SigOperator`
+against the operator's registered Ed25519 key — see
+[ADR-004](../adrs/004-operator-verifier-ed25519-signatures.md).
 
-**Implementation:** `Store.SessionExists(ctx, userID) → (role, roleGroup, exists, err)`.
+**Implementation:** the token check is `TokenVerifier.Verify(ctx, token) → (userID, role, err)`,
+implemented by `internal/auth.SinauthVerifier`, which wraps
+`sdk/go/sinauth.Client.VerifyToken` — a real cryptographic check
+against sinauth's JWKS, not a local session lookup. See
+[ADR-005](../adrs/005-sinauth-identity-bridge.md); CITADEL has no local
+sessions table. The two checks are gated independently
+(`EnforceIdentity` for the token, `EnforceSignatures` for the
+signature) — see
+[ADR-006](../adrs/006-split-enforce-identity-and-signatures.md).
 
 **Fail cases:**
 
 | Condition | Reason string |
 |---|---|
-| Session lookup errors | `AUTH_ERROR: session lookup failed for user_id=N` |
-| No session exists | `AUTH_FAIL: no valid session for user_id=N` |
-| Claimed role ≠ session role | `AUTH_FAIL: claimed role "X" does not match session role "Y"` |
+| Token verification errors | `AUTH_FAIL: actor_token invalid or expired: ...` |
+| Missing token | `AUTH_FAIL: no actor_token provided for user_id=N` |
+| Token subject ≠ claimed `actor.user_id` | `AUTH_FAIL: actor_token subject "X" does not match actor.user_id "Y"` |
 
-**Outcome on fail:** `REFUSE`.
+**Outcome on fail:** `WARN` when the corresponding flag
+(`EnforceIdentity` for the token check, `EnforceSignatures` for the
+signature check) is at its default `false`; `REFUSE` once the flag is
+enabled. Both default to `false` in v1.0.0 — see
+[ADR-006](../adrs/006-split-enforce-identity-and-signatures.md) for why
+neither is on by default yet.
 
 ## Gate 2 — AuthZ (Authorisation)
 
 **Question:** is `actor.role` permitted to perform `action.type`?
 
-**Implementation:** in-code RBAC map in `roleAllowed(role, actionType)`.
-Typical mapping: `admin` can do anything; `operator` can `CONTAIN`,
-`PATCH`, `CREATE_INCIDENT`; `verifier` can `VERIFY`; etc.
+**Implementation:** two checks composed via `combineChecks` (the same
+helper Gate 1/Gate 3 use for their soft-gated sub-checks):
 
-**Fail case:** the role/action pair is absent from the map.
+1. **`rbacMap` check** (`roleAllowed(role, actionType)`) — in-code RBAC
+   map. Typical mapping: `admin` can do anything; `operator` can
+   `CONTAIN`, `PATCH`, `CREATE_INCIDENT`; `verifier` can `VERIFY`; etc.
+   `enforce: true` always, unconditionally — this is the permanent
+   safety net Gate 2 has always provided and it is never weakened by
+   check 2 below.
+2. **Permify-snapshot check** (`permifyCheck`) — a new, optional
+   soft-launch check against a periodically-refreshed local snapshot of
+   Permify-derived role→action policy (`internal/permifysync.Snapshot`,
+   read via a `PermifySnapshot.Allowed(role, actionType) (allowed,
+   known bool)` interface method). No live per-request call to
+   Permify — Gate 2 is in the hot path of every governed action.
+   `enforce: cfg.EnforcePermifyAuthz` (config
+   `citadel.enforce_permify_authz`, default `false`). `known == false`
+   (Permify has synced no opinion for this role/action yet) is always
+   treated as a **PASS**; only `known=true, allowed=false` is a fail
+   candidate, and it only `REFUSE`s once the flag is on — until then it
+   only `WARN`s. A `nil` snapshot (unwired, or `PermifyURL` unset)
+   makes this check a no-op PASS for every role/action, identical to
+   pre-ADR-007 behavior. See
+   [ADR-007](../adrs/007-permify-gate2-snapshot.md).
 
-**Outcome on fail:** `REFUSE` with
-`AUTHZ_FAIL: role "X" is not permitted to perform "Y"`.
+**Fail cases:**
+
+| Condition | Status | Reason |
+|---|---|---|
+| Role/action pair absent from `rbacMap` | `REFUSE` (always) | `AUTHZ_FAIL: role "X" is not permitted to perform "Y"` |
+| Permify snapshot has `known=true, allowed=false` for this role/action | `WARN` (soft, default) / `REFUSE` (once `EnforcePermifyAuthz` is enabled) | combined per-check reason from `combineChecks` |
+
+**Outcome on fail:** `rbacMap` failing always produces `REFUSE`,
+regardless of the Permify flag. A Permify-known deny can only add a
+`WARN` while `EnforcePermifyAuthz` is off; once the flag is on, it can
+independently produce `REFUSE` even for a role/action pair `rbacMap`
+would otherwise have passed.
 
 ## Gate 3 — NDS (Separation of Duties)
 
@@ -71,16 +115,30 @@ they from different role groups?
 
 1. `sod.operator_user_id ≠ sod.verifier_user_id` — same identity is
    `HARD_STOP`, not merely `REFUSE`.
-2. Both user IDs resolve to valid sessions.
-3. Their role groups differ.
+2. Their role groups differ. Role groups are derived from the
+   producer-asserted `Actor.Role`/`Verifier.Role` (unchanged from
+   before ADR-005) — sinauth's role claim is scoped per sinauth
+   client, not to CITADEL's 5-role taxonomy, so it cannot substitute
+   here.
+3. Both `ActorToken` and `VerifierToken` verify as live sinauth
+   tokens whose subjects match `sod.operator_user_id`/`verifier_user_id`
+   (`TokenVerifier.Verify`, same mechanism as Gate 1 — no local
+   session table involved), and `SigVerifier` verifies against the
+   Verifier's registered Ed25519 key.
+
+Checks 1 and 2 are unconditional structural invariants (logic bugs if
+violated, not a rollout concern) and run before check 3, which is
+soft-gated the same way as Gate 1: token checks by `EnforceIdentity`,
+the signature check by `EnforceSignatures` — see
+[ADR-006](../adrs/006-split-enforce-identity-and-signatures.md).
 
 **Fail cases:**
 
 | Condition | Status | Reason |
 |---|---|---|
 | Operator ID == verifier ID | `HARD_STOP` | `NDS_SAME_IDENTITY: operator and verifier are the same user` |
-| Either user lacks a session | `FAIL` | `NDS_FAIL: operator/verifier has no valid session` |
 | Same role group (not "unknown") | `HARD_STOP` | `NDS_SAME_GROUP: operator and verifier are both in role group "X"` |
+| Either token/signature missing/invalid | `WARN` (soft, default) / `REFUSE` (once `EnforceIdentity`/`EnforceSignatures` is enabled) | combined per-check reason from `combineChecks` |
 
 **Why HARD_STOP on SoD violation:** same-identity dual control is a
 deliberate attempt to defeat the separation control. Downgrading it to

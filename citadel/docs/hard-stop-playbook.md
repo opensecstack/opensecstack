@@ -83,7 +83,7 @@ From the reason string, classify the event:
 | Pattern | Likely nature |
 |---|---|
 | `NDS_SAME_IDENTITY` | Misconfigured client auto-filling both IDs, OR spoofing. Check the client's auth context. |
-| `NDS_SAME_GROUP` | Role-group configuration error, OR colluding operators. Check `sessions.role_group` for both user_ids — if wrong, policy was mis-deployed; if right, it's a real SoD breach. |
+| `NDS_SAME_GROUP` | Role-group configuration error, OR colluding operators. Check the role-group mapping for the `role` each user's Kerkese asserted (`Actor.Role`/`Verifier.Role`) — if wrong, policy was mis-deployed; if right, it's a real SoD breach. |
 | `AUGUR_rule_03` | `DATA_EXPORT` without incident_id. Almost always exfiltration attempt. |
 
 ### Step 3 — Contain
@@ -94,8 +94,11 @@ Depending on the classification:
   fixed. Update the client's SoD wiring or the role groups and
   deploy.
 - **Real SoD breach / exfiltration attempt**: revoke the operator's
-  session immediately (`DELETE FROM sessions WHERE user_id = ?`);
-  rotate their credentials; start an investigation incident.
+  sinauth session/token immediately (sinauth-side revocation, not a
+  CITADEL table — CITADEL has no local session store), revoke their
+  registered signing key (`UPDATE signing_keys SET revoked_at = now()
+  WHERE user_id = ?`); rotate their credentials; start an
+  investigation incident.
 
 ### Step 4 — Preserve evidence
 

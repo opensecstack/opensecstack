@@ -247,9 +247,12 @@ response headers).
 
 ### Step 2 — Narrow the cause
 
-- **Sessions table:** if replica A sees user 42's session but replica
-  B doesn't, Gate 1 diverges. Replicas are supposed to share the DB;
-  this signals a DB-connection misconfig on one replica.
+- **Sinauth reachability:** if replica A can reach the sinauth JWKS
+  endpoint (`CITADEL_SINAUTH_ISSUER_URL`) but replica B can't (DNS,
+  egress NetworkPolicy, or a stale cached JWKS), Gate 1/Gate 3 token
+  verification diverges between replicas. This is a network/config
+  check on the affected replica, not a DB question — CITADEL has no
+  local session table (see [ADR-005](../adrs/005-sinauth-identity-bridge.md)).
 - **Rate-limit counters:** replica-local counter lag can cause Gate
   4 rule_02 divergence. The counters are in the DB, so genuine lag
   is a replication-bug indicator.
@@ -265,8 +268,9 @@ Keep it alive for forensics.
 ### Step 4 — Reproduce in-situ
 
 On the drained replica, replay the Kerkese with a fresh execution_id
-and capture full logs. Compare DB state against a healthy replica
-(`sessions`, `rate_limit_counters`).
+and capture full logs. Compare DB state (`signing_keys`,
+`rate_limit_counters`) and sinauth connectivity against a healthy
+replica.
 
 ### Step 5 — Recover
 

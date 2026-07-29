@@ -69,24 +69,33 @@ from the last known-good backup and re-apply cleanly.
 
 ## MARSHAL evaluation
 
-### All Kerkeses return `REFUSE` with `AUTH_FAIL: no valid session`
+### All Kerkeses return `REFUSE`/`WARN` with `AUTH_FAIL: actor_token invalid or expired`
 
-**Meaning:** Gate 1 rejects because `sessions` table is empty or
-stale.
+**Meaning:** Gate 1 rejects because `ActorToken` failed verification
+against sinauth's JWKS (`internal/auth.SinauthVerifier`) — expired
+token, wrong issuer, or `CitadelConfig.SinauthIssuerURL` pointing at
+the wrong sinauth instance. CITADEL has no local session table to
+inspect; the check is a live call to sinauth. See
+[ADR-005](../adrs/005-sinauth-identity-bridge.md).
 
-**Fix:** verify sessions are being populated. In v1.0.0, session
-management is minimal — sessions are inserted directly by upstream
-authenticators. If you're running without an upstream IdP sync, you
-need one.
+**Fix:** confirm `CITADEL_SINAUTH_ISSUER_URL` points at the correct,
+reachable sinauth instance and that the caller is forwarding a fresh
+bearer token as `ActorToken`/`VerifierToken`. `NewServer` fails fast
+at startup if the sinauth issuer is unreachable — check startup logs
+first. Whether this REFUSEs or only WARNs depends on `EnforceIdentity`
+(default `false`) — see
+[ADR-006](../adrs/006-split-enforce-identity-and-signatures.md).
 
 ### Kerkeses return `HARD_STOP: NDS_SAME_GROUP` for legitimate pairs
 
-**Meaning:** operator and verifier sessions carry `role_group =
-"unknown"` or both sit in the same group.
+**Meaning:** operator and verifier role groups — derived from the
+producer-asserted `Actor.Role`/`Verifier.Role` on the Kerkese, not
+looked up from any table — resolve to `role_group = "unknown"` or
+both sit in the same group.
 
-**Fix:** check `SELECT user_id, role, role_group FROM sessions WHERE
-user_id IN (operator_id, verifier_id)`. The role groups need to be
-configured distinct. A startup WARN logs when role groups are empty.
+**Fix:** check the caller's role-group mapping for the `role` values
+each side is submitting. The role groups need to be configured
+distinct. A startup WARN logs when role groups are empty.
 
 ### Kerkeses return `HARD_STOP: AUGUR_rule_03` for every DATA_EXPORT
 
@@ -242,20 +251,6 @@ overlapping secrets, rotation requires a coordinated cut-over.
 `citadel` pods to the Postgres Service.
 
 ## Operational
-
-### Sessions table growing unbounded
-
-**Meaning:** the GC worker for expired sessions isn't running.
-
-**Fix:** the worker is in-process; if it's down, CITADEL itself is
-having issues. In v1.0.0 the simplest path:
-
-```sql
-DELETE FROM sessions WHERE expires_at < now();
-```
-
-Run this manually from a maintenance job until the worker is
-reliable.
 
 ### `rate_limit_counters` table filling up
 

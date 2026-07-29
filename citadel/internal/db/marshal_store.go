@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"crypto/ed25519"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,19 +22,14 @@ func NewMarshalStore(d *DB) marshal.Store {
 	return &MarshalStore{db: d}
 }
 
-// SessionExists implements marshal.Store.
-func (s *MarshalStore) SessionExists(ctx context.Context, userID int64) (role, roleGroup string, exists bool, err error) {
-	return s.db.SessionExists(ctx, userID)
-}
-
 // ActionCount implements marshal.Store.
-func (s *MarshalStore) ActionCount(ctx context.Context, userID int64, windowDur time.Duration) (int, error) {
+func (s *MarshalStore) ActionCount(ctx context.Context, userID string, windowDur time.Duration) (int, error) {
 	return s.db.ActionCount(ctx, userID, windowDur)
 }
 
 // AppendWORM implements marshal.Store — converts *db.WORMEntry → *marshal.WORMEntry.
-func (s *MarshalStore) AppendWORM(ctx context.Context, source, eventType, projectID string, payload []byte) (*marshal.WORMEntry, error) {
-	entry, err := s.db.AppendWORM(ctx, source, eventType, projectID, payload)
+func (s *MarshalStore) AppendWORM(ctx context.Context, source, eventType, projectID string, payload []byte, sigOperator, sigVerifier string) (*marshal.WORMEntry, error) {
+	entry, err := s.db.AppendWORM(ctx, source, eventType, projectID, payload, sigOperator, sigVerifier)
 	if err != nil {
 		return nil, err
 	}
@@ -41,5 +37,13 @@ func (s *MarshalStore) AppendWORM(ctx context.Context, source, eventType, projec
 		ID:          uuid.UUID(entry.ID),
 		SequenceNum: entry.SequenceNum,
 		ChainHash:   entry.ChainHash,
+		SigOperator: entry.SigOperator,
+		SigVerifier: entry.SigVerifier,
 	}, nil
+}
+
+// GetSigningKey implements marshal.Store.
+func (s *MarshalStore) GetSigningKey(ctx context.Context, userID string) (ed25519.PublicKey, bool, error) {
+	pub, _, exists, err := s.db.GetActiveKey(ctx, userID)
+	return pub, exists, err
 }

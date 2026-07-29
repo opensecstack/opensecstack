@@ -57,7 +57,7 @@ func (w *WORM) Emit(rw http.ResponseWriter, r *http.Request) {
 		payload = req.Payload
 	}
 
-	entry, err := w.db.AppendWORM(r.Context(), req.Source, req.EventType, req.ProjectID, payload)
+	entry, err := w.db.AppendWORM(r.Context(), req.Source, req.EventType, req.ProjectID, payload, "", "")
 	if err != nil {
 		w.logger.Error().Err(err).Msg("worm emit: append failed")
 		http.Error(rw, `{"error":"internal server error"}`, http.StatusInternalServerError)

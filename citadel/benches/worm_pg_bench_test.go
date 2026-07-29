@@ -38,7 +38,7 @@ func BenchmarkWORM_AppendSync(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_, err := d.AppendWORM(ctx, "bench", "bench.append", "bench-pg", payload)
+		_, err := d.AppendWORM(ctx, "bench", "bench.append", "bench-pg", payload, "", "")
 		if err != nil {
 			b.Fatalf("AppendWORM: %v", err)
 		}
@@ -61,7 +61,7 @@ func BenchmarkWORM_VerifyChain_1000(b *testing.B) {
 		payload := []byte(fmt.Sprintf(
 			`{"benchmark":true,"seq":%d,"source":"verify_bench"}`, i,
 		))
-		if _, err := d.AppendWORM(ctx, "bench", "bench.verify_setup", "bench-verify", payload); err != nil {
+		if _, err := d.AppendWORM(ctx, "bench", "bench.verify_setup", "bench-verify", payload, "", ""); err != nil {
 			b.Fatalf("setup AppendWORM[%d]: %v", i, err)
 		}
 	}

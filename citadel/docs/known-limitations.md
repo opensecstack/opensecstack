@@ -55,6 +55,35 @@ prod), fast key rotation (quarterly), monitored secret-manager access.
 
 ## MARSHAL gates
 
+### `rbacMap`/`roleGroupMap` coverage gap (Gate 2)
+
+**Status:** `rbacMap`/`roleGroupMap` (`internal/marshal/types.go`)
+currently define 5 roles (`admin`, `operator`, `analyst`, `viewer`,
+`auditor`) and an action-type vocabulary drawn only from
+apiguard/irflow/threatflow — this is disclosed in the IEEE paper's
+limitations section ("Gate 2/Gate 3 policy-map coverage"). Action
+types and roles introduced by the ecosystem's other platforms are not
+yet represented, even though 9 producer platforms now submit real
+Kerkese requests to MARSHAL.
+
+**Impact:** most real `evaluate()` calls whose `action.type` or
+`actor.role` isn't in these maps currently `REFUSE` at Gate 2 (AuthZ),
+which is a hard, unconditional check with no soft mode.
+
+**Mitigation status:** a Permify-based mitigation now exists in
+soft-launch form — Gate 2 also runs an optional check against a
+periodically-refreshed local snapshot of Permify-derived role→action
+policy (`internal/permifysync`, `EnforcePermifyAuthz` default
+`false`). This does **not** yet close the gap: the synced snapshot is
+currently expected to be empty, since sinauth's Permify schema doesn't
+yet model CITADEL's action-type vocabulary. `rbacMap` remains the
+permanent, unconditionally-enforced safety net either way. See
+[ADR-007](../adrs/007-permify-gate2-snapshot.md).
+
+**Roadmap:** extend the policy maps (and/or the Permify schema), or
+move to a project-scoped, database-backed policy table, as each
+additional platform's action vocabulary is onboarded to Gate 2/Gate 3.
+
 ### AUGUR rule set is small
 
 **Status:** three rules in v1.0.0 — off-hours, high-frequency,
@@ -69,8 +98,10 @@ a rule-plugin system in v2.0.
 
 ### Gate 3 depends on correct role-group config
 
-**Status:** Gate 3 uses `sessions.role_group` to compare operator and
-verifier. If role groups are all `"unknown"` (default for unconfigured
+**Status:** Gate 3 derives role groups from the producer-asserted
+`Actor.Role`/`Verifier.Role` on the Kerkese (not a local session
+table — see [ADR-005](../adrs/005-sinauth-identity-bridge.md)). If
+role groups are all `"unknown"` (default for unconfigured
 deployments), Gate 3 falls back to same-identity check only.
 
 **Impact:** on a misconfigured deployment, two operators with

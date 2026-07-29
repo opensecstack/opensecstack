@@ -66,17 +66,25 @@ Confirm:
 - Nobody unexpected has read access to the secret manager path.
 - Last rotation date is within the rotation cadence from [SECURITY.md](../SECURITY.md).
 
-### Session TTL sanity
+### Signing key hygiene
+
+CITADEL has no local session table or session GC worker to check
+(Gate 1/Gate 3 authenticate against a live sinauth token — see
+[ADR-005](../adrs/005-sinauth-identity-bridge.md)). What is worth a
+monthly look is stale registered signing keys:
 
 ```sql
--- Expired sessions still in the table
-SELECT count(*) FROM sessions WHERE expires_at < now();
-
--- Should be ~0 if the GC worker is running
+-- Active keys with no matching activity in the last 90 days may
+-- belong to an off-boarded user and should be reviewed for revocation.
+SELECT user_id, key_id, created_at
+FROM signing_keys
+WHERE revoked_at IS NULL
+  AND created_at < now() - interval '90 days';
 ```
 
-If > 1000 expired sessions are sitting around, the GC worker is
-broken. Check its logs; restart if needed.
+Cross-check against your identity provider's (sinauth's) active user
+list; revoke (`UPDATE signing_keys SET revoked_at = now() WHERE ...`)
+any key belonging to a user who is no longer active there.
 
 ## Quarterly
 

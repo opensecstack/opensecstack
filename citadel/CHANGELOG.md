@@ -6,6 +6,31 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+- **Gate 2 (AuthZ) rewrite — optional Permify-snapshot soft-check.**
+  `gate2AuthZ` (`internal/marshal/marshal.go`) now composes two checks
+  via `combineChecks`: the existing `rbacMap` check (permanent,
+  unconditionally enforced — unchanged and never weakened), and a new
+  Permify-snapshot check (`enforce: cfg.EnforcePermifyAuthz`, default
+  `false`) backed by a new `PermifySnapshot` interface. An
+  unknown/unsynced role-action pair is always treated as PASS; a
+  known-deny only `WARN`s until `EnforcePermifyAuthz` is explicitly
+  enabled. See [ADR-007](./adrs/007-permify-gate2-snapshot.md).
+- **`internal/permifysync` package** — a `time.Ticker`-driven goroutine
+  that periodically refreshes a local `permify_role_action_snapshot`
+  table from the same Permify instance/schema sinauth's `internal/authz`
+  writes to, and exposes a fast in-memory `Snapshot.Allowed(role,
+  actionType)` read used by Gate 2. No live per-request call to Permify.
+- **Migration `005_permify_policy_snapshot.sql`** — creates
+  `permify_role_action_snapshot` (`role`, `action_type`, `allowed`,
+  `synced_at`).
+- New config (`CitadelConfig`): `PermifyURL`
+  (`CITADEL_CITADEL_PERMIFY_URL`, default `""`), `EnforcePermifyAuthz`
+  (`CITADEL_CITADEL_ENFORCE_PERMIFY_AUTHZ`, default `false`),
+  `PermifySyncInterval` (`CITADEL_CITADEL_PERMIFY_SYNC_INTERVAL`,
+  default `5m`).
+- **ADR-007** — Permify-derived Gate 2 snapshot check.
+
 ## [1.0.0] — 2026-04-08
 
 ### Added

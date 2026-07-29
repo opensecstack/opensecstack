@@ -55,6 +55,12 @@ only acceptable on a fully-private network.
 | `CITADEL_CITADEL_MASTER_KEY` | — | **Required in production.** 64 hex characters = 32-byte Ed25519 private key for anchor signing. Empty → anchor signing disabled with a WARN log. |
 | `CITADEL_CITADEL_ANCHOR_INTERVAL` | `100` | Anchor every N WORM entries. See [chain-anchor.md § Configuration](./chain-anchor.md#configuration) for the trade-offs. |
 | `CITADEL_CITADEL_GENESIS_HASH` | `b94f6f125c79e3a5ffaa826f584c10d52ada669e6762051b826b55776d05a15` | Pre-computed SHA-256("CITADEL-GENESIS-SIN-v1"). **Do not change** after the first entry. Changing the genesis invalidates every chain_hash downstream. |
+| `CITADEL_CITADEL_SINAUTH_ISSUER_URL` | — | **Required.** sinauth OIDC issuer URL (e.g. `https://auth.sin.to`) that Gate 1/Gate 3 verify Actor/Verifier bearer tokens (`actor_token`/`verifier_token`) against. `NewServer` fetches the OIDC discovery document once at startup and **fails to start** if this is empty, unreachable, or misconfigured — see [ADR-005](../adrs/005-sinauth-identity-bridge.md). |
+| `CITADEL_CITADEL_ENFORCE_IDENTITY` | `false` | When `true`, Gate 1 (AuthN) and Gate 3 (NDS) `REFUSE` a Kerkese whose `actor_token`/`verifier_token` is missing, invalid, or doesn't match the claimed `user_id`, instead of only warning. **Off by default** — apiguard's default config and threatflow submit a placeholder Verifier with no `verifier_token`; turning this on unconditionally today would refuse those platforms' default governed actions. See [ADR-006](../adrs/006-split-enforce-identity-and-signatures.md). |
+| `CITADEL_CITADEL_ENFORCE_SIGNATURES` | `false` | When `true`, Gate 1 (AuthN) and Gate 3 (NDS) `REFUSE` a Kerkese whose `sig_operator`/`sig_verifier` Ed25519 signature is missing, unregistered, or invalid, instead of only warning. **Off by default** — no producer platform has per-user Ed25519 key custody / signing UX yet. See [ADR-004](../adrs/004-operator-verifier-ed25519-signatures.md). |
+| `CITADEL_CITADEL_PERMIFY_URL` | `""` | The Permify instance/schema Gate 2's optional snapshot check reads from — the same instance sinauth's `internal/authz` writes to, not a separate one (see sinauth's `adrs/006-permify-authorization-engine.md`). Empty → the Gate 2 Permify sub-check is a no-op PASS for every role/action, identical to rbacMap-only behavior. |
+| `CITADEL_CITADEL_ENFORCE_PERMIFY_AUTHZ` | `false` | When `true`, Gate 2 (AuthZ) `REFUSE`s a Kerkese whose role/action pair the synced Permify snapshot explicitly denies (`known=true, allowed=false`), in addition to the always-enforced `rbacMap` check. **Off by default** (soft-launch) — a known-deny only `WARN`s until this is enabled; an unknown/unsynced role-action pair is always treated as PASS, never REFUSE. See [ADR-007](../adrs/007-permify-gate2-snapshot.md). |
+| `CITADEL_CITADEL_PERMIFY_SYNC_INTERVAL` | `5m` | How often `internal/permifysync`'s ticker goroutine refreshes the local `permify_role_action_snapshot` table Gate 2 reads from. Gate 2 never calls Permify live, per-request. See [ADR-007](../adrs/007-permify-gate2-snapshot.md). |
 
 Generate an anchor key:
 
@@ -100,6 +106,14 @@ CITADEL_DB_CONN_MAX_LIFETIME=5m
 # Anchor key (from secret manager; never literal here)
 CITADEL_CITADEL_MASTER_KEY=a1b2c3...  # 64 hex chars
 CITADEL_CITADEL_ANCHOR_INTERVAL=100
+
+# Identity — required; server fails to start without it
+CITADEL_CITADEL_SINAUTH_ISSUER_URL=https://auth.sin.to
+
+# Enforcement — both off (soft mode) until product/producer prerequisites
+# are met; see ADR-004/005/006. Flip deliberately, not as a default.
+CITADEL_CITADEL_ENFORCE_IDENTITY=false
+CITADEL_CITADEL_ENFORCE_SIGNATURES=false
 ```
 
 ## Full example — dev env
@@ -112,17 +126,30 @@ CITADEL_LOG_LEVEL=debug
 CITADEL_DB_URL=postgres://citadel:citadel_secret@localhost:5434/citadel?sslmode=disable
 CITADEL_CITADEL_MASTER_KEY=                 # empty OK for dev
 CITADEL_CITADEL_ANCHOR_INTERVAL=100
+
+CITADEL_CITADEL_SINAUTH_ISSUER_URL=http://localhost:8100  # local sinauth; required, no fallback
+CITADEL_CITADEL_ENFORCE_IDENTITY=false
+CITADEL_CITADEL_ENFORCE_SIGNATURES=false
 ```
 
 ## Validation at startup
 
-CITADEL's `config.Load()` does **not** currently validate required
-fields — it emits WARN logs via `WarnIfInsecure()` and lets the
-process continue. First real query then fails with a DB error.
+`config.Load()` itself still does **not** validate required fields — it
+emits WARN logs via `WarnIfInsecure()` (for `CITADEL_DB_URL` and
+`CITADEL_CITADEL_MASTER_KEY`) and lets the process continue; a missing
+`CITADEL_DB_URL` then fails on the first real query, not at startup.
 
-This is a known gap; v1.1 adds strict validation that exits the
-process on missing required fields. In v1.0.0, operators must
-eyeball the startup logs for `WARNING:` lines.
+`CITADEL_CITADEL_SINAUTH_ISSUER_URL` is the one exception: `NewServer`
+constructs the sinauth verifier during startup and returns an error —
+**the process exits** — if the issuer URL is empty, unreachable, or its
+OIDC discovery document can't be fetched. This was a deliberate choice in
+[ADR-005](../adrs/005-sinauth-identity-bridge.md): an AuthN gate with no
+way to verify tokens is a worse failure mode than refusing to start.
+
+Full strict validation of every required field at startup remains a
+known gap for the rest of the config surface; v1.1 is the tracked
+follow-up. In the meantime, operators must eyeball the startup logs for
+`WARNING:` lines for `CITADEL_DB_URL`/`CITADEL_CITADEL_MASTER_KEY`.
 
 ## Configuration changes at runtime
 
@@ -148,18 +175,22 @@ process should have zero startup WARNINGs.
 
 ## What CITADEL does *not* configure
 
-- **Authentication (JWT).** CITADEL does not mint or validate JWTs —
-  callers sign Kerkeses with HMAC secrets shared per-caller; the
-  secrets live on the caller side (e.g. `IRFLOW_CITADEL_KEY_SECRET`)
-  and in CITADEL's session store, not as config.
+- **JWT issuance.** CITADEL validates sinauth-issued bearer tokens
+  (`actor_token`/`verifier_token`) against `CITADEL_CITADEL_SINAUTH_ISSUER_URL`'s
+  JWKS — it does not mint tokens itself. Token issuance is entirely
+  sinauth's concern. See [ADR-005](../adrs/005-sinauth-identity-bridge.md).
+  The older local `sessions` table this section used to describe was
+  dropped in that ADR — nothing in the ecosystem ever wrote to it.
+- **Ed25519 signing-key custody.** CITADEL stores registered *public*
+  keys (`signing_keys` table) but never generates or holds a private key
+  — `citadel keygen` runs entirely on the Operator's/Verifier's own
+  machine. See [ADR-004](../adrs/004-operator-verifier-ed25519-signatures.md).
 - **Rate limits.** In v1.0.0 CITADEL does not rate-limit at the API
-  layer. Ingress-level rate limits (Envoy, Traefik) are the current
-  control.
+  layer (MARSHAL Gate 4/AUGUR's per-actor frequency check is a
+  behavioral heuristic, not an API rate limit). Ingress-level rate
+  limits (Envoy, Traefik) are the current control.
 - **TLS.** Termination is at the ingress. CITADEL listens on plain
   HTTP by design — put it on a private network behind TLS ingress.
-- **IdP integration.** CITADEL consumes session data from its DB
-  table; how the sessions got there (upstream IdP, sidecar sync,
-  direct API) is out of scope for this config.
 
 ## Related
 

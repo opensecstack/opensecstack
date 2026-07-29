@@ -15,37 +15,59 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/opensecstack/citadel/internal/api/handlers"
+	"github.com/opensecstack/citadel/internal/auth"
 	"github.com/opensecstack/citadel/internal/config"
 	"github.com/opensecstack/citadel/internal/db"
 	"github.com/opensecstack/citadel/internal/marshal"
+	"github.com/opensecstack/citadel/internal/permifysync"
 )
 
 // Server is the CITADEL HTTP server.
 type Server struct {
-	router chi.Router
-	logger zerolog.Logger
-	port   int
-	db     *db.DB
+	router          chi.Router
+	logger          zerolog.Logger
+	port            int
+	db              *db.DB
+	cfg             *config.Config
+	verifier        *auth.SinauthVerifier
+	permifySnapshot *permifysync.Snapshot
 }
 
-// NewServer creates a new CITADEL server with all routes registered.
-func NewServer(cfg *config.Config, database *db.DB) *Server {
+// NewServer creates a new CITADEL server with all routes registered. Fails
+// if a sinauth verifier cannot be constructed — an AuthN gate with no way
+// to verify tokens is a worse failure mode than refusing to start (see
+// adrs/005-sinauth-identity-bridge.md).
+//
+// permifySnapshot is the in-memory Gate 2 Permify snapshot maintained by
+// cmd/citadel/main.go's internal/permifysync background sync; nil when
+// cfg.Citadel.PermifyURL is unset, in which case Gate 2's Permify sub-check
+// is a no-op PASS for every role/action — see
+// adrs/007-permify-gate2-snapshot.md.
+func NewServer(cfg *config.Config, database *db.DB, permifySnapshot *permifysync.Snapshot) (*Server, error) {
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).
 		With().
 		Timestamp().
 		Str("component", "citadel-api").
 		Logger()
 
+	verifier, err := auth.NewSinauthVerifier(cfg.Citadel.SinauthIssuerURL)
+	if err != nil {
+		return nil, fmt.Errorf("citadel: constructing sinauth verifier: %w", err)
+	}
+
 	s := &Server{
-		router: chi.NewRouter(),
-		logger: logger,
-		port:   cfg.Port,
-		db:     database,
+		router:          chi.NewRouter(),
+		logger:          logger,
+		port:            cfg.Port,
+		db:              database,
+		cfg:             cfg,
+		verifier:        verifier,
+		permifySnapshot: permifySnapshot,
 	}
 
 	s.setupMiddleware()
 	s.registerRoutes()
-	return s
+	return s, nil
 }
 
 // Start begins listening for HTTP requests and shuts down gracefully on SIGINT/SIGTERM.
@@ -116,13 +138,29 @@ func (s *Server) setupMiddleware() {
 func (s *Server) registerRoutes() {
 	health := handlers.NewHealth(s.logger, s.db)
 	worm := handlers.NewWORM(s.logger, s.db)
+	keys := handlers.NewKeys(s.logger, s.db, s.verifier)
 
 	// MARSHAL engine uses MarshalStore adapter (breaks db↔marshal import cycle)
-	engine := marshal.New(db.NewMarshalStore(s.db))
+	engine := marshal.New(db.NewMarshalStore(s.db), s.verifier).
+		EnforceIdentity(s.cfg.Citadel.EnforceIdentity).
+		EnforceSignatures(s.cfg.Citadel.EnforceSignatures).
+		EnforcePermifyAuthz(s.cfg.Citadel.EnforcePermifyAuthz)
+	if s.permifySnapshot != nil {
+		// Only wire a real snapshot in — a nil *permifysync.Snapshot must
+		// never be handed to marshal.PermifySnapshot as a non-nil
+		// interface value (that would make Gate 2's nil check pass a
+		// non-nil interface wrapping a nil pointer, panicking on first
+		// Allowed() call). Engine's default (no snapshot wired) already
+		// behaves as "known=false for everything" — see
+		// adrs/007-permify-gate2-snapshot.md.
+		engine = engine.PermifySnapshot(s.permifySnapshot)
+	}
 	marshalH := handlers.NewMarshal(s.logger, engine)
 
 	s.router.Get("/api/v1/health", health.ServeHTTP)
 	s.router.Post("/api/v1/marshal/evaluate", marshalH.ServeHTTP)
 	s.router.Post("/api/v1/worm/emit", worm.Emit)
 	s.router.Get("/api/v1/worm/verify", worm.Verify)
+	s.router.Post("/api/v1/keys/register", keys.Register)
+	s.router.Get("/api/v1/keys/{user_id}", keys.Get)
 }

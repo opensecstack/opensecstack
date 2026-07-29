@@ -21,6 +21,22 @@ type Kerkese struct {
 	DryRun         bool            `json:"dry_run,omitempty"`
 	Emergency      bool            `json:"emergency,omitempty"`
 	EmergencyJust  string          `json:"emergency_justification,omitempty"`
+
+	// SigOperator and SigVerifier are hex-encoded Ed25519 signatures over
+	// CanonicalPayload(k), produced by the Operator and Verifier respectively
+	// (see sdk/go/citadel.Sign). Verified in gate1AuthN / gate3NDS when
+	// signature enforcement is enabled — see adrs/004-operator-verifier-ed25519-signatures.md.
+	SigOperator string `json:"sig_operator,omitempty"`
+	SigVerifier string `json:"sig_verifier,omitempty"`
+
+	// ActorToken and VerifierToken are sinauth-issued RS256 bearer tokens
+	// proving the Operator's and Verifier's authenticated identity. Verified
+	// in gate1AuthN / gate3NDS, then discarded — never persisted in the WORM
+	// entry (unlike SigOperator/SigVerifier, a bearer token is a short-lived
+	// secret, not long-term evidence). See
+	// adrs/005-sinauth-identity-bridge.md.
+	ActorToken    string `json:"actor_token,omitempty"`
+	VerifierToken string `json:"verifier_token,omitempty"`
 }
 
 // KerkeseAction describes the privileged action being requested.
@@ -34,15 +50,17 @@ type KerkeseAction struct {
 }
 
 // KerkeseActor is the principal initiating the action.
+// UserID is the sinauth subject (UUID string) — see adrs/005-sinauth-identity-bridge.md.
 type KerkeseActor struct {
-	UserID int64  `json:"user_id"`
+	UserID string `json:"user_id"`
 	Role   string `json:"role"`
 	Email  string `json:"email,omitempty"`
 }
 
 // KerkeseVerifier is the distinct principal approving the action.
+// UserID is the sinauth subject (UUID string) — see adrs/005-sinauth-identity-bridge.md.
 type KerkeseVerifier struct {
-	UserID int64  `json:"user_id"`
+	UserID string `json:"user_id"`
 	Role   string `json:"role"`
 	Email  string `json:"email,omitempty"`
 }
@@ -62,10 +80,10 @@ type EvidenceArtifact struct {
 	Label string `json:"label"`
 }
 
-// KerkeseSoD carries the Separation of Duties identifiers.
+// KerkeseSoD carries the Separation of Duties identifiers (sinauth UUIDs).
 type KerkeseSoD struct {
-	OperatorUserID int64 `json:"operator_user_id"`
-	VerifierUserID int64 `json:"verifier_user_id"`
+	OperatorUserID string `json:"operator_user_id"`
+	VerifierUserID string `json:"verifier_user_id"`
 }
 
 // Decision is the outcome returned by MARSHAL.

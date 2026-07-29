@@ -18,8 +18,8 @@ launch the missile." Translated to software governance:
 1. An **operator** proposes an action (fills out a Kerkese).
 2. A **verifier** approves it.
 3. MARSHAL evaluates — the verifier is not a rubber-stamp; they
-   carry their own session and role, and MARSHAL checks both against
-   independent criteria.
+   authenticate with their own sinauth bearer token and carry their
+   own role, and MARSHAL checks both against independent criteria.
 
 If the operator and verifier are the **same person** — either
 literally (same `user_id`) or effectively (same role group, so they
@@ -34,14 +34,22 @@ if sod.OperatorUserID == sod.VerifierUserID {
     return HARD_STOP("NDS_SAME_IDENTITY")
 }
 
-// 2. Both parties have valid sessions — FAIL if not
-opSession := store.SessionExists(operatorUserID)
-vfSession := store.SessionExists(verifierUserID)
-
-// 3. Role-group check — HARD_STOP
-if opSession.roleGroup == vfSession.roleGroup && opSession.roleGroup != "unknown" {
+// 2. Role-group check — HARD_STOP. Role groups are derived from the
+// producer-asserted Actor.Role/Verifier.Role, not looked up from any
+// local table.
+opGroup := roleGroup(actorRole)
+vfGroup := roleGroup(verifierRole)
+if opGroup == vfGroup && opGroup != "unknown" {
     return HARD_STOP("NDS_SAME_GROUP")
 }
+
+// 3. Both parties authenticate with a live sinauth token, and the
+// verifier's Ed25519 signature is checked — soft-gated independently
+// by EnforceIdentity / EnforceSignatures (see ADR-006), not a session
+// lookup.
+opTokenStatus, _ := verifyToken(ctx, actorToken, operatorUserID)
+vfTokenStatus, _ := verifyToken(ctx, verifierToken, verifierUserID)
+sigStatus, _ := verifyVerifierSignature(ctx, kerkese)
 ```
 
 ### Same-identity → HARD_STOP (not REFUSE)
@@ -69,10 +77,10 @@ Two operators both in `operations` cannot form a valid pair — the
 assumption is that they would collude. A pair must span two groups:
 `operations` ↔ `security`, or `admin` ↔ any.
 
-The `"unknown"` group is a sentinel for mis-configured sessions; Gate
-3 deliberately does not force a failure on unknown groups because that
-would break during a migration. Set role groups explicitly in
-production.
+The `"unknown"` group is a sentinel for a role that doesn't map to any
+configured group; Gate 3 deliberately does not force a failure on
+unknown groups because that would break during a migration. Set role
+groups explicitly in production.
 
 ## What the caller sends
 

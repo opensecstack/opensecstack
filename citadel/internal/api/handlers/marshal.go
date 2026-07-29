@@ -56,7 +56,7 @@ func (m *Marshal) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Str("outcome", decision.Outcome).
 		Str("execution_id", decision.ExecutionID.String()).
 		Str("action_type", k.Action.Type).
-		Int64("actor_user_id", k.Actor.UserID).
+		Str("actor_user_id", k.Actor.UserID).
 		Msg("MARSHAL decision")
 
 	status := http.StatusOK

@@ -24,6 +24,8 @@ type WORMEntry struct {
 	TripleHash  string // hex(SHA-256||SHA-512||BLAKE3) = 256 hex chars
 	ChainHash   string // hex(SHA-256(prev_hash || payload_bytes))
 	PrevHash    string
+	SigOperator string // hex-encoded Ed25519 signature by the Kerkese Operator, empty if unsigned
+	SigVerifier string // hex-encoded Ed25519 signature by the Kerkese Verifier, empty if unsigned
 	CreatedAt   time.Time
 }
 
@@ -59,7 +61,7 @@ func chainHash(prevHashHex string, payloadBytes []byte) string {
 // AppendWORM inserts a new entry into the WORM chain.
 // It reads the last chain_hash, computes the new chain_hash and triple_hash,
 // then inserts atomically. Returns the completed WORMEntry.
-func (d *DB) AppendWORM(ctx context.Context, source, eventType, projectID string, payload []byte) (*WORMEntry, error) {
+func (d *DB) AppendWORM(ctx context.Context, source, eventType, projectID string, payload []byte, sigOperator, sigVerifier string) (*WORMEntry, error) {
 	tx, err := d.Pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("worm: begin tx: %w", err)
@@ -92,10 +94,10 @@ func (d *DB) AppendWORM(ctx context.Context, source, eventType, projectID string
 	_, err = tx.Exec(ctx, `
 		INSERT INTO worm_entries
 			(id, sequence_num, ts_utc, source, event_type, project_id,
-			 payload, triple_hash, chain_hash, prev_hash, created_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+			 payload, triple_hash, chain_hash, prev_hash, sig_operator, sig_verifier, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
 		id, seqNum, now, source, eventType, projectID,
-		payload, th, ch, prevHash, now,
+		payload, th, ch, prevHash, nullIfEmpty(sigOperator), nullIfEmpty(sigVerifier), now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("worm: insert entry: %w", err)
@@ -116,8 +118,21 @@ func (d *DB) AppendWORM(ctx context.Context, source, eventType, projectID string
 		TripleHash:  th,
 		ChainHash:   ch,
 		PrevHash:    prevHash,
+		SigOperator: sigOperator,
+		SigVerifier: sigVerifier,
 		CreatedAt:   now,
 	}, nil
+}
+
+// nullIfEmpty converts an empty string to nil so it is stored as SQL NULL
+// rather than an empty-string TEXT value, keeping "unsigned" distinguishable
+// from "signed with an empty signature" (which should never happen, but NULL
+// is the correct representation of "not present").
+func nullIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 // VerifyResult is the outcome of a chain integrity check.

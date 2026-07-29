@@ -39,25 +39,95 @@ Every request flows through chi middleware (request-id, recovery,
 security headers), the relevant handler, and — if the handler produces a
 durable effect — a WORM emit that anchors the decision.
 
+Not pictured above: CITADEL also depends on **sinauth** (the ecosystem's
+OIDC identity provider) at runtime. Gate 1/Gate 3 call out to sinauth's
+JWKS endpoint (via `internal/auth.SinauthVerifier`) to verify
+`actor_token`/`verifier_token`, and the server refuses to start if
+`CITADEL_CITADEL_SINAUTH_ISSUER_URL` is unreachable — see
+[ADR-005](../adrs/005-sinauth-identity-bridge.md).
+
 ## MARSHAL — five-gate engine
 
-Every Kerkese passes through five gates, in order. A failure at any gate
-produces a `REFUSE` or `HARD_STOP`; only a full pass produces `EXECUTE`.
+Every Kerkese passes through five gates, in order (`internal/marshal/marshal.go`,
+`Engine.Evaluate`). A failure at any gate produces `REFUSE` or `HARD_STOP`;
+only a full pass produces `EXECUTE`. Gate 5 (WORM) always runs, regardless
+of the outcome of gates 1–4 — refusals are logged too.
 
 | # | Gate | Checks |
 |---|---|---|
-| 1 | **Schema** | Kerkese structure, required fields, enumerations, timestamp sanity |
-| 2 | **SoD** (Separation of Duties) | Operator ID ≠ verifier ID; roles are mutually compatible |
-| 3 | **Policy** | Project-scoped allow-list for action types; role-to-action matrix |
-| 4 | **Rate** | Per-actor + per-project token bucket; prevents runaway automation |
-| 5 | **Emergency** | Optional override — requires `emergency=true` + `emergency_justification` that is itself auditable |
+| 1 | **AuthN** | Actor's sinauth bearer token (`actor_token`) authenticates `actor.user_id`; Actor's Ed25519 signature (`sig_operator`) verifies against a registered key. See [ADR-004](../adrs/004-operator-verifier-ed25519-signatures.md) / [ADR-005](../adrs/005-sinauth-identity-bridge.md) |
+| 2 | **AuthZ** | RBAC: `actor.role` must be permitted to perform `action.type`, per the fixed `rbacMap` in `internal/marshal/types.go` (always enforced), composed with an optional soft-launch Permify-snapshot check ([ADR-007](../adrs/007-permify-gate2-snapshot.md)) |
+| 3 | **NDS** (Separation of Duties) | Operator ID ≠ Verifier ID and different role groups (unconditional `HARD_STOP` if violated); Operator and Verifier sinauth tokens authenticate; Verifier's Ed25519 signature (`sig_verifier`) verifies |
+| 4 | **AUGUR** | 3 behavioral heuristic rules: off-hours action (outside 07:00–19:00 UTC) → `WARN`; >10 actions by the same actor in 5 minutes → `WARN`; `DATA_EXPORT` without `incident_id` → unconditional `HARD_STOP` |
+| 5 | **WORM** | Unconditional append-only log of the decision, with TripleHash. Bearer tokens are redacted before archiving; Ed25519 signatures are persisted as non-repudiation evidence |
 
 Each gate records its outcome + latency, so `gates[]` in the response
 doubles as a compliance artefact ("why did this decision take 8 ms?").
 
-Gate evaluation is fully in-memory after the initial Kerkese parse —
-the 8 µs mean latency quoted in [api.md](./api.md#performance-envelope)
-is dominated by JSON decoding, not policy lookup.
+Gate evaluation is fully in-memory after the initial Kerkese parse and the
+(network-bound) sinauth token verification calls in Gates 1/3 — the 8 µs
+mean latency quoted in [api.md](./api.md#performance-envelope) predates
+those calls and has not yet been re-measured with them live.
+
+### Identity and signature checks are soft-gated, independently
+
+Gate 1 and Gate 3's token and signature checks always run and are always
+recorded in `gates[]`, but whether a failure actually blocks the decision
+is controlled by two independent `Engine` flags — `EnforceIdentity` and
+`EnforceSignatures` (config: `citadel.enforce_identity`,
+`citadel.enforce_signatures`; both **default `false`**). `combineChecks()`
+(`internal/marshal/marshal.go`) merges the sub-checks: `REFUSE` if any
+failed check is enforced, `WARN` if a failed check is only soft-gated,
+`PASS` otherwise. See [ADR-006](../adrs/006-split-enforce-identity-and-signatures.md)
+for why the two flags are split and why both still default off — briefly,
+apiguard's and threatflow's default configurations submit a placeholder
+Verifier with no `verifier_token`, and no producer platform has per-user
+Ed25519 signing UX yet.
+
+The structural SoD invariants in Gate 3 — same identity, same role group —
+are **not** behind either flag; they are unconditional `HARD_STOP`s.
+
+### Gate 2 is now a two-check composition
+
+`gate2AuthZ` (`internal/marshal/marshal.go`) builds two `enforcedCheck`s
+folded via the same `combineChecks` helper ADR-006 introduced for
+Gate 1/Gate 3:
+
+- **Check A — `rbacMap`** (`roleAllowed`): the permanent safety net,
+  `enforce: true` always, unconditionally. This is never weakened by
+  the Permify work below or any future change.
+- **Check B — Permify snapshot** (`permifyCheck`, backed by a
+  `PermifySnapshot` interface implemented by
+  `internal/permifysync.Snapshot`, a periodically-refreshed local
+  table — never a live per-request call to Permify): `enforce:
+  cfg.EnforcePermifyAuthz` (config `citadel.enforce_permify_authz`,
+  default `false`). An unknown/unsynced role-action pair is always
+  PASS; only an explicit known-deny is a fail candidate, and even then
+  it only `REFUSE`s once the flag is on — until then it only `WARN`s.
+  A `nil` snapshot (unwired, or `PermifyURL` unset) makes this
+  sub-check a no-op PASS, identical to today's rbacMap-only behavior.
+
+See [ADR-007](../adrs/007-permify-gate2-snapshot.md) for the full design.
+
+### Known limitation: `rbacMap` does not cover most real producers
+
+Gate 2 (AuthZ)'s `rbacMap` check is a hard, unconditional check — there
+is no soft mode for it. `rbacMap`/`roleGroupMap` in
+`internal/marshal/types.go` list a handful of legacy action types
+(`API_SCAN_INITIATE`, `INCIDENT_CREATE`, `DATA_EXPORT`, `CONFIG_CHANGE`,
+`USER_CREATE`/`DELETE`, `PLAYBOOK_EXECUTE`, `IOC_INGEST`) across 5 roles
+(`admin`, `operator`, `analyst`, `viewer`, `auditor`). Nine producer
+platforms (apiguard, irflow, threatflow, opencsirt, openscrub,
+securelab, community, cyberpath, nis2compass) were wired this session to
+submit real governance requests to CITADEL, but their actual `action.type`
+values and role names were not added to these maps. In practice, this
+means most real `evaluate()` calls from those platforms will `REFUSE` at
+Gate 2 today, even with `enforce_identity`/`enforce_signatures` both off.
+This is a real, open gap — not a hidden one. The Permify-snapshot check
+above (ADR-007) does not close this gap yet either: the synced snapshot
+is currently expected to be empty/near-empty, since sinauth's Permify
+schema doesn't yet model CITADEL's action-type vocabulary — tracked for
+a follow-up change to `rbacMap`/`roleGroupMap` and/or the Permify schema.
 
 ### Outcomes
 
@@ -126,12 +196,12 @@ For `POST /api/v1/marshal/evaluate`:
 
 ```
 HTTP request  →  chi middleware (request-id, recovery)
-              →  JSON parse + Kerkese validation
-              →  Gate 1 (schema)
-              →  Gate 2 (SoD)
-              →  Gate 3 (policy)
-              →  Gate 4 (rate)
-              →  Gate 5 (emergency)
+              →  JSON parse + Kerkese defaulting (ts_utc, execution_id)
+              →  Gate 1 (AuthN — sinauth token + Ed25519 signature)
+              →  Gate 2 (AuthZ — RBAC)
+              →  Gate 3 (NDS — Separation of Duties + identity/signature)
+              →  Gate 4 (AUGUR — behavioral heuristics)
+              →  Gate 5 (WORM — unconditional append)
               →  Outcome assembled
               →  WORM emit (the decision itself is an event)
               →  JSON response + `worm_entry_id`
@@ -144,12 +214,14 @@ are just as important in a compliance context.
 
 | Package | Responsibility |
 |---|---|
-| `cmd/citadel` | CLI entrypoint, config loading, graceful shutdown |
+| `cmd/citadel` | CLI entrypoint (incl. `citadel keygen`), config loading, graceful shutdown |
 | `internal/api` | chi router, middleware stack, handler wiring |
-| `internal/api/handlers` | `Health`, `Marshal`, `WORM` HTTP types |
-| `internal/marshal` | Engine, gate implementations, Kerkese types |
-| `internal/db` | pgxpool, WORM table operations, MarshalStore adapter |
-| `internal/config` | env + YAML configuration |
+| `internal/api/handlers` | `Health`, `Marshal`, `WORM`, `Keys` HTTP types |
+| `internal/marshal` | Engine, gate implementations, Kerkese types, Ed25519 canonical-payload signing (`sig.go`) |
+| `internal/auth` | `SinauthVerifier` — bridges Gate 1/Gate 3 token checks to sinauth's JWKS via `sdk/go/sinauth` |
+| `internal/keygen` | `citadel keygen` CLI — generates an Operator/Verifier Ed25519 keypair locally; CITADEL never sees the private key |
+| `internal/db` | pgxpool, WORM table operations, `MarshalStore` adapter, `signing_keys` registry |
+| `internal/config` | env configuration (Viper) |
 | `internal/version` | build-time version stamps |
 | `benches/` | Benchmark suite under `-tags bench` |
 

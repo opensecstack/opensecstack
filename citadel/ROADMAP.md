@@ -14,8 +14,27 @@ changes.
 - PostgreSQL 16 persistence with versioned migrations
 - Structured JSON logging (zerolog), graceful shutdown, security headers
 - Benchmark baselines: TripleHash 1.52 µs, WORM append 4.22 ms, MARSHAL
-  evaluation 7.55 µs (in-memory mock)
+  evaluation 7.55 µs (in-memory mock; predates the Ed25519/sinauth checks
+  below and has not yet been re-measured with them live)
 - Docker image with non-root user + build-arg version injection
+- Operator/Verifier Ed25519 signatures on every Kerkese, verified at
+  Gate 1 (AuthN) and Gate 3 (NDS): `signing_keys` registry, `POST
+  /api/v1/keys/register`, `citadel keygen` self-custody CLI — see
+  [ADR-004](adrs/004-operator-verifier-ed25519-signatures.md)
+- sinauth identity bridge: Gate 1/Gate 3 verify real sinauth-issued bearer
+  tokens (`actor_token`/`verifier_token`) instead of the dead local
+  `sessions` table nothing ever populated; `Kerkese` user IDs are now
+  sinauth UUID strings — see [ADR-005](adrs/005-sinauth-identity-bridge.md)
+- Independent `enforce_identity` / `enforce_signatures` rollout flags
+  (both default `false` — soft mode) so identity enforcement can graduate
+  ahead of signature enforcement — see
+  [ADR-006](adrs/006-split-enforce-identity-and-signatures.md)
+- Nine producer platforms (apiguard, irflow, threatflow, opencsirt,
+  openscrub, securelab, community, cyberpath, nis2compass) wired to
+  submit real Kerkese requests to MARSHAL — see
+  [Known limitations](docs/known-limitations.md) and
+  [architecture.md](docs/architecture.md#known-limitation-rbacmap-does-not-cover-most-real-producers)
+  for the `rbacMap` coverage gap this exposed
 
 ## v1.1 — Hardening (6-8 weeks post-v1.0.0)
 
@@ -27,6 +46,9 @@ changes.
 | Prometheus metrics | `/metrics` catalogue — MARSHAL gate outcomes, WORM lag, anchor-interval histograms |
 | Integration tests against real CITADEL | Existing tests use in-memory mocks; promote a subset to hit a live Postgres |
 | OpenAPI 3 spec | Machine-readable wire contract for SDK code-generation downstream |
+| `rbacMap`/`roleGroupMap` coverage | Add real action types/roles for the 9 wired producer platforms; today most of their real `evaluate()` calls `REFUSE` at Gate 2 (AuthZ) — see [architecture.md](docs/architecture.md) |
+| Turn on `enforce_identity` | Requires apiguard's `require_approval` (or equivalent) on by default and a real second-approver flow for threatflow — see [ADR-006](adrs/006-split-enforce-identity-and-signatures.md) |
+| Turn on `enforce_signatures` | Requires at least one producer to implement per-user Ed25519 key custody / signing UX — see [ADR-004](adrs/004-operator-verifier-ed25519-signatures.md) |
 
 ## v1.2 — ERP layer (after v1.1)
 

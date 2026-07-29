@@ -10,8 +10,9 @@ this document explains the *why* behind each design decision.
 |---|---|---|
 | `worm_entries` | The WORM audit chain | **Strictly** |
 | `chain_anchors` | Ed25519 signatures over the WORM chain | Strictly |
-| `sessions` | Active authentication sessions for Gate 1 / Gate 3 | Mutable |
+| `signing_keys` | Registered per-user Ed25519 public keys for Gate 1 / Gate 3 signature checks | Mutable |
 | `rate_limit_counters` | Per-user action counts for AUGUR rule_02 | Mutable |
+| `permify_role_action_snapshot` | Local snapshot of Permify-derived role→action policy for Gate 2's optional soft-check | Mutable |
 | `schema_migrations` | Migration bookkeeping | Append-only by convention |
 
 Only two tables are WORM-semantics strict. The others are mutable
@@ -42,31 +43,43 @@ See [chain-anchor.md](./chain-anchor.md).
   1 anchor per ~100 entries, i.e. anchor table ≈ 0.16% of WORM table
   size
 
-## `sessions`
+## `signing_keys`
 
-Backs Gate 1 (AuthN). A session row is created when a user
-authenticates and deleted or expires on logout / TTL.
+Backs the Ed25519 non-repudiation checks in Gate 1 (AuthN) and Gate 3
+(NDS) — see [ADR-004](../adrs/004-operator-verifier-ed25519-signatures.md).
+CITADEL itself has no local session table: Gate 1/Gate 3 authenticate
+the caller by verifying a sinauth-issued bearer JWT directly against
+sinauth's JWKS (`internal/auth.SinauthVerifier`), then check
+`SigOperator`/`SigVerifier` on the Kerkese against the registrant's
+active key here. See [ADR-005](../adrs/005-sinauth-identity-bridge.md)
+for why the identity side dropped the old local session model.
 
 ```sql
-CREATE TABLE sessions (
-    user_id    BIGINT      NOT NULL PRIMARY KEY,
-    role       TEXT        NOT NULL,
-    role_group TEXT        NOT NULL,   -- for Gate 3 NDS
-    expires_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL
+CREATE TABLE signing_keys (
+    id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     TEXT        NOT NULL,   -- sinauth UUID, since migration 004
+    key_id      TEXT        NOT NULL,
+    public_key  TEXT        NOT NULL,   -- hex, 64 chars (32-byte Ed25519 public key)
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at  TIMESTAMPTZ,
+    UNIQUE (user_id, key_id)
 );
 ```
 
-- **Role vs role_group:** `role` is fine-grained (`soc-analyst`);
-  `role_group` is the Gate-3 equivalence class (`security`). Two
-  different analysts could share a role group and would therefore fail
-  SoD.
-- **TTL:** enforced at query time (`SessionExists` filters by
-  `expires_at > now()`). Expired rows are garbage-collected by a
-  background worker — they are not load-bearing past expiry.
+- **`user_id` is the sinauth UUID**, not a local integer identity.
+  Migration `004_sinauth_identity.sql` widened this column from
+  `BIGINT` to `TEXT` to hold it.
+- **Registration:** `POST /api/v1/keys/register` requires a live
+  sinauth token (`token` field) rather than a session — the caller
+  proves who they are with that token, and the key is bound to its
+  `sub`.
+- **Active key:** at most one row per `user_id` should have
+  `revoked_at IS NULL`, enforced in application code
+  (`RegisterKey`), not a DB constraint, so rotation (register-new,
+  then revoke-old) can proceed in two steps.
 - **No password material.** CITADEL does not store credentials;
-  session tokens are minted externally and signed with the upstream
-  IdP's key.
+  user authentication is sinauth's concern — this table only holds
+  the public half of a signing keypair.
 
 ## `rate_limit_counters`
 
@@ -91,6 +104,43 @@ CREATE TABLE rate_limit_counters (
 - **Not load-bearing past GC.** If the counter is missing, AUGUR
   rule_02 falls through — same as if the actor had made zero prior
   actions. This is deliberate: rule_02 is advisory, not gating.
+
+## `permify_role_action_snapshot`
+
+Local snapshot of Permify-derived role→action_type coverage, read by
+MARSHAL Gate 2 (AuthZ)'s optional soft-check — see
+[ADR-007](../adrs/007-permify-gate2-snapshot.md). Gate 2 must never
+make a live synchronous call to Permify per-request (it runs in the
+hot path of every governed action across the ecosystem, at
+~microsecond latency); instead it reads this table's in-memory copy,
+refreshed on an interval (`citadel.permify_sync_interval`, default
+`5m`) by `internal/permifysync.Syncer`.
+
+```sql
+CREATE TABLE permify_role_action_snapshot (
+    role        TEXT        NOT NULL,
+    action_type TEXT        NOT NULL,
+    allowed     BOOLEAN     NOT NULL,
+    synced_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (role, action_type)
+);
+```
+
+- **Migration:** `005_permify_policy_snapshot.sql`.
+- **Expected to be empty/near-empty today.** As of this migration,
+  sinauth's Permify schema (`sinauth/permify/schema.perm`) models
+  organization/group/client_role membership, not CITADEL's governed
+  action-type vocabulary (`API_SCAN_INITIATE`, `INCIDENT_CREATE`,
+  ...) — so this table is expected to sync empty until the schema is
+  extended in a later phase. This is documented current scope, not a
+  bug: Gate 2's existing `rbacMap` check remains the unconditionally
+  enforced safety net regardless of what this table contains, and an
+  empty snapshot just means the Permify sub-check passes everything
+  (see [Known limitations](./known-limitations.md)).
+- **Not load-bearing on its own.** A row here only ever adds a soft
+  `WARN`-until-`EnforcePermifyAuthz`-is-enabled signal on top of
+  `rbacMap` (`internal/marshal/marshal.go`'s `gate2AuthZ`); it can
+  never grant access `rbacMap` denies.
 
 ## `schema_migrations`
 
@@ -125,9 +175,11 @@ CREATE TABLE schema_migrations (
                  └──────────────────┘
 
                  ┌──────────────────┐
-                 │     sessions     │◄──── Gate 1 AuthN
-                 │  (mutable)       │       Gate 3 NDS (role_group)
+                 │   signing_keys   │◄──── Gate 1 AuthN (SigOperator)
+                 │  (mutable)       │       Gate 3 NDS (SigVerifier)
                  └──────────────────┘
+                   (identity itself is verified against a live
+                    sinauth JWT, not a local table — see ADR-005)
 
                  ┌──────────────────────┐
                  │ rate_limit_counters  │◄── Gate 4 AUGUR rule_02
@@ -135,7 +187,7 @@ CREATE TABLE schema_migrations (
                  └──────────────────────┘
 ```
 
-Notice: the WORM chain has **no foreign keys into** `sessions` or
+Notice: the WORM chain has **no foreign keys into** `signing_keys` or
 `rate_limit_counters`. The mutable tables reference the chain, not
 vice-versa. Dropping the mutable tables does not break the chain;
 dropping the chain voids every downstream evidence claim.

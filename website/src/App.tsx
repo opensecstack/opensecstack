@@ -8,6 +8,7 @@ import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import HeroSection from './sections/HeroSection'
 import PlatformsSection from './sections/PlatformsSection'
+import ShowcaseSection from './sections/ShowcaseSection'
 import APIGuardSection from './sections/APIGuardSection'
 import NIS2CompassSection from './sections/NIS2CompassSection'
 import CitadelSection from './sections/CitadelSection'
@@ -89,6 +90,7 @@ function HomePage() {
         <Navbar />
         <HeroSection />
         <PlatformsSection />
+        <ShowcaseSection />
         <APIGuardSection />
         <NIS2CompassSection />
         <CitadelSection />

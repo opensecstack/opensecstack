@@ -29,6 +29,13 @@ export default function CitadelSection() {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           <div className="glass-card">
+            <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Name Meaning</h3>
+            <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.6 }}>
+              A citadel is a fortified centre built to protect what matters. In fiction, it can mean a place where knowledge is preserved.
+              In opensecstack, CITADEL is the cryptographic governance centre that protects audit truth, privileged decisions, and institutional memory.
+            </p>
+          </div>
+          <div className="glass-card">
             <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>WORM Chain</h3>
             <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.6 }}>
               Write-Once-Read-Many immutable audit log. SHA-256 hash chain with Ed25519 anchor rotation.

@@ -1,5 +1,7 @@
 import { motion } from 'framer-motion'
 import type { Platform } from '../data/platforms'
+import MediaVideo from './MediaVideo'
+import { platformMedia } from '../data/media'
 
 interface Props {
   platform: Platform
@@ -7,6 +9,8 @@ interface Props {
 }
 
 export default function PlatformCard({ platform, index }: Props) {
+  const clip = platformMedia[platform.id]
+
   return (
     <motion.div
       className="glass-card"
@@ -16,6 +20,18 @@ export default function PlatformCard({ platform, index }: Props) {
       viewport={{ once: true }}
       style={{ borderColor: `${platform.color}18` }}
     >
+      {clip && (
+        <MediaVideo
+          name={clip}
+          variant="background"
+          poster
+          style={{
+            width: '100%', height: 160, objectFit: 'cover',
+            borderRadius: 12, marginBottom: '1.25rem', display: 'block',
+            border: `1px solid ${platform.color}22`,
+          }}
+        />
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
         <div style={{
           width: 10, height: 10, borderRadius: '50%',

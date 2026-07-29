@@ -98,6 +98,13 @@ func RegisterRoutes(
 			r.With(reportLimiter.Middleware).Get("/scans/{id}/report", scans.Report)
 			r.Delete("/scans/{id}", scans.Delete)
 
+			// Two-person approval (Separation of Duties): a genuine, distinct
+			// second authenticated user approves/rejects a scan created while
+			// citadel.require_approval is enabled.
+			r.Get("/scans/{id}/approval", scans.GetApproval)
+			r.Post("/scans/{id}/approve", scans.Approve)
+			r.Post("/scans/{id}/reject", scans.Reject)
+
 			// Findings.
 			r.Get("/findings", findings.List)
 			r.Get("/findings/{id}", findings.Get)

@@ -48,7 +48,10 @@ func (a *Audit) List(w http.ResponseWriter, r *http.Request) {
 			db.AuditActionReportGenerated,
 			db.AuditActionReportExported,
 			db.AuditActionAPIKeyCreated,
-			db.AuditActionAPIKeyRevoked:
+			db.AuditActionAPIKeyRevoked,
+			db.AuditActionScanApprovalRequested,
+			db.AuditActionScanApprovalApproved,
+			db.AuditActionScanApprovalRejected:
 			action := db.AuditAction(v)
 			filters.Action = &action
 		default:

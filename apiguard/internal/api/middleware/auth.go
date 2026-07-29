@@ -39,6 +39,15 @@ func ClaimsFromContext(ctx context.Context) (*Claims, bool) {
 	return c, ok
 }
 
+// ContextWithClaims returns a copy of ctx carrying the given Claims, exactly
+// as the JWT middleware would store them after successful authentication.
+// Exported so handler-level tests (and any code composing requests outside
+// the normal HTTP middleware chain) can simulate an authenticated caller
+// without duplicating the unexported claimsKey.
+func ContextWithClaims(ctx context.Context, c *Claims) context.Context {
+	return context.WithValue(ctx, claimsKey{}, c)
+}
+
 // JWTAuth returns a middleware that validates JWT tokens in the Authorization header.
 // trustedProxies is used to correctly resolve the real client IP for log entries
 // (X-Forwarded-For is honoured only when the direct peer is a trusted proxy).

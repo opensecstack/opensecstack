@@ -84,8 +84,8 @@ func newKerkese() *citadel.Kerkese {
 			Type:     "api_scan",
 			ChangeID: "scan-integration-001",
 		},
-		Actor:    citadel.KerkeseActor{UserID: 1, Role: "operator"},
-		Verifier: citadel.KerkeseVerifier{UserID: 2, Role: "verifier"},
+		Actor:    citadel.KerkeseActor{UserID: "1", Role: "operator"},
+		Verifier: citadel.KerkeseVerifier{UserID: "2", Role: "verifier"},
 	}
 }
 

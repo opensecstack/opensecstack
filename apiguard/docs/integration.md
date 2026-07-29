@@ -20,46 +20,84 @@ APIGuard
 
 ## CITADEL Integration
 
-CITADEL receives every scan lifecycle event and logs them to the immutable WORM chain.
+APIGuard is an HTTP **client** of CITADEL — it is not a webhook receiver, and CITADEL does not push events into APIGuard. apiguard's `internal/citadel.Client` (`internal/citadel/client.go`) calls two CITADEL endpoints:
+
+- `POST /api/v1/marshal/evaluate` — submit a scan for a MARSHAL governance decision (see [Scan Governance](#scan-governance-marshal-evaluation-and-two-person-approval) below).
+- `POST /api/v1/worm/emit` — forward an audit event to the immutable WORM chain. Called from the audit log worker for every local audit entry via `Client.LogEvent`, fire-and-forget, in a bounded background goroutine.
+- `GET /api/v1/worm/verify` — verify WORM chain integrity for a time range (`Client.VerifyChain`).
+
+When `citadel.api_url` (env `APIGUARD_CITADEL_URL`) is empty, the client is a complete no-op: every method returns immediately without making a network request, so apiguard runs normally with CITADEL disabled.
 
 ### Configuration
 
 ```yaml
 citadel:
-  enabled: true
-  webhook_url: "https://citadel.internal/ingest/apiguard"
-  api_key: "${CITADEL_API_KEY}"
-  emit_events:
-    - scan_started
-    - scan_completed
-    - finding_critical
-    - finding_high
-  verify_tls: true
+  api_url: "http://citadel-api:8099"
+  key_id: "${APIGUARD_CITADEL_KEY_ID}"
+  key_secret: "${APIGUARD_CITADEL_KEY_SECRET}"
+  project_id: "apiguard"
+  dry_run: true
+  webhook_secret: "${APIGUARD_CITADEL_WEBHOOK_SECRET}"
+  require_approval: false
 ```
 
-### Event Payload
+See [Configuration Guide — CITADEL Integration](configuration.md#citadel-integration) for the full field/env-var table.
+
+### Authentication: HMAC-SHA256 connector auth
+
+Every request apiguard sends to CITADEL is signed, not bearer-token authenticated. `Client.do` (`internal/citadel/client.go`) attaches three headers to each request:
+
+```
+X-CITADEL-KEY  = key_id
+X-CITADEL-TS   = current Unix timestamp (seconds)
+X-CITADEL-SIG  = hmac-sha256=hex(HMAC-SHA256(key_secret, key_id + ":" + ts + ":" + hex(sha256(body))))
+```
+
+CITADEL recomputes the signature server-side using the shared `key_secret` for that `key_id` and rejects requests where it doesn't match. Requests also retry with exponential backoff (3 attempts, 500ms base) on 5xx responses and network errors; 4xx responses are returned immediately without retry.
+
+### WORM Event Payload
+
+`EmitWORM` posts to `POST /api/v1/worm/emit` with:
 
 ```json
 {
-  "event": "scan_completed",
-  "source": "apiguard",
-  "source_version": "0.2.0",
-  "ts_utc": "2026-03-30T14:00:00Z",
-  "scan_id": "uuid",
-  "target_url": "https://api.example.com",
-  "spec_hash": "sha256:abc123",
-  "summary": {
-    "total": 12,
-    "critical": 1,
-    "high": 3,
-    "medium": 5,
-    "low": 3
-  },
-  "signature": "hmac-sha256:..."
+  "source": "audit",
+  "event_type": "scan_created",
+  "project_id": "apiguard",
+  "payload": { "...": "audit entry fields, e.g. actor_user_id, actor_role, result_status, system_module, resource_id" }
 }
 ```
 
-CITADEL verifies the HMAC-SHA256 signature using the shared `api_key` before logging. Events that fail signature verification are rejected with HTTP 401.
+CITADEL responds with `worm_entry_id`, `chain_hash`, and `prev_hash`. apiguard tracks the last `chain_hash` it received and logs a warning (does not block) if the next response's `prev_hash` doesn't match — a best-effort local check for WORM chain continuity, not a substitute for `VerifyChain`/`GET /api/v1/worm/verify`.
+
+### Scan Governance: MARSHAL Evaluation and Two-Person Approval
+
+Beyond WORM audit logging, `POST /api/v1/scans` also submits every scan to CITADEL MARSHAL for a governance decision before it launches, via `POST /api/v1/marshal/evaluate` on the CITADEL client (`internal/citadel/client.go`), using the same HMAC connector auth (`citadel.key_id` / `citadel.key_secret`) described above.
+
+The governance payload (the "Kerkese") carries:
+
+- **Actor** — the real authenticated caller's sinauth user ID (from the request's JWT claims), plus `ActorToken`: the caller's own sinauth bearer token, forwarded so CITADEL can verify it directly against sinauth. This replaced a previous bug where scan creation submitted a hardcoded `UserID: 0` instead of the real requester.
+- **Verifier** — by default, a fixed placeholder identity (`apiguard-system-verifier`) with no token. This is a known, deliberate gap: apiguard does not yet have a real second-approver flow for scan initiation *unless* `citadel.require_approval` is enabled (see below).
+- **SoD** (Separation of Duties) — `operator_user_id` / `verifier_user_id`, evaluated by CITADEL Gate 3 (NDS).
+
+A `REFUSE` or `HARD_STOP` decision blocks the scan with `403 Forbidden`; a MARSHAL call that errors (e.g. CITADEL unreachable) logs a warning and the scan proceeds — CITADEL evaluation is currently fail-open, not fail-closed.
+
+**Known gap — Gate 2 (AuthZ) is not fully wired end-to-end.** CITADEL's RBAC map does not yet recognize apiguard's `deploy_change` action type for real REFUSE enforcement based on role. This is a gap on the CITADEL side, not something apiguard papers over — treat scan "governance" today as audited and SoD-checked, not yet as fully policy-enforced.
+
+#### Optional: real two-person approval (`citadel.require_approval`)
+
+Set `citadel.require_approval: true` (env: `APIGUARD_CITADEL_REQUIRE_APPROVAL`) to require a genuine, distinct second authenticated user to approve every scan before it runs. **Default: `false`** — with the flag off, apiguard's behavior is unchanged from before this feature: scans launch immediately using the placeholder Verifier described above.
+
+When enabled:
+
+1. `POST /api/v1/scans` no longer launches the scan. It creates a `scan_approvals` row (migration `008_create_scan_approvals`), returns `202 Accepted` with `"status": "pending_approval"`, and holds the scan's request details (spec/target/auth config) and the requester's bearer token in memory only — never persisted — for up to 24 hours (`pendingApprovalTTL`).
+2. A **different** authenticated user calls `POST /api/v1/scans/{id}/approve`. The API rejects same-identity approval attempts with `403` before ever contacting CITADEL. On success, apiguard submits a Kerkese to MARSHAL with both a real Actor (the requester) and a real Verifier (the approver) — each with their own live sinauth bearer token — then launches the scan.
+3. Alternatively, `POST /api/v1/scans/{id}/reject` (optional `{"reason": "..."}` body) declines the request; the scan never runs.
+4. `GET /api/v1/scans/{id}/approval` returns the current approval state (`pending` / `approved` / `rejected`, who requested it, who decided it and when).
+
+If the approval window expires (server restart or the 24-hour TTL) before a decision is made, `Approve` returns `410 Gone` and the requester must create a new scan — the ephemeral request details are gone.
+
+Note that even with `require_approval` enabled, `SigOperator`/`SigVerifier` (Ed25519 signatures) and `VerifierToken` freshness are soft-gated: apiguard does not hold per-user signing keys, and an approver's token captured at request time may have expired by the time they act on it. CITADEL treats both as WARN-level, not a hard block, while `citadel.enforce_signatures` remains `false`.
 
 ---
 

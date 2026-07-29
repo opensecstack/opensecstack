@@ -145,18 +145,16 @@ dashboard:
   session_timeout_minutes: 60
 
 # ---------------------------------------------------------------------------
-# CITADEL integration (optional)
+# CITADEL integration (optional) — HMAC connector auth, see docs/integration.md
 # ---------------------------------------------------------------------------
 citadel:
-  enabled: false
-  webhook_url: ""              # CITADEL ingest endpoint
-  api_key: "${CITADEL_API_KEY}"
-  emit_events:
-    - scan_started
-    - scan_completed
-    - finding_critical
-    - finding_high
-  verify_tls: true
+  api_url: ""                          # e.g. http://citadel-api:8099 — empty disables the client
+  key_id: "${APIGUARD_CITADEL_KEY_ID}"
+  key_secret: "${APIGUARD_CITADEL_KEY_SECRET}"
+  project_id: "apiguard"
+  dry_run: true
+  webhook_secret: "${APIGUARD_CITADEL_WEBHOOK_SECRET}"
+  require_approval: false
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -193,8 +191,13 @@ Every environment variable is prefixed with `APIGUARD_`. Variables map directly 
 | `APIGUARD_REPORT_FORMAT` | `report.format` | string | `json` | Default report format. |
 | `APIGUARD_REPORT_DIR` | `report.output_dir` | string | `./reports` | Default report output directory. |
 | `APIGUARD_DASHBOARD_PORT` | `dashboard.port` | int | `3000` | Dashboard UI port. |
-| `CITADEL_API_KEY` | `citadel.api_key` | string | (none) | API key for CITADEL webhook authentication. |
-| `CITADEL_WEBHOOK_URL` | `citadel.webhook_url` | string | (none) | CITADEL event ingest endpoint. |
+| `APIGUARD_CITADEL_URL` | `citadel.api_url` | string | (none) | Base URL of the CITADEL API. Empty disables the CITADEL client entirely. |
+| `APIGUARD_CITADEL_KEY_ID` | `citadel.key_id` | string | (none) | HMAC connector key identifier for signed CITADEL requests. |
+| `APIGUARD_CITADEL_KEY_SECRET` | `citadel.key_secret` | string | (none) | HMAC-SHA256 signing secret for signed CITADEL requests. |
+| `APIGUARD_CITADEL_PROJECT_ID` | `citadel.project_id` | string | `apiguard` | Project ID used in Kerkese payloads and WORM events. |
+| `APIGUARD_CITADEL_DRY_RUN` | `citadel.dry_run` | bool | `true` | When true, MARSHAL decisions are logged but never block a scan. |
+| `APIGUARD_CITADEL_WEBHOOK_SECRET` | `citadel.webhook_secret` | string | (none) | HMAC-SHA256 secret to verify inbound webhook events from CITADEL. |
+| `APIGUARD_CITADEL_REQUIRE_APPROVAL` | `citadel.require_approval` | bool | `false` | Require a genuine second authenticated user to approve a scan before it runs. |
 
 ---
 
@@ -444,24 +447,19 @@ The dashboard (L9) is the React-based web interface for viewing scan history, fi
 
 ## CITADEL Integration
 
-APIGuard can emit scan lifecycle events to a [CITADEL](../../.citadel/README.md) governance engine instance. This is a one-way integration: APIGuard pushes events via webhook. CITADEL cannot write back to APIGuard scan data.
+APIGuard is an HTTP client of [CITADEL](../../citadel/README.md), not a webhook receiver — CITADEL never writes back to APIGuard. `internal/citadel.Client` (`internal/citadel/client.go`) calls `POST /api/v1/marshal/evaluate` (governance decision on scan creation), `POST /api/v1/worm/emit` (audit event forwarding to the immutable WORM chain), and `GET /api/v1/worm/verify` (chain integrity check), all authenticated with per-request HMAC-SHA256 connector signatures — see [Integration Guide — CITADEL Integration](integration.md#citadel-integration) for the header format.
 
 | Setting | Config Path | Env Var | Default | Description |
 |---------|-----------|---------|---------|-------------|
-| Enabled | `citadel.enabled` | -- | `false` | Enable CITADEL event emission. |
-| Webhook URL | `citadel.webhook_url` | `CITADEL_WEBHOOK_URL` | (none) | CITADEL ingest endpoint. |
-| API key | `citadel.api_key` | `CITADEL_API_KEY` | (none) | Authentication key for the CITADEL webhook. |
-| Events | `citadel.emit_events` | -- | (all) | List of events to emit. |
-| Verify TLS | `citadel.verify_tls` | -- | `true` | Verify TLS certificate of the CITADEL endpoint. |
+| CITADEL API URL | `citadel.api_url` | `APIGUARD_CITADEL_URL` | (none) | Base URL of the CITADEL API (e.g. `http://citadel-api:8099`). When empty, the CITADEL client is a no-op — no requests are made. |
+| Connector key ID | `citadel.key_id` | `APIGUARD_CITADEL_KEY_ID` | (none) | HMAC connector key identifier, sent as the `X-CITADEL-KEY` header on every request. |
+| Connector key secret | `citadel.key_secret` | `APIGUARD_CITADEL_KEY_SECRET` | (none) | HMAC-SHA256 signing secret used to compute `X-CITADEL-SIG`. Never logged. |
+| Project ID | `citadel.project_id` | `APIGUARD_CITADEL_PROJECT_ID` | `apiguard` | Identifies this apiguard instance as a CITADEL project; used as `project_id` in Kerkese payloads and WORM events. |
+| Dry run | `citadel.dry_run` | `APIGUARD_CITADEL_DRY_RUN` | `true` | When true, MARSHAL evaluate calls set `dry_run: true` on the Kerkese — CITADEL logs the decision but never blocks a scan. Set to `false` to enforce governance decisions. |
+| Webhook secret | `citadel.webhook_secret` | `APIGUARD_CITADEL_WEBHOOK_SECRET` | (none) | HMAC-SHA256 shared secret used to verify **inbound** webhook events from CITADEL. When empty, apiguard's webhook endpoint rejects all requests with `401`. |
+| Require approval | `citadel.require_approval` | `APIGUARD_CITADEL_REQUIRE_APPROVAL` | `false` | Gate scan initiation behind a real, distinct second authenticated user's approval (`POST /api/v1/scans/{id}/approve`) instead of launching immediately with a placeholder CITADEL Verifier. See [Integration Guide — Scan Governance](integration.md#scan-governance-marshal-evaluation-and-two-person-approval). |
 
-### Available Events
-
-| Event | Emitted When |
-|-------|-------------|
-| `scan_started` | A scan begins execution. |
-| `scan_completed` | A scan finishes (success or failure). |
-| `finding_critical` | A CRITICAL severity finding is detected. |
-| `finding_high` | A HIGH severity finding is detected. |
+> `POST /api/v1/scans` synchronously submits each scan to CITADEL MARSHAL (`POST /api/v1/marshal/evaluate`) for a governance decision before launching. A `REFUSE`/`HARD_STOP` outcome blocks the scan with `403`; an evaluation error (e.g. CITADEL unreachable) logs a warning and the scan proceeds — evaluation is fail-open today. See the Integration Guide for the full scan-governance and approval flow.
 
 ---
 

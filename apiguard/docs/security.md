@@ -77,7 +77,7 @@ The scanner's HTTP client is restricted to the configured `target` URL. It canno
 | JWT signing key | `APIGUARD_JWT_SECRET` | Min 32 bytes. Use a random 64-byte value in production. |
 | Database password | Part of `APIGUARD_DB_URL` | Use a dedicated database user |
 | Redis password | Part of `APIGUARD_REDIS_URL` | Optional for internal Redis |
-| CITADEL API key | `CITADEL_API_KEY` | Only required if CITADEL integration is enabled |
+| CITADEL connector secret | `APIGUARD_CITADEL_KEY_SECRET` (with `APIGUARD_CITADEL_KEY_ID`) | HMAC-SHA256 connector auth. Only required if `APIGUARD_CITADEL_URL` is set. |
 
 ---
 

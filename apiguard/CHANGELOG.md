@@ -12,9 +12,18 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Access-token denylist with a `POST /api/v1/auth/logout` endpoint for immediate token invalidation on sign-out.
 - `sinauth.ts` client and `AuthCallback` page added to the web dashboard for popup-based SSO login.
 
+- `citadel.require_approval` config flag (default `false`) — gates a real two-person approval flow for scan initiation.
+- `POST /api/v1/scans/{id}/approve`, `POST /api/v1/scans/{id}/reject`, `GET /api/v1/scans/{id}/approval` endpoints for two-person Separation-of-Duties sign-off on pending scans.
+- `scan_approvals` table (migration `008_create_scan_approvals`) and `pending_approval` scan status.
+
 ### Changed
 
 - Backend auth handler now forwards authentication events to the CITADEL WORM audit chain.
+- Scan creation now derives the real authenticated user's identity and sinauth bearer token and forwards them to CITADEL as the Kerkese `Actor`/`ActorToken`, replacing a previous bug where scan creation submitted a hardcoded `UserID: 0` placeholder.
+
+### Fixed
+
+- Scan creation no longer submits a hardcoded `UserID: 0` to CITADEL MARSHAL — the real authenticated caller's sinauth identity is used instead.
 
 ---
 

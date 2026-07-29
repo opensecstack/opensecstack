@@ -64,6 +64,32 @@ func (s *Scans) auditLog(ctx context.Context, action db.AuditAction, resourceTyp
 	}
 }
 
+// pendingApprovalTTL bounds how long a scan's ephemeral request details (the
+// spec/target/auth config needed to actually launch it — never persisted to
+// the database, see migrations/001_create_scans.up.sql's "no secrets stored"
+// comment) are held in memory awaiting a second approver. After this window,
+// an approval attempt returns 410 Gone and the requester must recreate the
+// scan. This is an intentional, documented limitation of holding approval
+// state in-process rather than persisting scan secrets: it does not survive a
+// server restart and does not work across a horizontally-scaled fleet of
+// apiguard instances that don't share process memory. Acceptable for the
+// current scope; a future iteration could move to a short-lived, encrypted
+// server-side credential reference instead of raw secrets.
+const pendingApprovalTTL = 24 * time.Hour
+
+// pendingScanRequest holds the scanner request details for a scan awaiting
+// second-approver sign-off, in memory only. actorToken is the Operator's own
+// sinauth bearer token captured at request time — kept in-process alongside
+// the rest of the ephemeral request (never persisted, same as req's own
+// target-auth secrets) so that if approval happens before it expires, the
+// Kerkese submitted to CITADEL at approval time carries the Operator's real
+// token, not an empty/fabricated one.
+type pendingScanRequest struct {
+	req        createScanRequest
+	actorToken string
+	createdAt  time.Time
+}
+
 // Scans handles scan-related API endpoints.
 type Scans struct {
 	logger         zerolog.Logger
@@ -74,6 +100,9 @@ type Scans struct {
 	shutdownCtx    context.Context // cancelled when the server is shutting down
 	trustedProxies []*net.IPNet    // parsed from cfg.RateLimit.TrustedProxies
 	scanWg         sync.WaitGroup  // tracks in-flight scan goroutines for graceful shutdown
+
+	pendingMu   sync.Mutex
+	pendingReqs map[uuid.UUID]pendingScanRequest // scans awaiting a second approver
 }
 
 // NewScans creates a new Scans handler.
@@ -108,6 +137,53 @@ func NewScansWithCitadel(logger zerolog.Logger, database *db.DB, sc *scanner.Sca
 // accepting new requests, so that no new goroutines are started.
 func (s *Scans) WaitScans() {
 	s.scanWg.Wait()
+}
+
+// rememberPendingRequest stores the ephemeral scanner request (and the
+// Operator's own bearer token) for a scan that is now awaiting a second
+// approver.
+func (s *Scans) rememberPendingRequest(id uuid.UUID, req createScanRequest, actorToken string) {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	if s.pendingReqs == nil {
+		s.pendingReqs = make(map[uuid.UUID]pendingScanRequest)
+	}
+	s.sweepExpiredPendingLocked()
+	s.pendingReqs[id] = pendingScanRequest{req: req, actorToken: actorToken, createdAt: time.Now()}
+}
+
+// takePendingRequest atomically retrieves and removes a scan's pending
+// request. found is false if there is none (never stored, already consumed,
+// or expired).
+func (s *Scans) takePendingRequest(id uuid.UUID) (req createScanRequest, actorToken string, found bool) {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	s.sweepExpiredPendingLocked()
+	p, ok := s.pendingReqs[id]
+	if !ok {
+		return createScanRequest{}, "", false
+	}
+	delete(s.pendingReqs, id)
+	return p.req, p.actorToken, true
+}
+
+// deletePendingRequest discards a scan's pending request without returning
+// it (used when an approval request is rejected).
+func (s *Scans) deletePendingRequest(id uuid.UUID) {
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	delete(s.pendingReqs, id)
+}
+
+// sweepExpiredPendingLocked removes entries older than pendingApprovalTTL.
+// Callers must hold pendingMu.
+func (s *Scans) sweepExpiredPendingLocked() {
+	cutoff := time.Now().Add(-pendingApprovalTTL)
+	for k, v := range s.pendingReqs {
+		if v.createdAt.Before(cutoff) {
+			delete(s.pendingReqs, k)
+		}
+	}
 }
 
 // parseTrustedProxies converts config CIDR strings to net.IPNet values.
@@ -179,10 +255,19 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// requireApproval gates whether this scan needs a genuine, distinct second
+	// authenticated user to sign off before it runs (see Approve/Reject below)
+	// instead of launching immediately with CITADEL's placeholder Verifier.
+	// Default (config off) preserves today's behavior exactly.
+	requireApproval := s.cfg != nil && s.cfg.Citadel.RequireApproval
+
 	scan := &db.Scan{
 		TargetURL: req.Target,
 		Status:    db.ScanStatusPending,
 		Modules:   req.Modules,
+	}
+	if requireApproval {
+		scan.Status = db.ScanStatusPendingApproval
 	}
 	if req.SpecURL != "" {
 		scan.SpecURL = sql.NullString{String: req.SpecURL, Valid: true}
@@ -201,10 +286,68 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 	s.auditLog(r.Context(), db.AuditActionScanCreated, "scans", &scanID,
 		middleware.ClientIPFromRequest(r, s.trustedProxies), r.UserAgent(), map[string]interface{}{"target": req.Target})
 
+	if requireApproval {
+		// Real Operator identity — the authenticated caller, same source used
+		// throughout this handler. The endpoint sits behind the JWT-protected
+		// router group, so claims are always present in production; the
+		// fallback only matters for direct unit-test calls to this handler.
+		actorUserID := "unauthenticated"
+		var actorToken string
+		if claims, ok := middleware.ClaimsFromContext(r.Context()); ok && claims.Sub != "" {
+			actorUserID = claims.Sub
+			actorToken = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		}
+
+		if _, err := s.db.CreateScanApproval(r.Context(), scanID, actorUserID); err != nil {
+			s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to create scan approval request")
+			writeError(w, http.StatusInternalServerError, "failed to create scan approval request")
+			return
+		}
+		// The scanner request (including any target auth secrets, which are
+		// never persisted — see migrations/001_create_scans.up.sql) and the
+		// Operator's own bearer token are held in memory only until a second
+		// approver decides it; see pendingApprovalTTL.
+		s.rememberPendingRequest(scanID, req, actorToken)
+
+		s.auditLog(r.Context(), db.AuditActionScanApprovalRequested, "scans", &scanID,
+			middleware.ClientIPFromRequest(r, s.trustedProxies), r.UserAgent(),
+			map[string]interface{}{"requested_by": actorUserID, "target": req.Target})
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"id":     scanID.String(),
+			"status": string(db.ScanStatusPendingApproval),
+			"message": "this scan requires approval from a different authenticated user before it runs — " +
+				"see POST /api/v1/scans/{id}/approve",
+		})
+		return
+	}
+
 	// CITADEL governance check: evaluate the scan against MARSHAL before launching.
 	// A REFUSE or HARD_STOP outcome blocks the scan regardless of dry_run config —
 	// dry_run is set on the Kerkese itself, so CITADEL decides whether to enforce.
 	if s.citadel != nil && s.cfg != nil {
+		// Actor = the real authenticated caller (sinauth sub), same identity
+		// source already used by auditLog above. ActorToken forwards the
+		// caller's own bearer token so CITADEL can verify it directly against
+		// sinauth — see citadel adrs/005-sinauth-identity-bridge.md.
+		//
+		// Known gap, not silently papered over: apiguard has no real
+		// second-approver flow for scan initiation, so Verifier is a fixed
+		// system placeholder (never equal to Actor, so it doesn't trip Gate
+		// 3's NDS_SAME_IDENTITY check) rather than a genuine second person.
+		// VerifierToken is left empty; CITADEL treats that as a soft-mode
+		// warning today (citadel.enforce_signatures=false), not a block.
+		// Building real two-person approval for scan initiation is a
+		// separate product change, tracked, not fabricated here.
+		actorUserID := "unauthenticated"
+		var actorToken string
+		if claims, ok := middleware.ClaimsFromContext(r.Context()); ok && claims.Sub != "" {
+			actorUserID = claims.Sub
+			actorToken = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		}
+
 		k := &citadel.Kerkese{
 			KerkeseVersion: "1.0",
 			TsUTC:          time.Now().UTC(),
@@ -215,8 +358,8 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 				Description: "APIGuard security scan: " + req.Target,
 				ChangeID:    scanID.String(),
 			},
-			Actor:    citadel.KerkeseActor{UserID: 0, Role: "group_sig_operator"},
-			Verifier: citadel.KerkeseVerifier{UserID: 0, Role: "group_sig_verifier"},
+			Actor:    citadel.KerkeseActor{UserID: actorUserID, Role: "group_sig_operator"},
+			Verifier: citadel.KerkeseVerifier{UserID: "apiguard-system-verifier", Role: "group_sig_verifier"},
 			Evidence: citadel.KerkeseEvidence{
 				ChangeID: scanID.String(),
 				Extra: map[string]any{
@@ -224,8 +367,9 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 					"modules":    req.Modules,
 				},
 			},
-			SoD:    citadel.KerkeseSoD{OperatorUserID: 0, VerifierUserID: 0},
-			DryRun: s.cfg.Citadel.DryRun,
+			SoD:        citadel.KerkeseSoD{OperatorUserID: actorUserID, VerifierUserID: "apiguard-system-verifier"},
+			DryRun:     s.cfg.Citadel.DryRun,
+			ActorToken: actorToken,
 		}
 		decision, evalErr := s.citadel.EvaluateScan(r.Context(), k)
 		if evalErr != nil {
@@ -240,6 +384,28 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Launch scan in background using a context derived from the server shutdown
+	// context so the goroutine is cancelled on SIGTERM rather than leaking.
+	s.scanWg.Add(1)
+	go s.launchScan(scanID, req)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"id":     scanID.String(),
+		"status": string(db.ScanStatusPending),
+	})
+}
+
+// launchScan runs a scan to completion in the background: downloads/loads the
+// spec, executes the scanner, persists findings and summary, and emits WORM
+// and audit events along the way. It is invoked both by Create() (immediate
+// launch, no approval required) and by Approve() (after a genuine second
+// approver has signed off). Callers must have already called s.scanWg.Add(1)
+// before starting this as a goroutine.
+func (s *Scans) launchScan(scanID uuid.UUID, req createScanRequest) {
+	defer s.scanWg.Done()
+
 	// Build scanner request.
 	scanReq := scanner.ScanRequest{
 		SpecPath: req.SpecPath,
@@ -252,12 +418,7 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	// Launch scan in background using a context derived from the server shutdown
-	// context so the goroutine is cancelled on SIGTERM rather than leaking.
-	s.scanWg.Add(1)
-	go func() {
-		defer s.scanWg.Done()
-		bgCtx := s.shutdownCtx
+	bgCtx := s.shutdownCtx
 
 		// A-H2: track whether the scan reached a terminal status so the deferred
 		// cleanup can mark it failed if an unexpected exit occurs.
@@ -446,16 +607,270 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		s.auditLog(bgCtx, db.AuditActionScanCompleted, "scans", &scanID, "", "",
-			map[string]interface{}{"total_findings": summary.TotalFindings})
-	}()
+	s.auditLog(bgCtx, db.AuditActionScanCompleted, "scans", &scanID, "", "",
+		map[string]interface{}{"total_findings": summary.TotalFindings})
+}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusAccepted)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"id":     scanID.String(),
-		"status": string(db.ScanStatusPending),
-	})
+// rejectScanRequest is the optional JSON body for POST /api/v1/scans/{id}/reject.
+type rejectScanRequest struct {
+	Reason string `json:"reason"`
+}
+
+// scanApprovalActionResponse is the response body for Approve/Reject.
+type scanApprovalActionResponse struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+}
+
+// approvalCitadelKerkese builds the Kerkese submitted to CITADEL MARSHAL when
+// a real second approver decides on a pending scan. Unlike the placeholder
+// used in Create() when approval is not required, both Actor and Verifier
+// here are genuine, distinct sinauth UserIDs, and — as long as the Operator's
+// token captured at request time hasn't expired — both ActorToken and
+// VerifierToken are real, live-verifiable bearer tokens too.
+func (s *Scans) approvalCitadelKerkese(scanID uuid.UUID, requestedBy, actorToken, approverUserID, approverToken string, req createScanRequest) *citadel.Kerkese {
+	return &citadel.Kerkese{
+		KerkeseVersion: "1.0",
+		TsUTC:          time.Now().UTC(),
+		ProjectID:      s.cfg.Citadel.ProjectID,
+		ExecutionID:    scanID,
+		Action: citadel.KerkeseAction{
+			Type:        "deploy_change",
+			Description: "APIGuard security scan: " + req.Target,
+			ChangeID:    scanID.String(),
+		},
+		Actor:    citadel.KerkeseActor{UserID: requestedBy, Role: "group_sig_operator"},
+		Verifier: citadel.KerkeseVerifier{UserID: approverUserID, Role: "group_sig_verifier"},
+		Evidence: citadel.KerkeseEvidence{
+			ChangeID: scanID.String(),
+			Extra: map[string]any{
+				"target_url": req.Target,
+				"modules":    req.Modules,
+			},
+		},
+		SoD:    citadel.KerkeseSoD{OperatorUserID: requestedBy, VerifierUserID: approverUserID},
+		DryRun: s.cfg.Citadel.DryRun,
+		// ActorToken is the Operator's own bearer token, captured at scan
+		// creation time and held in memory only (never persisted to the
+		// database — see migrations/001_create_scans.up.sql's "no secrets
+		// stored" comment) until this approval. It is the Operator's real
+		// token, not a placeholder — but if a lot of time passed between
+		// request and approval it may have since expired, in which case
+		// Gate 1/Gate 3's AuthN token checks for the Operator WARN rather
+		// than PASS. That is a known, soft-gated limitation
+		// (citadel.enforce_signatures is false), not silently papered over —
+		// see the design report for this feature.
+		ActorToken: actorToken,
+		// VerifierToken is the approver's own bearer token, forwarded live
+		// from their own request — CITADEL verifies it directly against
+		// sinauth, proving the Verifier's real, independently-authenticated
+		// identity (see adrs/005-sinauth-identity-bridge.md).
+		VerifierToken: approverToken,
+	}
+}
+
+// Approve handles POST /api/v1/scans/{id}/approve. A genuine, distinct second
+// authenticated user (the Verifier) signs off on a scan that is pending
+// approval, satisfying CITADEL Gate 3 Separation-of-Duties (NDS) with two
+// real, independently sinauth-authenticated identities — never a placeholder,
+// never a token handed over out-of-band by the requester.
+func (s *Scans) Approve(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseUUID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	claims, ok := middleware.ClaimsFromContext(r.Context())
+	if !ok || claims.Sub == "" {
+		writeError(w, http.StatusUnauthorized, "authentication required to approve a scan")
+		return
+	}
+	approverUserID := claims.Sub
+
+	approval, err := s.db.GetScanApprovalByScanID(r.Context(), id)
+	if err != nil {
+		if isNotFound(err) {
+			writeError(w, http.StatusNotFound, "no pending approval found for this scan")
+			return
+		}
+		s.logger.Error().Err(err).Str("scan_id", id.String()).Msg("failed to load scan approval")
+		writeError(w, http.StatusInternalServerError, "failed to load scan approval")
+		return
+	}
+
+	if approval.Status != db.ApprovalStatusPending {
+		writeError(w, http.StatusConflict, "this scan approval has already been "+string(approval.Status))
+		return
+	}
+
+	// Separation of Duties: the Verifier must be a genuinely different real
+	// identity than the Operator who requested the scan. CITADEL's Gate 3 NDS
+	// HARD_STOPs unconditionally on same-identity — this endpoint must never
+	// let one person satisfy both roles, so it is checked here too, before
+	// ever building a Kerkese.
+	if approverUserID == approval.RequestedBy {
+		writeError(w, http.StatusForbidden,
+			"the approver must be a different authenticated user than the one who requested the scan (separation of duties)")
+		return
+	}
+
+	req, actorToken, found := s.takePendingRequest(id)
+	if !found {
+		// The ephemeral request details needed to actually launch the scan
+		// (never persisted — see pendingApprovalTTL) are gone: either the
+		// server restarted since the scan was requested, or the approval
+		// window (pendingApprovalTTL) expired. Terminal state — the requester
+		// must create a new scan.
+		reason := "original scan request is no longer available (server restart or approval window expired)"
+		if err := s.db.RejectScanApproval(r.Context(), id, approverUserID, reason); err != nil {
+			s.logger.Warn().Err(err).Str("scan_id", id.String()).Msg("failed to record expired scan approval")
+		}
+		if err := s.db.UpdateScanError(r.Context(), id, "scan approval expired: "+reason); err != nil {
+			s.logger.Warn().Err(err).Str("scan_id", id.String()).Msg("failed to update scan status after approval expiry")
+		}
+		s.auditLog(r.Context(), db.AuditActionScanApprovalRejected, "scans", &id,
+			middleware.ClientIPFromRequest(r, s.trustedProxies), r.UserAgent(),
+			map[string]interface{}{"approver": approverUserID, "reason": reason})
+		writeError(w, http.StatusGone,
+			"scan was approved too late — the original request details are no longer available; create a new scan")
+		return
+	}
+
+	approverToken := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+
+	if s.citadel != nil && s.cfg != nil {
+		k := s.approvalCitadelKerkese(id, approval.RequestedBy, actorToken, approverUserID, approverToken, req)
+		decision, evalErr := s.citadel.EvaluateScan(r.Context(), k)
+		if evalErr != nil {
+			s.logger.Warn().Err(evalErr).Str("scan_id", id.String()).Msg("CITADEL marshal evaluate failed on approval — proceeding")
+		} else if decision != nil && (decision.Outcome == citadel.OutcomeRefuse || decision.Outcome == citadel.OutcomeHardStop) {
+			reasons := decision.Reasons
+			if len(reasons) == 0 {
+				reasons = []string{"CITADEL governance check rejected this approval"}
+			}
+			reasonStr := strings.Join(reasons, "; ")
+			if err := s.db.RejectScanApproval(r.Context(), id, approverUserID, reasonStr); err != nil {
+				s.logger.Warn().Err(err).Str("scan_id", id.String()).Msg("failed to record CITADEL-rejected scan approval")
+			}
+			if err := s.db.UpdateScanError(r.Context(), id, "scan rejected by CITADEL governance check: "+reasonStr); err != nil {
+				s.logger.Warn().Err(err).Str("scan_id", id.String()).Msg("failed to update scan status after CITADEL rejection")
+			}
+			s.auditLog(r.Context(), db.AuditActionScanApprovalRejected, "scans", &id,
+				middleware.ClientIPFromRequest(r, s.trustedProxies), r.UserAgent(),
+				map[string]interface{}{"approver": approverUserID, "reason": reasonStr})
+			writeError(w, http.StatusForbidden, reasonStr)
+			return
+		}
+	}
+
+	if err := s.db.ApproveScanApproval(r.Context(), id, approverUserID); err != nil {
+		// Lost a race to a concurrent approve/reject on the same scan. Put
+		// the pending request back so the current state can still be
+		// inspected/retried rather than silently orphaning the scan.
+		s.rememberPendingRequest(id, req, actorToken)
+		s.logger.Warn().Err(err).Str("scan_id", id.String()).Msg("scan approval race lost")
+		writeError(w, http.StatusConflict, "this scan approval was concurrently decided by someone else")
+		return
+	}
+
+	if err := s.db.UpdateScanStatus(r.Context(), id, db.ScanStatusPending); err != nil {
+		s.logger.Error().Err(err).Str("scan_id", id.String()).Msg("failed to set scan status to pending after approval")
+	}
+
+	s.auditLog(r.Context(), db.AuditActionScanApprovalApproved, "scans", &id,
+		middleware.ClientIPFromRequest(r, s.trustedProxies), r.UserAgent(),
+		map[string]interface{}{"approved_by": approverUserID, "requested_by": approval.RequestedBy})
+
+	s.scanWg.Add(1)
+	go s.launchScan(id, req)
+
+	writeJSON(w, http.StatusOK, scanApprovalActionResponse{ID: id.String(), Status: string(db.ScanStatusPending)})
+}
+
+// Reject handles POST /api/v1/scans/{id}/reject. A genuine, distinct second
+// authenticated user declines a pending scan request; the scan never runs.
+func (s *Scans) Reject(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseUUID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	claims, ok := middleware.ClaimsFromContext(r.Context())
+	if !ok || claims.Sub == "" {
+		writeError(w, http.StatusUnauthorized, "authentication required to reject a scan")
+		return
+	}
+	rejectorUserID := claims.Sub
+
+	approval, err := s.db.GetScanApprovalByScanID(r.Context(), id)
+	if err != nil {
+		if isNotFound(err) {
+			writeError(w, http.StatusNotFound, "no pending approval found for this scan")
+			return
+		}
+		s.logger.Error().Err(err).Str("scan_id", id.String()).Msg("failed to load scan approval")
+		writeError(w, http.StatusInternalServerError, "failed to load scan approval")
+		return
+	}
+
+	if approval.Status != db.ApprovalStatusPending {
+		writeError(w, http.StatusConflict, "this scan approval has already been "+string(approval.Status))
+		return
+	}
+
+	if rejectorUserID == approval.RequestedBy {
+		writeError(w, http.StatusForbidden,
+			"the reviewer must be a different authenticated user than the one who requested the scan (separation of duties)")
+		return
+	}
+
+	var body rejectScanRequest
+	if r.Body != nil {
+		_ = json.NewDecoder(io.LimitReader(r.Body, 4*1024)).Decode(&body) // best-effort; reason is optional
+	}
+	reason := strings.TrimSpace(body.Reason)
+	if reason == "" {
+		reason = "rejected by reviewer"
+	}
+
+	if err := s.db.RejectScanApproval(r.Context(), id, rejectorUserID, reason); err != nil {
+		s.logger.Warn().Err(err).Str("scan_id", id.String()).Msg("scan rejection race lost")
+		writeError(w, http.StatusConflict, "this scan approval was concurrently decided by someone else")
+		return
+	}
+	if err := s.db.UpdateScanError(r.Context(), id, "scan rejected: "+reason); err != nil {
+		s.logger.Error().Err(err).Str("scan_id", id.String()).Msg("failed to update scan status after rejection")
+	}
+	s.deletePendingRequest(id)
+
+	s.auditLog(r.Context(), db.AuditActionScanApprovalRejected, "scans", &id,
+		middleware.ClientIPFromRequest(r, s.trustedProxies), r.UserAgent(),
+		map[string]interface{}{"rejected_by": rejectorUserID, "requested_by": approval.RequestedBy, "reason": reason})
+
+	writeJSON(w, http.StatusOK, scanApprovalActionResponse{ID: id.String(), Status: string(db.ScanStatusFailed)})
+}
+
+// GetApproval handles GET /api/v1/scans/{id}/approval — returns the current
+// two-person approval state for a scan (who requested it, who decided it and
+// how, if anyone yet).
+func (s *Scans) GetApproval(w http.ResponseWriter, r *http.Request) {
+	id, ok := parseUUID(w, r, "id")
+	if !ok {
+		return
+	}
+
+	approval, err := s.db.GetScanApprovalByScanID(r.Context(), id)
+	if err != nil {
+		if isNotFound(err) {
+			writeError(w, http.StatusNotFound, "no approval record for this scan")
+			return
+		}
+		s.logger.Error().Err(err).Str("scan_id", id.String()).Msg("failed to load scan approval")
+		writeError(w, http.StatusInternalServerError, "failed to load scan approval")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, approval)
 }
 
 // listScansResponse wraps paginated scan results.
@@ -475,7 +890,7 @@ func (s *Scans) List(w http.ResponseWriter, r *http.Request) {
 	// A-M3: Validate status filter against known scan status values.
 	if statusFilter != "" {
 		switch db.ScanStatus(statusFilter) {
-		case db.ScanStatusPending, db.ScanStatusRunning, db.ScanStatusCompleted, db.ScanStatusFailed, db.ScanStatusCancelled:
+		case db.ScanStatusPending, db.ScanStatusPendingApproval, db.ScanStatusRunning, db.ScanStatusCompleted, db.ScanStatusFailed, db.ScanStatusCancelled:
 			// valid
 		default:
 			writeError(w, http.StatusBadRequest, "invalid status value")

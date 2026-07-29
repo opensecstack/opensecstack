@@ -10,7 +10,7 @@ All endpoints return JSON unless otherwise noted. Authenticated endpoints requir
 
 - [Authentication](#authentication)
 - [Health and Status](#health-and-status)
-- [Scans](#scans)
+- [Scans](#scans) (including [scan approval](#post-apiv1scansidapprove))
 - [Findings](#findings)
 - [API Inventory](#api-inventory)
 
@@ -141,7 +141,7 @@ Returns build and version information.
 
 ### POST /api/v1/scans
 
-Create a new security scan. Provide either a `spec_url` pointing to a remote OpenAPI spec or an `inline_spec` with the spec content directly.
+Create a new security scan. Provide either `spec_url` (a remote OpenAPI spec URL, validated against SSRF) or `spec_path` (a local file path, restricted to the server's temp directory).
 
 **Auth required:** Yes
 
@@ -149,56 +149,53 @@ Create a new security scan. Provide either a `spec_url` pointing to a remote Ope
 
 ```json
 {
-  "target_url": "https://api.example.com",
+  "target": "https://api.example.com",
   "spec_url": "https://api.example.com/openapi.json",
-  "inline_spec": null,
+  "spec_path": "",
   "modules": ["a1_bola", "a5_function_auth", "a3_mass_assignment", "a7_ssrf", "a2_auth"],
-  "auth": {
-    "type": "bearer",
-    "token": "target-api-token"
-  },
-  "options": {
-    "rate_limit": 50,
-    "timeout_seconds": 300,
-    "follow_redirects": true
-  }
+  "auth_type": "bearer",
+  "auth_token": "target-api-token",
+  "auth_header": ""
 }
 ```
 
-| Field          | Type     | Required | Description                                      |
-|----------------|----------|----------|--------------------------------------------------|
-| `target_url`   | string   | Yes      | Base URL of the API under test                   |
-| `spec_url`     | string   | No       | URL to an OpenAPI/Swagger spec                   |
-| `inline_spec`  | object   | No       | OpenAPI spec provided inline as JSON             |
-| `modules`      | string[] | No       | Security test modules to run (default: all)      |
-| `auth`         | object   | No       | Auth config for the target API                   |
-| `auth.type`    | string   | No       | `bearer`, `basic`, `api_key`, or `oauth2`        |
-| `auth.token`   | string   | No       | Token or key value                               |
-| `auth.header`  | string   | No       | Custom header name (for `api_key` type)          |
-| `auth.username` | string  | No       | Username (for `basic` type)                      |
-| `auth.password` | string  | No       | Password (for `basic` type)                      |
-| `options`      | object   | No       | Scan execution options                           |
+| Field          | Type     | Required | Description                                                  |
+|----------------|----------|----------|----------------------------------------------------------------|
+| `target`       | string   | Yes      | Base URL of the API under test                                 |
+| `spec_url`     | string   | No*      | URL to an OpenAPI/Swagger spec                                  |
+| `spec_path`    | string   | No*      | Local filesystem path to a spec file (must resolve under the server's temp directory) |
+| `modules`      | string[] | No       | Security test modules to run (default: all)                    |
+| `auth_type`    | string   | No       | Auth type for the target API (e.g. `bearer`)                    |
+| `auth_token`   | string   | No       | Token or key value for the target API. Never persisted to the database. |
+| `auth_header`  | string   | No       | Custom header name to carry the auth token/key                 |
 
-Either `spec_url` or `inline_spec` must be provided.
+\* Either `spec_url` or `spec_path` must be provided.
 
-**Response (`201 Created`):**
+Note: the request body is a **flat** JSON object — there is no nested `auth` or `options` object, and there is no `inline_spec` field.
+
+**Response (`202 Accepted`):**
 
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "queued",
-  "target_url": "https://api.example.com",
-  "modules": ["a1_bola", "a5_function_auth", "a3_mass_assignment", "a7_ssrf", "a2_auth"],
-  "created_at": "2026-03-24T12:05:00Z"
+  "status": "pending"
 }
 ```
 
-| Status Code | Description                    |
-|-------------|--------------------------------|
-| 201         | Scan created and queued        |
-| 400         | Invalid request body           |
-| 401         | Unauthorized                   |
-| 422         | Spec parsing failed            |
+The scan is created and launched asynchronously in the background; the response body only ever contains `id` and `status`. Poll `GET /api/v1/scans/:id` for target, modules, timestamps, and progress.
+
+| Status Code | Description                                          |
+|-------------|-------------------------------------------------------|
+| 202         | Scan created and accepted (launched, or awaiting approval — see below) |
+| 400         | Invalid request body, or invalid `target`/`spec_path` |
+| 401         | Unauthorized                                           |
+| 403         | Blocked by CITADEL MARSHAL governance decision (`REFUSE`/`HARD_STOP`) |
+| 422         | `spec_url`/`spec_path` missing, or spec parsing failed |
+| 413         | Request body exceeds 1 MB                              |
+
+Scan `status` follows this lifecycle: `pending` → `running` → `completed` / `failed` / `cancelled`. When two-person approval is required (see below), the initial status is `pending_approval` instead of `pending`.
+
+> **Two-person approval:** when the server is configured with `citadel.require_approval: true` (default: `false`), this endpoint does not launch the scan. It returns `202 Accepted` with `"status": "pending_approval"` instead, and a different authenticated user must call `POST /api/v1/scans/:id/approve` before the scan runs. See [Scan Approval](#post-apiv1scansidapprove) below.
 
 ---
 
@@ -214,7 +211,7 @@ List scans with optional filters and pagination.
 |------------|--------|---------|---------------------------------------------------|
 | `page`     | int    | 1       | Page number                                        |
 | `per_page` | int    | 20      | Results per page (max 100)                         |
-| `status`   | string | —       | Filter by status: `queued`, `running`, `completed`, `failed`, `cancelled` |
+| `status`   | string | —       | Filter by status: `pending`, `pending_approval`, `running`, `completed`, `failed`, `cancelled` |
 | `since`    | string | —       | Filter scans created after this ISO 8601 timestamp |
 | `until`    | string | —       | Filter scans created before this ISO 8601 timestamp |
 | `sort`     | string | `created_at` | Sort field: `created_at`, `status`            |
@@ -426,6 +423,95 @@ No response body.
 | 204         | Scan deleted           |
 | 401         | Unauthorized           |
 | 404         | Scan not found         |
+
+---
+
+### POST /api/v1/scans/:id/approve
+
+Approve a scan that is awaiting two-person sign-off (only relevant when `citadel.require_approval` is enabled — see the note under `POST /api/v1/scans` above). The caller becomes the CITADEL Kerkese Verifier: their own sinauth identity and bearer token are submitted to CITADEL MARSHAL alongside the original requester's, satisfying Separation of Duties (CITADEL Gate 3 / NDS). On success, the scan launches.
+
+**Auth required:** Yes — and the caller must be a **different** authenticated user than whoever created the scan.
+
+**Response (`200 OK`):**
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "pending"
+}
+```
+
+| Status Code | Description                                                                 |
+|-------------|------------------------------------------------------------------------------|
+| 200         | Approved; scan launched                                                     |
+| 401         | Unauthorized                                                                 |
+| 403         | Approver is the same identity as the requester (Separation of Duties), or CITADEL MARSHAL returned REFUSE/HARD_STOP |
+| 404         | No pending approval found for this scan                                     |
+| 409         | Approval was already decided, or concurrently decided by someone else       |
+| 410         | Approval window expired (24h) or the server restarted since the scan was requested — create a new scan |
+
+---
+
+### POST /api/v1/scans/:id/reject
+
+Decline a scan that is awaiting two-person sign-off. The scan never runs.
+
+**Auth required:** Yes — and the caller must be a **different** authenticated user than whoever created the scan.
+
+**Request body (optional):**
+
+```json
+{ "reason": "target is out of scope for this environment" }
+```
+
+**Response (`200 OK`):**
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "failed"
+}
+```
+
+| Status Code | Description                                                            |
+|-------------|--------------------------------------------------------------------------|
+| 200         | Rejected                                                                  |
+| 401         | Unauthorized                                                              |
+| 403         | Rejector is the same identity as the requester (Separation of Duties)   |
+| 404         | No pending approval found for this scan                                 |
+| 409         | Approval was already decided, or concurrently decided by someone else   |
+
+---
+
+### GET /api/v1/scans/:id/approval
+
+Get the current two-person approval state for a scan: who requested it, and — once decided — who approved or rejected it, when, and why.
+
+**Auth required:** Yes
+
+**Response (`200 OK`):**
+
+```json
+{
+  "id": "8f14e45f-ceea-467e-a3a3-f1a9c8b3c2d1",
+  "scan_id": "550e8400-e29b-41d4-a716-446655440000",
+  "requested_by": "a1b2c3d4-...-sinauth-uuid",
+  "status": "pending",
+  "decided_by": null,
+  "decided_at": null,
+  "decision_reason": null,
+  "created_at": "2026-03-24T12:05:00Z",
+  "updated_at": "2026-03-24T12:05:00Z"
+}
+```
+
+`status` is one of `pending`, `approved`, `rejected`.
+
+| Status Code | Description                     |
+|-------------|----------------------------------|
+| 200         | Approval record returned         |
+| 401         | Unauthorized                     |
+| 404         | No approval record for this scan |
 
 ---
 

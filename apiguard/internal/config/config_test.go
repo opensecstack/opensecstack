@@ -9,7 +9,8 @@ import (
 )
 
 // setupViper wires viper with the same env prefix and replacer used by the
-// real application (defined in cmd/apiguard/commands/root.go).
+// real application (defined in setDefaults() in this package, and mirrored
+// by initConfig() in cmd/apiguard/main.go for YAML file loading).
 func setupViper() {
 	viper.Reset()
 	viper.SetEnvPrefix("APIGUARD")

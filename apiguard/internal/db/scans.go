@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -13,6 +14,20 @@ import (
 func (d *DB) CreateScan(ctx context.Context, scan *Scan) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
+
+	// Both columns are NOT NULL DEFAULT — but an explicit NULL parameter
+	// overrides the column default rather than falling back to it, so a nil
+	// Modules slice or ConfigJSON (the zero value callers get if they don't
+	// set these fields — e.g. a request whose JSON body omits "modules")
+	// would otherwise violate the NOT NULL constraint at insert time. Normalize
+	// here so every caller gets the same safe behavior instead of every caller
+	// having to remember to set these before calling CreateScan.
+	if scan.Modules == nil {
+		scan.Modules = []string{}
+	}
+	if scan.ConfigJSON == nil {
+		scan.ConfigJSON = json.RawMessage("{}")
+	}
 
 	query := `
 		INSERT INTO scans (spec_url, spec_hash, target_url, status, modules, config_json, auth_type)
@@ -157,6 +172,9 @@ func (d *DB) UpdateScanStatus(ctx context.Context, id uuid.UUID, status ScanStat
 		query = `UPDATE scans SET status = $1, completed_at = $2, updated_at = $2 WHERE id = $3`
 		now := time.Now()
 		args = []interface{}{status, now, id}
+	case ScanStatusPending, ScanStatusPendingApproval:
+		query = `UPDATE scans SET status = $1, updated_at = NOW() WHERE id = $2`
+		args = []interface{}{status, id}
 	default:
 		query = `UPDATE scans SET status = $1, updated_at = NOW() WHERE id = $2`
 		args = []interface{}{status, id}

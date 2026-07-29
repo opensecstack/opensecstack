@@ -21,6 +21,21 @@ type Kerkese struct {
 	DryRun         bool            `json:"dry_run,omitempty"`
 	Emergency      bool            `json:"emergency,omitempty"`
 	EmergencyJust  string          `json:"emergency_justification,omitempty"`
+
+	// SigOperator/SigVerifier: hex-encoded Ed25519 signatures over
+	// CanonicalPayload (see citadel ADR-004). apiguard does not currently
+	// sign requests (no per-user private key custody in this flow) — left
+	// empty, which CITADEL treats as a soft-mode warning, not a block.
+	SigOperator string `json:"sig_operator,omitempty"`
+	SigVerifier string `json:"sig_verifier,omitempty"`
+
+	// ActorToken/VerifierToken: sinauth bearer tokens proving Operator's and
+	// Verifier's identity (see citadel ADR-005). apiguard forwards the real
+	// caller's bearer token as ActorToken; VerifierToken is left empty
+	// (apiguard has no real second-approver flow for scan initiation today —
+	// see internal/api/handlers/scans.go).
+	ActorToken    string `json:"actor_token,omitempty"`
+	VerifierToken string `json:"verifier_token,omitempty"`
 }
 
 type KerkeseAction struct {
@@ -33,13 +48,13 @@ type KerkeseAction struct {
 }
 
 type KerkeseActor struct {
-	UserID int64  `json:"user_id"`
+	UserID string `json:"user_id"`
 	Role   string `json:"role"`
 	Email  string `json:"email,omitempty"`
 }
 
 type KerkeseVerifier struct {
-	UserID int64  `json:"user_id"`
+	UserID string `json:"user_id"`
 	Role   string `json:"role"`
 	Email  string `json:"email,omitempty"`
 }
@@ -58,8 +73,8 @@ type EvidenceArtifact struct {
 }
 
 type KerkeseSoD struct {
-	OperatorUserID int64 `json:"operator_user_id"`
-	VerifierUserID int64 `json:"verifier_user_id"`
+	OperatorUserID string `json:"operator_user_id"`
+	VerifierUserID string `json:"verifier_user_id"`
 }
 
 // Decision is the outcome returned by CITADEL MARSHAL.

@@ -167,6 +167,20 @@ type CitadelConfig struct {
 	// webhook events from CITADEL. Set via APIGUARD_CITADEL_WEBHOOK_SECRET.
 	// When empty, the webhook endpoint rejects all requests with 401.
 	WebhookSecret string `mapstructure:"webhook_secret" json:"-"`
+	// RequireApproval, when true, requires a genuine second authenticated user
+	// (a real, distinct sinauth identity — never a placeholder) to approve a
+	// scan via POST /api/v1/scans/{id}/approve before it launches. This
+	// replaces the fixed "apiguard-system-verifier" placeholder with a real
+	// two-person Separation-of-Duties flow feeding CITADEL Gate 3 (NDS) with
+	// two distinct, independently-authenticated identities.
+	//
+	// Default: false — scans launch immediately after CITADEL evaluation with
+	// the placeholder Verifier, exactly like today, until an operator opts in.
+	// This mirrors citadel.enforce_signatures' soft-rollout philosophy: ship
+	// the capability, but don't change default behavior (and risk breaking
+	// existing API consumers/tests) until the deployer is ready.
+	// Set via APIGUARD_CITADEL_REQUIRE_APPROVAL or citadel.require_approval.
+	RequireApproval bool `mapstructure:"require_approval"`
 }
 
 // Load reads configuration from viper with defaults applied.
@@ -226,6 +240,7 @@ func Load() *Config {
 			ProjectID: viper.GetString("citadel.project_id"),
 			DryRun:    viper.GetBool("citadel.dry_run"),
 			WebhookSecret: viper.GetString("citadel.webhook_secret"),
+			RequireApproval: viper.GetBool("citadel.require_approval"),
 		},
 	}
 
@@ -306,6 +321,10 @@ func setDefaults() {
 	// dry_run=true by default — CITADEL logs decisions without blocking scans.
 	// Set APIGUARD_CITADEL_DRY_RUN=false to enable full governance enforcement.
 	viper.SetDefault("citadel.dry_run", true)
+	// require_approval=false by default — preserves today's immediate-launch
+	// behavior. Set APIGUARD_CITADEL_REQUIRE_APPROVAL=true to require a real,
+	// distinct second user to approve every scan before it runs.
+	viper.SetDefault("citadel.require_approval", false)
 
 	viper.SetEnvPrefix("APIGUARD")
 	// Map nested config keys (e.g. db.url) to env vars (APIGUARD_DB_URL).

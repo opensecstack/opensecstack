@@ -17,6 +17,11 @@ const (
 	ScanStatusCompleted ScanStatus = "completed"
 	ScanStatusFailed    ScanStatus = "failed"
 	ScanStatusCancelled ScanStatus = "cancelled"
+	// ScanStatusPendingApproval means the scan has been requested but is
+	// waiting on a genuine, distinct second authenticated user to approve it
+	// (see ScanApproval / POST /api/v1/scans/{id}/approve) before it runs.
+	// Only reachable when config Citadel.RequireApproval is true.
+	ScanStatusPendingApproval ScanStatus = "pending_approval"
 )
 
 // FindingSeverity represents the severity level of a finding.
@@ -139,6 +144,9 @@ const (
 	AuditActionUserLogin            AuditAction = "user_login"
 	AuditActionUserLogout           AuditAction = "user_logout"
 	AuditActionJWTSecretRotated     AuditAction = "jwt_secret_rotated"
+	AuditActionScanApprovalRequested AuditAction = "scan_approval_requested"
+	AuditActionScanApprovalApproved  AuditAction = "scan_approval_approved"
+	AuditActionScanApprovalRejected  AuditAction = "scan_approval_rejected"
 )
 
 // AuditLog represents a row in the audit_log table.

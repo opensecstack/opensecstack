@@ -1,46 +1,67 @@
 # APIGuard Configuration
-# Environment variables take precedence over this file.
+#
+# Copy this file to apiguard.yaml and pass it explicitly with
+# `apiguard server --config apiguard.yaml` (or `-c`), or place it as
+# ./apiguard.yaml, $HOME/.apiguard/apiguard.yaml, or /etc/apiguard/apiguard.yaml
+# so it is picked up automatically (see initConfig in cmd/apiguard/main.go).
+#
+# Precedence (highest to lowest): CLI flags > APIGUARD_* environment
+# variables > this file > built-in defaults (see internal/config/config.go).
 # All secrets MUST use environment variables — never put secrets here.
 
-server:
-  host: 0.0.0.0
-  port: 8080
-  tls:
-    enabled: false
-    # cert_path: /path/to/cert.pem   # APIGUARD_TLS_CERT
-    # key_path: /path/to/key.pem     # APIGUARD_TLS_KEY
+port: 8080
+log_level: info
 
-database:
+db:
   # url: set via APIGUARD_DB_URL (required)
-  max_connections: 20
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: 5m
 
-auth:
-  # jwt_secret: set via APIGUARD_JWT_SECRET (required, min 32 chars)
-  token_expiry: 86400  # seconds (24h)
+redis:
+  url: redis://localhost:6379
+  # password: set via APIGUARD_REDIS_PASSWORD
+  db: 0
 
 scanner:
-  concurrency: 5
-  request_timeout: 30       # seconds per request
-  rate_limit_rps: 10        # requests per second to target API
-  max_spec_size_mb: 10
+  timeout: 5m
+  concurrency: 10
+  max_spec_size: 10          # MB
+  rate_limit: 0               # requests per second to target API; 0 = unlimited
+  tls_skip_verify: false
+  # custom_rules_dir: /path/to/custom/rules
+
+auth:
+  # jwt_secret: set via APIGUARD_AUTH_JWT_SECRET (required, min 32 chars)
+  # previous_jwt_secret: set via APIGUARD_AUTH_PREVIOUS_JWT_SECRET (legacy rotation slot)
+  # jwt_secrets: set via APIGUARD_AUTH_JWT_SECRETS (comma-separated, up to 3, preferred rotation mechanism)
+  token_expiry: 24h
+  enable_api_keys: false
+  # api_keys: set via APIGUARD_AUTH_API_KEYS (comma-separated)
+  sinauth_url: http://localhost:8100
+
+report:
+  default_format: json
+  output_dir: ./reports
+
+dashboard:
+  enabled: true
+  static_dir: ./web/dist
+
+cors:
+  # origins: set via APIGUARD_CORS_ORIGINS (comma-separated); empty = deny all cross-origin requests
+  origins: []
+
+ratelimit:
+  # trusted_proxies: set via APIGUARD_RATELIMIT_TRUSTED_PROXIES (comma-separated IPs/CIDRs)
+  trusted_proxies: []
+  trusted_proxy_depth: 1
 
 citadel:
-  enabled: false
-  # endpoint: set via APIGUARD_CITADEL_URL
-  # api_key: set via APIGUARD_CITADEL_KEY
-
-reporting:
-  output_dir: ./reports
-  retention_days: 90
-
-modules:
-  a1_bola: true
-  a2_auth: true
-  a3_mass_assignment: true
-  a4_rate_limiting: true
-  a5_function_auth: true
-  a6_business_flow: false       # requires manual config
-  a7_ssrf: true
-  a8_misconfig: true
-  a9_inventory: true
-  a10_unsafe_consumption: false  # requires OAST setup
+  # api_url: set via APIGUARD_CITADEL_URL (e.g. http://citadel-api:8099) — empty disables the CITADEL client
+  # key_id: set via APIGUARD_CITADEL_KEY_ID (HMAC connector key identifier)
+  # key_secret: set via APIGUARD_CITADEL_KEY_SECRET (HMAC-SHA256 signing secret — never commit)
+  project_id: apiguard
+  dry_run: true
+  # webhook_secret: set via APIGUARD_CITADEL_WEBHOOK_SECRET (required to accept inbound CITADEL webhooks)
+  require_approval: false

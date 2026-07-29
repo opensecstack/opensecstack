@@ -18,6 +18,7 @@ Before going live:
 - [ ] `log.format: json` for structured log ingestion
 - [ ] Rate limiting configured (`scanner.rate_limit_rps`)
 - [ ] CITADEL integration enabled if governance logging is required
+- [ ] Decide whether `citadel.require_approval` should be `true` (real two-person approval on every scan) — it defaults to `false`, meaning scans launch immediately with a placeholder CITADEL Verifier unless explicitly turned on
 
 ---
 

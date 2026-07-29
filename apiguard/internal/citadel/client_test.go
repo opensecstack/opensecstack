@@ -235,8 +235,8 @@ func TestClient_EvaluateScan_ExecuteOutcome(t *testing.T) {
 		ProjectID:      "proj-1",
 		ExecutionID:    execID,
 		Action:         KerkeseAction{Type: "deploy_change", ChangeID: "scan-001"},
-		Actor:          KerkeseActor{UserID: 0, Role: "group_sig_operator"},
-		Verifier:       KerkeseVerifier{UserID: 0, Role: "group_sig_verifier"},
+		Actor:          KerkeseActor{UserID: "0", Role: "group_sig_operator"},
+		Verifier:       KerkeseVerifier{UserID: "0", Role: "group_sig_verifier"},
 		SoD:            KerkeseSoD{},
 	}
 

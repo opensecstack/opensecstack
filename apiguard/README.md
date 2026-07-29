@@ -104,6 +104,8 @@ The web dashboard uses `sinauth.ts` for popup-based login and an `AuthCallback` 
 Auth events are forwarded to the CITADEL WORM audit chain, and a `POST /api/v1/auth/logout` endpoint maintains an access-token denylist.
 See the [sinauth integration guide](../sinauth/docs/integration/apiguard.md) for setup details.
 
+Scan creation carries the real authenticated caller's identity and sinauth bearer token through to CITADEL as the Kerkese `Actor`/`ActorToken` (no more hardcoded placeholder user). When `citadel.require_approval` is enabled (default: `false`), a scan does not launch immediately — it sits in `pending_approval` until a second, distinct authenticated user approves it via `POST /api/v1/scans/{id}/approve`, contributing their own real identity/token as the Kerkese `Verifier`. See [CITADEL Integration](docs/integration.md#citadel-integration) for details, including the current known gap around Gate 2 (AuthZ) enforcement.
+
 ### Security & Compliance
 
 | Document | Description |

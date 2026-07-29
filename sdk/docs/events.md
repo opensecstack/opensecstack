@@ -160,9 +160,14 @@ Emitted immediately on any HARD STOP outcome.
 }
 ```
 
-### `citadel.vigil_red`
+### `citadel.vigil_red` (planned)
 
-Emitted when VIGIL transitions to RED.
+> VIGIL is design-stage as of CITADEL v1.0.0 — this event type does not
+> exist yet. It ships with VIGIL in CITADEL v2.0. Documented here so
+> integrators can plan ahead. See
+> [citadel/docs/vigil.md](../../citadel/docs/vigil.md).
+
+Will be emitted when VIGIL transitions to RED.
 
 ```json
 {
@@ -175,9 +180,10 @@ Emitted when VIGIL transitions to RED.
 }
 ```
 
-### `citadel.vigil_amber`
+### `citadel.vigil_amber` (planned)
 
-Emitted when VIGIL transitions to AMBER.
+Will be emitted when VIGIL transitions to AMBER (see the VIGIL note above —
+design-stage as of CITADEL v1.0.0, ships v2.0).
 
 ```json
 {

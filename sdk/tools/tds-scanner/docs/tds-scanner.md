@@ -9,8 +9,8 @@ tds-scanner measures and validates Time Dimension Segmentation (TDS) compliance 
 | Tier | Latency bound | Operations |
 |------|--------------|-----------|
 | Second hand | < 300ms | Real-time checks, per-request operations, status polls |
-| Minute hand | 300ms – 30s | Report generation, standard scans (small specs), VIGIL_REALTIME |
-| Hour hand | > 30s | Full large-spec scans, VIGIL_DEEP, batch analytics |
+| Minute hand | 300ms – 30s | Report generation, standard scans (small specs), VIGIL_REALTIME (planned) |
+| Hour hand | > 30s | Full large-spec scans, VIGIL_DEEP (planned), batch analytics |
 
 Operations that exceed their tier boundary are flagged as TDS violations. A TDS violation does not mean the system is broken — it means an operation is taking longer than its contract allows.
 
@@ -103,12 +103,12 @@ tds-scanner scan --target ... --compare-baseline baseline.json
 
 | Operation | TDS tier | Test method |
 |-----------|---------|------------|
-| `GET /api/v1/vigil/status` | Second hand | Single poll |
+| `GET /api/v1/vigil/status` (planned — VIGIL is design-stage, ships CITADEL v2.0) | Second hand | Single poll |
 | `POST /api/v1/marshal/evaluate` (dry-run) | Second hand | Dry-run Kerkese |
 | `GET /api/v1/augur/advisory` | Second hand | Advisory fetch |
 | Chain anchor age check | Minute hand | Anchor status |
 | `POST /api/v1/worm/verify` (7-day window) | Hour hand | Chain verify |
-| VIGIL_DEEP (on-demand) | Hour hand | Full audit scan |
+| VIGIL_DEEP (planned, on-demand) | Hour hand | Full audit scan |
 
 ---
 

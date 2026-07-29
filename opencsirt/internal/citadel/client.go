@@ -59,7 +59,11 @@ type Config struct {
 	KeyID      string
 
 	APIURL string
-	DryRun bool
+	// ProjectID is forwarded as the "project_id" field on every WORM emit
+	// (see emitRequest in citadel/internal/api/handlers/worm.go). Defaults
+	// to "opencsirt" if unset — see config.CitadelProjectID.
+	ProjectID string
+	DryRun    bool
 }
 
 // primarySecret returns the bytes to sign with.
@@ -98,13 +102,22 @@ func (cfg *Config) SecretsAsBytes() [][]byte {
 // NewFromConfig constructs a Client from the operator Config struct.
 // Use this in main.go instead of calling New() directly.
 func NewFromConfig(cfg Config, logger zerolog.Logger) *Client {
-	return New(cfg.APIURL, cfg.SecretsAsBytes(), cfg.primaryKeyID(), cfg.DryRun, logger)
+	projectID := cfg.ProjectID
+	if projectID == "" {
+		projectID = "opencsirt"
+	}
+	return New(cfg.APIURL, cfg.SecretsAsBytes(), cfg.primaryKeyID(), projectID, cfg.DryRun, logger)
 }
+
+// source identifies this producer in every WORM entry it emits — the
+// "source" field in citadel/internal/api/handlers/worm.go's emitRequest.
+const source = "opencsirt"
 
 type Client struct {
 	apiURL      string
 	hmacSecrets [][]byte // sign with [0]
 	keyID       string
+	projectID   string
 	dryRun      bool
 	http        *http.Client
 	logger      zerolog.Logger
@@ -128,11 +141,15 @@ type Confirmation struct {
 	Err     error
 }
 
-func New(apiURL string, secrets [][]byte, keyID string, dryRun bool, logger zerolog.Logger) *Client {
+func New(apiURL string, secrets [][]byte, keyID string, projectID string, dryRun bool, logger zerolog.Logger) *Client {
+	if projectID == "" {
+		projectID = "opencsirt"
+	}
 	c := &Client{
 		apiURL:      apiURL,
 		hmacSecrets: secrets,
 		keyID:       keyID,
+		projectID:   projectID,
 		dryRun:      dryRun,
 		http:        &http.Client{Timeout: 10 * time.Second},
 		logger:      logger,
@@ -224,14 +241,40 @@ func (c *Client) publish(conf Confirmation) {
 	}
 }
 
+// wormEmitRequest is the body CITADEL's POST /api/v1/worm/emit expects —
+// see citadel/internal/api/handlers/worm.go's emitRequest. Field names must
+// match exactly (source, event_type, project_id, payload).
+type wormEmitRequest struct {
+	Source    string          `json:"source"`
+	EventType string          `json:"event_type"`
+	ProjectID string          `json:"project_id,omitempty"`
+	Payload   json.RawMessage `json:"payload"`
+}
+
 func (c *Client) deliver(ctx context.Context, env *Envelope) error {
-	body, err := json.Marshal(env.Payload)
+	payload, err := json.Marshal(env.Payload)
 	if err != nil {
 		return err
 	}
 	if len(c.hmacSecrets) == 0 {
 		return errors.New("citadel: no hmac secrets configured")
 	}
+
+	body, err := json.Marshal(wormEmitRequest{
+		Source:    source,
+		EventType: env.EventType,
+		ProjectID: c.projectID,
+		Payload:   payload,
+	})
+	if err != nil {
+		return err
+	}
+
+	// worm/emit takes a plain JSON body (see citadel/internal/api/server.go —
+	// no HMAC verification is wired up on that route today). These headers
+	// are kept for their audit/log value and forward-compatibility should
+	// CITADEL add signature verification to worm/emit later; they are not
+	// required for delivery to succeed.
 	ts := time.Now().UTC().Format(time.RFC3339)
 	mac := hmac.New(sha256.New, c.hmacSecrets[0])
 	mac.Write([]byte(ts))
@@ -240,7 +283,7 @@ func (c *Client) deliver(ctx context.Context, env *Envelope) error {
 	sig := hex.EncodeToString(mac.Sum(nil))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.apiURL+"/api/v1/events", bytes.NewReader(body))
+		c.apiURL+"/api/v1/worm/emit", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

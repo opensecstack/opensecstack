@@ -2,16 +2,29 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog"
 
 	"github.com/opensecstack/opencsirt/internal/advisory"
 	"github.com/opensecstack/opencsirt/internal/auth"
 	"github.com/opensecstack/opencsirt/internal/db"
+	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
 )
 
 type Advisory struct {
 	Service *advisory.Service
+
+	// CITADEL governance (see Publish). Citadel is nil when
+	// OPENCSIRT_CITADEL_API_URL is unset — the governance check is then
+	// skipped entirely (matches the outbox/watcher's existing dry-run
+	// posture for audit-only events).
+	Citadel          *sdkcitadel.Client
+	CitadelProjectID string
+	CitadelDryRun    bool
+	Logger           zerolog.Logger
 }
 
 type advisoryRequest struct {
@@ -153,6 +166,65 @@ func (h *Advisory) Publish(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
+
+	// CITADEL governance check: advisory publication is irreversible and
+	// public-facing (it goes out to the constituency and, via ThreatFlow
+	// push, beyond it), so it is evaluated against MARSHAL before it
+	// happens. A REFUSE or HARD_STOP outcome blocks the publish.
+	if h.Citadel != nil {
+		// Actor = the real authenticated caller (the same identity source
+		// actorAndRole already derives from JWT/sinauth claims for the
+		// audit log). ActorToken forwards the caller's own bearer token so
+		// CITADEL can verify it directly against sinauth — see citadel
+		// adrs/005-sinauth-identity-bridge.md.
+		actorToken := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+
+		// Known gap, deliberately not papered over: OpenCSIRT has no real
+		// second-approver flow for advisory publication — confirmed there
+		// is no reviewed_by/approved_by concept anywhere in db.Advisory or
+		// advisory.Service; a single csirt_lead currently both authors (or
+		// requests) and publishes. Verifier is therefore a fixed system
+		// placeholder, distinct from Actor so it can never trip Gate 3's
+		// NDS_SAME_IDENTITY HARD_STOP, rather than a genuine second
+		// person. VerifierToken is left empty; CITADEL's soft mode
+		// (citadel.enforce_identity / enforce_signatures both false)
+		// treats that as a warning, not a block, today. Building real
+		// two-person approval for advisory publication is a separate
+		// product change (new draft→review→publish states), not
+		// fabricated here.
+		k := sdkcitadel.Kerkese{
+			KerkeseVersion: "1.0",
+			TsUTC:          time.Now().UTC(),
+			ProjectID:      h.CitadelProjectID,
+			ExecutionID:    id,
+			Action: sdkcitadel.KerkeseAction{
+				Type:        "ADVISORY_PUBLISH",
+				Description: "OpenCSIRT advisory publication",
+				ChangeID:    id.String(),
+			},
+			Actor:    sdkcitadel.KerkeseActor{UserID: actor.String(), Role: role},
+			Verifier: sdkcitadel.KerkeseVerifier{UserID: "opencsirt-system-verifier", Role: "group_sig_verifier"},
+			Evidence: sdkcitadel.KerkeseEvidence{
+				ChangeID: id.String(),
+				Extra:    map[string]any{"advisory_id": id.String()},
+			},
+			SoD:        sdkcitadel.KerkeseSoD{OperatorUserID: actor.String(), VerifierUserID: "opencsirt-system-verifier"},
+			DryRun:     h.CitadelDryRun,
+			ActorToken: actorToken,
+		}
+		decision, evalErr := h.Citadel.Evaluate(r.Context(), k)
+		if evalErr != nil {
+			h.Logger.Warn().Err(evalErr).Str("advisory_id", id.String()).Msg("CITADEL marshal evaluate failed — proceeding with publish")
+		} else if decision != nil && (decision.Outcome == sdkcitadel.OutcomeRefuse || decision.Outcome == sdkcitadel.OutcomeHardStop) {
+			reasons := decision.Reasons
+			if len(reasons) == 0 {
+				reasons = []string{"CITADEL governance check rejected this advisory publication"}
+			}
+			writeError(w, http.StatusForbidden, strings.Join(reasons, "; "))
+			return
+		}
+	}
+
 	a, err := h.Service.Publish(r.Context(), id, actor, role)
 	if err != nil {
 		code, msg := mapDBError(err)

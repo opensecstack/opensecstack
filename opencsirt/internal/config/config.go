@@ -33,10 +33,13 @@ type Config struct {
 	SinauthURL string
 
 	// CITADEL
-	CitadelAPIURL       string
-	CitadelHMACSecrets  [][]byte
-	CitadelKeyID        string
-	CitadelDryRun       bool
+	CitadelAPIURL     string
+	CitadelHMACSecrets [][]byte
+	CitadelKeyID      string
+	// CitadelProjectID is forwarded as project_id on every WORM emit and on
+	// every Kerkese governance evaluation submitted to MARSHAL.
+	CitadelProjectID string
+	CitadelDryRun    bool
 
 	// ThreatFlow
 	ThreatFlowAPIURL    string
@@ -86,6 +89,7 @@ func FromEnv() (*Config, error) {
 		CitadelAPIURL:      env("OPENCSIRT_CITADEL_API_URL", ""),
 		CitadelHMACSecrets: parseSecrets(env("OPENCSIRT_CITADEL_HMAC_SECRETS", "")),
 		CitadelKeyID:       env("OPENCSIRT_CITADEL_KEY_ID", "opencsirt-1"),
+		CitadelProjectID:   env("OPENCSIRT_CITADEL_PROJECT_ID", "opencsirt"),
 		CitadelDryRun:      envBool("OPENCSIRT_CITADEL_DRY_RUN", true),
 		ThreatFlowAPIURL:   env("OPENCSIRT_THREATFLOW_API_URL", ""),
 		ThreatFlowAPIKey:   env("OPENCSIRT_THREATFLOW_API_KEY", ""),

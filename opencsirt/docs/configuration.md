@@ -63,10 +63,12 @@ Roles (from [`internal/auth/auth.go`](../internal/auth/auth.go)):
 | `OPENCSIRT_CITADEL_API_URL` | string (URL) | empty | no | CITADEL base URL. Empty disables emission (the outbox is still written, just never drained). |
 | `OPENCSIRT_CITADEL_HMAC_SECRETS` | CSV of strings | empty | no | HMAC-SHA256 rotation list `primary,next,previous`. Signs with `[0]`. |
 | `OPENCSIRT_CITADEL_KEY_ID` | string | `opencsirt-1` | no | `X-Key-ID` header value on outbound CITADEL events. |
+| `OPENCSIRT_CITADEL_PROJECT_ID` | string | `opencsirt` | no | `project_id` forwarded on every WORM emit (`/api/v1/worm/emit`) and every MARSHAL governance evaluation (`/api/v1/marshal/evaluate`). |
 | `OPENCSIRT_CITADEL_DRY_RUN` | bool | `true` | no | When true, builds and signs events but does not POST. Default-on so first-boot does not spam an unconfigured CITADEL. |
 
 See [citadel-integration.md](citadel-integration.md) for the wire
-envelope and rotation procedure.
+envelope, the MARSHAL governance checks on advisory publish/incident
+close (including known gaps), and the key rotation procedure.
 
 ---
 

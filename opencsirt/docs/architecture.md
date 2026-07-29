@@ -189,10 +189,10 @@ on commit.
                         └────────┘
 ```
 
-Wire envelope (mirrors CyberPath / IRFlow / OpenScrub):
+Wire envelope:
 
 ```
-POST {OPENCSIRT_CITADEL_API_URL}/api/v1/events
+POST {OPENCSIRT_CITADEL_API_URL}/api/v1/worm/emit
 X-Event-Type:   opencsirt.<event_type>
 X-Key-ID:       OPENCSIRT_CITADEL_KEY_ID
 X-Timestamp:    RFC3339 UTC
@@ -200,12 +200,29 @@ X-Signature:    hex(HMAC-SHA256(secret, timestamp || "." || body))
 Content-Type:   application/json
 ```
 
+Body is `{source, event_type, project_id, payload}` — see
+[citadel-integration.md](citadel-integration.md) for the exact shape
+and per-event `payload` schemas.
+
 Replay window is enforced server-side by CITADEL (±5 min). The
 watcher only transitions `sending → sent` on confirmed 2xx;
 partial failures stay `pending` and re-enter the queue.
 
 `OPENCSIRT_CITADEL_DRY_RUN=true` (default) builds and signs the
 event but does not POST it — useful for first-deploy smoke tests.
+
+### MARSHAL governance (advisory publish / incident close)
+
+Separately from WORM emission above, advisory publication and
+incident closure are evaluated against CITADEL MARSHAL
+(`POST /api/v1/marshal/evaluate`) *before* they are allowed to
+proceed, and blocked on `REFUSE`/`HARD_STOP`. This uses the caller's
+real identity as Actor but a fixed system-placeholder Verifier (no
+real second-approver flow exists yet), and today most non-admin
+callers will legitimately `REFUSE` at CITADEL's AuthZ gate because
+CITADEL's RBAC map doesn't yet cover OpenCSIRT's action types/roles.
+See [citadel-integration.md § MARSHAL governance](citadel-integration.md#marshal-governance-advisory-publish--incident-close)
+for the full picture, including both known gaps.
 
 ---
 

@@ -302,6 +302,14 @@ func ClaimsFrom(ctx context.Context) (*Claims, bool) {
 	return c, ok
 }
 
+// ContextWithClaims returns a copy of ctx carrying c, exactly as Middleware
+// would set it after successfully verifying a bearer token. Exported so
+// handler-level tests can simulate an authenticated request (real Sub/Role)
+// without needing a signed JWT or a live sinauth instance.
+func ContextWithClaims(ctx context.Context, c *Claims) context.Context {
+	return context.WithValue(ctx, claimsKey, c)
+}
+
 func RequireRole(min Role) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

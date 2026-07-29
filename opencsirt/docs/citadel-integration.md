@@ -5,8 +5,23 @@
 > matters: `opencsirt.incident_opened`, `opencsirt.incident_closed`,
 > `opencsirt.advisory_published`, and `opencsirt.escalation_sent`.
 > This page documents the wire schema, the outbox state machine,
+> the MARSHAL governance checks on advisory publish / incident close,
 > and the operational toggles. The implementation lives in
-> [internal/citadel/](../internal/citadel/).
+> [internal/citadel/](../internal/citadel/) (WORM emission) and
+> [internal/api/handlers/advisory.go](../internal/api/handlers/advisory.go) /
+> [internal/api/handlers/incident.go](../internal/api/handlers/incident.go)
+> (MARSHAL governance).
+>
+> **Corrected 2026-07:** earlier revisions of this integration posted
+> WORM events to `POST {CITADEL_API_URL}/api/v1/events`, which is not
+> a route CITADEL exposes. Every event silently failed delivery (the
+> outbox retried, exhausted its budget, and marked rows `failed`) from
+> the day the integration was built until this fix. The correct route
+> is `POST {CITADEL_API_URL}/api/v1/worm/emit`, documented below. If
+> you operate an existing OpenCSIRT deployment, check your
+> `citadel_outbox` table for a backlog of `failed` rows predating this
+> fix — those events never reached CITADEL and are not recoverable
+> from the outbox itself.
 
 ## Why
 
@@ -21,7 +36,7 @@ OpenScrub, IRFlow, and CyberPath.
 ## Transport
 
 ```
-POST {OPENCSIRT_CITADEL_API_URL}/api/v1/events
+POST {OPENCSIRT_CITADEL_API_URL}/api/v1/worm/emit
 Content-Type: application/json
 X-Event-Type:  opencsirt.<event_type>
 X-Event-ID:    <UUIDv4 stable per emission>
@@ -30,10 +45,35 @@ X-Timestamp:   <RFC3339 UTC>
 X-Signature:   hex(HMAC-SHA256(secret, ts || "." || body))
 ```
 
-`Body` is the JSON event payload — exact byte stream signed by
-`X-Signature`. Replay window is enforced **server-side** by CITADEL
-at ±5 minutes. Implementation: `(*Client).deliver` in
+`Body` is a JSON envelope, not the raw event — CITADEL's
+`POST /api/v1/worm/emit` (see `citadel/internal/api/handlers/worm.go`)
+expects `{source, event_type, project_id, payload}`, where `payload`
+is the event JSON documented per-type below:
+
+```json
+{
+  "source": "opencsirt",
+  "event_type": "opencsirt.incident_opened",
+  "project_id": "opencsirt",
+  "payload": { "...": "the event body shown in the sections below" }
+}
+```
+
+`project_id` is `OPENCSIRT_CITADEL_PROJECT_ID` (default `"opencsirt"`,
+see [configuration.md](configuration.md)). The full envelope — not
+just `payload` — is the exact byte stream signed by `X-Signature`.
+Replay window is enforced **server-side** by CITADEL at ±5 minutes.
+Implementation: `(*Client).deliver` in
 [internal/citadel/client.go](../internal/citadel/client.go).
+
+**Note on signing today:** `/api/v1/worm/emit` does not currently
+verify `X-Signature`/`X-Key-ID`/`X-Timestamp` on CITADEL's side (no
+HMAC check is wired up on that route as of this writing — see
+`citadel/internal/api/server.go`). OpenCSIRT still computes and sends
+them, both for the audit/log value on this side and so delivery keeps
+working with no client change if CITADEL adds verification to
+`worm/emit` later. Do not rely on these headers as an access-control
+boundary until CITADEL enforces them.
 
 ## Event types
 
@@ -290,6 +330,7 @@ release; consumers (auditor tooling) migrate during the overlap.
 OPENCSIRT_CITADEL_API_URL=https://citadel.internal:8099
 OPENCSIRT_CITADEL_HMAC_SECRETS=<new-hex>,<old-hex-during-rotation>
 OPENCSIRT_CITADEL_KEY_ID=opencsirt-2026q2
+OPENCSIRT_CITADEL_PROJECT_ID=opencsirt    # forwarded on worm/emit AND marshal/evaluate
 OPENCSIRT_CITADEL_DRY_RUN=false           # production
 ```
 
@@ -298,11 +339,98 @@ is set is a startup-blocking misconfiguration. Empty
 `OPENCSIRT_CITADEL_API_URL` falls back to `SubmitDryRun` so dev
 deployments do not accumulate failed rows.
 
+## MARSHAL governance (advisory publish / incident close)
+
+The four events above are **audit-only** — WORM records a fact after
+it already happened, and nothing blocks on the outcome. Two actions
+are additionally **governed**: they are evaluated against CITADEL
+MARSHAL (`POST {OPENCSIRT_CITADEL_API_URL}/api/v1/marshal/evaluate`)
+*before* they are allowed to happen, and a `REFUSE` or `HARD_STOP`
+verdict blocks the request with HTTP 403 and the verdict's reasons.
+
+| Action | Handler | Kerkese `Action.Type` |
+|---|---|---|
+| Advisory publication | `(*Advisory).Publish` in [internal/api/handlers/advisory.go](../internal/api/handlers/advisory.go) | `ADVISORY_PUBLISH` |
+| Incident closure | `(*Incident).Close` in [internal/api/handlers/incident.go](../internal/api/handlers/incident.go) | `INCIDENT_CLOSE` |
+
+Both handlers build a real `sdkcitadel.Kerkese` (SDK type from
+[sdk/go/citadel](../../sdk/go/citadel)) with:
+
+- **Actor** = the authenticated caller's real identity/role, the same
+  `actor`/`role` `actorAndRole()` derives from the request's
+  JWT/sinauth claims for the audit log — not a placeholder.
+- **ActorToken** = the caller's own bearer token (stripped of the
+  `Bearer ` prefix), forwarded so CITADEL can verify it directly
+  against sinauth.
+- **ProjectID** = `OPENCSIRT_CITADEL_PROJECT_ID`.
+- **DryRun** = `OPENCSIRT_CITADEL_DRY_RUN`.
+
+The check is skipped entirely (`h.Citadel == nil`) when
+`OPENCSIRT_CITADEL_API_URL` is unset, matching the outbox/watcher's
+existing posture for unconfigured deployments. If `Evaluate` itself
+errors (network, CITADEL down), the handler logs a warning and
+**proceeds with the action** — a MARSHAL outage does not itself block
+incident/advisory workflow; only an explicit `REFUSE`/`HARD_STOP`
+verdict does.
+
+### Known gap: no real second approver (Verifier is a placeholder)
+
+MARSHAL's Gate 3 (NDS, Separation of Duties) expects a genuine second
+identity as `Verifier`, distinct from `Actor`. OpenCSIRT has no
+draft→review→publish or close→countersign workflow today — confirmed
+there is no `reviewed_by`/`approved_by` concept anywhere in
+`db.Advisory`, `db.Incident`, `advisory.Service`, or
+`incident.Service`. A single `csirt_lead` both authors/requests and
+publishes an advisory; a single operator/admin closes an incident.
+
+Both handlers therefore set `Verifier` to a **fixed system
+placeholder** (`"opencsirt-system-verifier"`, role
+`group_sig_verifier`, no token) — distinct from `Actor` so it can
+never trip Gate 3's `NDS_SAME_IDENTITY` hard-stop, but not a genuine
+second person either. With `VerifierToken` left empty, CITADEL's soft
+mode (`citadel.enforce_identity` / `citadel.enforce_signatures` both
+`false`) treats the missing verifier signature as a warning, not a
+block, today. Building real two-person approval for advisory
+publication and incident closure is a separate, larger product change
+(new draft→review states) and is out of scope of this fix — it is
+tracked, not hidden.
+
+### Known gap: CITADEL's RBAC map does not fully cover OpenCSIRT yet
+
+**This is the limitation most likely to surprise an operator, so it
+is stated plainly:** CITADEL's AuthZ gate (Gate 2) evaluates
+`Action.Type` and `Actor.Role` against a role→action RBAC map that is
+maintained on the CITADEL side. As of this writing that map:
+
+- does **not** recognize `ADVISORY_PUBLISH` as an action type at all, and
+- for `INCIDENT_CLOSE`, only permits the `admin` role — `csirt_lead`,
+  `operator`, and every other OpenCSIRT role that can legitimately
+  close an incident in practice are **not** in the map.
+
+The practical consequence: most real `Evaluate()` calls from
+`Publish`/`Close` will legitimately **REFUSE at CITADEL's AuthZ gate
+today**, for any actor role that CITADEL doesn't yet recognize for
+that action — not because OpenCSIRT's governance code is broken, but
+because CITADEL's own RBAC map hasn't been extended to know about
+OpenCSIRT's action types and roles yet. That is a CITADEL-side change
+(citadel's RBAC map / policy configuration), out of scope for
+OpenCSIRT.
+
+In short: the governance wiring in OpenCSIRT is real, calls the real
+MARSHAL endpoint with the real caller identity, and will genuinely
+block on an actual `REFUSE`/`HARD_STOP` — but **end-to-end enforcement
+for non-admin publishers/closers is not fully live yet**, pending that
+CITADEL-side RBAC extension. Do not read "governance code shipped" as
+"publish/close are fully gated in production today."
+
 ## Related
 
-- [internal/citadel/client.go](../internal/citadel/client.go) — HTTP client + retry buffer
+- [internal/citadel/client.go](../internal/citadel/client.go) — HTTP client + retry buffer (WORM emission)
 - [internal/citadel/watcher.go](../internal/citadel/watcher.go) — outbox watcher
 - [internal/citadel/events.go](../internal/citadel/events.go) — event-type constants
+- [internal/api/handlers/advisory.go](../internal/api/handlers/advisory.go) — `Publish` MARSHAL governance check
+- [internal/api/handlers/incident.go](../internal/api/handlers/incident.go) — `Close` MARSHAL governance check
+- [go.mod](../go.mod) — `sdk/go/citadel` dependency (Kerkese types, `Evaluate` client)
 - [migrations/0001_init.up.sql](../migrations/0001_init.up.sql) — `citadel_outbox` schema
 - [security/threat-model.md](security/threat-model.md) — STRIDE rows for CITADEL credential exposure & replay
 - [security/compliance-map.md](security/compliance-map.md) — Article 21(2)(c)/(h) row referencing this page

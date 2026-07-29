@@ -25,6 +25,7 @@ import (
 	"github.com/opensecstack/opencsirt/internal/incident"
 	"github.com/opensecstack/opencsirt/internal/integrations"
 	"github.com/opensecstack/opencsirt/internal/version"
+	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
 )
 
 func main() {
@@ -90,10 +91,21 @@ func main() {
 	}
 
 	// ── CITADEL ──
-	citadelClient := citadel.New(cfg.CitadelAPIURL, cfg.CitadelHMACSecrets, cfg.CitadelKeyID, cfg.CitadelDryRun, logger)
+	citadelClient := citadel.New(cfg.CitadelAPIURL, cfg.CitadelHMACSecrets, cfg.CitadelKeyID, cfg.CitadelProjectID, cfg.CitadelDryRun, logger)
 	go citadelClient.Run(ctx)
 	if cfg.CitadelAPIURL != "" && len(cfg.CitadelHMACSecrets) == 0 {
 		logger.Fatal().Msg("OPENCSIRT_CITADEL_HMAC_SECRETS required when CITADEL_API_URL is set")
+	}
+
+	// MARSHAL governance client (sdk/go/citadel) — used directly at the
+	// advisory-publish / incident-close call sites to evaluate a real
+	// Kerkese via POST /api/v1/marshal/evaluate, distinct from the
+	// audit-only citadelClient above which only emits to /api/v1/worm/emit.
+	// nil when CITADEL isn't configured, in which case the governance
+	// check is skipped (see handlers.Advisory.Publish / handlers.Incident.Close).
+	var marshalClient *sdkcitadel.Client
+	if cfg.CitadelAPIURL != "" {
+		marshalClient = sdkcitadel.NewClient(cfg.CitadelAPIURL, nil)
 	}
 
 	if outboxStore != nil {
@@ -177,8 +189,21 @@ func main() {
 			Version:     version.Version,
 		}
 		deps.Constituency = &handlers.Constituency{Service: constituencySvc}
-		deps.Incident = &handlers.Incident{Service: incidentSvc, NIS2: nis2Client}
-		deps.Advisory = &handlers.Advisory{Service: advisorySvc}
+		deps.Incident = &handlers.Incident{
+			Service:          incidentSvc,
+			NIS2:             nis2Client,
+			Citadel:          marshalClient,
+			CitadelProjectID: cfg.CitadelProjectID,
+			CitadelDryRun:    cfg.CitadelDryRun,
+			Logger:           logger,
+		}
+		deps.Advisory = &handlers.Advisory{
+			Service:          advisorySvc,
+			Citadel:          marshalClient,
+			CitadelProjectID: cfg.CitadelProjectID,
+			CitadelDryRun:    cfg.CitadelDryRun,
+			Logger:           logger,
+		}
 		deps.Peers = &handlers.Peers{Store: peerStore}
 	}
 	deps.IRFlowWebhook = irflowWebhook

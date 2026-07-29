@@ -160,6 +160,7 @@ OPENCSIRT_USERS=operator:operator:<sha256hex>
 OPENCSIRT_ADVISORY_SERVICE_URL=http://advisory:8089
 OPENCSIRT_CITADEL_API_URL=https://citadel.internal
 OPENCSIRT_CITADEL_HMAC_SECRETS=<hmac>
+OPENCSIRT_CITADEL_PROJECT_ID=opencsirt
 OPENCSIRT_THREATFLOW_API_URL=https://threatflow.internal
 OPENCSIRT_IRFLOW_WEBHOOK_SECRET=<hmac>
 ```
@@ -173,6 +174,30 @@ with the `authorization_code` + PKCE (S256) flow; the dashboard's
 The API validates RS256-signed tokens against the sinauth JWKS endpoint
 (`https://auth.sin.to/.well-known/jwks.json`). See the
 [OpenCSIRT sinauth integration guide](../sinauth/docs/integration/opencsirt.md).
+
+## CITADEL governance
+
+OpenCSIRT integrates with CITADEL in two ways:
+
+- **WORM evidence (audit-only).** Incident open/close, advisory
+  publish, and escalation events are emitted to CITADEL's
+  `POST /api/v1/worm/emit` after the fact, as the tamper-evident
+  timeline required by NIS2 Article 21(2)(c)/23.
+- **MARSHAL evaluation (blocking).** Advisory publication and
+  incident closure are evaluated against CITADEL MARSHAL
+  (`POST /api/v1/marshal/evaluate`) *before* they are allowed to
+  proceed, using the authenticated caller's real identity, and are
+  blocked (HTTP 403) on a `REFUSE`/`HARD_STOP` verdict.
+
+**Known limitation:** the MARSHAL check's Verifier is a fixed system
+placeholder — OpenCSIRT has no real second-approver workflow yet — and
+CITADEL's RBAC map does not yet recognize OpenCSIRT's `ADVISORY_PUBLISH`
+action or cover most of OpenCSIRT's roles for `INCIDENT_CLOSE` (only
+`admin` is currently permitted). In practice this means most real
+evaluate calls legitimately `REFUSE` at CITADEL's AuthZ gate today,
+until CITADEL's RBAC map is extended on the CITADEL side. See
+[docs/citadel-integration.md](docs/citadel-integration.md) for the
+full write-up of both gaps.
 
 ## License
 

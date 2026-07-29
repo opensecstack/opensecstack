@@ -136,9 +136,15 @@
       `analyst`, `operator`, `csirt_lead`, `admin`. Rank verified
       by `auth_test.go`.
 - [ ] `csirt_lead` role assigned narrowly — only operators
-      authorised to publish advisories. Cross-author/approver
-      separation is socially enforced in v1.0.0; CITADEL Gate-3
-      NDS in a future v1.x.
+      authorised to publish advisories. Advisory publish and incident
+      close are evaluated against CITADEL MARSHAL (Gate 3 NDS
+      included) before they proceed — but the Verifier side is a
+      fixed system placeholder (no real second-approver workflow
+      exists yet), so cross-author/approver separation is still
+      **socially enforced**, not cryptographically enforced, in
+      v1.0.0. See [../citadel-integration.md](../citadel-integration.md)
+      for the known gaps (placeholder verifier; CITADEL RBAC map not
+      yet covering OpenCSIRT's action types/roles).
 - [ ] `external_peer` users granted only when an out-of-band peer
       handshake exists.
 - [ ] JWT TTL ≤ 12h (default).

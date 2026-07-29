@@ -108,11 +108,17 @@ Full spec: [citadel-integration.md](citadel-integration.md).
 
 ## NIS2 Compass integration (v1.0.0)
 
+Per ADR-014, NIS2 Compass **pulls** from CyberPath — it calls
+`GET /api/v1/coverage/{user_id}` and
+`GET /api/v1/cyberpath/recommend?gap=<measure>` — CyberPath never
+pushes to NIS2 Compass. `CYBERPATH_NIS2COMPASS_API_URL` is used only
+for CyberPath's own outbound `/healthz` connectivity check, reported
+in `/readyz`'s `integrations.nis2compass` field.
+
 | Variable | Default | Description |
 |---|---|---|
-| `CYBERPATH_NIS2COMPASS_API_URL` | — | Compass base URL (CyberPath only outbound for `recommend` callbacks) |
-| `CYBERPATH_NIS2COMPASS_TOKEN` | — | Service token for outbound calls |
-| `CYBERPATH_NIS2COMPASS_TIMEOUT` | `5s` | Per-request timeout |
+| `CYBERPATH_NIS2COMPASS_API_URL` | — | Compass base URL, used only for the outbound `/healthz` connectivity check surfaced in `/readyz` |
+| `CYBERPATH_NIS2COMPASS_TIMEOUT` | `5s` | Per-request timeout for the health check |
 
 Inbound coverage / recommend calls authenticate via the standard JWT
 middleware; no extra config is required for the CyberPath side.

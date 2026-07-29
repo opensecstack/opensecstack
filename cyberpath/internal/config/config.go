@@ -111,10 +111,11 @@ type CitadelConfig struct {
 	Enabled   bool   `mapstructure:"enabled"`
 }
 
-// NIS2Config — NIS2 Compass integration.
+// NIS2Config — NIS2 Compass connectivity (health-check only; per
+// ADR-014 NIS2 Compass pulls coverage/recommend data from CyberPath,
+// CyberPath does not push to or authenticate against NIS2 Compass).
 type NIS2Config struct {
 	APIURL string `mapstructure:"api_url"`
-	APIKey string `mapstructure:"api_key"`
 }
 
 // IRFlowConfig — IRFlow webhook integration.

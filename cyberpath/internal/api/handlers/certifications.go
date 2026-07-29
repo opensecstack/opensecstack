@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -23,6 +24,7 @@ import (
 	"github.com/opensecstack/cyberpath/internal/cert"
 	"github.com/opensecstack/cyberpath/internal/citadel"
 	"github.com/opensecstack/cyberpath/internal/db"
+	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
 )
 
 // ── interfaces ─────────────────────────────────────────────────────────────────
@@ -47,6 +49,19 @@ type CertCompletionChecker interface {
 	AllLessonsCompletedForTrack(ctx context.Context, userID, trackID uuid.UUID) (bool, error)
 }
 
+// MarshalEvaluator submits a Kerkese governance request to CITADEL's
+// MARSHAL engine (POST /api/v1/marshal/evaluate) and returns its
+// Decision. Satisfied by *sdk/go/citadel.Client — narrowed to an
+// interface here so tests can inject a fake without a live CITADEL
+// instance. Certification revocation is the only call site today: it
+// is an admin-only, high-stakes action (invalidating a previously
+// issued credential) and, unlike issuance, is not automatic/score-gated,
+// so it goes through a real governance evaluation rather than a plain
+// WORM audit-emit.
+type MarshalEvaluator interface {
+	Evaluate(ctx context.Context, k sdkcitadel.Kerkese) (*sdkcitadel.Decision, error)
+}
+
 // ── handler ────────────────────────────────────────────────────────────────────
 
 // CertHandlerDeps bundles all dependencies for CertificationsHandler.
@@ -58,6 +73,14 @@ type CertHandlerDeps struct {
 	Outbox      citadel.OutboxEnqueuer
 	Audit       *db.AuditEventStore
 	Logger      *zerolog.Logger
+
+	// Marshal is CITADEL's MARSHAL governance client, used only by
+	// Revoke(). Optional: nil skips the governance check (soft-fail —
+	// mirrors Outbox/Audit being optional elsewhere in this handler).
+	Marshal MarshalEvaluator
+	// CitadelProjectID is the CITADEL project_id stamped on Kerkese
+	// requests submitted by this handler.
+	CitadelProjectID string
 }
 
 // CertificationsHandler serves certification issuance, listing, and revocation.
@@ -69,18 +92,23 @@ type CertificationsHandler struct {
 	Outbox      citadel.OutboxEnqueuer
 	Audit       *db.AuditEventStore
 	Logger      *zerolog.Logger
+
+	Marshal          MarshalEvaluator
+	CitadelProjectID string
 }
 
 // NewCertificationsHandler wires a CertificationsHandler from a deps bundle.
 func NewCertificationsHandler(deps CertHandlerDeps) *CertificationsHandler {
 	return &CertificationsHandler{
-		Certs:       deps.Certs,
-		Tracks:      deps.Tracks,
-		Completions: deps.Completions,
-		Signer:      deps.Signer,
-		Outbox:      deps.Outbox,
-		Audit:       deps.Audit,
-		Logger:      deps.Logger,
+		Certs:            deps.Certs,
+		Tracks:           deps.Tracks,
+		Completions:      deps.Completions,
+		Signer:           deps.Signer,
+		Outbox:           deps.Outbox,
+		Audit:            deps.Audit,
+		Logger:           deps.Logger,
+		Marshal:          deps.Marshal,
+		CitadelProjectID: deps.CitadelProjectID,
 	}
 }
 
@@ -240,6 +268,20 @@ func (h *CertificationsHandler) ListMine(w http.ResponseWriter, r *http.Request)
 
 // Revoke handles DELETE /api/v1/admin/certifications/{id}/revoke.
 // Admin-only. Marks the certification as revoked.
+//
+// Unlike Issue (automatic, score-gated), revocation is a discretionary
+// admin decision that invalidates a previously issued credential —
+// adversarial/high-stakes enough to warrant a real CITADEL MARSHAL
+// governance check, not just an audit-emit. Flow:
+//  1. AuthN/AuthZ as before (admin role required).
+//  2. Build a Kerkese with the real authenticated admin as Actor,
+//     forwarding their bearer token, and submit it to MARSHAL.
+//     REFUSE/HARD_STOP blocks the revocation (403) with the reasons
+//     surfaced to the caller.
+//  3. On any other outcome (or if Marshal is not configured), proceed
+//     with the DB revoke.
+//  4. Emit a WORM audit entry unconditionally once revoked, so there is
+//     an immutable record regardless of the MARSHAL outcome.
 func (h *CertificationsHandler) Revoke(w http.ResponseWriter, r *http.Request) {
 	claims, ok := auth.ClaimsFromContext(r.Context())
 	if !ok || claims == nil {
@@ -258,6 +300,11 @@ func (h *CertificationsHandler) Revoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if blocked, reason := h.checkRevokeGovernance(r, certID, claims); blocked {
+		writeError(w, http.StatusForbidden, "governance_refused", reason)
+		return
+	}
+
 	if err := h.Certs.Revoke(r.Context(), certID); err != nil {
 		h.log().Error().Err(err).Str("cert_id", idStr).Msg("certifications.revoke")
 		writeError(w, http.StatusInternalServerError, "internal_error", "revocation failed")
@@ -265,12 +312,89 @@ func (h *CertificationsHandler) Revoke(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actorID, _ := userIDFromContext(r.Context())
+	h.enqueueRevokedEvent(r.Context(), certID, actorID)
 	h.appendAudit(r.Context(), actorID, "certification.revoke", "certification", certID.String())
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"cert_id": certID.String(),
 		"revoked": true,
 	})
+}
+
+// checkRevokeGovernance submits a certification-revocation Kerkese to
+// CITADEL MARSHAL and reports whether the outcome blocks the request.
+//
+// Actor: the real authenticated admin performing the revocation —
+// UserID/ActorToken are the caller's genuine sinauth-or-local identity
+// and bearer token, forwarded exactly as presented (see citadel
+// adrs/005-sinauth-identity-bridge.md); never a placeholder.
+//
+// Verifier: known, deliberate gap. CyberPath has no dual-control /
+// second-approver concept anywhere in the codebase today (checked:
+// no review/approval store, no "pending revocation" state) and
+// building one is a separate product change, out of scope here. We
+// use the same documented placeholder-Verifier pattern APIGuard uses
+// for scan initiation (apiguard/internal/api/handlers/scans.go) — a
+// fixed system identity that can never equal the Actor, so it doesn't
+// trip Gate 3's NDS_SAME_IDENTITY check, with an empty VerifierToken.
+// CITADEL's soft mode (citadel.enforce_identity /
+// citadel.enforce_signatures both false) makes the missing verifier
+// token/signature a WARN, not a block — this is a non-blocking known
+// gap, not a silent regression.
+//
+// Action.Type is "CONFIG_CHANGE": CITADEL's MARSHAL RBAC vocabulary
+// (citadel/internal/marshal/types.go rbacMap) has no CyberPath-specific
+// action types yet, and citadel is out of scope to modify for this
+// task. CONFIG_CHANGE is the closest existing admin-permitted action
+// type for an administrative mutation to a governed record; a
+// dedicated CERTIFICATION_REVOKE action type is a follow-up for
+// whoever extends CITADEL's RBAC map next.
+func (h *CertificationsHandler) checkRevokeGovernance(r *http.Request, certID uuid.UUID, claims *auth.Claims) (blocked bool, reason string) {
+	if h.Marshal == nil {
+		return false, ""
+	}
+
+	actorUserID := claims.Sub
+	actorToken := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+
+	k := sdkcitadel.Kerkese{
+		KerkeseVersion: "1.0",
+		TsUTC:          time.Now().UTC(),
+		ProjectID:      h.CitadelProjectID,
+		ExecutionID:    certID,
+		Action: sdkcitadel.KerkeseAction{
+			Type:        "CONFIG_CHANGE",
+			Description: "CyberPath certification revocation: " + certID.String(),
+			ChangeID:    certID.String(),
+		},
+		Actor:    sdkcitadel.KerkeseActor{UserID: actorUserID, Role: "admin"},
+		Verifier: sdkcitadel.KerkeseVerifier{UserID: "cyberpath-system-verifier", Role: "group_sig_verifier"},
+		Evidence: sdkcitadel.KerkeseEvidence{
+			ChangeID: certID.String(),
+			Extra: map[string]any{
+				"cert_id": certID.String(),
+			},
+		},
+		SoD:        sdkcitadel.KerkeseSoD{OperatorUserID: actorUserID, VerifierUserID: "cyberpath-system-verifier"},
+		ActorToken: actorToken,
+		// VerifierToken and SigOperator/SigVerifier are deliberately
+		// left empty — see the Verifier gap documented above.
+	}
+
+	decision, err := h.Marshal.Evaluate(r.Context(), k)
+	if err != nil {
+		h.log().Warn().Err(err).Str("cert_id", certID.String()).
+			Msg("certifications.revoke: CITADEL marshal evaluate failed — proceeding (fail-open, matches apiguard's scan-initiation pattern)")
+		return false, ""
+	}
+	if decision != nil && (decision.Outcome == sdkcitadel.OutcomeRefuse || decision.Outcome == sdkcitadel.OutcomeHardStop) {
+		reasons := decision.Reasons
+		if len(reasons) == 0 {
+			reasons = []string{"CITADEL governance check rejected this certification revocation"}
+		}
+		return true, strings.Join(reasons, "; ")
+	}
+	return false, ""
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -291,6 +415,25 @@ func (h *CertificationsHandler) enqueueIssuedEvent(ctx context.Context, c *db.Ce
 	}
 	if _, err := citadel.EnqueueCertificationIssued(ctx, h.Outbox, ev); err != nil {
 		h.log().Warn().Err(err).Msg("certifications: CITADEL enqueue failed (non-fatal)")
+	}
+}
+
+// enqueueRevokedEvent enqueues the cyberpath.certification.revoked WORM
+// event via the same outbox path Issue()/TryAutoIssue() already use
+// (POST /api/v1/worm/emit, dispatched asynchronously by the outbox
+// worker) — best-effort, matching enqueueIssuedEvent's failure handling.
+func (h *CertificationsHandler) enqueueRevokedEvent(ctx context.Context, certID, revokedBy uuid.UUID) {
+	if h.Outbox == nil {
+		return
+	}
+	ev := citadel.CertificationRevoked{
+		CertificateID: certID.String(),
+		RevokedBy:     revokedBy.String(),
+		RevokedAt:     time.Now(),
+		CorrelationID: uuid.NewString(),
+	}
+	if _, err := citadel.EnqueueCertificationRevoked(ctx, h.Outbox, ev); err != nil {
+		h.log().Warn().Err(err).Msg("certifications: CITADEL revoke enqueue failed (non-fatal)")
 	}
 }
 

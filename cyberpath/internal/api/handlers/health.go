@@ -28,8 +28,18 @@ func Healthz() http.HandlerFunc {
 	}
 }
 
-// Readyz checks Ready flag + DB ping.
-func Readyz(pinger Pinger) http.HandlerFunc {
+// NIS2HealthChecker abstracts the NIS2 Compass connectivity check
+// (internal/nis2.Client.Health) so Readyz can report it in the
+// `integrations.nis2compass` field documented in docs/api.md without
+// this package depending on internal/nis2 directly.
+type NIS2HealthChecker interface {
+	Health(ctx context.Context) (bool, error)
+}
+
+// Readyz checks Ready flag + DB ping, plus NIS2 Compass connectivity
+// when a checker is configured (nil disables the integrations report,
+// e.g. in dev without NIS2_BASE_URL set).
+func Readyz(pinger Pinger, nis2Checker NIS2HealthChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !Ready.Load() {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
@@ -51,10 +61,22 @@ func Readyz(pinger Pinger) http.HandlerFunc {
 			})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
+
+		body := map[string]any{
 			"status": "ready",
 			"db":     dbStatus,
-		})
+		}
+		if nis2Checker != nil {
+			nis2Status := "connected"
+			if ok, err := nis2Checker.Health(ctx); err != nil || !ok {
+				nis2Status = "unreachable"
+			}
+			// nis2compass is a best-effort dependency (see internal/nis2
+			// package doc): its unreachability degrades readiness
+			// reporting but does not fail /readyz itself.
+			body["integrations"] = map[string]any{"nis2compass": nis2Status}
+		}
+		writeJSON(w, http.StatusOK, body)
 	}
 }
 

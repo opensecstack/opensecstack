@@ -1,17 +1,27 @@
 ﻿// NIS2 coverage + recommendation handlers.
 //
-// v0.0.1 shipped function-form stubs (Coverage()/Recommend()). v1.0.0
-// adds CoverageHandler — a struct that wraps *nis2.Client so the wire
-// path in cmd/server/main.go can talk to NIS2 Compass when configured.
-// The bare functions are retained for back-compat: server.go falls
-// back to them when opts.Coverage is nil.
+// Per ADR-014, CyberPath is the PULL side of the CyberPath ↔ NIS2
+// Compass integration: NIS2 Compass calls these GET endpoints, it does
+// not receive pushes from CyberPath. Both Coverage() and Recommend()
+// serve data CyberPath already computes for its own users — completed
+// lessons (ProgressReader), published tracks and their NIS2Refs
+// (TrackReader), and per-track lesson counts (LessonsByTrackReader).
 //
-// See docs/nis2-integration.md.
+// v0.0.1 shipped function-form stubs (Coverage()/Recommend()). v1.0.0
+// adds CoverageHandler — a struct wired with the DB-backed readers so
+// the wire path in cmd/server/main.go can serve live data. The bare
+// functions are retained for back-compat: server.go falls back to them
+// when opts.Coverage is nil.
+//
+// See docs/nis2-integration.md and docs/api.md "NIS2 Compass
+// integration".
 package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -19,7 +29,6 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/opensecstack/cyberpath/internal/db"
-	"github.com/opensecstack/cyberpath/internal/nis2"
 )
 
 // LessonsByTrackReader is the slice of LessonStore CoverageHandler needs
@@ -28,15 +37,17 @@ type LessonsByTrackReader interface {
 	ListByTrack(ctx context.Context, trackID uuid.UUID) ([]db.Lesson, error)
 }
 
-// CoverageHandler wraps the NIS2 client. When the client is nil the
-// handler degrades to the v0.0.1 stub responses so the server stays
-// runnable in dev without NIS2 Compass configured.
+// CoverageHandler serves the NIS2 Compass pull-side endpoints. When
+// Progress/Tracks/Lessons are nil the handler degrades to the v0.0.1
+// stub responses so the server stays runnable in dev without a DB.
 //
-// When Progress, Tracks and Lessons are also wired the Coverage()
-// method computes a real NIS2 coverage report by cross-referencing the
-// user's completed lessons against every published track's NIS2Refs.
+// When Progress, Tracks and Lessons are all wired, Coverage() computes
+// a real NIS2 coverage report by cross-referencing the user's completed
+// lessons against every published track's NIS2Refs, and Recommend()
+// computes real gap-driven recommendations from the same published
+// tracks. Both surface data CyberPath already owns for its own users —
+// neither calls out to another platform.
 type CoverageHandler struct {
-	Client   *nis2.Client
 	Logger   *zerolog.Logger
 	Progress ProgressReader       // optional — from users.go
 	Tracks   TrackReader          // optional — from tracks.go
@@ -44,8 +55,8 @@ type CoverageHandler struct {
 }
 
 // NewCoverageHandler constructs a CoverageHandler.
-func NewCoverageHandler(client *nis2.Client, logger *zerolog.Logger) *CoverageHandler {
-	return &CoverageHandler{Client: client, Logger: logger}
+func NewCoverageHandler(logger *zerolog.Logger) *CoverageHandler {
+	return &CoverageHandler{Logger: logger}
 }
 
 // WithProgress wires the optional progress and track stores used by
@@ -177,38 +188,109 @@ func (h *CoverageHandler) log() *zerolog.Logger {
 	return &z
 }
 
-// Recommend returns a NIS2 track recommendation for a gap. When the
-// NIS2 client is configured we proxy to /api/v1/recommend; otherwise
-// we return an empty placeholder so dev environments stay usable.
+// validGapMeasures is the Article 21(2) allowlist NIS2 Compass gap ids
+// must resolve to. Mirrors internal/content/validator.go's
+// validNIS2Measures (art21.a..art21.j) — the same allowlist track
+// content is validated against on import, so a gap outside this set
+// can never match a real track anyway.
+var validGapMeasures = map[string]struct{}{
+	"art21.a": {}, "art21.b": {}, "art21.c": {}, "art21.d": {},
+	"art21.e": {}, "art21.f": {}, "art21.g": {}, "art21.h": {},
+	"art21.i": {}, "art21.j": {},
+}
+
+// normalizeGap accepts both the dotted ("art21.g") and underscored
+// ("art21_g") forms documented in docs/api.md and internal/nis2's
+// former GapID comment, and returns the canonical dotted measure id
+// used in db.Track.NIS2Refs.
+func normalizeGap(gap string) string {
+	return strings.ReplaceAll(gap, "_", ".")
+}
+
+// recommendation is one entry in a /recommend response. Field names
+// mirror docs/api.md's documented shape. audience/estimated_minutes/
+// lab_required/certification are documented there too, but omitted
+// here: db.Track carries no such fields today, and fabricating values
+// for them would misrepresent data CyberPath doesn't actually have.
+type recommendation struct {
+	TrackID           string   `json:"track_id"`
+	TrackSlug         string   `json:"track_slug"`
+	TitleEN           string   `json:"title_en"`
+	AddressesMeasures []string `json:"addresses_measures"`
+	Priority          string   `json:"priority"` // primary | secondary
+}
+
+// Recommend returns tracks that address a documented NIS2 gap, drawn
+// from CyberPath's own published track catalogue (TrackReader). A
+// track's first NIS2Ref is its content-authored "primary" mapping
+// (see internal/content/loader.go's flattenNIS2 — primary measure
+// first, secondary measures follow); a match against that first entry
+// is reported as priority "primary", any other match as "secondary".
 func (h *CoverageHandler) Recommend() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		gap := r.URL.Query().Get("gap")
 		if h.Logger != nil {
 			h.Logger.Info().Str("event", "coverage.recommend").Str("gap", gap).Msg("recommend")
 		}
-		if h.Client == nil {
+
+		measure := normalizeGap(gap)
+		if _, ok := validGapMeasures[measure]; !ok {
+			writeError(w, http.StatusBadRequest, "unknown_gap", fmt.Sprintf("unknown NIS2 gap %q", gap))
+			return
+		}
+
+		// Degrade gracefully when the track store is not wired.
+		if h.Tracks == nil {
 			writeJSON(w, http.StatusOK, map[string]any{
-				"gap":         gap,
-				"recommended": []any{},
+				"gap":             gap,
+				"measure":         measure,
+				"recommendations": []any{},
 			})
 			return
 		}
-		recs, err := h.Client.RecommendTracks(r.Context(), "", nis2.GapID(gap))
+
+		pub := true
+		tracks, err := h.Tracks.List(r.Context(), db.TrackFilter{Published: &pub})
 		if err != nil {
-			if h.Logger != nil {
-				h.Logger.Warn().Err(err).Str("gap", gap).Msg("nis2 recommend failed; degrading")
-			}
-			writeJSON(w, http.StatusOK, map[string]any{
-				"gap":         gap,
-				"recommended": []any{},
-			})
+			h.log().Error().Err(err).Msg("recommend: list tracks")
+			writeError(w, http.StatusInternalServerError, "internal_error", "track listing failed")
 			return
 		}
+
+		recs := make([]recommendation, 0)
+		for _, t := range tracks {
+			idx := indexOfMeasure(t.NIS2Refs, measure)
+			if idx < 0 {
+				continue
+			}
+			priority := "secondary"
+			if idx == 0 {
+				priority = "primary"
+			}
+			recs = append(recs, recommendation{
+				TrackID:           t.ID.String(),
+				TrackSlug:         t.Slug,
+				TitleEN:           t.Title,
+				AddressesMeasures: t.NIS2Refs,
+				Priority:          priority,
+			})
+		}
+
 		writeJSON(w, http.StatusOK, map[string]any{
-			"gap":         gap,
-			"recommended": recs,
+			"gap":             gap,
+			"measure":         measure,
+			"recommendations": recs,
 		})
 	}
+}
+
+func indexOfMeasure(refs []string, measure string) int {
+	for i, ref := range refs {
+		if ref == measure {
+			return i
+		}
+	}
+	return -1
 }
 
 // Coverage is the v0.0.1 stub used when no CoverageHandler is wired.

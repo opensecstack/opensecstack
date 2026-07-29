@@ -183,6 +183,49 @@ func EnqueueCertificationIssued(ctx context.Context, store OutboxEnqueuer, ev Ce
 	}, payload)
 }
 
+// CertificationRevoked is the `cyberpath.certification.revoked` event.
+// Unlike CertificationIssued, revocation is a discretionary admin
+// action (not automatic/score-gated) — the WORM entry it produces is
+// the immutable record of who revoked which credential, independent
+// of the MARSHAL governance outcome recorded separately.
+type CertificationRevoked struct {
+	CertificateID string
+	TenantID      string
+	RevokedBy     string // admin user_id who performed the revocation
+	RevokedAt     time.Time
+	Reason        string
+	CorrelationID string
+}
+
+// EnqueueCertificationRevoked enqueues a certification-revoked event.
+func EnqueueCertificationRevoked(ctx context.Context, store OutboxEnqueuer, ev CertificationRevoked) (int64, error) {
+	if ev.CertificateID == "" {
+		return 0, fmt.Errorf("EnqueueCertificationRevoked: certificate_id is required")
+	}
+	cb := map[string]any{
+		"certificate_id": ev.CertificateID,
+		"revoked_by":     ev.RevokedBy,
+		"revoked_at":     tsOrNow(ev.RevokedAt),
+	}
+	if ev.Reason != "" {
+		cb["reason"] = ev.Reason
+	}
+	payload := map[string]any{
+		"event_type":     "cyberpath.certification.revoked",
+		"subject":        "certification:" + ev.CertificateID,
+		"tenant":         ev.TenantID,
+		"timestamp":      tsOrNow(ev.RevokedAt),
+		"correlation_id": ev.CorrelationID,
+		"cyberpath":      cb,
+	}
+	return enqueueJSON(ctx, store, EnqueueRequest{
+		TenantID:      ev.TenantID,
+		Destination:   "citadel",
+		EventType:     "cyberpath.certification.revoked",
+		CorrelationID: ev.CorrelationID,
+	}, payload)
+}
+
 // LabCompleted is the `cyberpath.lab.completed` event.
 type LabCompleted struct {
 	LabSessionID  string

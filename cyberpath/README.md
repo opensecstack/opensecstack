@@ -30,6 +30,7 @@ modules across two releases:
 | 4 | **Wasm Sandbox Labs** | Lower-overhead, faster-spinup hands-on labs running pre-built lab images on a wasmtime host | v1.0.0 | Done |
 | 5 | **Certification Issuance** | Per-track certification with signed, hash-anchored completion certificates | v1.0.0 | Done |
 | 6 | **CITADEL Evidence Emitter** | Async `cyberpath.completion` event emission to CITADEL WORM | v1.0.0 | Done |
+| 9 | **Certification Revocation Governance** | Admin revocation now emits a WORM audit entry and runs a real CITADEL MARSHAL governance check before proceeding (previously revocation had no CITADEL integration at all — not even an audit-log entry) | v1.0.0 | Done |
 | 7 | **NIS2 Compass Coverage API** | `/api/v1/cyberpath/coverage/{user_id}` — query Article 21 measure coverage by user | v1.0.0 | Done |
 | 8 | **Content Versioning** | Immutable content snapshots so a learner's evidence references the exact lesson revision they completed | v1.0.0 | Done |
 
@@ -56,7 +57,7 @@ CyberPath is the missing piece between VertGuard (Module 2 — phishing
 recognition has training counterparts here), IRFlow (incident-derived
 training plays), and NIS2 Compass (gap-driven track recommendation).
 
-## Quick start (v0.0.1 preview — once code lands)
+## Quick start
 
 ```bash
 git clone https://github.com/opensecstack/opensecstack
@@ -72,8 +73,8 @@ curl http://localhost:8086/api/v1/health
 curl http://localhost:8086/api/v1/tracks
 ```
 
-Full deployment guide will land at `docs/configuration.md` when
-v0.0.1 ships. Topology in
+Full deployment guide: [docs/configuration.md](docs/configuration.md).
+Topology in
 [../docs/deployment-topology.md](../docs/deployment-topology.md).
 
 ## Architecture at a glance
@@ -107,7 +108,57 @@ v0.0.1 ships. Topology in
 
 Full architecture: [docs/architecture.md](docs/architecture.md).
 
-## Endpoints (planned)
+## Certification governance: issuance vs. revocation
+
+Certification **issuance** (`POST /api/v1/certifications/issue`, and the
+auto-issue path triggered by track completion) has emitted a WORM audit
+event to CITADEL (`cyberpath.certification.issued`, via the outbox
+worker) since it shipped — this was not changed in the fix described
+below.
+
+Certification **revocation** (`DELETE
+/api/v1/admin/certifications/{id}/revoke`) previously had **no CITADEL
+integration whatsoever** — not even a plain audit-log entry. That gap
+is closed:
+
+- **WORM audit trail.** Every successful revocation now enqueues a
+  `cyberpath.certification.revoked` event to CITADEL's WORM ledger
+  (`internal/citadel/events.go`), mirroring the pattern issuance
+  already used, plus a local `AuditEventStore` entry.
+- **MARSHAL governance check.** Before the revocation is applied, the
+  handler builds a Kerkese request using the real authenticated
+  admin's identity and bearer token as `Actor` and submits it to
+  CITADEL MARSHAL (`POST /api/v1/marshal/evaluate`). A `REFUSE` or
+  `HARD_STOP` decision blocks the revocation with `403` and the
+  reported reasons.
+
+Two deliberate, documented trade-offs — not defects — apply to the
+governance check and should be understood by anyone relying on this
+for compliance evidence:
+
+- **Fails open.** If CITADEL/MARSHAL is unreachable, the check logs a
+  warning and the revocation proceeds anyway (matching the fail-open
+  pattern used elsewhere in this codebase, e.g. APIGuard's scan
+  initiation). A CITADEL outage does not block revocation — it simply
+  means that particular revocation has no governance record, only the
+  WORM audit entry (which is unconditional, independent of the
+  MARSHAL outcome).
+- **Placeholder Verifier.** The Kerkese's `Verifier` is a fixed system
+  identity (`cyberpath-system-verifier`, no token), not a real second
+  approver. CyberPath has no dual-control / second-approver concept
+  anywhere in the codebase today, so there is nothing to wire a real
+  Verifier to. This is a WARN under CITADEL's soft-mode identity/
+  signature enforcement, not a block.
+- The Kerkese `Action.Type` is `CONFIG_CHANGE` — CITADEL's MARSHAL RBAC
+  vocabulary has no CyberPath-specific action type yet. A dedicated
+  `CERTIFICATION_REVOKE` action type is a follow-up on the CITADEL
+  side, out of scope for CyberPath alone.
+
+See [docs/citadel-integration.md](docs/citadel-integration.md) for the
+event schema and [docs/module-5-certification.md](docs/module-5-certification.md)
+for the certification lifecycle.
+
+## Endpoints (live)
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -118,10 +169,14 @@ Full architecture: [docs/architecture.md](docs/architecture.md).
 | `POST` | `/api/v1/lessons/{id}/complete` | Record lesson completion |
 | `POST` | `/api/v1/quizzes/{id}/submit` | Submit quiz answers, get score |
 | `POST` | `/api/v1/labs/{id}/start` | Start a sandbox lab session |
+| `POST` | `/api/v1/certifications/issue` | Issue a track certification |
+| `DELETE` | `/api/v1/admin/certifications/{id}/revoke` | Revoke a certification (admin, CITADEL-governed) |
 | `GET` | `/api/v1/cyberpath/coverage/{user_id}` | NIS2 Compass coverage query |
 | `GET` | `/api/v1/cyberpath/recommend?gap=art21_g` | Gap-driven recommendation |
 
-Full API reference: lands at `docs/api.md` with v0.0.1.
+This is a representative subset — see the full, current route table
+implemented in [`internal/api/server.go`](internal/api/server.go) and
+documented in [docs/api.md](docs/api.md).
 
 ## Authentication
 
@@ -134,7 +189,7 @@ See the [sinauth integration guide](../sinauth/docs/integration/cyberpath.md) fo
 
 ## Configuration
 
-Minimum required env vars (v1.0.0 target):
+Minimum required env vars:
 
 ```bash
 CYBERPATH_DB_URL=postgres://...
@@ -153,29 +208,30 @@ matches APIGuard, ThreatFlow, OpenScrub, SecureLab. See
 
 ## Development status
 
-- **Phase 2 v1.0.0 — shipped**: Modules 1, 2, 3 — Learning path
-  engine, quiz engine, Docker-based labs, browser terminal.
-- **Phase 2 v1.0.0 — shipped 2026-05-09**: Modules 4, 5, 6, 7, 8 —
-  Wasm sandbox labs, certification issuance, NIS2 Article 21(2)(g)
-  WORM evidence emission to CITADEL.
+- **v1.0.0 — shipped 2026-05-09**: Modules 1–8 are all delivered and
+  live — learning path engine, quiz engine, Docker-based labs, browser
+  terminal, Wasm sandbox labs, certification issuance (+ governed
+  revocation), NIS2 Article 21(2)(g) WORM evidence emission to CITADEL,
+  and content versioning.
 
-See [ROADMAP.md](ROADMAP.md) for the detailed timeline.
+See [ROADMAP.md](ROADMAP.md) for the historical delivery timeline and
+[CHANGELOG.md](CHANGELOG.md) for the full v1.0.0 release notes.
 
 ## Contributing
 
-CyberPath is greenfield — pre-v0.0.1 as of 2026-04-26. Early
-contributors have outsized influence on the data model, the lab
-runtime selection, and the certification format. See
-[CONTRIBUTING.md](CONTRIBUTING.md).
-
-Specifically open for claim once v0.0.1 lands:
+CyberPath is v1.0.0 and feature-complete for its initial 8 modules —
+the data model, lab runtime, and certification format are settled. New
+contributors are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md) for
+the workflow. The areas with the most open ground for contribution:
 
 - **Track content authoring** (NIS2 Article 21 awareness, phishing
   recognition, secure coding, IR basics, API security, threat-intel
   basics, Linux hardening, network forensics)
-- **Wasm lab image build pipeline**
-- **Browser terminal integration** (xterm.js + WebSocket relay)
-- **NIS2 Compass coverage API contract**
+- **Additional Wasm lab images** on the existing build pipeline
+- **v1.1 work**: per-schema tenant isolation, additional EU language
+  coverage, hardware-isolated lab runtime evaluation (see
+  [docs/tenancy.md](docs/tenancy.md) for the tenancy design doc and
+  [ROADMAP.md](ROADMAP.md) for the rest of the v1.1 scope)
 
 ## Related
 

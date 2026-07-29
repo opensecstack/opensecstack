@@ -28,6 +28,10 @@ type Options struct {
 	Metrics  *metrics.Registry
 	Verifier auth.Verifier
 
+	// NIS2 reports NIS2 Compass connectivity from /readyz
+	// (integrations.nis2compass). Nil omits the field entirely.
+	NIS2 handlers.NIS2HealthChecker
+
 	// Auth handlers (login/refresh/logout/me). Login + refresh sit
 	// outside the JWT middleware; logout + me sit inside.
 	Auth *handlers.AuthHandlers
@@ -79,7 +83,7 @@ func NewRouter(opts Options) *chi.Mux {
 
 	// ── Unauthenticated probes ───────────────────────────────────
 	r.Get("/healthz", handlers.Healthz())
-	r.Get("/readyz", handlers.Readyz(opts.Pinger))
+	r.Get("/readyz", handlers.Readyz(opts.Pinger, opts.NIS2))
 	r.Get("/version", handlers.Version())
 
 	if opts.Metrics != nil {

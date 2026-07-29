@@ -157,6 +157,27 @@ alongside the PDF and stored in `certifications.vc_document` (JSONB).
 
 ## Revocation flow
 
+> **Implementation note (v1.0.0 shipped code):** the description below
+> is the original design intent (reason codes, `revoked_reason`,
+> `POST /api/v1/admin/certs/{cert_id}/revoke`). The handler that
+> actually shipped
+> (`internal/api/handlers/certifications.go: CertificationsHandler.Revoke`)
+> is simpler — `DELETE /api/v1/admin/certifications/{id}/revoke`,
+> admin-only, no revocation-reason payload — but as of this change it
+> gained something the design draft below didn't originally call out:
+> a CITADEL integration on revocation. Previously, revoking a
+> certification had **no CITADEL integration at all**, not even a
+> plain audit-log entry. Now every revocation (a) emits a
+> `cyberpath.certification.revoked` WORM audit event and (b) runs a
+> real CITADEL MARSHAL governance evaluation first, blocking on
+> `REFUSE`/`HARD_STOP`. The governance check fails open if CITADEL is
+> unreachable, and its `Verifier` is a fixed placeholder identity
+> (CyberPath has no dual-control concept to bind a real second
+> approver to) — both deliberate, documented trade-offs. See
+> [citadel-integration.md § Certification issuance & revocation
+> events](citadel-integration.md#certification-issuance--revocation-events)
+> for the full detail.
+
 Certificates may be revoked by a platform administrator. Revocation
 reasons (stored in `certifications.revoked_reason`):
 

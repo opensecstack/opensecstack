@@ -7,6 +7,21 @@
 > **Verify before v1.0.0 implementation:** the NIS2 Compass team
 > should confirm the measure taxonomy and gap-id format used in the
 > requests below.
+>
+> **Implementation status (per [ADR-014](../../adrs/ADR-014-cyberpath-nis2compass-integration-direction.md),
+> Accepted — implemented):** the pull direction described in this
+> document is what CyberPath implements. The exact routes are
+> `GET /api/v1/coverage/{user_id}` and
+> `GET /api/v1/cyberpath/recommend?gap=<measure>` — **not**
+> `GET /api/v1/cyberpath/coverage/{user_id}` as the section header
+> below has it; see [api.md](api.md#nis2-compass-integration-v100)
+> for the response shapes actually returned today. Not yet
+> implemented: `service`-role JWT enforcement (any authenticated user
+> can currently call these), the `as_of`/`include_expired`/`audience`/
+> `max_duration_min` query parameters, and the coverage response's
+> per-track `certification`/`citadel_ledger_id` detail fields. Treat
+> the request/response bodies below as the target design, not the
+> current wire format.
 
 ## Overview
 

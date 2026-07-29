@@ -21,6 +21,7 @@ import (
 	"github.com/opensecstack/cyberpath/internal/cert"
 	"github.com/opensecstack/cyberpath/internal/citadel"
 	"github.com/opensecstack/cyberpath/internal/db"
+	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
 )
 
 // ── context helpers ───────────────────────────────────────────────────────────
@@ -168,6 +169,37 @@ func (o *fakeCertOutbox) Enqueue(_ context.Context, req citadel.EnqueueRequest) 
 	return 1, nil
 }
 
+// fakeMarshalEvaluator implements MarshalEvaluator for tests. It records
+// every Kerkese it was called with and returns a canned Decision/error.
+type fakeMarshalEvaluator struct {
+	mu       sync.Mutex
+	calls    []sdkcitadel.Kerkese
+	decision *sdkcitadel.Decision
+	err      error
+}
+
+func (f *fakeMarshalEvaluator) Evaluate(_ context.Context, k sdkcitadel.Kerkese) (*sdkcitadel.Decision, error) {
+	f.mu.Lock()
+	f.calls = append(f.calls, k)
+	f.mu.Unlock()
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.decision != nil {
+		return f.decision, nil
+	}
+	return &sdkcitadel.Decision{Outcome: sdkcitadel.OutcomeExecute}, nil
+}
+
+func (f *fakeMarshalEvaluator) lastCall() (sdkcitadel.Kerkese, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.calls) == 0 {
+		return sdkcitadel.Kerkese{}, false
+	}
+	return f.calls[len(f.calls)-1], true
+}
+
 // ── test handler constructor ──────────────────────────────────────────────────
 
 func newTestCertHandler(t *testing.T, certStore CertStore, completions CertCompletionChecker) *CertificationsHandler {
@@ -182,6 +214,25 @@ func newTestCertHandler(t *testing.T, certStore CertStore, completions CertCompl
 		Completions: completions,
 		Signer:      signer,
 		Outbox:      &fakeCertOutbox{},
+	}
+}
+
+// newTestCertHandlerWithGovernance builds a CertificationsHandler wired
+// with the given outbox and MarshalEvaluator, for tests exercising
+// Revoke()'s CITADEL wiring specifically.
+func newTestCertHandlerWithGovernance(t *testing.T, certStore CertStore, outbox citadel.OutboxEnqueuer, marshal MarshalEvaluator) *CertificationsHandler {
+	t.Helper()
+	signer, err := cert.NewSigner("")
+	if err != nil {
+		t.Fatalf("cert.NewSigner: %v", err)
+	}
+	return &CertificationsHandler{
+		Certs:            certStore,
+		Tracks:           &fakeCertTrackReader{},
+		Signer:           signer,
+		Outbox:           outbox,
+		Marshal:          marshal,
+		CitadelProjectID: "cyberpath-test",
 	}
 }
 
@@ -421,6 +472,250 @@ func TestCertificationsRevoke_InvalidID(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
+	}
+}
+
+// ── Revoke / CITADEL governance tests ─────────────────────────────────────────
+
+// TestCertificationsRevoke_EmitsWORM verifies that a successful revocation
+// enqueues a cyberpath.certification.revoked WORM event via the outbox,
+// mirroring how Issue() already enqueues cyberpath.certification.issued.
+func TestCertificationsRevoke_EmitsWORM(t *testing.T) {
+	adminID := uuid.New()
+	certID := uuid.New()
+	store := newFakeCertStore()
+	store.certs[certID] = &db.Certification{ID: certID, IssuedAt: time.Now()}
+	outbox := &fakeCertOutbox{}
+	marshal := &fakeMarshalEvaluator{}
+
+	h := newTestCertHandlerWithGovernance(t, store, outbox, marshal)
+	r := chi.NewRouter()
+	r.Delete("/certifications/{id}/revoke", h.Revoke)
+
+	req := withAdminCtx(
+		httptest.NewRequest(http.MethodDelete, "/certifications/"+certID.String()+"/revoke", nil),
+		adminID,
+	)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+
+	outbox.mu.Lock()
+	defer outbox.mu.Unlock()
+	found := false
+	for _, e := range outbox.entries {
+		if e.EventType == "cyberpath.certification.revoked" {
+			found = true
+			var payload map[string]any
+			if err := json.Unmarshal(e.Payload, &payload); err != nil {
+				t.Fatalf("decode WORM payload: %v", err)
+			}
+			cb, _ := payload["cyberpath"].(map[string]any)
+			if cb["certificate_id"] != certID.String() {
+				t.Errorf("certificate_id = %v, want %s", cb["certificate_id"], certID.String())
+			}
+			if cb["revoked_by"] != adminID.String() {
+				t.Errorf("revoked_by = %v, want %s", cb["revoked_by"], adminID.String())
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no cyberpath.certification.revoked event enqueued; entries: %+v", outbox.entries)
+	}
+}
+
+// TestCertificationsRevoke_RealActorIdentity verifies that the Kerkese
+// submitted to MARSHAL carries the real authenticated admin's identity
+// and bearer token — never a placeholder — as Actor/ActorToken.
+func TestCertificationsRevoke_RealActorIdentity(t *testing.T) {
+	adminID := uuid.New()
+	certID := uuid.New()
+	store := newFakeCertStore()
+	store.certs[certID] = &db.Certification{ID: certID, IssuedAt: time.Now()}
+	marshal := &fakeMarshalEvaluator{}
+
+	h := newTestCertHandlerWithGovernance(t, store, &fakeCertOutbox{}, marshal)
+	r := chi.NewRouter()
+	r.Delete("/certifications/{id}/revoke", h.Revoke)
+
+	req := withAdminCtx(
+		httptest.NewRequest(http.MethodDelete, "/certifications/"+certID.String()+"/revoke", nil),
+		adminID,
+	)
+	req.Header.Set("Authorization", "Bearer real-admin-bearer-token")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+
+	k, ok := marshal.lastCall()
+	if !ok {
+		t.Fatal("MarshalEvaluator.Evaluate was not called")
+	}
+	if k.Actor.UserID != adminID.String() {
+		t.Errorf("Actor.UserID = %q, want real admin id %q (must not be a placeholder)", k.Actor.UserID, adminID.String())
+	}
+	if k.Actor.UserID == "" || k.Actor.UserID == "cyberpath-system-verifier" {
+		t.Errorf("Actor.UserID = %q, must not be empty or a placeholder", k.Actor.UserID)
+	}
+	if k.ActorToken != "real-admin-bearer-token" {
+		t.Errorf("ActorToken = %q, want the forwarded bearer token", k.ActorToken)
+	}
+	if k.SoD.OperatorUserID != adminID.String() {
+		t.Errorf("SoD.OperatorUserID = %q, want %q", k.SoD.OperatorUserID, adminID.String())
+	}
+	// Verifier is a documented, deliberate placeholder (no dual-control
+	// concept exists in CyberPath) — assert it stays a fixed system
+	// identity distinct from the Actor, not that it's "real".
+	if k.Verifier.UserID == "" || k.Verifier.UserID == k.Actor.UserID {
+		t.Errorf("Verifier.UserID = %q, must be a non-empty placeholder distinct from Actor", k.Verifier.UserID)
+	}
+	if k.SigOperator != "" || k.SigVerifier != "" {
+		t.Errorf("SigOperator/SigVerifier must stay empty, got %q / %q", k.SigOperator, k.SigVerifier)
+	}
+}
+
+// TestCertificationsRevoke_RefuseBlocks verifies a REFUSE outcome blocks
+// the revocation (403) and surfaces MARSHAL's reason, without touching
+// the DB or emitting a WORM event.
+func TestCertificationsRevoke_RefuseBlocks(t *testing.T) {
+	adminID := uuid.New()
+	certID := uuid.New()
+	store := newFakeCertStore()
+	store.certs[certID] = &db.Certification{ID: certID, IssuedAt: time.Now()}
+	outbox := &fakeCertOutbox{}
+	marshal := &fakeMarshalEvaluator{
+		decision: &sdkcitadel.Decision{
+			Outcome: sdkcitadel.OutcomeRefuse,
+			Reasons: []string{"AUTHZ_FAIL: role not permitted"},
+		},
+	}
+
+	h := newTestCertHandlerWithGovernance(t, store, outbox, marshal)
+	r := chi.NewRouter()
+	r.Delete("/certifications/{id}/revoke", h.Revoke)
+
+	req := withAdminCtx(
+		httptest.NewRequest(http.MethodDelete, "/certifications/"+certID.String()+"/revoke", nil),
+		adminID,
+	)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body: %s", w.Code, w.Body.String())
+	}
+	body := decodeBody(t, w)
+	errBlock, _ := body["error"].(map[string]any)
+	msg, _ := errBlock["message"].(string)
+	if !strings.Contains(msg, "AUTHZ_FAIL") {
+		t.Errorf("error.message = %q, want it to contain the MARSHAL reason", msg)
+	}
+	if store.revoked[certID] {
+		t.Error("certification was revoked despite REFUSE outcome")
+	}
+	outbox.mu.Lock()
+	n := len(outbox.entries)
+	outbox.mu.Unlock()
+	if n != 0 {
+		t.Errorf("outbox has %d entries, want 0 — no WORM event should be emitted when governance blocks the revocation", n)
+	}
+}
+
+// TestCertificationsRevoke_HardStopBlocks mirrors the REFUSE test for
+// HARD_STOP, MARSHAL's more severe blocking outcome.
+func TestCertificationsRevoke_HardStopBlocks(t *testing.T) {
+	adminID := uuid.New()
+	certID := uuid.New()
+	store := newFakeCertStore()
+	store.certs[certID] = &db.Certification{ID: certID, IssuedAt: time.Now()}
+	marshal := &fakeMarshalEvaluator{
+		decision: &sdkcitadel.Decision{
+			Outcome: sdkcitadel.OutcomeHardStop,
+			Reasons: []string{"NDS_SAME_IDENTITY: operator and verifier are the same user"},
+		},
+	}
+
+	h := newTestCertHandlerWithGovernance(t, store, &fakeCertOutbox{}, marshal)
+	r := chi.NewRouter()
+	r.Delete("/certifications/{id}/revoke", h.Revoke)
+
+	req := withAdminCtx(
+		httptest.NewRequest(http.MethodDelete, "/certifications/"+certID.String()+"/revoke", nil),
+		adminID,
+	)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403; body: %s", w.Code, w.Body.String())
+	}
+	if store.revoked[certID] {
+		t.Error("certification was revoked despite HARD_STOP outcome")
+	}
+}
+
+// TestCertificationsRevoke_EvaluateErrorFailsOpen verifies that a
+// transport/evaluation error (CITADEL unreachable) does not itself block
+// revocation — only an explicit REFUSE/HARD_STOP decision blocks. This
+// matches apiguard's scan-initiation pattern (scans.go: "proceeding with
+// scan" on evalErr).
+func TestCertificationsRevoke_EvaluateErrorFailsOpen(t *testing.T) {
+	adminID := uuid.New()
+	certID := uuid.New()
+	store := newFakeCertStore()
+	store.certs[certID] = &db.Certification{ID: certID, IssuedAt: time.Now()}
+	marshal := &fakeMarshalEvaluator{err: fmt.Errorf("citadel: connection refused")}
+
+	h := newTestCertHandlerWithGovernance(t, store, &fakeCertOutbox{}, marshal)
+	r := chi.NewRouter()
+	r.Delete("/certifications/{id}/revoke", h.Revoke)
+
+	req := withAdminCtx(
+		httptest.NewRequest(http.MethodDelete, "/certifications/"+certID.String()+"/revoke", nil),
+		adminID,
+	)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (fail-open on evaluate error); body: %s", w.Code, w.Body.String())
+	}
+	if !store.revoked[certID] {
+		t.Error("certification was not revoked despite fail-open evaluate error")
+	}
+}
+
+// TestCertificationsRevoke_NoMarshalConfigured verifies Revoke() still
+// works when h.Marshal is nil (CITADEL not configured) — the existing
+// unmodified issuance behaviour for "CITADEL absent" should be preserved.
+func TestCertificationsRevoke_NoMarshalConfigured(t *testing.T) {
+	adminID := uuid.New()
+	certID := uuid.New()
+	store := newFakeCertStore()
+	store.certs[certID] = &db.Certification{ID: certID, IssuedAt: time.Now()}
+
+	h := newTestCertHandlerWithGovernance(t, store, &fakeCertOutbox{}, nil)
+	r := chi.NewRouter()
+	r.Delete("/certifications/{id}/revoke", h.Revoke)
+
+	req := withAdminCtx(
+		httptest.NewRequest(http.MethodDelete, "/certifications/"+certID.String()+"/revoke", nil),
+		adminID,
+	)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
+	}
+	if !store.revoked[certID] {
+		t.Error("certification was not revoked")
 	}
 }
 

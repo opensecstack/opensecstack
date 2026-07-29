@@ -9,9 +9,10 @@
 > the existing VertGuard contract are marked. Fields specific to
 > CyberPath are noted.
 >
-> **Verify before v1.0.0 implementation:** the CITADEL Kerkese
-> schema team should confirm the `cyberpath.completion` event
-> registration and the schema-extension fields below.
+> Shipped with v1.0.0: the `cyberpath.completion` event registration
+> and the schema-extension fields below are implemented and live (see
+> `internal/citadel/events.go`, `internal/citadel/client.go`,
+> `internal/citadel/dispatcher.go`, `internal/citadel/worker.go`).
 
 ## Event schema (JSON)
 
@@ -191,6 +192,83 @@ the content was as claimed.
 - Does CITADEL's Kerkese schema allow nested sub-objects, or should
   CyberPath-specific fields be flattened? **Verify with CITADEL
   team before v1.0.0.**
+
+## Certification issuance & revocation events
+
+In addition to `cyberpath.completion` (above), the certifications
+handler (`internal/api/handlers/certifications.go`) emits two more
+event types through the same outbox path, defined in
+`internal/citadel/events.go`:
+
+| Event type | Emitted by | Trigger |
+|---|---|---|
+| `cyberpath.certification.issued` | `Issue()` / `TryAutoIssue()` | A certification is issued (manual or auto-triggered by track completion) |
+| `cyberpath.certification.revoked` | `Revoke()` | An admin revokes a certification |
+
+Both are best-effort/fire-and-forget through the outbox worker, same
+as `cyberpath.completion` — a failed enqueue is logged and does not
+fail the API request.
+
+`cyberpath.certification.issued` payload (`cyberpath` sub-object):
+
+```json
+{
+  "certificate_id": "<uuid>",
+  "user_id":        "<uuid>",
+  "track_id":       "<uuid>",
+  "certification_level": "track-cert",
+  "issued_at":      "2027-05-14T10:21:33Z",
+  "signed_by":      "ed25519:<key id>"
+}
+```
+
+`cyberpath.certification.revoked` payload:
+
+```json
+{
+  "certificate_id": "<uuid>",
+  "revoked_by":      "<admin user_id>",
+  "revoked_at":      "2027-05-14T10:21:33Z"
+}
+```
+
+### Revocation also runs a MARSHAL governance check — issuance does not
+
+This is a deliberate asymmetry, not an inconsistency to fix:
+
+- **Issuance** is automatic and score/eligibility-gated (all lessons in
+  the track complete). It only needs a WORM audit-emit, which it has
+  had since v1.0.0 — `EnqueueCertificationIssued` above.
+- **Revocation** is a discretionary admin action that invalidates a
+  previously issued credential. Until this fix landed, it had **no**
+  CITADEL integration at all — no WORM event, no governance check.
+  `Revoke()` now does both:
+  1. Builds a Kerkese (`ExecutionID` = cert ID, `Action.Type =
+     "CONFIG_CHANGE"`, `Actor` = the real authenticated admin's
+     `sub`/role, `ActorToken` = their forwarded bearer token) and
+     calls `POST /api/v1/marshal/evaluate` via the `MarshalEvaluator`
+     interface (satisfied by `sdk/go/citadel.Client`).
+  2. On `REFUSE` / `HARD_STOP`, the revocation is blocked — the
+     handler returns `403 governance_refused` with the decision's
+     reasons.
+  3. On any other outcome, or if MARSHAL is unreachable (`err != nil`
+     from `Evaluate`), the revocation proceeds — **the governance
+     check fails open**. This matches the fail-open pattern used
+     elsewhere in the ecosystem (e.g. APIGuard's scan-initiation
+     check) and is a deliberate availability-over-strictness choice:
+     a CITADEL outage does not block an admin from revoking a
+     credential, it just means that call has no governance record —
+     the WORM audit-emit (step above) still happens unconditionally.
+  4. `Verifier` on the Kerkese is a fixed placeholder identity
+     (`cyberpath-system-verifier`, `VerifierToken` empty) — CyberPath
+     has no dual-control/second-approver concept to bind a real
+     Verifier to. Under CITADEL's soft-mode identity/signature
+     enforcement this is a WARN, not a block. Anyone treating a
+     revocation's MARSHAL decision as dual-control evidence should
+     know the Verifier side is not a real second approver.
+  5. `Action.Type` is `CONFIG_CHANGE` because CITADEL's MARSHAL RBAC
+     map has no CyberPath-specific action types yet; a dedicated
+     `CERTIFICATION_REVOKE` type is a follow-up on the CITADEL side.
 
 ## Related
 

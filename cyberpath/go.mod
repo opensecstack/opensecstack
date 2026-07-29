@@ -9,6 +9,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/jackc/pgx/v5 v5.7.4
+	github.com/opensecstack/sdk/go/citadel v0.0.0
 	github.com/opensecstack/sdk/go/sinauth v0.0.0
 	github.com/prometheus/client_golang v1.20.5
 	github.com/rs/zerolog v1.34.0
@@ -16,6 +17,8 @@ require (
 	golang.org/x/crypto v0.50.0
 	gopkg.in/yaml.v3 v3.0.1
 )
+
+replace github.com/opensecstack/sdk/go/citadel => ../sdk/go/citadel
 
 replace github.com/opensecstack/sdk/go/sinauth => ../sdk/go/sinauth
 

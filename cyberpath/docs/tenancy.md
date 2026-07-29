@@ -1,4 +1,26 @@
-﻿# CyberPath Multi-Tenancy
+﻿# CyberPath Multi-Tenancy (design doc — NOT YET IMPLEMENTED)
+
+> **Status: design document, not shipped functionality.** Everything
+> below this notice — RLS policies, the `POST /api/v1/admin/tenants`
+> API, the `cyberpath-cli tenant` command family, rate-limit profiles,
+> quotas, branding overrides, and the offboarding/GDPR-erase tooling —
+> describes a **target design for a future multi-tenancy feature that
+> does not exist in the codebase today**.
+>
+> What actually ships in v1.0.0: a bare `tenant_id UUID` column on
+> `users`, `cohorts`, `lab_sessions`, `audit_events`, `webhooks`, and
+> the `outbox` table (see `internal/db/migrations/0001_initial.sql`
+> and `0002`–`0004`), plus a `tenants` table holding `id`, `slug`,
+> `name`, `created_at`, `updated_at`. There is **no** row-level
+> security enabled on any table, **no** `/api/v1/admin/tenants` route
+> in `internal/api/server.go`, and **no** `tenant` subcommand in
+> `cyberpath-cli`. In practice CyberPath runs as a single-tenant
+> deployment today.
+>
+> Treat every code sample, CLI invocation, and API call below as
+> **proposed**, not documentation of current behaviour. This content
+> is kept because it has real design value for whoever implements real
+> multi-tenancy — read it as a plan, not a manual.
 
 Design and operational reference for CyberPath's multi-tenant model.
 This document covers the isolation model, tenant provisioning, per-tenant
@@ -10,22 +32,23 @@ For schema details of the `tenants` table and FK cascade rules, see
 checklist, see [operator-handbook.md](operator-handbook.md).
 
 > Status: v1.0.0 ships a single default tenant. The row-level isolation
-> model described here is the v1.0.0 target; per-schema isolation is
-> planned for v1.1+.
+> model described here is a proposed future upgrade; per-schema
+> isolation is a further-out v1.1+ idea. Neither is implemented yet.
 
 ---
 
-## Isolation model
+## Isolation model (proposed — not implemented)
 
-### v1.0.0 — single tenant
+### v1.0.0 — single tenant (actual, current behaviour)
 
 v1.0.0 is deployed with one `tenants` row (the default tenant). All
 users, cohorts, and content belong to this tenant. The schema column
 `tenant_id` is present on `users`, `cohorts`, and `webhooks` from the
-initial migration so the v1.0.0 row-level isolation upgrade is a
-schema-additive step, not a structural change.
+initial migration, which means a future row-level isolation upgrade
+can be schema-additive rather than a structural change — but that
+upgrade has not been built.
 
-### v1.0.0 — row-level security (RLS)
+### Proposed — row-level security (RLS)
 
 Every tenant-scoped table enforces row-level security via PostgreSQL RLS
 policies. The application connects as the `cyberpath` role; each request

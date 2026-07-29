@@ -60,6 +60,31 @@ First stable release. Modules 1–8 feature-complete.
 
 ## [Unreleased]
 
+### Security
+
+- Certification revocation (`DELETE /api/v1/admin/certifications/{id}/revoke`)
+  previously had **no CITADEL integration at all** — not even a plain
+  audit-log entry — unlike issuance, which already emitted a WORM
+  audit event on issue. Closed that gap:
+  - Revocation now emits a `cyberpath.certification.revoked` WORM
+    audit event (`internal/citadel/events.go`), through the same
+    outbox path issuance's `cyberpath.certification.issued` event
+    already used, plus a local audit-log entry.
+  - Revocation now runs a real CITADEL MARSHAL governance evaluation
+    (`POST /api/v1/marshal/evaluate`) before proceeding, using the
+    authenticated admin's real identity and bearer token as `Actor`;
+    a `REFUSE`/`HARD_STOP` decision blocks the request with `403` and
+    the reported reasons.
+  - Known, deliberate trade-offs, not defects: the governance check
+    **fails open** if CITADEL/MARSHAL is unreachable (an outage does
+    not block revocation — it proceeds without a governance record
+    for that call; the WORM audit event still fires unconditionally),
+    and the Kerkese `Verifier` is a fixed placeholder identity
+    (`cyberpath-system-verifier`, no token) since CyberPath has no
+    dual-control / second-approver concept to bind a real verifier
+    to. See [docs/citadel-integration.md](docs/citadel-integration.md)
+    for the full detail.
+
 ### Added
 
 - sinauth SSO integration — authenticate via the SIN identity provider (OAuth 2.0 / OIDC, authorization_code + PKCE); web dashboard added a sinauth.ts client and /auth/callback route.
@@ -83,67 +108,38 @@ First stable release. Modules 1–8 feature-complete.
   - Port 8086 (API) + 3006 (dashboard) reserved in
     [../docs/deployment-topology.md](../docs/deployment-topology.md)
 
-### Planned (Phase 2 — 2027 Q1 target, v1.0.0)
+### Delivered (Phase 2, folded into [1.0.0] above)
 
-- **Module 1 (Learning Path Engine):**
-  - PostgreSQL schema (users, paths, modules, lessons, quizzes,
-    progress, completions, content_versions)
-  - Go orchestrator (`internal/path/`)
-  - API endpoints: `GET /api/v1/tracks`, `GET /api/v1/tracks/{id}`,
-    `POST /api/v1/enrollments`, `POST /api/v1/lessons/{id}/complete`
-- **Module 2 (Quiz & Assessment Engine):**
-  - Question banks, randomisation, scoring
-  - API endpoint: `POST /api/v1/quizzes/{id}/submit`
-- **Module 3 (Docker-Based Labs):**
-  - Per-session container provisioner
-  - WebSocket relay for browser terminal (xterm.js)
-  - API endpoint: `POST /api/v1/labs/{id}/start`
-- **Frontend (React + Vite):**
-  - Learner UI, dashboard, lesson runner, quiz UI, browser terminal
-  - i18n: shqip + anglisht
-- **Initial track content:**
-  - NIS2 Article 21 awareness (drafted)
-  - Phishing recognition (drafted)
-  - Secure coding (drafted)
+Modules 1–8 and the frontend/content items originally tracked here as
+"planned" all shipped in the [1.0.0] release on 2026-05-09 — see that
+entry for the authoritative list. This section is kept only as a
+historical record of what was scoped for delivery; nothing below is
+still outstanding:
 
-### Planned (Phase 2 — 2027 Q2 target, v1.0.0)
-
-- **Module 4 (Wasm Sandbox Labs):**
-  - wasmtime host, pre-built lab images
-  - Per-session isolation, no host filesystem access
-  - Lab-image build pipeline
-- **Module 5 (Certification Issuance):**
-  - Per-track certification with signed completion certificates
-  - Hash-anchored to CITADEL evidence
-- **Module 6 (CITADEL Evidence Emitter):**
-  - Async `cyberpath.completion` event emission (HMAC-SHA256 signed)
-  - Schema: `docs/citadel-integration.md`
-- **Module 7 (NIS2 Compass Coverage API):**
-  - `GET /api/v1/cyberpath/coverage/{user_id}` — Article 21 measure
-    coverage query for NIS2 Compass
-  - `GET /api/v1/cyberpath/recommend?gap=<measure>` — gap-driven
-    recommendation
-- **Module 8 (Content Versioning):**
-  - Immutable lesson revisions
-  - Evidence references the exact `content_version_id` completed
-- **Cross-cutting:**
-  - CITADEL Kerkese schema extension with `cyberpath.completion`
-    event type
-  - IRFlow integration: incident → recommended track mapping
-  - Integration tests against live Postgres
+- Module 1 (Learning Path Engine), Module 2 (Quiz & Assessment
+  Engine), Module 3 (Docker-Based Labs) with the React + Vite
+  frontend and bilingual (shqip + anglisht) i18n.
+- Module 4 (Wasm Sandbox Labs), Module 5 (Certification Issuance),
+  Module 6 (CITADEL Evidence Emitter), Module 7 (NIS2 Compass Coverage
+  API), Module 8 (Content Versioning).
+- All 8 initial tracks, IRFlow integration (incident → recommended
+  track mapping), and integration tests against live Postgres.
 
 ---
 
-## Release roadmap
+## Release history
 
-| Version | Phase | Scope | Target |
-|---|---|---|---|
-| **v0.0.1** (scaffold + first code) | 2 | Repo skeleton wired up; `make build` passes; `/api/v1/health` returns 200 | 2026 Q4 |
-| **v1.0.0** (alpha) | 2 | Modules 1 + 2 + 3: Learning path engine, quiz engine, Docker-based labs, browser terminal. Initial 3-track content. | 2027 Q1 |
-| **v0.2.0 – v0.4.0** (alpha iterations) | 2 | Track-content expansion (8 tracks complete), false-positive-free quiz banks, operator handbook | 2027 Q1 |
-| **v0.5.0 – v0.9.0** (beta iterations) | 2 | Wasm lab runtime hardening, certification issuance preview, CITADEL integration preview | 2027 Q2 |
-| **v1.0.0** (stable) | 2 | Modules 4 + 5 + 6 + 7 + 8: Wasm sandbox labs, certification issuance, NIS2 Article 21(2)(g) completion records to CITADEL WORM, NIS2 Compass coverage API | 2027 Q2 |
-| **v1.x** | — | New tracks (post-NIS2 amendments), additional EU language coverage, hardware-isolated lab runtime evaluation | 2027 Q3 – 2028 |
+| Version | Scope | Shipped |
+|---|---|---|
+| **v1.0.0** | Modules 1–8: learning path engine, quiz engine, Docker-based labs, browser terminal, Wasm sandbox labs, certification issuance (+ governed revocation), NIS2 Article 21(2)(g) completion records to CITADEL WORM, NIS2 Compass coverage API, content versioning. | 2026-05-09 |
+
+### Planned (v1.x — not yet started)
+
+- New tracks (post-NIS2 amendments)
+- Additional EU language coverage
+- Hardware-isolated lab runtime evaluation
+- Per-schema tenant isolation (see [docs/tenancy.md](docs/tenancy.md)
+  — a design document; only a bare `tenant_id` column ships today)
 
 ## Versioning policy
 

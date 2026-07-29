@@ -88,7 +88,6 @@ func newCoverageRouter(h *CoverageHandler) http.Handler {
 func TestCoverageHandler_NoStores_ReturnsStub(t *testing.T) {
 	// Progress=nil → must degrade to stub.
 	h := &CoverageHandler{
-		Client:   nil,
 		Progress: nil,
 		Tracks:   nil,
 		Lessons:  nil,
@@ -366,10 +365,10 @@ func TestCoverageHandler_NoNIS2Refs_Skipped(t *testing.T) {
 	}
 }
 
-func TestRecommend_NoClient(t *testing.T) {
-	h := &CoverageHandler{
-		Client: nil, // no NIS2 client → stub response
-	}
+func TestRecommend_NoTracks_ReturnsEmpty(t *testing.T) {
+	// Tracks=nil → must degrade to an empty recommendations list rather
+	// than 500, so dev environments without a DB stay usable.
+	h := &CoverageHandler{Tracks: nil}
 	router := newCoverageRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/recommend?gap=art21_a", nil)
@@ -384,12 +383,104 @@ func TestRecommend_NoClient(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	recommended, ok := resp["recommended"]
-	if !ok {
-		t.Fatalf("missing 'recommended' field")
+	if resp["measure"] != "art21.a" {
+		t.Errorf("measure = %v, want art21.a", resp["measure"])
 	}
-	recs, _ := recommended.([]any)
+	recs, ok := resp["recommendations"].([]any)
+	if !ok {
+		t.Fatalf("missing 'recommendations' field")
+	}
 	if len(recs) != 0 {
-		t.Errorf("recommended = %v, want empty list", recs)
+		t.Errorf("recommendations = %v, want empty list", recs)
+	}
+}
+
+func TestRecommend_UnknownGap_Returns400(t *testing.T) {
+	h := &CoverageHandler{Tracks: &fakeTrackReader{}}
+	router := newCoverageRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/recommend?gap=not_a_measure", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body = %s", w.Code, w.Body.String())
+	}
+}
+
+func TestRecommend_MatchesPublishedTracks(t *testing.T) {
+	primaryTrack := db.Track{
+		ID:       uuid.New(),
+		Slug:     "nis2-art21-awareness",
+		Title:    "NIS2 Article 21 awareness",
+		NIS2Refs: []string{"art21.g", "art21.a", "art21.b"}, // art21.g is primary (index 0)
+	}
+	secondaryTrack := db.Track{
+		ID:       uuid.New(),
+		Slug:     "incident-response-basics",
+		Title:    "Incident Response Basics",
+		NIS2Refs: []string{"art21.b", "art21.g"}, // art21.g is secondary here (index 1)
+	}
+	unrelatedTrack := db.Track{
+		ID:       uuid.New(),
+		Slug:     "phishing-recognition",
+		Title:    "Phishing Recognition",
+		NIS2Refs: []string{"art21.a"},
+	}
+
+	h := &CoverageHandler{
+		Tracks: &fakeTrackReader{tracks: []db.Track{primaryTrack, secondaryTrack, unrelatedTrack}},
+	}
+	router := newCoverageRouter(h)
+
+	// Accepts the underscored form and normalizes it to dotted.
+	req := httptest.NewRequest(http.MethodGet, "/recommend?gap=art21_g", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp["gap"] != "art21_g" {
+		t.Errorf("gap = %v, want art21_g (echoed as received)", resp["gap"])
+	}
+	if resp["measure"] != "art21.g" {
+		t.Errorf("measure = %v, want art21.g", resp["measure"])
+	}
+
+	recs, ok := resp["recommendations"].([]any)
+	if !ok || len(recs) != 2 {
+		t.Fatalf("recommendations = %v, want 2 entries", resp["recommendations"])
+	}
+
+	bySlug := map[string]map[string]any{}
+	for _, r := range recs {
+		item := r.(map[string]any)
+		bySlug[item["track_slug"].(string)] = item
+	}
+
+	primary, ok := bySlug["nis2-art21-awareness"]
+	if !ok {
+		t.Fatalf("missing primary track in recommendations: %v", recs)
+	}
+	if primary["priority"] != "primary" {
+		t.Errorf("primary track priority = %v, want primary", primary["priority"])
+	}
+
+	secondary, ok := bySlug["incident-response-basics"]
+	if !ok {
+		t.Fatalf("missing secondary track in recommendations: %v", recs)
+	}
+	if secondary["priority"] != "secondary" {
+		t.Errorf("secondary track priority = %v, want secondary", secondary["priority"])
+	}
+
+	if _, ok := bySlug["phishing-recognition"]; ok {
+		t.Errorf("unrelated track must not be recommended for art21.g: %v", recs)
 	}
 }

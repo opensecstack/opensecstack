@@ -34,6 +34,7 @@ import (
 	"github.com/opensecstack/cyberpath/internal/nis2"
 	"github.com/opensecstack/cyberpath/internal/version"
 	"github.com/opensecstack/cyberpath/internal/wireup"
+	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
 )
 
 type stubPinger struct{}
@@ -93,9 +94,8 @@ func main() {
 
 	// ── Outbound integration clients ─────────────────────────────────
 	nis2Client := nis2.New(nis2.Options{
-		BaseURL:    cfg.NIS2.APIURL,
-		HMACSecret: cfg.NIS2.APIKey,
-		Logger:     logger,
+		BaseURL: cfg.NIS2.APIURL,
+		Logger:  logger,
 	})
 	_ = irflow.New(irflow.Options{
 		BaseURL:    cfg.IRFlow.APIURL,
@@ -218,15 +218,29 @@ func main() {
 			logger.Info().Msg("outbox worker started")
 		}
 
+		// MARSHAL governance client for certification revocation — a
+		// discretionary admin action, distinct from the outbox worker's
+		// citadelClient above (which only handles WORM audit-emit).
+		// Left as a nil interface (skips the governance check) when
+		// CITADEL is not configured — assigned only in the branch below
+		// so handlers.CertHandlerDeps.Marshal stays a true nil interface
+		// rather than a non-nil interface wrapping a nil *Client.
+		var marshalClient handlers.MarshalEvaluator
+		if cfg.Citadel.APIURL != "" {
+			marshalClient = sdkcitadel.NewClient(cfg.Citadel.APIURL, nil)
+		}
+
 		// Certifications handler (cert signer initialized before DB block).
 		certificationsHandler = handlers.NewCertificationsHandler(handlers.CertHandlerDeps{
-			Certs:       certificationStore,
-			Tracks:      trackStore,
-			Completions: completionStore,
-			Signer:      certSigner,
-			Outbox:      wireup.CertOutbox(outboxStore),
-			Audit:       auditStore,
-			Logger:      &logger,
+			Certs:            certificationStore,
+			Tracks:           trackStore,
+			Completions:      completionStore,
+			Signer:           certSigner,
+			Outbox:           wireup.CertOutbox(outboxStore),
+			Audit:            auditStore,
+			Logger:           &logger,
+			Marshal:          marshalClient,
+			CitadelProjectID: cfg.Citadel.ProjectID,
 		})
 		contentVersionsHandler = handlers.NewContentVersionsHandler(contentVersionStore, &logger)
 		logger.Info().Msg("certifications handler wired")
@@ -282,7 +296,7 @@ func main() {
 	}
 
 	// ── HTTP handlers ────────────────────────────────────────────────
-	coverageHandler := handlers.NewCoverageHandler(nis2Client, &logger)
+	coverageHandler := handlers.NewCoverageHandler(&logger)
 	if outerProgressStore != nil && outerTrackStore != nil && outerLessonStore != nil {
 		coverageHandler.WithProgress(outerProgressStore, outerTrackStore, outerLessonStore)
 	}
@@ -291,12 +305,23 @@ func main() {
 		contentAdmin = handlers.NewContentAdminHandler(contentSvc, &logger)
 	}
 
+	// /readyz only reports nis2compass connectivity when NIS2_BASE_URL
+	// (cfg.NIS2.APIURL) is actually configured — an unconfigured client
+	// would report "unreachable" forever in dev, which is noise, not
+	// signal. Passed as a nil handlers.NIS2HealthChecker (not a
+	// typed-nil *nis2.Client) so Readyz's nil check works correctly.
+	var nis2Checker handlers.NIS2HealthChecker
+	if cfg.NIS2.APIURL != "" {
+		nis2Checker = nis2Client
+	}
+
 	router := api.NewRouter(api.Options{
 		Config:        cfg,
 		Logger:        &logger,
 		Pinger:        pinger,
 		Metrics:       mreg,
 		Verifier:      verifier,
+		NIS2:          nis2Checker,
 		Auth:          authHandlers,
 		IRFlowWebhook: irflowWebhook,
 		Coverage:      coverageHandler,

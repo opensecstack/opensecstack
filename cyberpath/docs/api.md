@@ -1,8 +1,10 @@
 ﻿# CyberPath API Reference
 
-HTTP API for CyberPath v0.1.x (learning path, quiz, Docker labs) with
-forward-looking endpoints reserved for v1.0.0 (certifications, NIS2
-Compass coverage, gap-driven recommendations).
+HTTP API for CyberPath v1.0.0 — the first stable release (shipped
+2026-05-09, Modules 1–8 feature-complete): learning path engine, quiz
+engine, Docker-based labs, Wasm sandbox labs, certification issuance
+and governed revocation, NIS2 Compass coverage and gap-driven
+recommendations, and content versioning. All endpoints below are live.
 
 Base URL: `http://<host>:8086/api/v1/`
 
@@ -17,7 +19,7 @@ For the CITADEL evidence wire format, see
 | Health, readiness, metrics | None (public) |
 | `auth/*` | None (login / signup) |
 | Learner endpoints | JWT HS256 Bearer (issued via `/auth/login`) |
-| NIS2 Compass coverage / recommend | JWT with `service` role from NIS2 Compass |
+| NIS2 Compass coverage / recommend | JWT Bearer, any authenticated user — **known gap:** not yet restricted to the `service` role; see [ADR-014](../../adrs/ADR-014-cyberpath-nis2compass-integration-direction.md) implementation note |
 | Admin endpoints | JWT with `admin` role |
 
 JWT shape inherited from `opensecstack/sdk`:
@@ -48,7 +50,7 @@ Readiness — DB ping plus integration health.
     "path":   "active",
     "quiz":   "active",
     "lab":    "active (docker)",
-    "cert":   "inactive (v1.0.0)"
+    "cert":   "active"
   },
   "integrations": {
     "citadel":     "connected",
@@ -268,8 +270,10 @@ returns the existing completion).
 
 ### `POST /api/v1/labs/{id}/start`
 
-Provisions a per-session lab environment (Docker in v1.0.0; wasmtime
-in v1.0.0+). Returns a WebSocket URL for the browser terminal.
+Provisions a per-session lab environment — Docker or wasmtime
+(Module 4, Wasm Sandbox Labs), depending on the lab image — both
+runtimes shipped in v1.0.0. Returns a WebSocket URL for the browser
+terminal.
 
 **Response (200):**
 
@@ -277,7 +281,7 @@ in v1.0.0+). Returns a WebSocket URL for the browser terminal.
 {
   "session_id":  "01J0...",
   "runtime":     "docker",
-  "ws_url":      "ws://localhost:8086/api/v1/labs/01J0.../terminal",
+  "ws_url":      "ws://localhost:8086/api/v1/ws/labs/01J0.../term",
   "image":       "opensecstack/cyberpath-lab-phish:1.0.0@sha256:...",
   "started_at":  "2026-04-26T11:05:00Z",
   "expires_at":  "2026-04-26T13:05:00Z"
@@ -355,34 +359,76 @@ Tears the session down and finalises `lab_sessions.ended_at`.
 }
 ```
 
-Certifications are issued by the v1.0.0 cert module. Endpoint exists
-at v1.0.0 and returns an empty list.
+Certifications are issued by the Module 5 certification module
+(Ed25519-signed, per-track). This endpoint returns the caller's
+issued certifications; an empty list simply means the user has none
+yet.
+
+## Certifications
+
+### `POST /api/v1/certifications/issue`
+
+Issues a signed, hash-anchored certification for a completed track.
+`admin` role or the auto-issue path triggered by track completion.
+Emits a `cyberpath.certification.issued` WORM audit event to CITADEL.
+
+### `GET /api/v1/me/certifications`
+
+Lists the authenticated caller's own certifications. Same response
+shape as `GET /api/v1/users/{id}/certifications` above.
+
+### `DELETE /api/v1/admin/certifications/{id}/revoke`
+
+Revokes a certification. `admin` role. Runs a CITADEL MARSHAL
+governance evaluation before proceeding — a `REFUSE`/`HARD_STOP`
+verdict blocks the request with `403`. Emits a
+`cyberpath.certification.revoked` WORM audit event unconditionally.
+See [../README.md § Certification governance](../README.md) and
+[citadel-integration.md](citadel-integration.md) for the full detail,
+including the documented fail-open and placeholder-verifier
+trade-offs.
 
 ## NIS2 Compass integration (v1.0.0)
 
-Full schema in [nis2-integration.md](nis2-integration.md).
+Per [ADR-014](../../adrs/ADR-014-cyberpath-nis2compass-integration-direction.md),
+this is a **pull** integration: NIS2 Compass calls these two `GET`
+endpoints; CyberPath never calls out to NIS2 Compass except for the
+`/healthz` connectivity probe backing `/readyz`'s
+`integrations.nis2compass` field (see [configuration.md](configuration.md)).
+Full narrative spec (partially aspirational — verify against the
+implementation below before integrating) in
+[nis2-integration.md](nis2-integration.md).
 
 ### `GET /api/v1/coverage/{user_id}`
 
-NIS2 Article 21 measure coverage for a user. Caller is NIS2 Compass.
+NIS2 Article 21 measure coverage for a user, computed live from the
+user's completed lessons against every published track's NIS2
+measure mappings.
 
 ```json
 {
-  "user_id": "01HX...",
-  "as_of":   "2027-05-14T10:21:33Z",
-  "coverage": [
-    { "measure": "art21.g", "covered": true,  "tracks": [ /* ... */ ] },
-    { "measure": "art21.b", "covered": false, "tracks": [] }
-  ]
+  "user_id":   "01HX...",
+  "coverage":  [
+    { "track_id": "01HX...", "track_slug": "nis2-art21-awareness", "nis2_refs": ["art21.g","art21.a"], "pct_complete": 100 }
+  ],
+  "gaps": [
+    { "track_id": "01HY...", "track_slug": "phishing-recognition", "nis2_refs": ["art21.g"], "pct_complete": 50 }
+  ],
+  "generated": "live"
 }
 ```
 
-Aliased at `/api/v1/cyberpath/coverage/{user_id}` for callers using
-the namespaced form.
+A track appears in `coverage` at 100% completion, otherwise in `gaps`.
+Tracks with no NIS2 measure mappings are omitted entirely. Falls back
+to `"generated": "stub"` with both lists empty when the DB-backed
+stores are not wired (dev only).
 
 ### `GET /api/v1/cyberpath/recommend?gap=art21_g`
 
-Tracks that address a documented gap.
+Tracks that address a documented gap, drawn from CyberPath's own
+published track catalogue. `gap` accepts either the dotted
+(`art21.g`) or underscored (`art21_g`) form; the response echoes the
+gap as received and adds the normalised dotted `measure`.
 
 ```json
 {
@@ -393,10 +439,6 @@ Tracks that address a documented gap.
       "track_id":            "01HX...",
       "track_slug":          "nis2-art21-awareness",
       "title_en":            "NIS2 Article 21 awareness",
-      "audience":            "all-staff",
-      "estimated_minutes":   90,
-      "lab_required":        false,
-      "certification":       true,
       "addresses_measures":  ["art21.g","art21.a","art21.b","art21.i"],
       "priority":            "primary"
     }
@@ -404,25 +446,34 @@ Tracks that address a documented gap.
 }
 ```
 
-Query params: `audience`, `max_duration_min`. `400` on unknown gap.
+A track's priority is `"primary"` when the requested measure is its
+first (content-authored primary) NIS2 mapping, `"secondary"` for any
+other match. `audience`, `estimated_minutes`, `lab_required` and
+`certification` — present in earlier drafts of this doc — are **not**
+returned: `db.Track` carries no such fields, and CyberPath does not
+fabricate values it doesn't actually have.
+
+`400 unknown_gap` when `gap` does not normalise to one of the
+Article 21(2)(a–j) measures.
 
 ## Webhooks (inbound)
 
-### `POST /api/v1/webhooks/irflow`
+### `POST /api/v1/webhooks/irflow/incident_trigger`
 
 IRFlow delivers an incident summary; CyberPath maps it to a
 recommended track and surfaces the recommendation in the learner's
-dashboard. HMAC-SHA256 via `X-Cyberpath-Signature` +
-`X-Cyberpath-Timestamp`. Wire format: shared with the rest of the
+dashboard. HMAC-SHA256 via `X-IRFlow-Signature` +
+`X-IRFlow-Timestamp`. Wire format: shared with the rest of the
 ecosystem (see `opensecstack/sdk`).
 
 ## Admin
 
-### `POST /api/v1/admin/tracks/import`
-
-Server-side equivalent of `cyberpath-cli track import`. Body is the
-canonical `track.yaml` plus referenced lesson markdown bundled as
-multipart. `admin` role.
+> There is no HTTP endpoint for importing tracks. Track import is a
+> CLI-only operation — run `cyberpath-cli track import <track.yaml>`
+> against the content directory (see [quick-start.md](quick-start.md)
+> and [troubleshooting.md](troubleshooting.md)). `internal/api/server.go`
+> registers no `/admin/tracks/import` route and no handler for it
+> exists in `internal/api/handlers`.
 
 ### `POST /api/v1/admin/content/reload`
 

@@ -97,7 +97,7 @@ For the ecosystem-wide changelog, see [../CHANGELOG.md](../CHANGELOG.md).
 - 54 docs under `docs/` including `docs/INDEX.md`; zero stubs
 - 8 security docs: threat model, pentest scope, pre-audit plan, checklist (100%), tabletop runbook
 - NIS2/AI Act mapping, NIS3 readiness statement, MITRE ATLAS mapping
-- 11 ADRs (ADR-001 through ADR-011)
+- 12 ADRs (ADR-001 through ADR-012)
 
 #### Rust Crates
 - `rust/audio-fingerprint`: MFCC pipeline (13 coefficients) + `StreamProcessor` (3-second chunks)

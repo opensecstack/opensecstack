@@ -1,12 +1,14 @@
 # VertGuard — AI-Attack Defence Platform
 
-> **Status:** scaffold / pre-v0.1.0. Phase 4.1 modules (Prompt Injection
-> Defence + AI Threat Intelligence Feed + C2PA provenance) in active
-> development. Phase 4.2 (deepfake, AI phishing) and Phase 4.3
-> (synthetic identity) scheduled for 2027 and 2028 respectively.
+> **Status:** v1.0.0 stable (2026-05-10). All three phases are
+> delivered: Phase 4.1 (Prompt Injection Defence + AI Threat
+> Intelligence Feed + C2PA provenance), Phase 4.2 (deepfake + AI
+> phishing ML layer), and Phase 4.3 (real-time video/voice deepfake
+> detection, meeting-platform plugins, synthetic identity detection).
+> See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 >
-> See [RFC-0004](../rfcs/RFC-0004-vertguard-platform.md) for the open
-> community comment period (deadline 2026-05-20) and
+> See [RFC-0004](../rfcs/RFC-0004-vertguard-platform.md) for the
+> original platform proposal and
 > [ADR-010](../adrs/ADR-010-vertguard-platform-strategy.md) for the
 > platform strategy rationale.
 
@@ -24,11 +26,11 @@ across 3 phases:
 
 | # | Module | Purpose | Phase | Status |
 |:-:|---|---|:-:|---|
-| 1 | **Media Authenticity** | C2PA provenance + deepfake detection (image/video/audio) | 4.1 (C2PA) + 4.2 (ML) | 🔨 Scaffold |
-| 2 | **AI Phishing Detection** | LLM-generated email/chat classification | 4.2 | 📋 Planned |
-| 3 | **Prompt Injection Defence** | OWASP LLM Top 10 scanner + LLM firewall integration | **4.1** | 🔨 Active |
-| 4 | **AI Threat Intelligence Feed** | AI-specific IOCs, MITRE ATLAS mapping, ThreatFlow integration | **4.1** | 🔨 Active |
-| 5 | **Synthetic Identity Detection** | GAN-generated profiles + real-time video call analysis | 4.3 | 📋 Planned |
+| 1 | **Media Authenticity** | C2PA provenance + deepfake detection (image/video/audio) | 4.1 (C2PA) + 4.2 (ML) | ✅ Shipped |
+| 2 | **AI Phishing Detection** | LLM-generated email/chat classification | 4.2 | ✅ Shipped |
+| 3 | **Prompt Injection Defence** | OWASP LLM Top 10 scanner + LLM firewall integration | **4.1** | ✅ Shipped |
+| 4 | **AI Threat Intelligence Feed** | AI-specific IOCs, MITRE ATLAS mapping, ThreatFlow integration | **4.1** | ✅ Shipped |
+| 5 | **Synthetic Identity Detection** | GAN-generated profiles + real-time video call analysis | 4.3 | ✅ Shipped |
 
 ## Why VertGuard exists
 
@@ -45,20 +47,23 @@ NIS3 (expected 2030-2032) is projected to mandate AI-attack defence
 for essential entities. VertGuard targets **v1.0.0 stable by the
 NIS3 transposition window**.
 
-## Quick start (Phase 4.1 preview)
+## Quick start
 
 ```bash
 git clone https://github.com/opensecstack/opensecstack
 cd opensecstack/vertguard
 
-# Phase 4.1 scope — prompt injection + AI threat feed, no ML required
 cp .env.example .env
 docker compose up -d
 
-# Scan a prompt
+# Scan a prompt for injection
 curl -X POST http://localhost:8091/api/v1/prompt/scan \
   -H "Content-Type: application/json" \
   -d '{"input": "Ignore previous instructions and..."}'
+
+# Score a video call frame for deepfake indicators (Phase 4.3)
+# — open a session, then stream frames over the WebSocket it returns
+curl -X POST http://localhost:8091/api/v1/video/session
 
 # Full quick-start: docs/quick-start.md
 ```
@@ -79,37 +84,49 @@ topology in [../docs/deployment-topology.md](../docs/deployment-topology.md).
         ▼                        ▼                        ▼
 ┌───────────────┐      ┌──────────────────┐      ┌──────────────────┐
 │  Rust layer   │      │  Python ML layer │      │  Integrations    │
-│  (Phase 4.1)  │      │  (Phase 4.2+)    │      │                  │
-│               │      │                  │      │  → ThreatFlow    │
+│  (pattern &   │      │  (deepfake &     │      │                  │
+│   provenance) │      │   inference)     │      │  → ThreatFlow    │
 │  • c2pa-rs    │      │  • gRPC :50051   │      │  → CITADEL WORM  │
 │  • prompt     │      │  • HuggingFace   │      │  → IRFlow (webhook)
-│    patterns   │      │  • FaceForensics │      │                  │
-│  • audio-fp   │      │  • sentence-     │      └──────────────────┘
-│               │      │    transformers  │
-└───────────────┘      └──────────────────┘
+│    patterns   │      │  • FaceForensics │      │  → Meeting SDKs  │
+│  • audio-fp   │      │  • sentence-     │      │    (Zoom/Teams/  │
+│               │      │    transformers  │      │    WebEx)        │
+└───────────────┘      └──────────────────┘      └──────────────────┘
 ```
 
 - **Go**: orchestration, HTTP API, CITADEL + ThreatFlow integration,
   pattern engine coordination
 - **Rust**: C2PA bindings (via `c2pa-rs`), prompt injection pattern
   matching, audio fingerprinting
-- **Python ML** (Phase 4.2+): gRPC side-car for inference, HuggingFace
-  model zoo adapters
+- **Python ML**: gRPC side-car for inference (media/audio/video
+  deepfake scoring, identity fraud), HuggingFace model zoo adapters
 - **Model registry** (`models.yaml`): SHA-256 checksums, no models in
   git
 - **Dataset registry** (`datasets.yaml`): same pattern for test data
 
 Full architecture: [docs/architecture.md](docs/architecture.md).
 
-## Endpoints (Phase 4.1)
+## Endpoints
 
 | Method | Path | Module | Notes |
 |---|---|---|---|
 | `GET` | `/api/v1/health` | core | Liveness + DB ping |
-| `POST` | `/api/v1/media/verify` | 1 | C2PA provenance only in Phase 4.1 |
+| `POST` | `/api/v1/media/verify` | 1 | C2PA provenance + Phase 4.2 ML deepfake scoring (image/video/audio) |
+| `GET` | `/api/v1/media/scans/{scan_id}` | 1 | Fetch a persisted media scan result |
+| `POST` | `/api/v1/audio/score` | 1 | Voice-clone / deepfake audio risk scoring |
+| `POST` | `/api/v1/video/session` | 1 | Allocates a WebRTC deepfake-detection session |
+| `GET` (WS) | `/api/v1/video/stream/{session_id}` | 1 | Real-time per-frame deepfake scoring stream |
+| `POST` | `/api/v1/phishing/scan` | 2 | LLM-generated phishing classification (URL/email/HTML) |
 | `POST` | `/api/v1/prompt/scan` | 3 | OWASP LLM Top 10 scan |
 | `GET` | `/api/v1/threatfeed/iocs` | 4 | AI-specific IOC feed |
+| `POST` | `/api/v1/threatfeed/ioc` | 4 | Admin manual IOC insert |
 | `POST` | `/api/v1/threatfeed/atlas` | 4 | MITRE ATLAS mapping |
+| `GET` | `/api/v1/threatfeed/atlas/coverage` | 4 | ATLAS technique coverage report |
+| `POST` | `/api/v1/identity/verify` | 5 | Synthetic identity / GAN-profile claim verification |
+| `GET` | `/api/v1/integrations/meetings/connect/{platform}` | 5 | Start meeting-platform OAuth2 connect (Zoom/Teams/WebEx) |
+| `GET` | `/api/v1/integrations/meetings/callback` | 5 | OAuth2 callback for meeting-platform connect |
+| `GET` | `/api/v1/integrations/meetings/status` | 5 | Configured/enabled state of each meeting platform |
+| `POST` | `/api/v1/integrations/meetings/webhook/{platform}` | 5 | Inbound meeting event webhook (HMAC-signed) |
 
 Full API reference: [docs/api.md](docs/api.md).
 
@@ -145,21 +162,22 @@ Tool platforms (APIGuard, ThreatFlow, SDKs) remain Apache-2.0. See
 
 ## Development status
 
-- **Phase 4.1 active** (2026 Q3–Q4): Modules 3, 4, and partial 1 (C2PA only)
-- **Phase 4.2 planned** (2027 Q1–Q3): ML layer for Modules 1 + 2
-- **Phase 4.3 planned** (2028 Q1–Q3): Module 5 + real-time video call
+All three phases have shipped as of **v1.0.0 (2026-05-10)**:
 
-See [ROADMAP.md](ROADMAP.md) for the detailed timeline.
+- **Phase 4.1 — Core Platform** (v0.1.0 alpha): Modules 3, 4, and
+  partial 1 (C2PA only)
+- **Phase 4.2 — Python ML Layer** (v0.5.0 beta): ML layer for Modules
+  1 + 2 (media deepfake + AI phishing detection)
+- **Phase 4.3 — Real-time AI Threat Detection** (v1.0.0 stable):
+  Module 5 + real-time video/voice deepfake detection +
+  meeting-platform plugins (Zoom / Teams / WebEx)
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 ## Contributing
 
-Phase 4.1 modules are open for contribution now. Good first issues
+All Phase 4.1–4.3 modules are open for contribution. Good first issues
 are labelled in GitHub. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-Contributors with ML expertise who want to start Phase 4.2 modules
-(deepfake detection, AI phishing) earlier than planned — please open
-an issue with label `phase-4.2-claim`; we'll work with you on
-sequencing.
 
 ## Related
 

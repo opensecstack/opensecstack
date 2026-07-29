@@ -90,7 +90,7 @@ If you are a maintainer who wants to mentor, add yourself via PR.
 ## Focus tracks
 
 ### Track A — Security engineering
-Contribute to APIGuard scanner modules or CITADEL governance engine. Expected output: at least one new OWASP module or one MARSHAL/VIGIL feature merged.
+Contribute to APIGuard scanner modules or CITADEL governance engine. Expected output: at least one new OWASP module or one MARSHAL feature merged (VIGIL is design-stage — see `citadel/docs/vigil.md` — so VIGIL contributions are design/RFC work rather than mergeable code for now).
 
 ### Track B — Compliance and regulatory
 Contribute to NIS2 Compass measure evaluators, evidence artifacts, or regulatory report templates. Prior knowledge of NIS2 Article 21 helpful but not required.

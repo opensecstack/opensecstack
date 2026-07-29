@@ -117,8 +117,11 @@ Rate-limited to 5 requests/minute per IP on login, register, and password endpoi
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | /api/v1/admin/deletion-requests | Required | List deletion requests |
-| POST | /api/v1/admin/deletion-requests/{id}/process | Required | Process a deletion request |
+| POST | /api/v1/admin/deletion-requests/{id}/approve | Required | Approve a pending deletion request (required before it can execute) |
+| POST | /api/v1/admin/deletion-requests/{id}/process | Required | Process an already-approved deletion request |
 | POST | /api/v1/admin/digest/send | Required | Trigger digest email send |
+
+A deletion request must be **approved** before it can be **processed**, whether processed immediately via this endpoint or picked up later by the scheduler's unattended sweep. `approve` requires a distinct admin identity from the user being deleted (an admin cannot approve their own deletion request) and records `approved_by`/`approved_at`. Both `approve` and `process` additionally submit the request to CITADEL MARSHAL for governance evaluation; see [GDPR & Account Deletion](../README.md#gdpr--account-deletion) in the README for the full flow.
 
 ---
 
@@ -429,3 +432,5 @@ Rate-limited to 5 requests/minute per IP on login, register, and password endpoi
 | DELETE | /api/v1/me/deletion-request | Required | Cancel deletion request |
 | GET | /api/v1/me/deletion-request | Required | Get deletion request status |
 | GET | /api/v1/me/export | Required | Export own data |
+
+A self-service request only reaches `pending`. It does not delete anything by itself — a distinct admin must approve it via `POST /api/v1/admin/deletion-requests/{id}/approve` before the 30-day scheduled deletion (or an immediate admin-triggered one) can run. See [Admin — GDPR](#admin--gdpr) above.

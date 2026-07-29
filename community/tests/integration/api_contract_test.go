@@ -113,7 +113,10 @@ func TestAuthLogin(t *testing.T) {
 
 func TestAuthLoginBadCreds(t *testing.T) {
 	body, _ := json.Marshal(map[string]string{"username": "admin", "password": "wrong"})
-	resp, _ := http.Post(baseURL+"/api/v1/auth/login", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(baseURL+"/api/v1/auth/login", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", resp.StatusCode)
@@ -200,13 +203,19 @@ func TestListFeed(t *testing.T) {
 }
 
 func TestTagsAndSearch(t *testing.T) {
-	resp, _ := http.Get(baseURL + "/api/v1/tags")
+	resp, err := http.Get(baseURL + "/api/v1/tags")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("tags: %d", resp.StatusCode)
 	}
 
-	resp2, _ := http.Get(baseURL + "/api/v1/search?q=opencsirt")
+	resp2, err := http.Get(baseURL + "/api/v1/search?q=opencsirt")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusOK {
 		t.Errorf("search: %d", resp2.StatusCode)

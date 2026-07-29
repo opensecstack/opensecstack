@@ -2,10 +2,12 @@ package scheduler
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/opensecstack/community/internal/citadel"
 	"github.com/opensecstack/community/internal/config"
@@ -16,6 +18,7 @@ import (
 // scheduled_at time has passed. It ticks every minute and exits when ctx is done.
 func Start(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config) {
 	cit := citadel.New(cfg.CitadelURL, cfg.CitadelHMAC, cfg.CitadelKeyID, cfg.CitadelDryRun)
+	gov := citadel.NewGovernanceClient(cfg.CitadelURL)
 
 	mailer := email.New(email.Config{
 		Host:     cfg.SMTPHost,
@@ -34,46 +37,106 @@ func Start(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config) {
 			return
 		case <-ticker.C:
 			publishDue(ctx, pool, cit, cfg)
-			processDeletions(ctx, pool, cit, cfg)
+			processDeletions(ctx, pool, cit, gov, cfg)
 			go sendDigests(ctx, pool, mailer, cfg)
 		}
 	}
 }
 
-func processDeletions(ctx context.Context, pool *pgxpool.Pool, cit *citadel.Client, cfg *config.Config) {
+// processDeletions executes GDPR account deletions whose 30-day grace
+// period has elapsed. This is the unattended, no-human-in-the-loop path
+// CITADEL's governance model exists to catch: it runs from a background
+// ticker with no live request or bearer token to forward, deleting a
+// user's account and all their content irreversibly.
+//
+// Two independent controls gate the DELETE, neither of which existed
+// before this change:
+//
+//  1. Only rows with status='approved' are even considered — an admin,
+//     distinct from the user being deleted, must have already approved
+//     the request via POST /api/v1/admin/deletion-requests/{id}/approve
+//     (internal/api/handlers/gdpr.go's AdminApproveDeletion). This is a
+//     real two-person control, not a placeholder: Actor (the user) and
+//     Verifier (the approving admin) are both genuine, distinct,
+//     durably-recorded identities — see citadel.ResolveIdentity, which
+//     prefers each user's real sinauth UUID (captured at SSO login time)
+//     and falls back to a clearly-marked community-internal identifier
+//     only for accounts that never linked sinauth.
+//  2. Immediately before the DELETE, a Kerkese is submitted to CITADEL
+//     MARSHAL for evaluation (citadel.GovernanceClient.EvaluateDeletion).
+//     A REFUSE/HARD_STOP outcome genuinely blocks the deletion — the row
+//     is left as 'approved' and skipped for this run, not silently
+//     processed, so it will be re-evaluated on the next tick.
+func processDeletions(ctx context.Context, pool *pgxpool.Pool, cit *citadel.Client, gov *citadel.GovernanceClient, cfg *config.Config) {
 	rows, err := pool.Query(ctx, `
-		UPDATE deletion_requests SET status='processed', processed_at=now()
-		WHERE status='pending' AND scheduled_for <= now()
-		RETURNING id, user_id`)
+		SELECT dr.id, dr.user_id, u.sinauth_id, dr.approved_by, au.sinauth_id
+		FROM deletion_requests dr
+		JOIN users u ON u.id = dr.user_id
+		LEFT JOIN users au ON au.id = dr.approved_by
+		WHERE dr.status='approved' AND dr.scheduled_for <= now()`)
 	if err != nil {
 		slog.Error("scheduler: deletion query failed", "err", err)
 		return
 	}
 	defer rows.Close()
 
-	var toDelete []struct{ reqID, userID string }
+	type deletionCandidate struct {
+		reqID, userID             string
+		userSinauthID, approvedBy sql.NullString
+		approverSinauthID         sql.NullString
+	}
+	var toDelete []deletionCandidate
 	for rows.Next() {
-		var reqID, userID string
-		if err := rows.Scan(&reqID, &userID); err != nil {
+		var c deletionCandidate
+		if err := rows.Scan(&c.reqID, &c.userID, &c.userSinauthID, &c.approvedBy, &c.approverSinauthID); err != nil {
 			slog.Error("scheduler: deletion scan failed", "err", err)
 			continue
 		}
-		toDelete = append(toDelete, struct{ reqID, userID string }{reqID, userID})
+		toDelete = append(toDelete, c)
 	}
 	rows.Close()
 
 	for _, d := range toDelete {
+		reqUUID, err := uuid.Parse(d.reqID)
+		if err != nil {
+			slog.Error("scheduler: deletion request id is not a valid UUID", "request_id", d.reqID, "err", err)
+			continue
+		}
+
+		actorID := citadel.ResolveIdentity(d.userSinauthID, d.userID)
+		verifierID := "community-system-verifier"
+		if d.approvedBy.Valid {
+			verifierID = citadel.ResolveIdentity(d.approverSinauthID, d.approvedBy.String)
+		}
+
+		k := citadel.DeletionKerkese(cfg.Node, reqUUID, actorID, verifierID)
+		proceed, reasons, evalErr := gov.EvaluateDeletion(ctx, k)
+		if evalErr != nil {
+			slog.Warn("scheduler: CITADEL marshal evaluate failed for GDPR deletion — proceeding (fail-open)",
+				"user_id", d.userID, "request_id", d.reqID, "err", evalErr)
+		}
+		if !proceed {
+			slog.Error("scheduler: CITADEL blocked GDPR deletion — skipping this run, will retry next tick",
+				"user_id", d.userID, "request_id", d.reqID, "reasons", reasons)
+			continue
+		}
+
 		if _, err := pool.Exec(ctx, `DELETE FROM users WHERE id=$1`, d.userID); err != nil {
 			slog.Error("scheduler: delete user failed", "user_id", d.userID, "err", err)
 			continue
+		}
+		if _, err := pool.Exec(ctx,
+			`UPDATE deletion_requests SET status='processed', processed_at=now() WHERE id=$1`, d.reqID,
+		); err != nil {
+			slog.Error("scheduler: failed to mark deletion request processed", "request_id", d.reqID, "err", err)
 		}
 		_ = cit.Emit(ctx, citadel.Event{
 			Kind:      "community.user.deleted",
 			NodeID:    cfg.Node,
 			Timestamp: time.Now(),
-			Payload:   map[string]any{"user_id": d.userID, "via": "gdpr_scheduler"},
+			Payload:   map[string]any{"user_id": d.userID, "request_id": d.reqID, "via": "gdpr_scheduler"},
 		})
-		slog.Info("scheduler: deleted user (GDPR)", "user_id", d.userID)
+		slog.Info("scheduler: deleted user (GDPR)", "user_id", d.userID, "request_id", d.reqID)
 	}
 }
 

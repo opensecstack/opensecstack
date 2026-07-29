@@ -27,6 +27,7 @@ type Deps struct {
 	Pool       *pgxpool.Pool
 	Cfg        *config.Config
 	Citadel    *citadel.Client
+	Marshal    *citadel.GovernanceClient
 	Search     *search.Client
 	Mailer     *email.Mailer
 	Version    string

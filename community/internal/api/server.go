@@ -18,6 +18,7 @@ import (
 
 func NewServer(cfg *config.Config, pool *pgxpool.Pool, version string) http.Handler {
 	cit := citadel.New(cfg.CitadelURL, cfg.CitadelHMAC, cfg.CitadelKeyID, cfg.CitadelDryRun)
+	gov := citadel.NewGovernanceClient(cfg.CitadelURL)
 
 	sc, _ := search.New(cfg)
 
@@ -36,6 +37,7 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool, version string) http.Hand
 		Pool:       pool,
 		Cfg:        cfg,
 		Citadel:    cit,
+		Marshal:    gov,
 		Search:     sc,
 		Mailer:     mailer,
 		Version:    version,
@@ -291,6 +293,7 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool, version string) http.Hand
 	mux.Handle("GET /api/v1/me/export", auth(http.HandlerFunc(handlers.ExportMyData(d))))
 	mux.Handle("POST /api/v1/admin/digest/send", auth(http.HandlerFunc(handlers.TriggerDigest(d))))
 	mux.Handle("GET /api/v1/admin/deletion-requests", auth(http.HandlerFunc(handlers.AdminListDeletionRequests(d))))
+	mux.Handle("POST /api/v1/admin/deletion-requests/{id}/approve", auth(http.HandlerFunc(handlers.AdminApproveDeletion(d))))
 	mux.Handle("POST /api/v1/admin/deletion-requests/{id}/process", auth(http.HandlerFunc(handlers.AdminProcessDeletion(d))))
 
 	// notification preferences

@@ -56,7 +56,7 @@ Scope:
 - Review all security advisories opened in the quarter
 - Re-assess threat model for any new platforms or integrations
 - Audit CITADEL connector keys — rotate any that are > 90 days old
-- Review WORM chain integrity report (VIGIL_DEEP output)
+- Review WORM chain integrity report (`POST /api/v1/worm/verify`; VIGIL_DEEP will supersede this once VIGIL ships in CITADEL v2.0)
 - Update [SECURITY.md](../SECURITY.md) if scope has changed
 
 ---

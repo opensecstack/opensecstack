@@ -46,7 +46,7 @@ Python-first. Good entry for contributors from compliance or data backgrounds.
 
 ## CITADEL — Go
 
-The governance engine. Requires reading the MARSHAL and WORM specs in `.citadel/docs/`.
+The governance engine. Requires reading the MARSHAL and WORM specs in `citadel/docs/` (`marshal-engine.md` and `worm-log.md`).
 
 | Area | Task | Skills | Difficulty |
 |------|------|--------|-----------|

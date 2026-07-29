@@ -38,19 +38,58 @@ func New(apiURL string, secrets []string, keyID string, dryRun bool) *Client {
 	}
 }
 
-func (c *Client) Emit(ctx context.Context, ev Event) error {
-	body, err := json.Marshal(ev)
-	if err != nil {
-		return err
-	}
+// wormEmitRequest mirrors the request body CITADEL's WORM handler expects at
+// POST /api/v1/worm/emit (see citadel/internal/api/handlers/worm.go's
+// emitRequest) — source and event_type are required, project_id and payload
+// are optional/best-effort.
+type wormEmitRequest struct {
+	Source    string          `json:"source"`
+	EventType string          `json:"event_type"`
+	ProjectID string          `json:"project_id"`
+	Payload   json.RawMessage `json:"payload"`
+}
 
+// wormEmitResponse mirrors CITADEL's emitResponse — unused by callers today,
+// decoded only to validate the shape during tests/debugging.
+type wormEmitResponse struct {
+	WORMEntryID string `json:"worm_entry_id"`
+	ChainHash   string `json:"chain_hash"`
+	PrevHash    string `json:"prev_hash"`
+	SequenceNum int64  `json:"sequence_num"`
+}
+
+// Emit appends an audit-only event to CITADEL's WORM chain via
+// POST /api/v1/worm/emit. This is a plain immutable-log append — no
+// authorization decision is made — distinct from a MARSHAL governance
+// evaluation (see GovernanceClient.EvaluateDeletion in governance.go).
+//
+// Historical note: this used to POST to /api/v1/events, a route that has
+// never existed on CITADEL (see citadel/internal/api/server.go's route
+// table) — every call silently failed. Source is fixed to "community";
+// Event.Kind maps to worm's event_type; Event.NodeID doubles as project_id
+// since community has no separate multi-tenant project concept.
+func (c *Client) Emit(ctx context.Context, ev Event) error {
 	if c.dryRun || c.apiURL == "" {
 		slog.Info("citadel dry-run", "event", ev.Kind)
 		return nil
 	}
 
+	payload, err := json.Marshal(ev.Payload)
+	if err != nil {
+		return err
+	}
+	body, err := json.Marshal(wormEmitRequest{
+		Source:    "community",
+		EventType: ev.Kind,
+		ProjectID: ev.NodeID,
+		Payload:   payload,
+	})
+	if err != nil {
+		return err
+	}
+
 	sig := c.sign(body)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.apiURL+"/api/v1/events", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.apiURL+"/api/v1/worm/emit", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

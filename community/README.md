@@ -144,14 +144,35 @@ Create credentials at https://console.cloud.google.com/apis/credentials.
 
 ### Citadel Integration
 
-CITADEL emits tamper-evident evidence records when posts are published. Leave `COMMUNITY_CITADEL_API_URL` empty to disable the integration entirely.
+CITADEL is used two ways from Community:
+
+- **WORM audit evidence** — `community.post.published` and `community.user.deleted` events are appended to CITADEL's immutable WORM chain via `POST /api/v1/worm/emit` (`internal/citadel/connector.go`). This is audit-only: it records that something happened, it does not authorize it.
+- **MARSHAL governance** — GDPR account deletions are submitted to CITADEL's MARSHAL engine for an EXECUTE/REFUSE/HARD_STOP decision before they run. See [GDPR & Account Deletion](#gdpr--account-deletion) below.
+
+Leave `COMMUNITY_CITADEL_API_URL` empty to disable both integrations (WORM emission becomes a no-op dry-run log line, and MARSHAL evaluation fails open — see below).
 
 | Variable                    | Default       | Required | Description                                                                 |
 |-----------------------------|---------------|----------|-----------------------------------------------------------------------------|
 | `COMMUNITY_CITADEL_API_URL` | —             | No       | Base URL of the Citadel API. Empty disables the integration.                |
 | `COMMUNITY_CITADEL_KEY_ID`  | `community-1` | No       | Key identifier sent in Citadel requests.                                    |
 | `COMMUNITY_CITADEL_HMAC_SECRETS` | —        | No       | Comma-separated HMAC secrets for verifying inbound Citadel webhook payloads.|
-| `COMMUNITY_CITADEL_DRY_RUN` | `true`        | No       | When `true`, Citadel calls are logged but not sent. Set `false` in production when Citadel is fully configured. |
+| `COMMUNITY_CITADEL_DRY_RUN` | `true`        | No       | When `true`, WORM evidence calls are logged but not sent. Set `false` in production when Citadel is fully configured. This flag only affects WORM emission — MARSHAL deletion governance always calls out live when `COMMUNITY_CITADEL_API_URL` is set. |
+
+---
+
+## GDPR & Account Deletion
+
+Deleting a user account is irreversible — it cascades to all of that user's content. Community gates it behind two independent controls, neither of which is optional:
+
+1. **Second-admin approval (application-level).** A user's own erasure request (`POST /api/v1/me/deletion-request`) only ever creates a `pending` row. A **distinct** admin — never the user themselves — must call `POST /api/v1/admin/deletion-requests/{id}/approve` to move it to `approved`. Only `approved` requests are eligible for deletion: neither the background scheduler's unattended 30-day sweep (`internal/scheduler/scheduler.go`, `processDeletions`) nor an admin's immediate `POST /api/v1/admin/deletion-requests/{id}/process` will run `DELETE FROM users` on a request that is still `pending`. The approval endpoint itself rejects same-identity approval with `403 Forbidden`, and the `approved_by`/`approved_at` columns (added by the migration in `internal/db/migrations_gdpr_approval.go`) record who approved it and when.
+
+2. **CITADEL MARSHAL governance (infrastructure-level).** Immediately before the actual `DELETE`, both the scheduler's sweep and the immediate admin path submit a governance request (a "Kerkese") to CITADEL's MARSHAL engine describing the deletion: the user being deleted is the **Actor**, and the approving admin is the **Verifier** — always two distinct identities, matching the approval check above. A **REFUSE or HARD_STOP** verdict genuinely blocks the deletion: the request is left in `approved` state and retried on the next scheduler tick (or the next manual `process` call), it is never silently allowed through. Only an `EXECUTE` verdict lets the deletion proceed.
+
+   If CITADEL is unreachable or misconfigured, MARSHAL evaluation **fails open** (the deletion proceeds and the error is logged) — this mirrors how other opensecstack platforms treat a CITADEL outage, so an unreachable governance layer cannot itself cause a GDPR erasure deadline to be missed. A REFUSE/HARD_STOP *decision* is never treated this way — only a transport/availability failure is.
+
+**Identity used with CITADEL:** wherever possible, Community uses the real sinauth UUID captured at SSO login time for both the Actor and Verifier. For accounts that never linked sinauth (native email/password signups), it falls back to a durable, clearly-marked local identifier (`community-user:<id>`) — this is a real, stable identity, not a placeholder, but it will not verify against sinauth's JWKS the way a genuine sinauth UUID does.
+
+**Known limitation:** the Kerkese's `ActorToken`/`VerifierToken` fields are left empty. Community authenticates its own API with a locally-minted JWT issued after sinauth login completes, rather than forwarding the caller's raw sinauth-issued bearer token on every request — so there is no live sinauth bearer token anywhere in Community available to forward to CITADEL. This is a documented gap, not an oversight, and is soft-gated by CITADEL's `enforce_signatures=false` mode; it does not weaken the REFUSE/HARD_STOP block described above.
 
 ---
 

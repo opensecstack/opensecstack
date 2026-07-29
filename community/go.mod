@@ -8,6 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.4
 	github.com/meilisearch/meilisearch-go v0.36.2
+	github.com/opensecstack/sdk/go/citadel v0.0.0
 	github.com/pquerna/otp v1.5.0
 	golang.org/x/crypto v0.50.0
 	golang.org/x/image v0.40.0
@@ -24,3 +25,5 @@ require (
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 )
+
+replace github.com/opensecstack/sdk/go/citadel => ../sdk/go/citadel

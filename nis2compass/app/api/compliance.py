@@ -14,6 +14,7 @@ from ..extensions import db
 from ..models import Assessment, Artifact, Control, ComplianceSnapshot
 from ..auth import require_auth, require_scope
 from ..audit import write_audit
+from .. import citadel_client
 from .assessments import _check_org_access
 
 compliance_bp = Blueprint('compliance', __name__)
@@ -36,6 +37,56 @@ def _compute_compliance_score(controls: list[Control]) -> Decimal | None:
         return None
     total = sum(_STATUS_WEIGHT.get(c.status, Decimal('0')) for c in scored)
     return (total / len(scored)).quantize(Decimal('0.01'))
+
+
+def _evaluate_or_error(action_type: str, *, description: str, change_id: str,
+                        verifier_user_id: str | None = None,
+                        verifier_role: str | None = None,
+                        verifier_token: str = '',
+                        verifier_email: str | None = None):
+    """Submit a governance-candidate action to CITADEL MARSHAL and translate a
+    blocking verdict into a Flask (response, status) tuple.
+
+    Returns None if the action is authorized (EXECUTE) and may proceed.
+    Returns a (jsonify(...), status_code) tuple if it must be blocked —
+    callers MUST return this immediately and MUST NOT commit any pending
+    changes first (roll back if anything was already mutated in-session).
+    """
+    identity = citadel_client.current_actor_identity()
+    kwargs = dict(
+        actor_user_id=identity['actor_user_id'],
+        actor_role=identity['actor_role'],
+        actor_token=identity['actor_token'],
+        actor_email=identity['actor_email'],
+        description=description,
+        change_id=change_id,
+    )
+    if verifier_user_id is not None:
+        kwargs['verifier_user_id'] = verifier_user_id
+    if verifier_role is not None:
+        kwargs['verifier_role'] = verifier_role
+    if verifier_token:
+        kwargs['verifier_token'] = verifier_token
+    if verifier_email:
+        kwargs['verifier_email'] = verifier_email
+
+    try:
+        citadel_client.evaluate_governance_action(action_type, **kwargs)
+    except citadel_client.CitadelGovernanceError as exc:
+        db.session.rollback()
+        return jsonify({
+            'error': f'{action_type} was refused by CITADEL governance',
+            'code': 'CITADEL_' + (exc.outcome or 'REFUSE'),
+            'reasons': exc.reasons,
+        }), 403
+    except citadel_client.CitadelUnavailableError as exc:
+        db.session.rollback()
+        current_app.logger.error('CITADEL governance evaluation unavailable: %s', exc)
+        return jsonify({
+            'error': f'{action_type} could not be authorized — CITADEL governance engine unavailable',
+            'code': 'CITADEL_UNAVAILABLE',
+        }), 503
+    return None
 
 
 def _check_locked(assessment: Assessment):
@@ -87,8 +138,9 @@ def compute_score(assessment_id):
             'weight': float(_STATUS_WEIGHT.get(c.status, 0)) if c.status != 'not_applicable' else None,
         }
 
-    write_audit('assessment_score_computed', g.actor, 'assessment', assessment.id,
+    write_audit(db.session, 'assessment_score_computed', g.actor, 'assessment', assessment.id,
                 metadata={'score': float(score) if score else None})
+    db.session.commit()
 
     return jsonify({
         'assessment_id': str(assessment_id),
@@ -158,10 +210,10 @@ def approve_assessment(assessment_id):
     assessment.approved_at = now
     assessment.approval_notes = notes
     assessment.updated_at = now
-    db.session.commit()
 
-    write_audit(f'assessment_{action}d', g.actor, 'assessment', assessment.id,
+    write_audit(db.session, f'assessment_{action}d', g.actor, 'assessment', assessment.id,
                 metadata={'action': action, 'notes': notes}, risk_class='WARNING')
+    db.session.commit()
 
     return jsonify(assessment.to_dict(include_stats=True))
 
@@ -185,16 +237,28 @@ def lock_assessment(assessment_id):
 
     body = request.get_json(silent=True) or {}
     now = datetime.now(timezone.utc)
+    reason = body.get('reason', '')
+
+    # Governance gate: locking freezes an assessment for regulatory
+    # submission — a compliance attestation. Evaluated by CITADEL MARSHAL
+    # before any mutation; REFUSE/HARD_STOP blocks the lock entirely.
+    err = _evaluate_or_error(
+        'ASSESSMENT_LOCK',
+        description=f'Lock assessment {assessment_id} for regulatory submission',
+        change_id=str(assessment.id),
+    )
+    if err:
+        return err
 
     assessment.locked = True
     assessment.locked_by = g.actor
     assessment.locked_at = now
-    assessment.lock_reason = body.get('reason', '')
+    assessment.lock_reason = reason
     assessment.updated_at = now
-    db.session.commit()
 
-    write_audit('assessment_locked', g.actor, 'assessment', assessment.id,
+    write_audit(db.session, 'assessment_locked', g.actor, 'assessment', assessment.id,
                 metadata={'reason': assessment.lock_reason}, risk_class='WARNING')
+    db.session.commit()
 
     return jsonify({'assessment_id': str(assessment_id), 'locked': True, 'locked_by': g.actor})
 
@@ -212,14 +276,24 @@ def unlock_assessment(assessment_id):
     if not assessment.locked:
         return jsonify({'error': 'Not locked', 'code': 'NOT_LOCKED'}), 409
 
+    # Governance gate: unlocking reopens a submission-frozen assessment —
+    # equally significant as locking it. Evaluated before any mutation.
+    err = _evaluate_or_error(
+        'ASSESSMENT_UNLOCK',
+        description=f'Unlock assessment {assessment_id}',
+        change_id=str(assessment.id),
+    )
+    if err:
+        return err
+
     assessment.locked = False
     assessment.locked_by = None
     assessment.locked_at = None
     assessment.lock_reason = None
     assessment.updated_at = datetime.now(timezone.utc)
-    db.session.commit()
 
-    write_audit('assessment_unlocked', g.actor, 'assessment', assessment.id, risk_class='WARNING')
+    write_audit(db.session, 'assessment_unlocked', g.actor, 'assessment', assessment.id, risk_class='WARNING')
+    db.session.commit()
 
     return jsonify({'assessment_id': str(assessment_id), 'locked': False})
 
@@ -253,13 +327,35 @@ def sign_artifact(artifact_id):
     secret = current_app.config.get('SECRET_KEY', 'default-signing-key')
     now = datetime.now(timezone.utc)
 
+    # Governance gate: signing is a digital attestation that the artifact is
+    # accepted evidence — textbook Separation-of-Duties territory. Unlike
+    # lock/unlock, nis2compass's data model *does* distinguish a real second
+    # identity here: Artifact.created_by (the preparer/uploader) vs. g.actor
+    # (the signer). Wire the real preparer as Verifier instead of the
+    # system placeholder — if they're the same person, Gate 3's
+    # NDS_SAME_IDENTITY hard-stop is a genuine, meaningful catch, not a
+    # false positive. We don't track the preparer's role anywhere in this
+    # model, so conservatively assign the lowest-privilege role rather than
+    # guessing a higher one.
+    verifier_user_id = artifact.created_by or citadel_client.SYSTEM_VERIFIER_USER_ID
+    verifier_role = 'viewer' if artifact.created_by else citadel_client.SYSTEM_VERIFIER_ROLE
+    err = _evaluate_or_error(
+        'ARTIFACT_SIGN',
+        description=f'Sign artifact {artifact_id} (hash={artifact.hash}) as evidence',
+        change_id=str(artifact.id),
+        verifier_user_id=verifier_user_id,
+        verifier_role=verifier_role,
+    )
+    if err:
+        return err
+
     artifact.signature = _sign_artifact(artifact.hash, g.actor, secret)
     artifact.signed_by = g.actor
     artifact.signed_at = now
-    db.session.commit()
 
-    write_audit('artifact_signed', g.actor, 'artifact', artifact.id,
+    write_audit(db.session, 'artifact_signed', g.actor, 'artifact', artifact.id,
                 metadata={'file_hash': artifact.hash}, risk_class='WARNING')
+    db.session.commit()
 
     return jsonify({
         'artifact_id': str(artifact_id),
@@ -368,10 +464,10 @@ def analyze_gaps(assessment_id):
     assessment.gap_report = report
     assessment.gap_generated_at = now
     assessment.updated_at = now
-    db.session.commit()
 
-    write_audit('gap_analysis_computed', g.actor, 'assessment', assessment.id,
+    write_audit(db.session, 'gap_analysis_computed', g.actor, 'assessment', assessment.id,
                 metadata={'gap_count': len(gaps), 'critical': report['critical_gaps']})
+    db.session.commit()
 
     return jsonify(report)
 

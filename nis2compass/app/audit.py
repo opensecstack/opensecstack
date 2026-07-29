@@ -94,47 +94,32 @@ def _compute_object_fingerprint(obj: dict | None) -> str | None:
 
 
 def _forward_to_citadel(log_entry: dict) -> None:
-    """Forward an audit entry to CITADEL HTTP API. Fire-and-forget — never raises."""
-    try:
-        from flask import current_app
-        citadel_url = current_app.config.get('CITADEL_API_URL')
-    except RuntimeError:
-        return  # No app context (e.g. during testing without full stack)
-    if not citadel_url:
-        return
-    try:
-        import requests  # lazy import — only used if CITADEL is configured
-        payload = {
-            'action_type': log_entry.get('action'),
-            'actor_user_id': 0,  # system/API-key requests have no numeric user id
-            'actor_role': 'NIS2_COMPASS',
-            'result_status': 'EXECUTED',
-            'system_module': 'nis2compass',
-            'resource_id': str(log_entry.get('resource_id', '')),
-            'data_hash': log_entry.get('chain_hash'),
-            'metadata': {
-                'resource_type': log_entry.get('resource_type'),
-                'risk_class': log_entry.get('risk_class', 'INFO'),
-                'platform': 'nis2compass',
-                'actor_identity': log_entry.get('actor', 'unknown'),
-            }
-        }
-        try:
-            from flask import current_app as _app
-            api_key = _app.config.get('CITADEL_API_KEY')
-        except RuntimeError:
-            api_key = None
-        headers = {'Content-Type': 'application/json'}
-        if api_key:
-            headers['Authorization'] = f'Bearer {api_key}'
-        requests.post(
-            f'{citadel_url.rstrip("/")}/v1/log',
-            json=payload,
-            headers=headers,
-            timeout=2.0,
-        )
-    except Exception as exc:
-        current_app.logger.warning('CITADEL forwarding failed: %s', exc)
+    """Forward an audit entry to CITADEL's WORM chain. Fire-and-forget — never raises.
+
+    Previously POSTed to f'{citadel_url}/v1/log', a route that does not
+    exist anywhere on CITADEL (real routes are all under /api/v1/, see
+    citadel/internal/api/server.go) — every call here silently failed. This
+    routes through citadel_client.emit_worm(), which hits the real
+    POST /api/v1/worm/emit route and matches its request shape exactly
+    (citadel/internal/api/handlers/worm.go).
+    """
+    from . import citadel_client
+
+    payload = {
+        'action': log_entry.get('action'),
+        'actor': log_entry.get('actor', 'unknown'),
+        'resource_type': log_entry.get('resource_type'),
+        'resource_id': str(log_entry.get('resource_id', '')) if log_entry.get('resource_id') is not None else None,
+        'risk_class': log_entry.get('risk_class', 'INFO'),
+        'chain_hash': log_entry.get('chain_hash'),
+        'platform': 'nis2compass',
+    }
+    citadel_client.emit_worm(
+        source='nis2compass',
+        event_type=log_entry.get('action') or 'audit_event',
+        project_id=citadel_client.PROJECT_ID,
+        payload=payload,
+    )
 
 
 def write_audit(

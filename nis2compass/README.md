@@ -42,6 +42,53 @@ See the [sinauth integration guide](../sinauth/docs/integration/nis2compass.md) 
 
 ---
 
+## CITADEL Governance & Audit
+
+NIS2 Compass integrates with CITADEL, the ecosystem's governance and WORM
+audit layer, via `app/citadel_client.py`. This client implements the two
+CITADEL HTTP contracts NIS2 Compass uses:
+
+- **`POST /api/v1/worm/emit`** — every `write_audit()` call (`app/audit.py`)
+  forwards a copy of the local audit entry to CITADEL's WORM chain after the
+  database transaction commits. This is fire-and-forget: a CITADEL outage
+  never blocks or fails the underlying request, it only logs a warning.
+- **`POST /api/v1/marshal/evaluate`** — a synchronous governance check
+  (MARSHAL's 5-gate pipeline: AuthN → AuthZ → NDS → AUGUR → WORM) submitted
+  *before* four privileged actions commit:
+
+  | Action | Endpoint | Verifier identity |
+  |---|---|---|
+  | Control status update | `PATCH /api/v1/assessments/{id}/controls/{ref}` (when `status` changes) | Fixed placeholder (`nis2compass-system-verifier`) |
+  | Artifact signing | `POST /api/v1/artifacts/{id}/sign` | **Real second identity** — `Artifact.created_by` (the preparer) against the signer as actor |
+  | Assessment lock | `POST /api/v1/assessments/{id}/lock` | Fixed placeholder |
+  | Assessment unlock | `POST /api/v1/assessments/{id}/unlock` | Fixed placeholder |
+
+  A `REFUSE` or `HARD_STOP` verdict blocks the action (`403`, no commit). If
+  CITADEL is configured but unreachable, the action is also blocked
+  (`503`) — this path fails **closed**, not open. If `CITADEL_API_URL` is
+  not set at all, governance evaluation is a no-op and the action proceeds
+  exactly as it did before this integration existed (matching `emit_worm`'s
+  existing behaviour for deployments that haven't opted in to CITADEL).
+
+Artifact signing is the one action with genuine Separation-of-Duties: the
+data model already distinguishes the artifact's preparer/uploader
+(`created_by`) from the signer (the authenticated actor), so that real
+second identity is sent to CITADEL as `Verifier` rather than the system
+placeholder used by the other three actions. If the same person prepared
+and is now signing the artifact, CITADEL's Gate 3 (`NDS_SAME_IDENTITY`)
+correctly flags it — that is a genuine control, not a false positive.
+
+**Known gap:** CITADEL's RBAC map does not yet recognise NIS2 Compass's
+action types (`CONTROL_STATUS_UPDATE`, `ARTIFACT_SIGN`, `ASSESSMENT_LOCK`,
+`ASSESSMENT_UNLOCK`) or its `assessor` role. Until CITADEL's RBAC map is
+extended (a CITADEL-side change, tracked separately), a real
+`marshal/evaluate` call for these actions will typically `REFUSE` at the
+AuthZ gate — deployments that have set `CITADEL_API_URL` should expect
+these four endpoints to return `403 CITADEL_REFUSE` until that follow-up
+lands.
+
+---
+
 ## Environment Variables
 
 ### Production (`docker-compose.yml`)
@@ -55,6 +102,8 @@ All variables marked **required** must be set; the Compose file will refuse to s
 | `REDIS_PASSWORD` | Yes | Redis authentication password |
 | `NIS2_SECRET_KEY` | Yes | Flask/application secret key (use a long random string) |
 | `NIS2_JWT_SECRET` | Yes | JWT signing secret — minimum 32 characters |
+| `CITADEL_API_URL` | No | Base URL of the CITADEL governance service (e.g. `http://citadel-api:8099`). If unset, audit forwarding and governance evaluation are both no-ops — see [CITADEL Governance & Audit](#citadel-governance--audit) below. |
+| `CITADEL_API_KEY` | No | Bearer token sent as `Authorization: Bearer <key>` on requests to CITADEL. Optional even when `CITADEL_API_URL` is set, depending on CITADEL's own deployment. |
 
 ### Development (`docker-compose.dev.yml`)
 

@@ -11,6 +11,16 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Real CITADEL governance integration: `app/citadel_client.py` implements `POST /api/v1/worm/emit` (fire-and-forget audit forwarding) and `POST /api/v1/marshal/evaluate` (synchronous, fail-closed governance evaluation). Wired into four privileged actions — control status update, artifact signing, assessment lock, and assessment unlock — each of which now blocks (`403`/`503`) on a `REFUSE`/`HARD_STOP` verdict or an unreachable CITADEL, instead of proceeding un-governed. No-op (proceeds as before) when `CITADEL_API_URL` is not set.
+- Real Separation-of-Duties for artifact signing: `Artifact.created_by` (the preparer) is sent to CITADEL as `Verifier` against the signer as `Actor` — a genuine second identity, not the placeholder verifier used by the other three governed actions.
+- `app/auth.py`'s `require_auth` now stashes the raw bearer token (`g.raw_token`) and actor email (`g.actor_email`) on the request context, forwarded to CITADEL as `Kerkese.ActorToken`/`Actor.Email`.
+- Alembic migration 020: adds the missing `assessments.created_by` column (declared on the model, used by `app/api/assessments.py`, but never migrated — every assessment creation was failing with `column assessments.created_by does not exist`).
+
+### Fixed
+
+- CITADEL audit forwarding was completely broken: `app/audit.py` posted to `{citadel_url}/v1/log`, a route that never existed on CITADEL (not even under `/api/v1/`). Every forwarded audit event silently failed regardless of `CITADEL_API_URL` being configured. Now routes through `citadel_client.emit_worm()` against the real `/api/v1/worm/emit` endpoint.
+- `write_audit()` calls in `app/api/compliance.py` (score, approve/reject, lock, unlock, sign, gap-analysis) were missing a required positional argument and crashed on every call.
+- Audit entries for CITADEL-forwarded events could be lost when a transaction rolled back after a premature commit; forwarding is now correctly deferred until after the database transaction actually commits.
 - sinauth SSO integration — authenticate via the SIN identity provider (OAuth 2.0 / OIDC, authorization_code + PKCE).
 - `app/sinauth.py` — OIDC token validation module; verifies RS256 tokens against the sinauth JWKS endpoint.
 - `sinauth.ts` client added to the web dashboard for popup-based SSO login.

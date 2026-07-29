@@ -1,6 +1,7 @@
 """Tests for compliance features: scoring, approval, locking, proofs, gap analysis."""
 
 import json
+import uuid
 import pytest
 
 
@@ -9,8 +10,14 @@ import pytest
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _create_org(client, headers):
+    # Organisation names are unique per (name, created_by) — see
+    # app/api/organisations.py. All tests in this file authenticate as the
+    # same actor (the fixed 'test-api-key'), so a fixed literal name here
+    # collided across every test function in the same pytest run. Suffix
+    # with a fresh UUID per call, matching the per-test-unique-org-name
+    # convention already used in tests/test_controls.py / test_artifacts.py.
     resp = client.post('/api/v1/organisations', json={
-        'name': 'Compliance Test Corp',
+        'name': f'Compliance Test Corp {uuid.uuid4()}',
         'industry': 'technology',
         'country': 'DE',
     }, headers=headers)

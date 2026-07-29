@@ -1,10 +1,11 @@
 import json
 from datetime import datetime, timezone, date
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, current_app
 from ..extensions import db
 from ..models import Assessment, Control
 from ..auth import require_auth, require_scope
 from ..audit import write_audit
+from .. import citadel_client
 from .assessments import _check_org_access
 
 controls_bp = Blueprint('controls', __name__)
@@ -232,6 +233,39 @@ def update_control(assessment_id, measure_ref):
         action = 'control_ticket_updated'
     else:
         action = 'control_updated'
+
+    # Governance gate: a control status change is a compliance attestation
+    # (especially so once risk_class reaches CRITICAL — closing out a
+    # critical NIS2 Article 21 gap). Submitted to CITADEL MARSHAL for
+    # authorization *before* the change commits; a REFUSE/HARD_STOP verdict
+    # must block the update, not just be logged. See app/citadel_client.py.
+    if action == 'control_status_updated':
+        try:
+            identity = citadel_client.current_actor_identity()
+            citadel_client.evaluate_governance_action(
+                'CONTROL_STATUS_UPDATE',
+                actor_user_id=identity['actor_user_id'],
+                actor_role=identity['actor_role'],
+                actor_token=identity['actor_token'],
+                actor_email=identity['actor_email'],
+                description=f'Control {measure_ref} status changed to {data["status"]!r} on assessment {assessment_id}',
+                change_id=str(control.id),
+            )
+        except citadel_client.CitadelGovernanceError as exc:
+            db.session.rollback()
+            return jsonify({
+                'error': 'Control status update was refused by CITADEL governance',
+                'code': 'CITADEL_' + (exc.outcome or 'REFUSE'),
+                'reasons': exc.reasons,
+            }), 403
+        except citadel_client.CitadelUnavailableError as exc:
+            db.session.rollback()
+            current_app.logger.error('CITADEL governance evaluation unavailable: %s', exc)
+            return jsonify({
+                'error': 'Control status update could not be authorized — CITADEL governance engine unavailable',
+                'code': 'CITADEL_UNAVAILABLE',
+            }), 503
+
     write_audit(
         db.session,
         action=action,

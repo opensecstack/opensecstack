@@ -41,14 +41,19 @@ The platform exposes a REST API on **port 8090**, backed by a Python/Flask appli
              │  Flask REST API ├───────┘
              │                │
              │                │──── every write ──► audit_log
-             │                │                    (CITADEL WORM
-             └────────┬────────┘                    append-only)
-                      │
-                      │ rate limiting / sessions
-                      ▼
-             ┌─────────────────┐
-             │    Redis 7      │
-             └─────────────────┘
+             │                │                    (local WORM,
+             │                │                     append-only)
+             └────────┬────────┘
+                      │  │
+      rate limiting / │  │ after commit: worm/emit (fire-and-forget)
+      sessions        │  │ before commit: marshal/evaluate (blocking,
+                      │  │  4 privileged actions only — see below)
+                      ▼  ▼
+             ┌─────────────────┐   ┌──────────────────────┐
+             │    Redis 7      │   │   CITADEL (external)  │
+             └─────────────────┘   │  /api/v1/worm/emit    │
+                                    │  /api/v1/marshal/evaluate │
+                                    └──────────────────────┘
 
   ── startup only ──────────────────────────────────────
              ┌─────────────────┐
@@ -134,6 +139,17 @@ The trigger function raises an exception for any UPDATE or DELETE attempt, regar
 ### Relevance to NIS2 Article 21
 
 NIS2 Article 21 requires that organisations implement appropriate and proportionate technical and organisational measures to manage cybersecurity risks, and Article 23 requires incident notification with supporting evidence. Competent authorities and audit bodies expect that organisations can produce a verifiable, unaltered history of their compliance posture changes. The CITADEL WORM audit chain satisfies this requirement by producing a tamper-evident record where any gap or alteration in the hash sequence is detectable without requiring access to external systems.
+
+### External CITADEL forwarding and governance evaluation
+
+The local `audit_log` table described above is the system of record and functions correctly on its own. Separately, when `CITADEL_API_URL` is configured, `app/citadel_client.py` connects NIS2 Compass to the ecosystem-wide CITADEL service over two HTTP contracts:
+
+- **`POST /api/v1/worm/emit`** — `write_audit()` (`app/audit.py`) forwards every local audit entry to CITADEL's own WORM chain after the transaction commits. This is fire-and-forget and never blocks or fails the request; failures are logged only. Note that earlier versions of this integration posted to `{citadel_url}/v1/log`, a route that does not exist anywhere in CITADEL — every forwarding attempt silently failed. This has been fixed; forwarding now hits the real `/api/v1/worm/emit` route.
+- **`POST /api/v1/marshal/evaluate`** — a synchronous, blocking governance check submitted before four privileged actions commit: control status update, artifact signing, assessment lock, and assessment unlock. A `REFUSE`/`HARD_STOP` verdict, or an unreachable CITADEL, blocks the action (fail-closed). If `CITADEL_API_URL` is unset, this evaluation is skipped entirely (fail-open by design, matching pre-integration behaviour for deployments that have not opted in).
+
+Artifact signing is the only one of the four actions with a real Separation-of-Duties identity: the preparer (`Artifact.created_by`) is sent as `Verifier` against the signer as `Actor`. The other three actions use a fixed placeholder verifier identity (`nis2compass-system-verifier`) because NIS2 Compass has no second-approver concept for them.
+
+**Known limitation:** CITADEL's RBAC map does not yet recognise NIS2 Compass's action types or its `assessor` role, so real `marshal/evaluate` calls for these four actions will generally `REFUSE` at the AuthZ gate until CITADEL's RBAC map is extended (a CITADEL-side follow-up, not yet done). See the [README](../README.md#citadel-governance--audit) for the full endpoint-to-verifier mapping.
 
 ---
 

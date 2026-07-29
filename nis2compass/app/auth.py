@@ -289,6 +289,13 @@ def require_auth(f):
             return jsonify({'error': 'Missing or invalid Authorization header', 'code': 'UNAUTHORIZED'}), 401
         token = auth_header[len('Bearer '):]
 
+        # Stash the raw bearer token for the current request. Needed as
+        # CITADEL Kerkese.ActorToken (see app/citadel_client.py) — CITADEL
+        # verifies it directly against sinauth's JWKS, so the raw string
+        # must be forwarded, not just the parsed claims.
+        g.raw_token = token
+        g.actor_is_sinauth = False
+
         sinauth_url = current_app.config.get('SINAUTH_URL', '')
         sinauth_issuer = current_app.config.get('SINAUTH_ISSUER', sinauth_url)
 
@@ -301,6 +308,10 @@ def require_auth(f):
                 g.actor = payload.get('sub', 'unknown')
                 g.token_scope = 'read_write'  # sinauth tokens get full scope
                 g.token_role = payload.get('role', 'assessor')
+                g.actor_email = payload.get('email')
+                # Real sinauth-issued identity — sub is a sinauth UUID and
+                # `token` is a live RS256 bearer CITADEL can verify directly.
+                g.actor_is_sinauth = True
                 return f(*args, **kwargs)
 
         try:
@@ -338,6 +349,7 @@ def require_auth(f):
         g.actor = payload.get('sub', 'unknown')
         g.token_scope = payload.get('scope', 'read_write')
         g.token_role = payload.get('role', 'assessor')
+        g.actor_email = payload.get('email')
         return f(*args, **kwargs)
     return decorated
 

@@ -293,6 +293,23 @@ The underlying PostgreSQL trigger (`enforce_audit_log_immutability`) prevents an
 
 Audit entries can be retrieved via `GET /api/v1/audit` with filtering by actor, action, resource_type, resource_id, and risk_class.
 
+### CITADEL governance gate
+
+Four actions in the workflow above are treated as compliance-significant enough to require CITADEL's authorization *before* they are allowed to happen, not just logged after the fact:
+
+| Action | Endpoint |
+|---|---|
+| Control status change | `PATCH /api/v1/assessments/{id}/controls/{ref}` (only when `status` is included in the request) |
+| Artifact signing | `POST /api/v1/artifacts/{id}/sign` |
+| Assessment lock | `POST /api/v1/assessments/{id}/lock` |
+| Assessment unlock | `POST /api/v1/assessments/{id}/unlock` |
+
+Each of these submits a governance request to CITADEL MARSHAL (`POST /api/v1/marshal/evaluate`) synchronously. A `REFUSE` or `HARD_STOP` verdict — or CITADEL being configured but unreachable — returns an error response (`403 CITADEL_REFUSE`/`CITADEL_HARD_STOP` or `503 CITADEL_UNAVAILABLE`) and nothing is committed: the control status, artifact signature, or lock/unlock state is left unchanged. If `CITADEL_API_URL` is not configured for the deployment, this check is skipped entirely and the action proceeds as it would without CITADEL integration.
+
+For **artifact signing** specifically, the governance request carries a real second identity: the artifact's `created_by` (whoever uploaded/prepared it) is sent as the `Verifier`, against the signer (the authenticated caller) as `Actor`. This gives artifact signing genuine Separation-of-Duties — if the same person prepared and is now signing the artifact, CITADEL's identity-separation gate can catch it. Control status changes and assessment lock/unlock use a fixed system placeholder identity as verifier instead, since NIS2 Compass has no second-approver concept for those actions.
+
+**Current limitation:** CITADEL's RBAC policy does not yet recognise NIS2 Compass's action types or its `assessor` role. Until that is extended on the CITADEL side, expect real `marshal/evaluate` calls for these four endpoints to `REFUSE` at the authorization gate in a deployment that has `CITADEL_API_URL` configured — this is a known, tracked follow-up, not a bug in NIS2 Compass.
+
 ---
 
 ## Example Curl Workflow

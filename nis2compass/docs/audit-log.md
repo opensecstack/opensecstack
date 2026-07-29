@@ -136,6 +136,16 @@ The following `action` values are written by the application. All entries includ
 
 ---
 
+## Forwarding to External CITADEL
+
+The `audit_log` table itself is entirely self-contained — the chain and immutability guarantees described above hold regardless of whether external CITADEL forwarding is configured. Separately, when the `CITADEL_API_URL` environment variable is set, every entry written by `write_audit()` is also forwarded to CITADEL's own WORM chain via `POST /api/v1/worm/emit` (implemented in `app/citadel_client.py`), after the local transaction has committed.
+
+This forwarding is fire-and-forget: a CITADEL outage is logged as a warning and never fails or blocks the originating request. Earlier versions of this integration posted to a non-existent route (`{citadel_url}/v1/log`), so every forward silently failed regardless of `CITADEL_API_URL` being set — this has been fixed. Deployments relying on external CITADEL forwarding as evidence should confirm `CITADEL_API_URL` is set and reachable; the local `audit_log` table remains the authoritative record either way.
+
+Governance evaluation (CITADEL MARSHAL, `POST /api/v1/marshal/evaluate`) is a separate, synchronous mechanism layered on top of four specific write paths (control status update, artifact signing, assessment lock/unlock) — it decides whether the action is *allowed to happen at all*, before the audit entry is even written. See [architecture.md](architecture.md#external-citadel-forwarding-and-governance-evaluation) for details, including the current CITADEL-side RBAC gap that causes real evaluate calls for these actions to `REFUSE` until CITADEL's RBAC map is extended.
+
+---
+
 ## Chain Verification Procedure
 
 The following Python script fetches all `audit_log` entries and verifies the chain integrity. Run it from any host with network access to the PostgreSQL instance.

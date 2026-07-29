@@ -314,9 +314,9 @@ Receives scan completion and critical finding events from APIGuard.
 
 ### POST /api/v1/webhooks/citadel
 
-Receives governance events from CITADEL (MARSHAL decisions, AUGUR advisories, VIGIL alerts).
+Receives governance events from CITADEL (MARSHAL decisions, AUGUR advisories; VIGIL alerts once VIGIL ships — CITADEL v2.0, design-stage as of v1.0.0).
 
-**Event types:** `citadel.marshal.decision`, `citadel.augur.advisory`, `citadel.vigil.alert`
+**Event types:** `citadel.marshal.decision`, `citadel.augur.advisory`, `citadel.vigil.alert` (planned)
 
 **Payload schema:**
 
@@ -711,7 +711,7 @@ Complete list of event types used in ThreatFlow webhooks:
 | `apiguard.finding.critical` | APIGuard | Critical finding detected -- immediate IOC extraction |
 | `citadel.marshal.decision` | CITADEL | MARSHAL governance decision delivered |
 | `citadel.augur.advisory` | CITADEL | AUGUR advisory published -- may block ingestion |
-| `citadel.vigil.alert` | CITADEL | VIGIL monitoring alert |
+| `citadel.vigil.alert` | CITADEL | VIGIL monitoring alert (planned — VIGIL is design-stage as of CITADEL v1.0.0, ships v2.0) |
 | `custom.ioc.report` | Third-party | Custom IOC report from external scanner |
 
 ### Outbound Events (sent by ThreatFlow)

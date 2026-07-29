@@ -116,7 +116,7 @@ ThreatFlow tracks per-feed health metrics:
 | `accuracy_ratio` | True positive rate based on sighting feedback |
 | `total_iocs` | Total IOCs contributed by this feed |
 
-Feeds with `error_count > 5` are automatically paused and a VIGIL AMBER alert is raised.
+Feeds with `error_count > 5` are automatically paused. Once VIGIL ships (CITADEL v2.0, design-stage as of v1.0.0 — see [VIGIL](../../citadel/docs/vigil.md)), this will also raise a VIGIL AMBER alert; today the pause itself is the enforcement mechanism.
 
 ---
 

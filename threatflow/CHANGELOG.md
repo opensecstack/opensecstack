@@ -8,7 +8,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`POST /api/v1/advisories` — CSAF 2.0 advisory ingestion from OpenCSIRT.**
+  Resolves [ADR-004](adrs/004-opencsirt-advisory-ingestion-gap.md)'s
+  push/data-model/dedup questions: OpenCSIRT pushes full CSAF 2.0
+  documents on every publish; each `vulnerabilities[]` entry maps onto
+  a STIX 2.1 `vulnerability` object (new `internal/stix` `Vulnerability`
+  type + `AsVulnerability`), while `product_tree`/`remediations[]` (no
+  STIX 2.1 equivalent) are kept verbatim in new advisory-specific
+  tables. New migration 009 adds `advisories` (current revision per
+  `tracking_id`), `advisory_revisions` (append-only), `advisory_vulnerabilities`,
+  `advisory_remediations`, `advisory_products`. Dedup/revision key is
+  `document.tracking.id` + `document.tracking.version`: a new revision
+  replaces the current one; a duplicate `(tracking_id, version)` is a
+  no-op 200; a stale (older) revision is rejected 409. New package
+  `internal/csaf` (parse/map/import); new handler
+  `internal/api/handlers/advisory.go` (`Ingest`/`List`/`Get`) follows
+  `STIX.IngestBundle`'s shape — MARSHAL gate
+  (`citadel.ActionAdvisoryIngest`) → import → WORM emit → webhook
+  fan-out (`advisory.ingested`/`advisory.updated`), skipped for
+  duplicate/stale outcomes.
 - sinauth SSO integration — authenticate via the SIN identity provider (OAuth 2.0 / OIDC).
+
+### Fixed
+- **CITADEL governance requests carried no real actor identity.** `citadel.Client.Evaluate`
+  never received the authenticated caller's identity: `Kerkese.Actor.UserID` was left at its
+  Go zero value, and `Verifier`/`SoD` were entirely unset (all zero values) on every governed
+  action (`IOC_INGEST`, `STIX_BUNDLE_IMPORT`, `FEED_CREATE`, `FEED_TOGGLE`, `FEED_DELETE`). This
+  was a live risk of an accidental `NDS_SAME_IDENTITY` collision at CITADEL's Gate 3, since an
+  empty operator identity and an empty verifier identity are indistinguishable. `Evaluate` now
+  takes the real authenticated `actorUserID`/`actorToken` (sinauth UUID, or the API-key/bootstrap
+  fallback subject) from every handler via the new `actorFromRequest()` helper, and submits a
+  fixed, clearly-named placeholder Verifier (`threatflow-system-verifier`) instead of leaving the
+  field unset. `Kerkese`'s `UserID` fields changed from `int64` to `string` to carry sinauth
+  UUIDs. ThreatFlow still has no second-approver concept for any governed action — governance
+  runs single-party by deliberate scope decision, not because of this bug — see
+  [docs/citadel-integration.md](docs/citadel-integration.md#verifier--single-party-governance-today).
 
 ## [1.0.0] — 2026-04-19
 

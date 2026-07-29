@@ -94,8 +94,9 @@ func (h *STIX) IngestBundle(w http.ResponseWriter, r *http.Request) {
 
 	// MARSHAL gate — bundle import is a privileged mutation.
 	if h.citadel != nil && h.citadel.Enabled() {
+		actorUserID, actorRole, actorToken := actorFromRequest(r)
 		decision, err := h.citadel.Evaluate(r.Context(), citadel.ActionBundleImport,
-			"stix bundle import from "+source, "", "operator")
+			"stix bundle import from "+source, actorUserID, "", actorRole, actorToken)
 		if err != nil {
 			h.logger.Error().Err(err).Msg("marshal evaluate")
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "governance check failed"})

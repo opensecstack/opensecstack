@@ -36,7 +36,8 @@ func (h *Feed) gate(w http.ResponseWriter, r *http.Request, action, description 
 	if h.citadel == nil || !h.citadel.Enabled() {
 		return true
 	}
-	decision, err := h.citadel.Evaluate(r.Context(), action, description, "", "operator")
+	actorUserID, actorRole, actorToken := actorFromRequest(r)
+	decision, err := h.citadel.Evaluate(r.Context(), action, description, actorUserID, "", actorRole, actorToken)
 	if err != nil {
 		h.logger.Error().Err(err).Msg("marshal evaluate")
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "governance check failed"})

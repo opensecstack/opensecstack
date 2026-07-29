@@ -128,7 +128,7 @@ All mutation operations that modify the IOC store require a MARSHAL EXECUTE deci
 If MARSHAL returns:
 - **EXECUTE** — operation proceeds normally
 - **REFUSE** — operation is rejected, 403 returned to caller, event WORM-logged
-- **HARD_STOP** — all ThreatFlow ingestion is halted, VIGIL RED alert raised
+- **HARD_STOP** — all ThreatFlow ingestion is halted (once VIGIL ships — CITADEL v2.0, design-stage as of v1.0.0 — this will also raise a VIGIL RED alert)
 
 ---
 
@@ -422,8 +422,9 @@ When CITADEL issues a HARD_STOP decision:
 
 1. **All ThreatFlow ingestion is immediately halted** — no new IOCs are accepted
 2. Feed polling is paused across all sources
-3. A VIGIL RED alert is raised in CITADEL
-4. The admin team must investigate and explicitly resume operations
+3. The admin team must investigate and explicitly resume operations
+
+(Once VIGIL ships — CITADEL v2.0, design-stage as of v1.0.0 — a HARD_STOP will also raise a VIGIL RED alert in CITADEL.)
 
 ### Compromised API Key
 

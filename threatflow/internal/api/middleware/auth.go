@@ -26,6 +26,14 @@ func Identity(r *http.Request) *auth.Identity {
 	return v
 }
 
+// ContextWithIdentity stashes id in ctx the same way RequireAuth/RequireRole
+// do after a successful verification. Exported for handler-level tests that
+// need to exercise CITADEL Kerkese construction under a specific identity
+// without standing up a full auth middleware chain.
+func ContextWithIdentity(ctx context.Context, id *auth.Identity) context.Context {
+	return context.WithValue(ctx, identityKey, id)
+}
+
 // sinauthHolder wraps lazy sinauth client initialisation. The client is
 // created the first time an RS256 token is seen so startup never fails
 // if the issuer is temporarily unreachable.
@@ -145,20 +153,6 @@ func identityFromRequestDual(svc *auth.Service, sin *sinauthHolder, r *http.Requ
 	}
 
 	return svc.VerifyToken(token)
-}
-
-// identityFromRequest pulls a Bearer token out of Authorization and verifies it.
-// Kept for internal use and tests that don't need sinauth.
-func identityFromRequest(svc *auth.Service, r *http.Request) (*auth.Identity, error) {
-	header := r.Header.Get("Authorization")
-	if header == "" {
-		return nil, auth.ErrUnauthorized
-	}
-	parts := strings.SplitN(header, " ", 2)
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		return nil, auth.ErrUnauthorized
-	}
-	return svc.VerifyToken(strings.TrimSpace(parts[1]))
 }
 
 func writeJSONError(w http.ResponseWriter, status int, msg string) {

@@ -79,10 +79,37 @@ func (c *Client) Enabled() bool {
 	return c != nil && c.baseURL != ""
 }
 
+// verifierPlaceholder is the fixed Verifier identity ThreatFlow submits for
+// every Kerkese. None of ThreatFlow's governed actions (IOC ingest/revoke,
+// STIX bundle import, feed create/delete/toggle) have a real second-approver
+// concept today — there is no separate "approve" step, just a single
+// mutating request from the operator who initiated it. Following the same
+// documented pattern apiguard used (citadel adrs/005-sinauth-identity-bridge.md,
+// "Producer wiring — apiguard only in this pass"): a fixed, clearly-named
+// placeholder distinct from any real user so it never collides with the
+// Actor and never trips Gate 3's NDS_SAME_IDENTITY HARD_STOP. VerifierToken
+// is always left empty (no real second person to forward a token for).
+// Building genuine two-person approval for these actions is a separate
+// product change, tracked as follow-up, not fabricated here. This is safe
+// to defer because citadel.enforce_signatures stays at its ADR-004 default
+// (false) — the gap surfaces as a Gate 1/Gate 3 WARN reason, not silently.
+const verifierPlaceholder = "threatflow-system-verifier"
+
 // Evaluate asks MARSHAL whether an action is allowed. When the client is
 // disabled the decision is always EXECUTE. When CITADEL is unreachable the
 // configured FailMode decides whether to allow or reject.
-func (c *Client) Evaluate(ctx context.Context, action, description, actorEmail, actorRole string) (*Decision, error) {
+//
+// actorUserID is the real authenticated caller's identity — a sinauth UUID
+// when the caller presented a genuine sinauth RS256 token, or ThreatFlow's
+// own "apikey:<uuid>" / "bootstrap:<name>" subject when the caller used the
+// API-key/HS256 fallback (see internal/auth.Identity.Subject). actorToken is
+// the raw bearer token forwarded from the incoming request's Authorization
+// header — callers MUST leave it empty when the caller authenticated via the
+// API-key/HS256 fallback, since there is no real sinauth token to forward in
+// that case (see citadel adrs/005-sinauth-identity-bridge.md); a missing
+// token is a non-blocking WARN under CITADEL's current soft-mode
+// enforce_signatures=false config, not a failure.
+func (c *Client) Evaluate(ctx context.Context, action, description, actorUserID, actorEmail, actorRole, actorToken string) (*Decision, error) {
 	if !c.Enabled() {
 		return &Decision{Outcome: OutcomeExecute, ExecutionID: uuid.New(), TsUTC: time.Now().UTC()}, nil
 	}
@@ -97,9 +124,19 @@ func (c *Client) Evaluate(ctx context.Context, action, description, actorEmail, 
 			Description: description,
 		},
 		Actor: KerkeseActor{
-			Role:  actorRole,
-			Email: actorEmail,
+			UserID: actorUserID,
+			Role:   actorRole,
+			Email:  actorEmail,
 		},
+		Verifier: KerkeseVerifier{
+			UserID: verifierPlaceholder,
+			Role:   "group_sig_verifier",
+		},
+		SoD: KerkeseSoD{
+			OperatorUserID: actorUserID,
+			VerifierUserID: verifierPlaceholder,
+		},
+		ActorToken: actorToken,
 	}
 	body, err := json.Marshal(kerkese)
 	if err != nil {

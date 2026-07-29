@@ -357,16 +357,25 @@ ThreatFlow authenticates to CITADEL as a **connector** using HMAC-SHA256:
 
 ### MARSHAL Governance
 
-All high-impact mutations require a MARSHAL EXECUTE decision before proceeding:
+Every mutation is evaluated by MARSHAL before it proceeds:
 
-| Operation | MARSHAL Action Type | Reason |
-|-----------|-------------------|--------|
-| Bulk feed ingestion (> 100 IOCs) | `bulk_ioc_ingest` | Prevent accidental mass pollution of IOC store |
-| Feed source addition | `feed_source_add` | New feeds should be reviewed before activation |
-| STIX bundle export to external consumer | `stix_export` | Outbound intelligence sharing is a policy decision |
-| IOC confidence override (manual) | `ioc_confidence_override` | Manual overrides bypass automated scoring |
+| Operation | MARSHAL Action Type |
+|-----------|-------------------|
+| IOC ingest (`POST /api/v1/iocs`) | `IOC_INGEST` |
+| STIX bundle import (`POST /api/v1/stix/bundles`) | `STIX_BUNDLE_IMPORT` |
+| Feed create (`POST /api/v1/feeds`) | `FEED_CREATE` |
+| Feed enable/disable (`PATCH /api/v1/feeds/{id}`) | `FEED_TOGGLE` |
+| Feed delete (`DELETE /api/v1/feeds/{id}`) | `FEED_DELETE` |
 
-If MARSHAL returns **REFUSE**, the operation is rejected and logged. If **HARD_STOP**, ThreatFlow pauses the related feed and raises a VIGIL RED alert.
+If MARSHAL returns **REFUSE** or **HARD_STOP**, the request is rejected with
+HTTP 403 and not persisted.
+
+The Kerkese carries the caller's real identity (sinauth UUID, or the
+API-key/bootstrap fallback subject) as `actor`, plus a fixed placeholder
+`verifier` (`threatflow-system-verifier`) — ThreatFlow has no second-approver
+concept for any governed action today, so governance runs single-party. See
+[CITADEL Integration — Actor identity / Verifier](citadel-integration.md#actor-identity)
+for the full explanation of why the placeholder is used and why it's safe.
 
 ### WORM Events
 
@@ -489,7 +498,79 @@ X-ThreatFlow-Signature: sha256=<hmac-sha256-hex-digest>
 
 ### Reverse Flow: CSAF Advisories to ThreatFlow
 
-OpenCSIRT publishes CSAF 2.0 advisories that ThreatFlow consumes to enrich its IOC store with vulnerability context. This is defined in the SDK integration contracts as the `Advisory` contract (CSAF 2.0 v1).
+This is a **push**, not a poll: when an OpenCSIRT advisory transitions to
+`published`, OpenCSIRT's `(*ThreatFlowClient).PushAdvisory`
+(`opencsirt/internal/integrations/threatflow.go`) immediately POSTs the
+full CSAF 2.0 document to ThreatFlow — there is no ThreatFlow-side poller
+or `advisory_import.poll_interval` config. (An earlier revision of this
+document described the opposite — a ThreatFlow-side poll — which never
+matched what either platform actually implemented; see
+`threatflow/adrs/004-opencsirt-advisory-ingestion-gap.md` for how that
+was reconciled.)
+
+```http
+POST http://threatflow:8091/api/v1/advisories?source=opencsirt
+Content-Type: application/json
+Authorization: Bearer <token>
+
+{
+  "document": {
+    "category": "csaf_security_advisory",
+    "csaf_version": "2.0",
+    "title": "Example RCE in Widget",
+    "publisher": {"category": "coordinator", "name": "OpenCSIRT", "namespace": "https://csirt.example/"},
+    "tracking": {
+      "id": "OPENCSIRT-20260101-abcd1234",
+      "initial_release_date": "2026-01-01T00:00:00Z",
+      "current_release_date": "2026-01-01T00:00:00Z",
+      "status": "final",
+      "version": "1"
+    },
+    "distribution": {"tlp": {"label": "AMBER"}}
+  },
+  "product_tree": {
+    "full_product_names": [{"product_id": "CSAFPID-1", "name": "Widget 1.0"}]
+  },
+  "vulnerabilities": [
+    {
+      "cve": "CVE-2026-00001",
+      "title": "CVE-2026-00001 — Example RCE in Widget",
+      "remediations": [{"category": "vendor_fix", "details": "Upgrade to 1.1", "product_ids": ["CSAFPID-1"]}]
+    }
+  ]
+}
+```
+
+**Response (201 Created — new advisory; 200 — revision update or
+idempotent duplicate; 409 — a newer revision is already stored; 400 —
+malformed CSAF):**
+
+```json
+{
+  "advisory_id": "5b6e...-uuid",
+  "tracking_id": "OPENCSIRT-20260101-abcd1234",
+  "revision": "1",
+  "action": "created",
+  "vulnerabilities_mapped": 1,
+  "products_mapped": 1
+}
+```
+
+Server-side, `POST /api/v1/advisories` (`internal/api/handlers/advisory.go`,
+`internal/csaf`) maps every `vulnerabilities[]` entry onto a STIX 2.1
+`vulnerability` object — ThreatFlow's canonical representation for CVE
+data, per `threatflow/adrs/001-stix-21-as-canonical-format.md` — and keeps
+`product_tree` / `remediations[]` (which have no STIX 2.1 equivalent) in
+dedicated `advisory_*` tables (migration 009) cross-referenced to that
+STIX object. The dedup/revision key is
+`document.tracking.id` + `document.tracking.version`: a new version
+replaces the current advisory's vulnerability/product set; a repeat of an
+already-seen version is a no-op; an out-of-order older version is
+rejected without touching current state. Auth matches every other
+ThreatFlow mutation endpoint (`Authorization: Bearer <JWT>`, operator role
+required, obtained via `POST /api/v1/auth/token`) — see the ADR-004
+implementation note for the known gap between that contract and what
+OpenCSIRT's client currently sends.
 
 ### Configuration
 
@@ -500,9 +581,6 @@ integrations:
     api_key: "${THREATFLOW_OPENCSIRT_API_KEY}"
     push_events:
       - threatflow.bundle.exported
-    advisory_import:
-      enabled: true
-      poll_interval: 30m
 ```
 
 ---

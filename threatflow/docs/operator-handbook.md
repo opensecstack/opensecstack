@@ -128,8 +128,10 @@ monitoring:
 | `error` | Last 3+ consecutive polls failed | Check URL, credentials, network |
 | `stale` | No poll attempt in >2x the configured interval | Check scheduler, restart service |
 
-Feeds with `error_count > 5` are automatically paused and a VIGIL AMBER alert
-is raised via CITADEL.
+Feeds with `error_count > 5` are automatically paused. Once VIGIL ships
+(CITADEL v2.0, design-stage as of v1.0.0), this will also raise a VIGIL
+AMBER alert via CITADEL; today the pause itself is the enforcement
+mechanism.
 
 ---
 

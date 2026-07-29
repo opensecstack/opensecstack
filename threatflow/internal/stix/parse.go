@@ -106,6 +106,19 @@ func AsRelationship(o Object) (Relationship, bool, error) {
 	return r, true, nil
 }
 
+// AsVulnerability decodes the raw object as Vulnerability when type matches.
+func AsVulnerability(o Object) (Vulnerability, bool, error) {
+	if o.Type != "vulnerability" {
+		return Vulnerability{}, false, nil
+	}
+	var v Vulnerability
+	if err := json.Unmarshal(o.Raw, &v); err != nil {
+		return Vulnerability{}, false, err
+	}
+	v.Raw = o.Raw
+	return v, true, nil
+}
+
 func validateObject(o *Object) error {
 	if o.Type == "" {
 		return errors.New("missing type")

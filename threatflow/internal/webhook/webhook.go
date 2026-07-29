@@ -31,6 +31,8 @@ const (
 	EventIOCRevoked       = "ioc.revoked"
 	EventBundleImported   = "bundle.imported"
 	EventSightingReported = "sighting.reported"
+	EventAdvisoryIngested = "advisory.ingested"
+	EventAdvisoryUpdated  = "advisory.updated"
 )
 
 // Event is the wire envelope sent to every subscriber.
@@ -52,8 +54,8 @@ type Dispatcher struct {
 	wg  sync.WaitGroup
 	sem chan struct{}
 
-	maxAttempts  int
-	baseBackoff  time.Duration
+	maxAttempts int
+	baseBackoff time.Duration
 }
 
 // NewDispatcher builds a Dispatcher.
@@ -225,14 +227,19 @@ func (d *Dispatcher) recordOutcome(
 }
 
 // signPayload computes the HMAC-SHA256 signature that the subscriber verifies.
-// Format: `hmac-sha256=<hex(HMAC(secret, ts + "." + body))>` — chosen to mirror
-// the GitHub-webhook style so existing consumer libraries work unchanged.
+// Format: `sha256=<hex(HMAC(secret, ts + "." + body))>` — this is the
+// ecosystem-wide webhook signature contract (see docs/webhook-spec.md and
+// docs/security.md) shared by every X-<Platform>-Signature webhook header
+// across opensecstack (IRFlow, VertGuard, CyberPath, APIGuard, the SDK, ...).
+// It is deliberately distinct from the `hmac-sha256=` prefix used only by the
+// CITADEL connector protocol (X-CITADEL-SIG, see internal/citadel/client.go)
+// — do not conflate the two schemes.
 func signPayload(secret, ts string, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(ts))
 	mac.Write([]byte{'.'})
 	mac.Write(body)
-	return "hmac-sha256=" + hex.EncodeToString(mac.Sum(nil))
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }
 
 // VerifySignature is a helper for subscribers (re-exported so tests can use it).

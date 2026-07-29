@@ -81,6 +81,17 @@ type AttackPattern struct {
 	KillChain   []KillChainPhase `json:"kill_chain_phases,omitempty"`
 }
 
+// Vulnerability is a STIX 2.1 vulnerability object (§4.14) — a weakness that
+// can be exploited, typically identified by a CVE carried in
+// external_references. Unlike Indicator, it has no pattern: it represents
+// the vulnerability itself, not a detection rule for it. This is the object
+// CSAF `vulnerabilities[]` entries are mapped onto (see internal/csaf).
+type Vulnerability struct {
+	Object
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
 // Relationship connects two STIX objects (e.g. malware USES attack-pattern).
 type Relationship struct {
 	Object

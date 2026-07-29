@@ -126,7 +126,11 @@ func TestE2E_FullEcosystemFlow(t *testing.T) {
 	sig := recvSig.Load().(string)
 	// Extract timestamp by re-parsing envelope — we don't have the ts header here
 	// in our lightweight helper, so we just verify it's non-empty + prefixed.
-	if !strings.HasPrefix(sig, "hmac-sha256=") {
+	// X-ThreatFlow-Signature must use the ecosystem-wide webhook contract
+	// ("sha256=<hex>", per docs/webhook-spec.md) — NOT the "hmac-sha256="
+	// prefix reserved for the CITADEL connector protocol. Every real
+	// consumer (IRFlow, VertGuard) verifies against "sha256=".
+	if !strings.HasPrefix(sig, "sha256=") {
 		t.Errorf("signature format unexpected: %q", sig)
 	}
 	if !bytes.Contains(body, []byte(`"type":"sighting.reported"`)) {
@@ -282,7 +286,9 @@ func resetDB(t *testing.T, dsn string) {
 		t.Fatalf("migrate up: %v", err)
 	}
 	_, err = sqlDB.Exec(`TRUNCATE TABLE
-  ioc_correlations, ttp_tags, sightings, stix_objects, stix_bundles,
+  ioc_correlations, ttp_tags, sightings,
+  advisory_remediations, advisory_vulnerabilities, advisory_products, advisory_revisions, advisories,
+  stix_objects, stix_bundles,
   iocs, feeds, webhook_deliveries, webhook_subscribers, api_keys
 RESTART IDENTITY CASCADE`)
 	if err != nil {

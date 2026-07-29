@@ -15,6 +15,7 @@ import (
 	"github.com/opensecstack/threatflow/internal/citadel"
 	"github.com/opensecstack/threatflow/internal/config"
 	"github.com/opensecstack/threatflow/internal/correlate"
+	"github.com/opensecstack/threatflow/internal/csaf"
 	"github.com/opensecstack/threatflow/internal/db"
 	"github.com/opensecstack/threatflow/internal/db/store"
 	"github.com/opensecstack/threatflow/internal/stix"
@@ -72,7 +73,9 @@ func (s *Server) registerRoutes() {
 		webhookStore  *store.WebhookStore
 		sightingStore *store.SightingStore
 		apiKeyStore   *store.APIKeyStore
+		advisoryStore *store.AdvisoryStore
 		importer      *stix.Importer
+		csafImporter  *csaf.Importer
 		engine        *correlate.Engine
 		dispatcher    *webhook.Dispatcher
 	)
@@ -85,9 +88,11 @@ func (s *Server) registerRoutes() {
 		webhookStore = store.NewWebhookStore(s.db.Pool)
 		sightingStore = store.NewSightingStore(s.db.Pool)
 		apiKeyStore = store.NewAPIKeyStore(s.db.Pool)
+		advisoryStore = store.NewAdvisoryStore(s.db.Pool)
 		engine = correlate.New(s.db.Pool, corrStore, s.logger)
 		dispatcher = webhook.NewDispatcher(webhookStore, s.logger)
 		importer = stix.NewImporter(stixStore, iocStore, ttpStore, engine, s.logger)
+		csafImporter = csaf.NewImporter(advisoryStore, stixStore, s.logger)
 	}
 	s.Importer = importer
 	s.Feeds = feedStore
@@ -101,6 +106,7 @@ func (s *Server) registerRoutes() {
 	webhookH := handlers.NewWebhook(s.logger, webhookStore)
 	sightH := handlers.NewSighting(s.logger, sightingStore, iocStore, dispatcher, s.Cache)
 	authH := handlers.NewAuth(s.logger, s.Auth, apiKeyStore)
+	advisoryH := handlers.NewAdvisory(s.logger, advisoryStore, csafImporter, s.Citadel, dispatcher)
 
 	// Rate-limit middleware — keeps a shared instance so it tracks the
 	// same IP buckets across all routes.
@@ -145,6 +151,8 @@ func (s *Server) registerRoutes() {
 			r.Get("/iocs/{id}/sightings", sightH.ForIOC)
 			r.Get("/stix/bundles", stixH.ListBundles)
 			r.Get("/stix/bundles/{id}", stixH.GetBundle)
+			r.Get("/advisories", advisoryH.List)
+			r.Get("/advisories/{id}", advisoryH.Get)
 			r.Get("/feeds", feedH.List)
 			r.Get("/feeds/{id}", feedH.Get)
 			r.Get("/techniques", techH.List)
@@ -167,6 +175,7 @@ func (s *Server) registerRoutes() {
 				r.Use(middleware.RequireRoleWithSinauth(s.Auth, auth.RoleOperator, sinauthURL))
 				r.Post("/iocs", ioc.Ingest)
 				r.Post("/stix/bundles", stixH.IngestBundle)
+				r.Post("/advisories", advisoryH.Ingest)
 				r.Post("/feeds", feedH.Create)
 				r.Patch("/feeds/{id}", feedH.Patch)
 				r.Delete("/feeds/{id}", feedH.Delete)
@@ -194,6 +203,7 @@ func (s *Server) registerRoutes() {
 				r.Use(rateLimiter.Middleware())
 				r.Post("/iocs", ioc.Ingest)
 				r.Post("/stix/bundles", stixH.IngestBundle)
+				r.Post("/advisories", advisoryH.Ingest)
 				r.Post("/feeds", feedH.Create)
 				r.Patch("/feeds/{id}", feedH.Patch)
 				r.Delete("/feeds/{id}", feedH.Delete)

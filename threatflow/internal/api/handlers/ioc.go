@@ -5,11 +5,13 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	"github.com/opensecstack/threatflow/internal/api/middleware"
 	"github.com/opensecstack/threatflow/internal/cache"
 	"github.com/opensecstack/threatflow/internal/citadel"
 	"github.com/opensecstack/threatflow/internal/correlate"
@@ -103,7 +105,8 @@ func (h *IOC) Ingest(w http.ResponseWriter, r *http.Request) {
 	// MARSHAL gate — governance check before mutation.
 	if h.citadel != nil && h.citadel.Enabled() {
 		desc := "direct IOC ingest: " + req.Type + "=" + req.Value
-		decision, err := h.citadel.Evaluate(r.Context(), citadel.ActionIOCIngest, desc, "", "operator")
+		actorUserID, actorRole, actorToken := actorFromRequest(r)
+		decision, err := h.citadel.Evaluate(r.Context(), citadel.ActionIOCIngest, desc, actorUserID, "", actorRole, actorToken)
 		if err != nil {
 			h.logger.Error().Err(err).Msg("marshal evaluate")
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "governance check failed"})
@@ -203,4 +206,33 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+// actorFromRequest extracts the CITADEL Actor identity for the caller of r:
+// the real authenticated identity set by the auth middleware
+// (internal/api/middleware.Identity), plus the raw bearer token to forward as
+// ActorToken — but ONLY when that identity came from a genuine sinauth RS256
+// token (Identity.Source == "sinauth"). ThreatFlow's own API-key/bootstrap
+// HS256 fallback (Identity.Source == "api_key" | "bootstrap", Subject
+// "apikey:<uuid>" / "bootstrap:<name>") has no real sinauth identity behind
+// it, so actorToken is left empty in that case — CITADEL's Gate 1/Gate 3
+// treat a missing token as a non-blocking WARN under the current soft-mode
+// enforce_signatures=false config (citadel adrs/005-sinauth-identity-bridge.md),
+// not a failure, and fabricating a token would be worse than omitting one.
+//
+// When no identity is present at all (dev mode with auth disabled, see
+// server.go's s.Auth == nil branch), actorUserID falls back to
+// "unauthenticated" and actorRole to "operator" so the Kerkese still carries
+// a non-empty Actor rather than a zero-value one.
+func actorFromRequest(r *http.Request) (actorUserID, actorRole, actorToken string) {
+	id := middleware.Identity(r)
+	if id == nil {
+		return "unauthenticated", "operator", ""
+	}
+	actorUserID = id.Subject
+	actorRole = string(id.Role)
+	if id.Source == "sinauth" {
+		actorToken = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	}
+	return actorUserID, actorRole, actorToken
 }

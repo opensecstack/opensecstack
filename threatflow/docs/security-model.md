@@ -71,7 +71,7 @@ Not all IOC feeds are equally trustworthy. ThreatFlow implements a graduated tru
 | **Trusted** | Internal MISP, manual analyst input | Direct ingestion, high confidence base |
 | **Verified** | TAXII feeds from known providers (OTX, CIRCL) | Standard ingestion, medium confidence base |
 | **Unverified** | New or community feeds | MARSHAL-gated ingestion, low confidence base, manual review |
-| **Blocked** | Feeds with accuracy_ratio < 0.3 | Automatic pause, VIGIL AMBER alert |
+| **Blocked** | Feeds with accuracy_ratio < 0.3 | Automatic pause (VIGIL AMBER alert once VIGIL ships — CITADEL v2.0, design-stage as of v1.0.0) |
 
 Feed trust levels can be changed only by users with the `threatflow_admin` role, and every change is WORM-logged.
 

@@ -57,44 +57,123 @@ ThreatFlow emits the following events to the CITADEL WORM chain:
 
 ## MARSHAL Gating
 
-High-impact operations require a MARSHAL EXECUTE decision before proceeding:
+Every mutation goes through `citadel.Client.Evaluate` before it is persisted. The
+current gated operations, and the CITADEL `action.type` each one submits, are:
 
-| Operation | MARSHAL Action Type | Why |
-|-----------|-------------------|-----|
-| Bulk feed ingestion (> 100 IOCs) | `bulk_ioc_ingest` | Prevent accidental mass pollution of IOC store |
-| Feed source addition | `feed_source_add` | New feeds should be reviewed before activation |
-| STIX bundle export to external consumer | `stix_export` | Outbound intelligence sharing is a policy decision |
-| IOC confidence override (manual) | `ioc_confidence_override` | Manual overrides bypass automated scoring |
+| Operation | MARSHAL Action Type | Handler |
+|-----------|-------------------|---------|
+| IOC ingest (`POST /api/v1/iocs`) | `IOC_INGEST` | `internal/api/handlers/ioc.go` |
+| STIX bundle import (`POST /api/v1/stix/bundles`) | `STIX_BUNDLE_IMPORT` | `internal/api/handlers/stix.go` |
+| Feed create (`POST /api/v1/feeds`) | `FEED_CREATE` | `internal/api/handlers/feed.go` |
+| Feed enable/disable (`PATCH /api/v1/feeds/{id}`) | `FEED_TOGGLE` | `internal/api/handlers/feed.go` |
+| Feed delete (`DELETE /api/v1/feeds/{id}`) | `FEED_DELETE` | `internal/api/handlers/feed.go` |
+
+`IOC_REVOKE` is reserved in `internal/citadel/types.go` for a future IOC revoke
+endpoint but is not currently wired to any handler.
+
+If MARSHAL returns **REFUSE**, the mutation is rejected (HTTP 403) and not
+persisted. If **HARD_STOP**, the same 403 is returned and the reasons array
+carries the hard-stop cause — ThreatFlow does not currently take a further
+automated action (e.g. pausing a feed) on `HARD_STOP`, beyond refusing the
+single request.
+
+### Actor identity
+
+Every Kerkese carries the *real* identity of the caller who triggered the
+mutation, not a placeholder:
+
+- `actor.user_id` — the sinauth UUID (`Identity.Subject`) of the authenticated
+  caller, taken from the request's verified JWT. When the caller authenticated
+  through ThreatFlow's own API-key or bootstrap HS256 fallback (no sinauth
+  token involved), this is the fallback subject instead (`apikey:<uuid>` or
+  `bootstrap:<name>`) — still a real, traceable identity, just not a sinauth
+  UUID.
+- `actor_token` — the raw bearer token forwarded from the incoming request's
+  `Authorization` header, but **only** when the caller authenticated with a
+  genuine sinauth RS256 token (`Identity.Source == "sinauth"`). API-key and
+  bootstrap callers have no real sinauth token to forward, so `actor_token` is
+  left empty for them — this is expected, not a gap.
+- When a request reaches the handler with no identity at all (dev mode with
+  auth disabled), the actor falls back to `user_id: "unauthenticated"`,
+  `role: "operator"` so the Kerkese still carries a non-empty Actor.
+
+This wiring lives in `actorFromRequest()` in
+`internal/api/handlers/ioc.go`, shared by all three governed handler files.
+
+> **Fixed in the identity rework (2026-07):** prior to this change, `Evaluate`
+> never received the caller's identity at all — `Actor.UserID` was left at its
+> Go zero value, and `Verifier`/`SoD` were entirely unset. Every Kerkese
+> ThreatFlow submitted carried an empty operator identity and a zero-value
+> verifier identity, which is a live risk of an accidental
+> `NDS_SAME_IDENTITY` collision at Gate 3 (both roles resolving to the same
+> "identity"). See the [Changelog](../CHANGELOG.md) for details.
+
+### Verifier — single-party governance today
+
+ThreatFlow does not have a second-approver ("who verifies the operator's
+action") concept for any of its governed actions today. There is no separate
+approve/review step before an IOC ingest, feed change, or STIX import takes
+effect — the same request that mutates state is the request MARSHAL
+evaluates. This is a **deliberate, documented scope decision**, not a hidden
+gap: building real two-person approval for automated, high-frequency
+threat-intel ingestion was judged out of scope for v1.0.
+
+To keep this honest at the protocol level rather than silently reusing the
+actor's own identity as the verifier (which would misrepresent single-party
+review as SoD-verified review), the client submits a fixed, clearly-named
+placeholder verifier for every Kerkese:
+
+```go
+const verifierPlaceholder = "threatflow-system-verifier"
+```
+
+- `verifier.user_id` / `sod.verifier_user_id` — always
+  `"threatflow-system-verifier"`, `role: "group_sig_verifier"`.
+- `sod.operator_user_id` — the real actor's `user_id` (see above).
+- `verifier_token` — always empty; there is no real second person to forward
+  a token for.
+
+Because the placeholder never equals a real user's identity, it never
+collides with the Actor and never trips Gate 3's `NDS_SAME_IDENTITY`
+hard-stop. Because `citadel.enforce_signatures` stays at its ADR-004 default
+(`false`), the absence of a real verifier and of `sig_operator`/`sig_verifier`
+signatures surfaces as a Gate 1 / Gate 3 **WARN** reason in the decision, not
+a block — governance evaluation currently runs single-party for ThreatFlow.
+Two-person approval for threat-intel actions is a tracked future enhancement,
+not something this integration claims to provide today.
 
 ### Kerkese Example
 
 ```json
 {
   "kerkese_version": "1.0",
+  "ts_utc": "2026-07-26T12:00:00Z",
   "project_id": "threatflow",
-  "execution_id": "poll-otx-2026-03-31",
+  "execution_id": "8f14e...-uuid",
   "action": {
-    "type": "bulk_ioc_ingest",
-    "label": "Ingest 247 IOCs from alienvault-otx feed"
+    "type": "IOC_INGEST",
+    "description": "direct IOC ingest: ipv4-addr=198.51.100.42"
   },
   "actor": {
-    "user_id": 0,
-    "role": "group_sig_operator"
+    "user_id": "b3f2c9de-....-sinauth-uuid",
+    "role": "operator"
   },
-  "evidence": {
-    "feed_name": "alienvault-otx",
-    "ioc_count": 247,
-    "confidence_base": 70
+  "verifier": {
+    "user_id": "threatflow-system-verifier",
+    "role": "group_sig_verifier"
   },
   "sod": {
-    "operator_user_id": 0,
-    "verifier_user_id": 0
+    "operator_user_id": "b3f2c9de-....-sinauth-uuid",
+    "verifier_user_id": "threatflow-system-verifier"
   },
+  "actor_token": "eyJhbGciOi...",
   "dry_run": false
 }
 ```
 
-If MARSHAL returns **REFUSE**, the IOCs are not persisted and the feed poll is logged as rejected. If **HARD_STOP**, ThreatFlow pauses the feed and raises a VIGIL RED alert.
+`sig_operator`, `sig_verifier`, and `verifier_token` are always omitted —
+ThreatFlow does not sign Kerkese payloads (no per-user private key custody in
+this flow) and has no real verifier to hold a token for.
 
 ---
 

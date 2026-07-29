@@ -20,10 +20,10 @@ and initial evaluation. For production deployment, see
 
 | Tool | Minimum version | Purpose |
 |---|---|---|
-| Python | 3.12 | API server and scenario engine |
-| Rust + Cargo | 1.77 | Payload engine |
-| Docker + Docker Compose | 24+ | Postgres + Redis + container stack |
-| `uv` | latest | Python dependency management (recommended) |
+| Go | 1.22 | API server (`cmd/securelab`) |
+| Rust + Cargo | 1.77 | `payload-gen` crate (standalone, unit-tested; not yet wired into the API) |
+| Node.js | 20+ | Web dashboard (`web/`, React + Vite + TS) |
+| Docker + Docker Compose | 24+ | Postgres + full container stack |
 | `curl` | any | API smoke tests in this guide |
 
 ## Step 1 — Clone and configure
@@ -36,91 +36,57 @@ cd opensecstack/securelab
 cp .env.example .env
 ```
 
-Open `.env` and set the minimum required values:
+Open `.env` and set the minimum required values (see
+[docs/configuration.md](configuration.md) for the full list):
 
 ```bash
-# Database + broker
-SECURELAB_DB_URL=postgres://securelab:securelab@localhost:5432/securelab
-SECURELAB_REDIS_URL=redis://localhost:6379/0
-
-# Isolation — strict mode enforces target scope validation.
-# Do not set to 'permissive' without reading SECURITY.md § Isolation escape.
-SECURELAB_ISOLATION_MODE=strict
-
-# Integration endpoints — leave empty to skip integration validation.
-# Detection validation (Module 4, v1.0.0) requires these to be set.
-SECURELAB_CITADEL_API_URL=
-SECURELAB_CITADEL_KEY_SECRET=
-SECURELAB_OPENSCRUB_API_URL=
-SECURELAB_OPENSCRUB_KEY_SECRET=
-SECURELAB_APIGUARD_API_URL=
-SECURELAB_APIGUARD_KEY_SECRET=
-SECURELAB_THREATFLOW_API_URL=
-SECURELAB_THREATFLOW_KEY_SECRET=
-SECURELAB_IRFLOW_API_URL=
-SECURELAB_IRFLOW_KEY_SECRET=
+SECURELAB_DB_URL=postgres://securelab:changeme@localhost:5432/securelab?sslmode=disable
+SECURELAB_JWT_SECRET=change-this-to-a-random-secret-at-least-32-chars
+SECURELAB_CITADEL_URL=https://citadel.internal
+SECURELAB_CITADEL_HMAC_SECRET=change-this-citadel-hmac-secret
+SECURELAB_CITADEL_DRY_RUN=true
 ```
 
 ## Step 2 — Start the backing services
 
 ```bash
-# Start Postgres and Redis only (no SecureLab API yet)
-docker compose up -d securelab-postgres securelab-redis
-
-# Wait for health checks to pass
-docker compose ps
+# Start Postgres via the dev compose file (see docker-compose.dev.yml)
+docker compose -f docker-compose.dev.yml up -d
 ```
 
-Expected output: both `securelab-postgres` and `securelab-redis`
-show status `healthy`.
-
-## Step 3 — Build the Python package and Rust payload engine
+## Step 3 — Build and start the API server
 
 ```bash
-# Install Python dependencies
-uv pip install -e ".[dev]"
-
-# Build the Rust payload engine (PyO3 native extension)
-cargo build -p payload-engine --release
-
-# Or use the Makefile shortcut
-make build
+go run ./cmd/server
 ```
 
-## Step 4 — Run database migrations
+Database migrations (embedded `*.sql` files under
+`internal/db/migrations`) run automatically against `SECURELAB_DB_URL`
+on every server start — there is no separate migration step. The
+server listens on `SECURELAB_HTTP_ADDR` (default `:8085`; set
+`SECURELAB_HTTP_ADDR=127.0.0.1:8080` to match the Docker Compose
+default used elsewhere in this guide).
+
+The `rust/payload-gen` crate builds independently and is not required
+to start the API server:
 
 ```bash
-uv run alembic upgrade head
-```
-
-## Step 5 — Start the API server
-
-```bash
-make run
-```
-
-This starts the API server on `127.0.0.1:8087` with
-`SECURELAB_ISOLATION_MODE=strict`.
-
-In a second terminal, start the Celery worker:
-
-```bash
-uv run celery -A securelab.worker worker --loglevel=info
+cargo build -p payload-gen --release
 ```
 
 ## Step 6 — Health check
 
 ```bash
-curl http://localhost:8087/api/v1/health
+curl http://localhost:8080/health
 ```
 
-Expected response:
+Expected response shape (see `internal/api/handlers/health.go`):
 
 ```json
 {
   "status": "ok",
-  "db": "ok",
-  "redis": "ok",
+  "db": true,
+  "uptime_seconds": 12,
   "version": "1.0.0"
 }
 ```
@@ -128,95 +94,49 @@ Expected response:
 ## Step 7 — List available scenarios
 
 ```bash
-curl http://localhost:8087/api/v1/scenarios
+curl -H "Authorization: Bearer <your-jwt>" \
+  http://localhost:8080/api/v1/scenarios
 ```
 
-Expected response (with example scenarios loaded):
+Requires an `analyst` role or higher (see
+[docs/api.md](api.md) for authentication and RBAC details).
 
-```json
-{
-  "scenarios": [
-    {
-      "id": "01HX...",
-      "slug": "T1059.001-powershell-exec",
-      "title": "PowerShell Command Execution",
-      "mitre_technique": "T1059.001",
-      "tactic": "execution",
-      "version": "1.0.0",
-      "step_count": 3
-    }
-  ],
-  "total": 1
-}
-```
-
-## Step 8 — Fire your first scenario (dry run)
-
-A dry run generates the execution plan and validates scope without
-dispatching any payloads. Always run dry first.
+## Step 8 — Run your first scenario
 
 ```bash
-curl -X POST http://localhost:8087/api/v1/scenarios/T1059.001-powershell-exec/execute \
+curl -X POST http://localhost:8080/api/v1/scenarios/<scenario-id>/run \
      -H "Content-Type: application/json" \
-     -H "Authorization: Bearer <your-token>" \
-     -d '{
-       "dry_run": true,
-       "target_scope": ["192.168.100.0/24"],
-       "notes": "Initial dry-run — quick start guide"
-     }'
+     -H "Authorization: Bearer <your-jwt>" \
+     -d '{"environment_id": "env_test_01"}'
 ```
 
-Expected response:
-
-```json
-{
-  "execution_id": "01HY...",
-  "scenario_id": "01HX...",
-  "scenario_version": "1.0.0",
-  "mode": "dry_run",
-  "status": "completed",
-  "plan": [
-    {
-      "step": 1,
-      "primitive": "powershell-encoded-command",
-      "target": "192.168.100.10",
-      "payload_preview": "[redacted in dry-run]",
-      "estimated_detection_window_s": 30
-    }
-  ]
-}
-```
+Requires an `operator` role or higher. See
+[docs/scenario-spec.md](scenario-spec.md) for the YAML scenario
+format and [docs/attack-library.md](attack-library.md) for built-in
+attack types.
 
 ## Step 9 — View ATT&CK coverage
 
 ```bash
-curl http://localhost:8087/api/v1/coverage
+curl -H "Authorization: Bearer <your-jwt>" \
+  http://localhost:8080/api/v1/coverage
 ```
 
-Expected response:
-
-```json
-{
-  "total_techniques": 1,
-  "techniques_with_scenarios": 1,
-  "techniques_with_passing_executions": 0,
-  "coverage_pct": 0.0,
-  "tactics": {
-    "execution": { "total": 1, "covered": 1, "validated": 0 }
-  }
-}
-```
-
-Coverage percentage (`coverage_pct`) is computed from execution
-results with `detection_verdict: detected`, not from the existence
-of scenarios. A scenario with no passing live execution does not
-count as validated coverage.
+See [docs/mitre-attack-coverage.md](mitre-attack-coverage.md).
 
 ## Step 10 — Open the dashboard
 
-Navigate to `http://localhost:3007` in a browser on the same
-isolated network segment. The dashboard shows the scenario library,
-ATT&CK coverage heatmap, and execution history.
+For local frontend development:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Navigate to `http://localhost:3085` (Vite dev server). In the
+Docker Compose stack, the built dashboard is served on
+`http://localhost:3000`.
 
 ## Next steps
 
@@ -231,22 +151,15 @@ ATT&CK coverage heatmap, and execution history.
 
 ## Common issues
 
-**`make run` fails with "public interface" error:**
-The API refuses to start if `SECURELAB_HTTP_ADDR` resolves to a
-public interface in `strict` isolation mode. Set it to `127.0.0.1:8087`
-or a private VLAN address.
+**`go run ./cmd/server` fails to bind:**
+Check that nothing else on the host is already bound to
+`SECURELAB_HTTP_ADDR`.
 
-**`cargo build -p payload-engine` fails:**
-Ensure Rust 1.77+ is installed (`rustup update stable`) and that
-the `pyo3` Python headers are available (set `PYO3_PYTHON` to the
-path of your Python 3.12 binary).
+**`cargo build -p payload-gen` fails:**
+Ensure Rust 1.77+ is installed (`rustup update stable`). The
+`payload-gen` crate has no Python/PyO3 dependency — it is a plain
+Rust library.
 
-**Celery worker connects but does not pick up tasks:**
-Verify `SECURELAB_REDIS_URL` in `.env` matches the Redis container's
-address and that the worker is using the same Redis URL as the API
-server.
-
-**`alembic upgrade head` fails:**
-Verify `SECURELAB_DB_URL` is correct and that `securelab-postgres`
-is healthy (`docker compose ps`). The database must exist and the
-service role must have CREATE TABLE privileges.
+**Server fails to apply migrations on startup:**
+Verify `SECURELAB_DB_URL` is correct and that the Postgres container
+is healthy (`docker compose -f docker-compose.dev.yml ps`).

@@ -24,24 +24,21 @@ The following diagram shows the required network topology:
   │  Access via: VPN or dedicated VLAN                           │
   └───────────────────────────┬───────────────────────────────────┘
                               │ HTTPS (authenticated + TLS)
-                              │ Firewall: allow operator VLAN → port 3007/8087
+                              │ Firewall: allow operator VLAN → port 3000/8080
                               ▼
   ┌───────────────────────────────────────────────────────────────┐
   │  SECURELAB NETWORK SEGMENT (isolated bridge / VLAN)          │
   │  Subnet: e.g. 172.30.0.0/24                                  │
   │                                                               │
-  │  securelab-api     :8087   (Python / FastAPI)                │
-  │  securelab-worker          (Celery)                          │
-  │  securelab-dashboard :3007 (React / Nginx)                   │
-  │  securelab-postgres  :5432                                    │
-  │  securelab-redis     :6379                                    │
+  │  securelab-api     :8080   (Go binary)                       │
+  │  securelab-web     :3000   (React, nginx)                    │
+  │  securelab-db      :5432   (PostgreSQL, internal only)       │
   │                                                               │
   │  Firewall rules (egress):                                     │
   │   ALLOW → CITADEL API endpoint (specific IP:port)            │
   │   ALLOW → OpenScrub API endpoint                             │
   │   ALLOW → APIGuard API endpoint                              │
   │   ALLOW → ThreatFlow API endpoint                            │
-  │   ALLOW → IRFlow API endpoint                                │
   │   ALLOW → Target simulation scope (CIDR allow-list)          │
   │   DENY ALL other egress                                       │
   └───────────────────────────┬───────────────────────────────────┘
@@ -56,29 +53,29 @@ The following diagram shows the required network topology:
 
 **Non-negotiable rules:**
 
-1. **No public internet exposure.** The API port (8087) and dashboard
-   port (3007) must not be reachable from the internet under any
+1. **No public internet exposure.** The API port (8080) and dashboard
+   port (3000) must not be reachable from the internet under any
    circumstances.
 2. **No routing to production.** The SecureLab network segment must
    not have a route to production network segments. Use separate VLANs
    and explicit firewall rules.
 3. **Egress is allow-listed.** Only the specific IP/port combinations
-   of integration endpoints and the target simulation CIDR are
-   permitted as egress from the SecureLab segment.
-4. **Postgres and Redis are internal only.** Ports 5432 and 6379 must
-   not be reachable from outside the SecureLab network segment.
+   of integration endpoints and the target simulation CIDR should be
+   permitted as egress from the SecureLab segment, enforced at your
+   host/VLAN firewall.
+4. **Postgres is internal only.** The shipped `docker-compose.yml`
+   does not publish a host port for `securelab-db` — keep it that way.
 
 ## Docker Compose deployment
 
-The provided `docker-compose.yml` enforces isolation via Docker
-networks:
-
-- `securelab-internal`: `internal: true` — no routing to host
-  networking or external networks. Postgres, Redis, API, and worker
-  all attach here.
-- `securelab-egress`: restricted bridge for API and worker egress to
-  integration endpoints. Configure your host firewall to restrict
-  this bridge's outbound traffic to the allow-list.
+The provided `docker-compose.yml` defines three services on a single
+`securelab-net` bridge network: `securelab-api` (Go binary, port 8080
+bound to `127.0.0.1`), `securelab-web` (nginx serving the built React
+app, port 3000 bound to `127.0.0.1`), and `securelab-db` (PostgreSQL
+16, no published host port). It does not itself enforce a hardened
+`internal: true` / egress-restricted network — that isolation is the
+operator's responsibility, per the rules above, at the VLAN/firewall
+level surrounding the Docker host.
 
 ### Steps
 
@@ -91,42 +88,35 @@ cd opensecstack/securelab
 cp .env.example .env
 # Edit .env — see docs/configuration.md for required values
 
-# 3. Build the image
-make docker-build
+# 3. Start the stack (builds images from source)
+docker compose up -d --build
 
-# 4. Start the stack
-docker compose up -d
-
-# 5. Run database migrations
-docker compose exec securelab alembic upgrade head
-
-# 6. Verify health
-curl http://127.0.0.1:8087/api/v1/health
-
-# 7. Create the first operator account
-docker compose exec securelab python -m securelab.cli operators create \
-  --email ops@yourorg.internal \
-  --role operator
+# 4. Verify health
+curl http://127.0.0.1:8080/health
 ```
+
+Database migrations run automatically as part of the API server's
+startup path (see `cmd/server`); there is no separate migration step
+to run against the container.
 
 ### Production hardening checklist
 
-- [ ] `SECURELAB_HTTP_ADDR` is set to `127.0.0.1:8087` or a private
-      VLAN address. Not `0.0.0.0`.
-- [ ] `SECURELAB_ISOLATION_MODE=strict` (default).
-- [ ] `SECURELAB_TARGET_CIDR_ALLOWLIST` is set to the minimum
-      necessary simulation scope.
-- [ ] `SECURELAB_MFA_REQUIRED=true`.
-- [ ] `SECURELAB_DRY_RUN_ONLY=true` until first live execution is
-      explicitly approved.
+- [ ] `SECURELAB_HTTP_ADDR` is set to `127.0.0.1:8080` or a private
+      VLAN address. Not `0.0.0.0`, unless a reverse proxy on the same
+      isolated host is the only thing that can reach it.
+- [ ] `SECURELAB_CITADEL_DRY_RUN=false` only after the CITADEL
+      integration has been validated end-to-end.
+- [ ] `SECURELAB_JWT_SECRET` and `SECURELAB_CITADEL_HMAC_SECRET` are
+      strong, random, and not the values from `.env.example`.
 - [ ] TLS termination in front of the API (nginx / Caddy as reverse
-      proxy on the isolated VLAN).
-- [ ] Host firewall restricts the `securelab-egress` bridge to
-      allow-listed integration endpoints only.
+      proxy on the isolated VLAN) — the shipped compose file does not
+      terminate TLS itself.
+- [ ] Host/VLAN firewall restricts outbound traffic from the Docker
+      host to allow-listed integration endpoints only.
 - [ ] Docker image verified via Cosign signature before deployment.
-- [ ] `POSTGRES_PASSWORD` is a strong random value (not the default
-      `securelab`).
-- [ ] Audit log is forwarded to CITADEL or a separate syslog target.
+- [ ] `SECURELAB_DB_PASSWORD` is a strong random value.
+- [ ] Audit-relevant events are confirmed flowing to CITADEL (see
+      [docs/citadel-integration.md](citadel-integration.md)).
 
 ## Verifying the Docker image signature
 
@@ -142,10 +132,10 @@ cosign verify \
 
 ## Kubernetes deployment
 
-A Kubernetes Helm chart will land with v1.0.0. Until then, the Docker
-Compose reference deployment is the supported production configuration.
-
-For Kubernetes, the mandatory isolation controls translate to:
+No Kubernetes/Helm manifests ship in this repository today. The
+Docker Compose reference deployment is the supported configuration.
+If you deploy SecureLab on Kubernetes yourself, the mandatory
+isolation controls above translate to:
 
 - **NetworkPolicy:** deny all ingress to the SecureLab namespace by
   default; allow only from the operator namespace/VLAN. Deny all
@@ -179,7 +169,7 @@ server {
     deny all;
 
     location / {
-        proxy_pass         http://127.0.0.1:8087;
+        proxy_pass         http://127.0.0.1:8080;
         proxy_set_header   Host $host;
         proxy_set_header   X-Real-IP $remote_addr;
         proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -204,24 +194,18 @@ docker compose down
 # 5. Start the new stack
 docker compose up -d
 
-# 6. Run any pending migrations
-docker compose exec securelab alembic upgrade head
-
-# 7. Verify health
-curl http://127.0.0.1:8087/api/v1/health
+# 6. Verify health — pending migrations apply automatically on startup
+curl http://127.0.0.1:8080/health
 ```
 
 ## Data persistence and backup
 
-- **Postgres:** use `pg_dump` for regular backups. The `audit_log`
-  table is INSERT-only and should be backed up frequently — it is
-  the primary audit trail.
-- **Payload store:** the content-addressed payload store
-  (`SECURELAB_PAYLOAD_STORE_PATH`) should be backed up alongside the
-  database. Execution records reference payloads by hash; a missing
-  payload file makes an execution record non-reproducible.
-- **Redis:** used only as a Celery broker; no persistent data that
-  cannot be regenerated. Backup is optional.
+- **Postgres:** use `pg_dump` for regular backups of the
+  `securelab-db-data` volume. This is the only persistent store —
+  scenarios, environments, run results, and MITRE ATT&CK coverage
+  data all live in PostgreSQL (see `internal/db/migrations/`).
+- There is no separate broker or content-addressed payload store in
+  the current implementation; nothing else requires backup.
 
 ## Related
 

@@ -2,258 +2,147 @@
 
 > **Audience:** authorised operators running SecureLab in a deployed
 > environment — red-team leads, SOC managers, and detection engineers
-> with write access to the SecureLab API.
+> with `operator` or `admin` role on the SecureLab API.
 >
-> **Prerequisite:** You must have completed the access control
-> onboarding for your deployment (MFA enrolled, operator role granted,
-> target scope approved by your security manager) before following any
-> procedure in this handbook.
+> **Prerequisite:** Confirm the isolation requirements in
+> [docs/deployment.md](deployment.md) are met and you have explicit
+> written authorisation to run scenarios against your target
+> environments before following any procedure in this handbook.
 
 ## Daily operations checklist
 
 Run this before executing any scenario:
 
-- [ ] Confirm SecureLab is healthy: `curl http://<host>:8087/api/v1/health`
-- [ ] Confirm Celery worker is running and connected to Redis
-- [ ] Confirm CITADEL emitter is not circuit-broken (check Prometheus
-      `securelab_citadel_circuit_breaker_state == 0`)
-- [ ] Confirm target simulation systems are in a known clean state
-      (no prior scenario artefacts left from previous runs)
-- [ ] Review the execution queue — no executions in `running` state
-      from a previous operator session
-- [ ] Confirm your execution has been approved per your deployment's
-      change management procedure
+- [ ] Confirm SecureLab is healthy: `curl http://<host>:8080/health`
+- [ ] Confirm the target environment is registered and `status: ready`
+      (`GET /api/v1/environments`)
+- [ ] Confirm no runs are stuck in `pending`/`running` from a previous
+      session (`GET /api/v1/runs`)
+- [ ] Confirm your execution has been approved per your organisation's
+      change-management procedure
 
-## Running a scenario safely
+## Running a scenario
 
 ### Step 1 — Select the scenario
 
 ```bash
-# List scenarios filtered to your target tactic
-curl http://localhost:8087/api/v1/scenarios?tactic=execution \
+curl http://localhost:8080/api/v1/scenarios \
      -H "Authorization: Bearer <token>"
 ```
 
-Review the scenario detail — pay particular attention to:
-- `target_scope`: confirm the target CIDR matches your authorised scope
-- `destructive` steps: plan your cleanup before you run
-- `expected_detections`: know what a pass looks like before you fire
+Review the scenario's `mitre_technique_ids`, `tags`, `severity`, and
+`yaml_content` before running it — see
+[docs/scenario-spec.md](scenario-spec.md) for the YAML format.
 
-### Step 2 — Always dry-run first
+### Step 2 — Confirm the target environment
 
 ```bash
-curl -X POST http://localhost:8087/api/v1/scenarios/T1059.001-powershell-encoded/execute \
+curl http://localhost:8080/api/v1/environments \
+     -H "Authorization: Bearer <token>"
+```
+
+`RunScenario` (`POST /api/v1/scenarios/{id}/run`) requires the target
+environment to be in `status: ready`; it returns `409 Conflict`
+otherwise. There is no separate dry-run mode at the API level in the
+current implementation — running a scenario dispatches it to the
+scheduler against the named environment.
+
+### Step 3 — Run the scenario
+
+```bash
+curl -X POST http://localhost:8080/api/v1/scenarios/<scenario-id>/run \
      -H "Authorization: Bearer <token>" \
      -H "Content-Type: application/json" \
-     -d '{
-       "dry_run": true,
-       "target_scope": ["192.168.100.0/24"],
-       "notes": "Dry-run pre-check — operator: alice — approved by: bob"
-     }'
+     -d '{"environment_id": "<environment-id>"}'
 ```
 
-Review the execution plan in the response. Verify that:
-- All step targets are within the approved scope
-- No destructive steps are present that you have not planned rollbacks for
-- The detection sources are all configured and reachable
+Response `202 Accepted` returns `{"run_id": "<id>"}`.
 
-### Step 3 — Execute live
+### Step 4 — Monitor the run
 
 ```bash
-curl -X POST http://localhost:8087/api/v1/scenarios/T1059.001-powershell-encoded/execute \
-     -H "Authorization: Bearer <token>" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "dry_run": false,
-       "target_scope": ["192.168.100.0/24"],
-       "notes": "Live execution — operator: alice — CR-2027-1101 approved by: bob"
-     }'
-```
-
-Note the `execution_id` from the response.
-
-### Step 4 — Monitor execution
-
-```bash
-# Poll for completion
-curl http://localhost:8087/api/v1/executions/<exec_id> \
+curl http://localhost:8080/api/v1/runs/<run-id> \
      -H "Authorization: Bearer <token>"
 ```
 
-Or watch in the dashboard execution console.
+The run record includes `status`, `started_at`, `finished_at`,
+`attack_events`, `detection_events`, `detection_latency_ms`, and
+`detected`. See [docs/api.md](api.md) for the full field reference.
 
-### Step 5 — Review detection results (v1.0.0+)
+### Step 5 — Check CITADEL emission
 
-```bash
-curl http://localhost:8087/api/v1/executions/<exec_id>/detections \
-     -H "Authorization: Bearer <token>"
-```
+CITADEL emission (`securelab.run_completed`) happens synchronously at
+run completion when `SECURELAB_CITADEL_API_URL` is set and
+`SECURELAB_CITADEL_DRY_RUN=false` (see `internal/citadel/connector.go`
+and [docs/citadel-integration.md](citadel-integration.md)). If the
+POST to CITADEL fails, the failure is logged; there is currently no
+retry queue, circuit breaker, or manual re-emit endpoint. If CITADEL
+emission fails, check the API server logs for the run ID and retry
+the CITADEL connectivity check manually.
 
-For each step:
-- `detected`: the detection platform fired within the detection window. Pass.
-- `not_detected`: no event received within the window. **This is a finding.**
-  Document the gap and open a detection engineering ticket.
-- `inconclusive`: detection platform was unreachable or returned an error.
-  The execution was real; the validation was not. Re-run when the platform
-  is healthy.
-- `timeout`: detection window elapsed with no event. Equivalent to
-  `not_detected` for coverage purposes.
+## Interpreting run results
 
-### Step 6 — Verify CITADEL emission
-
-```bash
-# Check the execution record for citadel_emitted: true
-curl http://localhost:8087/api/v1/executions/<exec_id> \
-     -H "Authorization: Bearer <token>" | jq '.data.citadel_emitted'
-```
-
-If `citadel_emitted` is `false` and `evidence_status` is `pending`:
-see [Resolving evidence_pending](#resolving-evidence_pending) below.
-
-### Step 7 — Cleanup destructive steps
-
-For any execution with destructive steps, run cleanup immediately
-after the execution completes — do not leave artefacts on target
-systems. If the scenario's rollback was automatic (triggered by the
-engine), verify the rollback succeeded:
-
-```bash
-curl http://localhost:8087/api/v1/executions/<exec_id> \
-     -H "Authorization: Bearer <token>" | jq '.data.steps[].rollback_status'
-```
-
-If any step shows `rollback_status: failed`, clean up manually and
-document the action in the notes field via the execution update
-endpoint.
-
-## Interpreting detection verdicts
-
-| Verdict | Meaning | Action |
-|---|---|---|
-| `detected` | Detection platform fired within the window. | No action. Record as validated coverage. |
-| `not_detected` | No detection event within the window. | **Finding.** Open detection engineering ticket with scenario ID, step index, and execution ID. |
-| `inconclusive` | Detection platform error during polling. | Re-run when platform is healthy. Do not count as validated. |
-| `timeout` | Detection window elapsed without event. | Treat as `not_detected`. May indicate platform performance issue — check detection platform health first. |
-| `not_applicable` | This source was not expected to detect this step (documented in scenario). | No action. |
-| `partial` | Mixed verdicts across detection sources. | Review per-source breakdown. At least one source detected; identify which source is missing. |
+The `detected` field on a run record is a boolean: `true` once the
+configured detection platforms (OpenScrub, APIGuard, ThreatFlow — see
+`internal/detection`) confirm the attack was observed within the
+detection window, `false`/`null` otherwise. There are no additional
+verdict states (`inconclusive`, `timeout`, `not_applicable`, `partial`)
+in the current implementation — treat a run without a `detected: true`
+result as a detection gap worth investigating.
 
 ## Coverage monitoring
 
-The ATT&CK coverage dashboard shows current validated coverage.
-Coverage degrades when:
+See [docs/mitre-attack-coverage.md](mitre-attack-coverage.md) for the
+`mitre_coverage` table and the `GET /api/v1/coverage` endpoint. Note
+that this table is not populated automatically by run completion in
+the current implementation — treat coverage numbers as only as fresh
+as your last manual/administrative update, until that wiring lands.
 
-1. A previously `validated` technique produces `not_detected` in a
-   subsequent execution (detection regression).
-2. The ATT&CK matrix is updated with new techniques (new gaps appear).
+## Roles
 
-### Scheduling regular re-validation
+RBAC roles enforced by `internal/api/middleware.RequireRole`:
 
-Re-run scenarios on a schedule to detect coverage drift. Recommended
-cadences by risk:
-
-| Scenario type | Re-validation cadence |
+| Role | Can do |
 |---|---|
-| High-priority techniques (T1566, T1190, T1078) | Weekly |
-| Standard technique coverage | Monthly |
-| Full coverage sweep | Quarterly |
+| `analyst` | Read scenarios, runs, environments, coverage |
+| `operator` | Everything `analyst` can, plus create scenarios and run them |
+| `admin` | Everything `operator` can, plus create/delete environments |
 
-The operator handbook recommends running all scenarios in dry-run
-mode after any detection platform update to verify scope compatibility
-before live re-execution.
-
-## Audit trail
-
-Every action in SecureLab — login, scenario create/update/delete,
-execution request, detection verdict, CITADEL emission — is recorded
-in the `audit_log` table. The audit log is INSERT-only at the database
-level.
-
-### Querying the audit log
-
-```bash
-# Last 50 audit entries
-curl "http://localhost:8087/api/v1/audit?limit=50" \
-     -H "Authorization: Bearer <token>"
-
-# Entries for a specific operator
-curl "http://localhost:8087/api/v1/audit?operator_id=<id>" \
-     -H "Authorization: Bearer <token>"
-
-# Entries for a specific execution
-curl "http://localhost:8087/api/v1/audit?resource_type=execution&resource_id=<exec_id>" \
-     -H "Authorization: Bearer <token>"
-```
-
-### Audit log retention
-
-The audit log is retained for the lifetime of the deployment. Do
-not truncate the `audit_log` table. If storage is a concern, archive
-old entries to cold storage (maintaining the append-only guarantee)
-rather than deleting them.
-
-## Resolving `evidence_pending`
-
-When a live execution completes but CITADEL emission fails (circuit
-breaker open, CITADEL unreachable), the execution is marked
-`evidence_status: pending`. The evidence is not lost — it is in the
-SecureLab database — but the WORM seal is missing.
-
-Resolution procedure:
-
-1. Check CITADEL health. If CITADEL is down, wait for it to recover.
-2. Check the `securelab_citadel_circuit_breaker_state` Prometheus
-   metric. If the circuit is open, check CITADEL connectivity from
-   the SecureLab host.
-3. Once CITADEL is reachable, trigger a manual re-emit:
-   ```bash
-   curl -X POST http://localhost:8087/api/v1/executions/<exec_id>/re-emit-citadel \
-        -H "Authorization: Bearer <token>"
-   ```
-4. Verify `citadel_emitted: true` after re-emit.
-
-If CITADEL remains unavailable for an extended period, document the
-gap and the reason in the execution notes. The CITADEL team can
-accept late emissions with a documented explanation.
-
-## Prometheus metrics reference
-
-| Metric | Type | Description |
-|---|---|---|
-| `securelab_executions_total` | Counter | Total executions by mode (dry_run, live) and status |
-| `securelab_executions_running` | Gauge | Currently running live executions |
-| `securelab_detection_verdict_total` | Counter | Detection verdicts by source and verdict type |
-| `securelab_citadel_queue_depth` | Gauge | Current CITADEL emission queue depth |
-| `securelab_citadel_emit_total` | Counter | CITADEL emissions by status (success, failure) |
-| `securelab_citadel_circuit_breaker_state` | Gauge | 0 = closed (healthy), 1 = open (failing) |
-| `securelab_coverage_pct` | Gauge | Current ATT&CK coverage percentage (validated) |
-| `securelab_api_request_duration_seconds` | Histogram | API request latency by endpoint |
-
-All metrics are available at `http://<host>:8087/metrics`. Restrict
-this endpoint to your monitoring stack via firewall; it is
-unauthenticated by convention.
+Roles come from the authenticated token (local JWT or sinauth SSO —
+see [docs/configuration.md](configuration.md)). There is no local
+`/auth/revoke-all` endpoint in the current implementation; if you
+suspect a compromised token, rotate `SECURELAB_JWT_SECRET` (which
+invalidates all locally-issued tokens) and/or revoke the session at
+your sinauth identity provider.
 
 ## Incident response — unauthorised access
 
 If you suspect an unauthorised actor has accessed the SecureLab API
 or dashboard:
 
-1. **Immediately revoke all active operator tokens:**
-   ```bash
-   curl -X POST http://localhost:8087/api/v1/auth/revoke-all \
-        -H "Authorization: Bearer <admin-token>"
-   ```
-2. **Rotate all HMAC keys** (`SECURELAB_CITADEL_KEY_SECRET`,
-   integration keys) — restart the stack after rotation.
-3. **Review the audit log** for the time window of suspected access.
-4. **Notify your security team** and escalate via your IR procedure.
-5. **Preserve the audit log** — do not restart or clear Postgres
-   before the IR team has reviewed it.
-6. **Report to CITADEL** any simulation events that may have been
-   triggered under the unauthorised session — these must be marked
-   as potentially tainted in the CITADEL ledger.
+1. Rotate `SECURELAB_JWT_SECRET` and any active `SECURELAB_CITADEL_HMAC_SECRETS`,
+   then restart the API server so the new values take effect.
+2. Revoke the operator's session at your sinauth identity provider.
+3. Review recent rows in `scenarios`, `environments`, and
+   `scenario_runs` for the suspected time window — there is no
+   dedicated audit-log table in the current implementation, so these
+   application tables are the available record.
+4. Notify your security team and escalate via your incident-response
+   procedure.
+5. Treat any scenario runs triggered during the suspected window as
+   potentially unauthorised when reviewing CITADEL evidence.
 
 An unauthorised access event must be treated as a critical security
-incident. Escalate to your CISO and, if applicable, to IRFlow.
+incident. Escalate to your CISO.
+
+## Future / Not Yet Implemented
+
+The following operational capabilities are reasonable future work but
+do not exist in the codebase today: a dedicated append-only audit-log
+table and query endpoint, Prometheus metrics (`/metrics` is not
+exposed by the API), a CITADEL emission retry queue / circuit breaker
+with manual re-emit, and a token-revocation API. Do not rely on any of
+these until they are actually implemented.
 
 ## Related
 

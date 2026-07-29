@@ -1,95 +1,97 @@
 # CITADEL Integration
 
-SecureLab emits `securelab.simulation` events to the CITADEL WORM
-ledger at the completion of every live scenario execution. These
-events are the audit-grade record that a simulation was run, what
-the detection outcome was, and which scenario version was executed.
+SecureLab emits a `securelab.run_completed` event to CITADEL's WORM
+ledger when a scenario run finishes. This is an **audit-only**
+integration: it records that a run happened, on what scenario, with
+what outcome, so the fact of the run is part of CITADEL's immutable
+history. It is not a governance decision — no MARSHAL gate evaluates
+or authorizes anything here, because running a scenario isn't a
+privileged action CITADEL needs to approve; it's telemetry submitted
+after the fact.
 
-Dry-run executions do not emit to CITADEL.
+Implementation: [`internal/citadel/connector.go`](../internal/citadel/connector.go).
+Call site: [`internal/scenarios/executor.go`](../internal/scenarios/executor.go)
+(`Executor.Execute`, after the run's final status is persisted).
 
-## Why CITADEL matters for SecureLab
+## Emission flow
 
-A detection validation exercise has audit value only if its results
-are immutable and independently verifiable. SecureLab stores execution
-results in its own Postgres database — but that database is
-controlled by the operator and could be modified. The CITADEL WORM
-ledger provides an external, append-only record that:
+```
+  Executor.Execute() persists the run's final status to Postgres
+         │
+         ▼
+  If a Connector is attached (executor.WithCitadel(...)):
+         │
+         ▼
+  Connector.EmitRunCompleted(ctx, runID, scenarioName, status, detectionRate)
+         │
+         ▼
+  Build runCompletedEvent, marshal to JSON, wrap in an emitRequest
+  { source, event_type, project_id, payload }
+         │
+         ▼
+  Sign the full emitRequest body: HMAC-SHA256(secret, body) → hex
+         │
+         ▼
+  POST {CITADEL_API_URL}/api/v1/worm/emit
+    Content-Type: application/json
+    X-CITADEL-Signature: sha256=<hex>
+    X-CITADEL-Source: securelab
+         │
+         ▼
+  Non-2xx response or transport error → EmitRunCompleted returns an
+  error → executor logs a warning ("citadel emit failed") and moves on
+```
 
-1. A specific scenario version (content-hashed) was executed at a
-   specific time by a specific operator.
-2. The detection verdict (detected / not detected / inconclusive)
-   against each configured platform.
-3. The ATT&CK technique(s) covered by the execution.
+The emit call is synchronous, made under a 5-second context timeout
+set by the executor, and is **non-fatal**: a failed or slow CITADEL
+call never fails the scenario run itself. There is no retry queue,
+circuit breaker, or async worker — a single POST is attempted once per
+completed run.
 
-An auditor querying CITADEL can reconstruct the coverage history for
-any ATT&CK technique without trusting SecureLab's own database.
+## Wiring / when it's active
 
-## Event schema — `securelab.simulation`
+`cmd/server/main.go` only attaches a `Connector` to the executor when
+both are true:
+
+- `SECURELAB_CITADEL_API_URL` is set, **and**
+- `SECURELAB_CITADEL_DRY_RUN` is `false`
+
+If either condition fails, `executor.WithCitadel(...)` is never
+called and `Executor.citadel` stays `nil` — the executor simply skips
+emission for every run (see the `if e.citadel != nil` guard in
+`executor.go`). There is no separate "log but don't send" dry-run path
+inside the connector itself; dry-run means the connector is never
+wired up at all.
+
+Relevant environment variables (`internal/config/config.go`):
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `SECURELAB_CITADEL_API_URL` | Base URL of the CITADEL API (e.g. `https://citadel.internal`) | unset |
+| `SECURELAB_CITADEL_HMAC_SECRETS` | Comma-separated list of HMAC secrets; the first entry is used to sign outbound events | unset |
+| `SECURELAB_CITADEL_DRY_RUN` | When `true` (default), CITADEL emission is disabled entirely | `true` |
+
+## Event schema — `securelab.run_completed`
+
+The request body POSTed to `/api/v1/worm/emit` is an `emitRequest`
+envelope (matching CITADEL's `citadel/internal/api/handlers/worm.go`
+`emitRequest` struct) carrying the run event as its `payload`:
 
 ```json
 {
-  "event_type": "securelab.simulation",
-  "event_id": "01HY...",
   "source": "securelab",
-  "source_version": "1.0.0",
-  "timestamp": "2027-11-01T14:01:00Z",
-  "nonce": "a3f8...",
-  "signature": "hmac-sha256:<hex>",
-
+  "event_type": "securelab.run_completed",
+  "project_id": "",
   "payload": {
-    "execution_id": "01HY...",
-    "scenario_id": "T1059.001-powershell-encoded",
-    "scenario_version": "1.0.0",
-    "scenario_version_hash": "sha256:abc123...",
-    "operator_id": "01HZ...",
-    "mode": "live",
-    "target_scope": ["192.168.100.0/24"],
-    "notes": "Weekly validation run",
-
-    "mitre": {
-      "technique": "T1059.001",
-      "sub_technique": "PowerShell",
-      "tactic": "execution"
-    },
-
-    "steps": [
-      {
-        "index": 1,
-        "primitive": "cmd-spawn",
-        "status": "completed"
-      },
-      {
-        "index": 2,
-        "primitive": "powershell-encoded-command",
-        "status": "completed"
-      }
-    ],
-
-    "detection_results": [
-      {
-        "step_index": 2,
-        "source": "openscrub",
-        "verdict": "detected",
-        "rule_ref": "DETECT-PS-ENCODED-001",
-        "event_id": "openscrub-evt-999",
-        "captured_at": "2027-11-01T14:00:35Z",
-        "latency_ms": 29500
-      },
-      {
-        "step_index": 2,
-        "source": "apiguard",
-        "verdict": "not_applicable",
-        "rule_ref": null,
-        "event_id": null,
-        "captured_at": null
-      }
-    ],
-
-    "overall_verdict": "detected",
-    "evidence_hash": "blake3:def456...",
-
-    "started_at": "2027-11-01T14:00:05Z",
-    "completed_at": "2027-11-01T14:01:00Z"
+    "event_type": "securelab.run_completed",
+    "event_id": "run-abc123-1737904860000000000",
+    "source": "securelab",
+    "spec_version": "1.0",
+    "timestamp": "2026-07-26T14:01:00Z",
+    "run_id": "run-abc123",
+    "scenario_name": "api/bola-basic",
+    "status": "passed",
+    "detection_rate": 1.0
   }
 }
 ```
@@ -98,169 +100,69 @@ any ATT&CK technique without trusting SecureLab's own database.
 
 | Field | Type | Description |
 |---|---|---|
-| `event_type` | string | Always `securelab.simulation`. |
-| `event_id` | ULID | Globally unique event identifier. |
 | `source` | string | Always `securelab`. |
-| `source_version` | semver | SecureLab version that emitted the event. |
-| `timestamp` | ISO 8601 | UTC emission time. |
-| `nonce` | hex string | 128-bit random nonce for replay prevention. |
-| `signature` | string | HMAC-SHA256 over canonical event body; `hmac-sha256:<hex>`. |
-| `payload.execution_id` | ULID | SecureLab execution record ID. |
-| `payload.scenario_version_hash` | `sha256:<hex>` | Content hash of the scenario YAML at execution time. Reproducible for audit. |
-| `payload.operator_id` | ULID | Operator who triggered the execution. |
-| `payload.mode` | string | `live` \| `dry_run`. |
-| `payload.detection_results[*].verdict` | string | `detected` \| `not_detected` \| `inconclusive` \| `timeout` \| `not_applicable`. |
-| `payload.overall_verdict` | string | `detected` if any step has at least one `detected` verdict; `not_detected` if all asserted steps returned `not_detected`; `partial` if mixed; `inconclusive` if any timeout. |
-| `payload.evidence_hash` | `blake3:<hex>` | BLAKE3 hash of the canonical evidence body (the full `payload` object serialised as canonical JSON). Reproducible without CITADEL. |
+| `event_type` | string | Always `securelab.run_completed`. |
+| `project_id` | string | Not currently populated by the connector (empty string). |
+| `payload.event_id` | string | `"<run_id>-<UnixNano timestamp>"`, generated at emit time. |
+| `payload.spec_version` | string | Always `"1.0"`. |
+| `payload.timestamp` | ISO 8601 (UTC) | Emission time, set when `EmitRunCompleted` is called. |
+| `payload.run_id` | string | SecureLab `scenario_runs` row ID. |
+| `payload.scenario_name` | string | The scenario's `spec.Name`. |
+| `payload.status` | string | Final run status: `passed`, `failed`, or `error`. |
+| `payload.detection_rate` | float | `1.0` if a detection was confirmed during the run, `0.0` otherwise (see `Executor.Execute`). |
 
-## Emission flow
+There is no `nonce`, `evidence_hash`, `mitre` block, per-step
+`detection_results` array, or operator identity in the current wire
+format — the event is a single flat summary of the run's outcome. If
+richer per-technique or per-step evidence is needed later, that's a
+schema change to `runCompletedEvent` and `EmitRunCompleted`'s
+signature, not something already shipped.
 
-```
-  SecureLab execution completes (live mode)
-         │
-         ▼
-  Celery worker: compute evidence_hash from canonical payload JSON
-         │
-         ▼
-  Construct securelab.simulation event body
-         │
-         ▼
-  Sign with HMAC-SHA256 (SECURELAB_CITADEL_KEY_SECRET)
-         │
-         ▼
-  Enqueue to bounded async queue (max SECURELAB_CITADEL_QUEUE_SIZE)
-         │
-         ▼
-  Emitter goroutine: POST to CITADEL /api/v1/events
-         │         ├─ success → mark execution.citadel_emitted = true
-         │         │            record citadel_event_id on execution
-         │         └─ failure → retry (exponential backoff, 3 retries)
-         │                       circuit breaker after 5 consecutive fails
-         │                       mark execution.evidence_status = 'pending'
-         ▼
-  On shutdown: 10s drain — flush queue before exit
+## Signing
+
+The connector signs the **entire marshaled `emitRequest` JSON body**
+with HMAC-SHA256 under the configured secret and sends the result,
+hex-encoded, as `sha256=<hex>` in the `X-CITADEL-Signature` header:
+
+```go
+mac := hmac.New(sha256.New, secret)
+mac.Write(body) // the full emitRequest JSON, exactly as sent
+sig := hex.EncodeToString(mac.Sum(nil))
+// X-CITADEL-Signature: sha256=<sig>
 ```
 
-An execution is considered fully complete only when `citadel_emitted`
-is `true`. Executions with `evidence_status: pending` are surfaced in
-the dashboard as needing follow-up.
+This matches the wire format used by the OpenCSIRT CITADEL emitter.
+There is no separate nonce or replay-window field added by SecureLab;
+any replay protection is enforced on the CITADEL side.
 
-## Replay prevention
+## What this integration is not
 
-Each event carries a `nonce` (128-bit random) and `timestamp`.
-CITADEL enforces a ±5-minute replay window: events with a timestamp
-outside this window or a nonce that has been seen before are rejected.
+- **Not a MARSHAL-governed action.** Emitting a completed-run summary
+  is not a privileged action requiring AuthN/AuthZ/NDS/AUGUR
+  evaluation — it's after-the-fact audit telemetry about a simulation
+  SecureLab already ran under its own authorization. No Kerkese
+  contract is needed for this event.
+- **Not a queue or async pipeline.** There is no bounded queue,
+  circuit breaker, or backoff/retry loop. A failed emit is logged and
+  dropped; the next completed run tries again independently.
+- **Not evidence-hash verifiable offline.** Unlike some other
+  platforms' CITADEL events, there is currently no `evidence_hash`
+  field for independent tamper-checking outside of CITADEL's own WORM
+  chain integrity (TripleHash).
 
-The SecureLab emitter includes the nonce in the HMAC input, so a
-replay of an intercepted event is detectable by CITADEL even if the
-attacker replays it within the time window with a different nonce
-(the signature would not verify).
+## Testing
 
-## Querying CITADEL for SecureLab evidence
-
-CITADEL supports querying events by `event_type` and `source`:
+`internal/citadel/connector_test.go` covers the happy path (asserts
+method, path, headers, and decoded payload fields) and the non-2xx
+error path. Run with:
 
 ```bash
-# All SecureLab simulation events in the last 30 days
-GET /api/v1/events?event_type=securelab.simulation&since=2027-10-01
-
-# Events for a specific ATT&CK technique
-GET /api/v1/events?event_type=securelab.simulation&filter=payload.mitre.technique:T1059.001
-
-# Events for a specific execution
-GET /api/v1/events?event_type=securelab.simulation&filter=payload.execution_id:01HY...
+go test ./internal/citadel/... ./internal/scenarios/...
 ```
-
-## Verifying evidence integrity
-
-The `evidence_hash` field allows offline verification that the event
-body has not been tampered with after emission:
-
-```python
-import json
-import hashlib
-
-# Retrieve the event from CITADEL
-event = citadel_client.get_event("01HY...")
-
-# Canonical JSON: sorted keys, no whitespace
-canonical = json.dumps(event["payload"], sort_keys=True, separators=(",", ":"))
-
-# Verify
-computed = "blake3:" + blake3(canonical.encode()).hexdigest()
-assert computed == event["payload"]["evidence_hash"], "Evidence hash mismatch"
-```
-
-## Circuit breaker and backpressure
-
-The CITADEL emitter wraps outbound calls in a circuit breaker:
-
-- **Threshold:** 5 consecutive failures → circuit opens
-- **Half-open probe:** every 30s after circuit opens
-- **Queue backpressure:** if the queue exceeds
-  `SECURELAB_CITADEL_QUEUE_SIZE`, new events are rejected (execution
-  marked `evidence_pending` immediately)
-- **Shutdown drain:** 10s to flush the queue before process exit
-
-Operators should monitor the `securelab_citadel_queue_depth` and
-`securelab_citadel_emit_failures_total` Prometheus metrics.
-
-## Go v1.0.0 event name: `securelab.run_completed`
-
-In the Go 1.22 backend (v1.0.0), the CITADEL event type is `securelab.run_completed`. The wire format is HMAC-SHA256 signed JSON. DryRun mode is controlled by `SECURELAB_CITADEL_DRY_RUN`.
-
-### Wire format (v1.0.0)
-
-```json
-{
-  "event_type": "securelab.run_completed",
-  "event_id": "01HY...",
-  "source": "securelab",
-  "source_version": "1.0.0",
-  "timestamp": "2026-05-10T14:01:00Z",
-  "nonce": "a3f8...",
-  "signature": "hmac-sha256:<hex>",
-  "payload": {
-    "run_id": "run_abc123",
-    "scenario": "api/bola-basic",
-    "environment_id": "env_test_01",
-    "operator_id": "op_xyz",
-    "mitre_technique_ids": ["T1078"],
-    "status": "completed",
-    "detection_rate": 1.0,
-    "gaps": [],
-    "started_at": "2026-05-10T14:00:00Z",
-    "completed_at": "2026-05-10T14:01:00Z"
-  }
-}
-```
-
-### HMAC signing
-
-The signature covers: `event_id + "." + timestamp + "." + nonce + "." + canonical_payload_json`. Canonical JSON is sorted keys, no whitespace.
-
-Verification:
-```go
-mac := hmac.New(sha256.New, []byte(hmacSecret))
-mac.Write([]byte(eventID + "." + timestamp + "." + nonce + "." + canonicalPayload))
-expected := hex.EncodeToString(mac.Sum(nil))
-```
-
-### DryRun mode
-
-When `SECURELAB_CITADEL_DRY_RUN=true` (the default), the event is:
-- Constructed and signed as normal
-- Logged at INFO level with field `dry_run: true`
-- NOT sent to the CITADEL API
-- Stored in the database with `citadel_status: dry_run`
-
-Set to `false` only when you have a validated CITADEL endpoint and an isolated test environment.
 
 ## Related
 
-- [docs/operator-handbook.md](operator-handbook.md) — monitoring
-  CITADEL emission health, resolving `evidence_pending` executions
-- [docs/architecture.md](architecture.md) — integration arrows
+- [`internal/citadel/connector.go`](../internal/citadel/connector.go) — implementation
+- [`internal/scenarios/executor.go`](../internal/scenarios/executor.go) — call site
+- [`internal/config/config.go`](../internal/config/config.go) — `SECURELAB_CITADEL_*` env vars
 - [SECURITY.md](../SECURITY.md) — result tampering threat model
-- CITADEL documentation — `securelab.run_completed` event type
-  registration

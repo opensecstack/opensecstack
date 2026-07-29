@@ -13,8 +13,8 @@ SecureLab contains offensive tooling. These safety controls are mandatory and ar
 | Rate caps | Maximum packets/requests per second per attack type | Execution engine |
 | Scenario timeout | Hard wall-clock limit per scenario | Execution engine |
 | Admin-only environment creation | `admin` role required to create environments | RBAC middleware |
-| Audit logging | Every run and environment action recorded before execution | Execution engine + DB |
-| CITADEL evidence | Every run emits a `securelab.run_completed` event | CITADEL emitter |
+| Application-record trail | `scenarios`, `environments`, `scenario_runs` rows are the available record of activity (no dedicated audit-log table exists) | PostgreSQL |
+| CITADEL evidence | Every completed run emits a `securelab.run_completed` event | CITADEL emitter |
 
 ---
 
@@ -88,15 +88,15 @@ This prevents unprivileged users from pointing SecureLab at arbitrary targets.
 
 ---
 
-## 6. Audit logging of all runs
+## 6. Application-record trail (no dedicated audit-log table)
 
-Every scenario run is recorded in the audit log **before execution begins** — not after. This means:
+**There is no dedicated append-only audit-log table in the current implementation, and no PostgreSQL row-level security (RLS) policies protecting one.** This was previously documented incorrectly in this file; the statement has been corrected here and in [docs/operator-handbook.md](operator-handbook.md) and [SECURITY.md](../SECURITY.md).
 
-- A run that is blocked by safety validation still appears in the audit log with status `blocked`.
-- A run that times out has a complete audit trail including the timeout event.
-- There is no path to execute a scenario without creating an audit record.
+What actually exists today: `scenario_runs` rows (see `internal/db/migrations/003_results.sql`) record `status`, `started_at`, `finished_at`, `attack_events`, `detection_events`, `detection_latency_ms`, and `detected` for every run, alongside the `scenarios` and `environments` tables. These are ordinary application tables — they are not append-only, are not protected by RLS or `CREATE POLICY` rules, and can be updated or deleted like any other row in the database. In an incident, these tables are the available record; see [docs/operator-handbook.md § Incident response](operator-handbook.md#incident-response--unauthorised-access).
 
-The audit log is append-only at the database level (enforced via PostgreSQL row-level security — INSERT only, no UPDATE/DELETE on audit tables).
+A blocked or timed-out run is still recorded as a `scenario_runs` row with the corresponding status (`blocked`, `timed_out`, etc.) — see `internal/scenarios/validator.go` for the production-hostname blocklist check that produces `blocked` runs.
+
+A dedicated append-only audit-log table with RLS enforcement is reasonable future work — see [docs/operator-handbook.md § Future / Not Yet Implemented](operator-handbook.md#future--not-yet-implemented) — but do not rely on it until it is actually implemented.
 
 ---
 

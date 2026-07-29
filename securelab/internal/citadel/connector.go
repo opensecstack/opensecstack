@@ -36,6 +36,7 @@ func NewConnector(citadelURL, hmacSecret string) *Connector {
 }
 
 // runCompletedEvent is the canonical wire format for securelab.run_completed.
+// It is carried as the `payload` field of a CITADEL WORM emit request.
 type runCompletedEvent struct {
 	EventType     string    `json:"event_type"`
 	EventID       string    `json:"event_id"`
@@ -48,6 +49,15 @@ type runCompletedEvent struct {
 	DetectionRate float64   `json:"detection_rate"`
 }
 
+// emitRequest is the body for POST /api/v1/worm/emit on CITADEL, matching
+// citadel/internal/api/handlers/worm.go's emitRequest struct.
+type emitRequest struct {
+	Source    string          `json:"source"`
+	EventType string          `json:"event_type"`
+	ProjectID string          `json:"project_id"`
+	Payload   json.RawMessage `json:"payload"`
+}
+
 // EmitRunCompleted signs and POSTs a securelab.run_completed CITADEL event.
 //
 // The request includes an X-CITADEL-Signature header containing
@@ -55,25 +65,36 @@ type runCompletedEvent struct {
 // matching the OpenCSIRT CITADEL wire format.
 func (c *Connector) EmitRunCompleted(ctx context.Context, runID, scenarioName, status string, detectionRate float64) error {
 	event := runCompletedEvent{
-		EventType:    "securelab.run_completed",
-		EventID:      fmt.Sprintf("%s-%d", runID, time.Now().UnixNano()),
-		Source:       "securelab",
-		SpecVersion:  "1.0",
-		Timestamp:    time.Now().UTC(),
-		RunID:        runID,
-		ScenarioName: scenarioName,
-		Status:       status,
+		EventType:     "securelab.run_completed",
+		EventID:       fmt.Sprintf("%s-%d", runID, time.Now().UnixNano()),
+		Source:        "securelab",
+		SpecVersion:   "1.0",
+		Timestamp:     time.Now().UTC(),
+		RunID:         runID,
+		ScenarioName:  scenarioName,
+		Status:        status,
 		DetectionRate: detectionRate,
 	}
 
-	body, err := json.Marshal(event)
+	payload, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("citadel: marshal event: %w", err)
 	}
 
+	emit := emitRequest{
+		Source:    "securelab",
+		EventType: event.EventType,
+		Payload:   payload,
+	}
+
+	body, err := json.Marshal(emit)
+	if err != nil {
+		return fmt.Errorf("citadel: marshal emit request: %w", err)
+	}
+
 	sig := c.sign(body)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.citadelURL+"/api/v1/events", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.citadelURL+"/api/v1/worm/emit", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("citadel: build request: %w", err)
 	}

@@ -25,6 +25,8 @@ func Load() (*Config, error) {
 		Issuer:          env("SINAUTH_ISSUER", ""),
 		SiteURL:         env("SINAUTH_SITE_URL", ""),
 
+		BootstrapAdminEmail: env("SINAUTH_BOOTSTRAP_ADMIN_EMAIL", ""),
+
 		SMTPHost:     env("SINAUTH_SMTP_HOST", ""),
 		SMTPPort:     envInt("SINAUTH_SMTP_PORT", 587),
 		SMTPUsername: env("SINAUTH_SMTP_USERNAME", ""),
@@ -50,9 +52,13 @@ func Load() (*Config, error) {
 
 		WebAuthnRPID:          env("SINAUTH_WEBAUTHN_RP_ID", "localhost"),
 		WebAuthnRPDisplayName: env("SINAUTH_WEBAUTHN_RP_DISPLAY", "SIN"),
+
+		PermifyURL:     env("SINAUTH_PERMIFY_URL", ""),
+		PermifyTimeout: envDuration("SINAUTH_PERMIFY_TIMEOUT", 3*time.Second),
 	}
 
 	cfg.SMSEnabled = cfg.TwilioSID != ""
+	cfg.PermifyEnabled = cfg.PermifyURL != ""
 
 	// Default the social OAuth redirect URIs to the canonical callback routes
 	// under the issuer, so social login works with only the client ID/secret set.

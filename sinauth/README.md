@@ -29,6 +29,46 @@ make migrate DB_URL=postgres://sinauth:sinauth@localhost:5433/sinauth
 # OIDC discovery: http://localhost:8100/.well-known/openid-configuration
 ```
 
+## Authorization (`internal/authz`)
+
+sinauth's real authorization decisions — beyond the flat
+`users.is_platform_admin` check — are backed by an `authz.Checker`
+interface (`internal/authz/checker.go`), with two implementations:
+
+- **`PermifyChecker`** — wraps [Permify](https://permify.co), an
+  open-source Zanzibar-style ReBAC/RBAC engine, used whenever
+  `SINAUTH_PERMIFY_URL` is set. This is the real authorization engine
+  behind `rbac.Store.Evaluate` (finally making the `policies` table's
+  `require_mfa`/`require_email_verified`/`deny_role` rows take effect
+  at token issuance) and behind the self-service org-delegation
+  routes (`POST`/`DELETE /api/v1/organizations/{id}/members`).
+- **`NoopChecker`** — the default when `SINAUTH_PERMIFY_URL` is unset
+  (empty, out of the box). `Check` always returns `(true, nil)`, but
+  because `callerCanManageOrg` only ever *consults* `d.Authz.Check` when
+  `d.Cfg.PermifyEnabled` is true, an unconfigured `NoopChecker` never
+  actually gets asked to make a real authorization decision — org
+  delegation stays **platform-admin-only** until Permify is deployed.
+  This is inert-by-design, not fail-open: see the "Security fix
+  (2026-07-29)" section of
+  [`adrs/006-permify-authorization-engine.md`](adrs/006-permify-authorization-engine.md)
+  for the same-day bug this design closes.
+
+Config: `SINAUTH_PERMIFY_URL` (default `""` → `NoopChecker`) and
+`SINAUTH_PERMIFY_TIMEOUT` (default `3s`, bounds every
+Check/WriteRelationship/DeleteRelationship RPC).
+
+Backfill existing rows into Permify with the CLI, after deploying it:
+
+```bash
+sinauth permify-sync
+```
+
+For local dev, `docker-compose.dev.yml` includes a `permify` service
+(`ghcr.io/permify/permify:latest`, in-memory storage) so
+`SINAUTH_PERMIFY_URL` can point at it without standing up a separate
+instance. See [`adrs/006-permify-authorization-engine.md`](adrs/006-permify-authorization-engine.md)
+for the full design.
+
 ## Integrating a platform
 
 See [docs/integration/](docs/integration/) for per-platform guides.

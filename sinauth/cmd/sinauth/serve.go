@@ -12,6 +12,7 @@ import (
 	"github.com/opensecstack/sinauth/internal/api"
 	"github.com/opensecstack/sinauth/internal/config"
 	"github.com/opensecstack/sinauth/internal/keys"
+	"github.com/opensecstack/sinauth/internal/user"
 	"github.com/spf13/cobra"
 )
 
@@ -57,6 +58,20 @@ func runServe(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("db ping: %w", err)
 	}
 	log.Println("sinauth: database connected")
+
+	// Bootstrap the first platform admin, if configured. See SECURITY.md.
+	if cfg.BootstrapAdminEmail != "" {
+		store := user.NewStore(pool)
+		promoted, err := store.SetPlatformAdmin(ctx, cfg.BootstrapAdminEmail, true)
+		if err != nil {
+			log.Printf("sinauth: WARNING: failed to bootstrap platform admin %q: %v", cfg.BootstrapAdminEmail, err)
+		} else if promoted {
+			log.Printf("sinauth: bootstrapped platform admin: %s", cfg.BootstrapAdminEmail)
+		} else {
+			log.Printf("sinauth: SINAUTH_BOOTSTRAP_ADMIN_EMAIL=%s set but no matching user exists yet — "+
+				"register that account, then restart sinauth (or re-run) to promote it", cfg.BootstrapAdminEmail)
+		}
+	}
 
 	handler := api.NewServer(cfg, pool, km)
 

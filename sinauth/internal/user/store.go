@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -86,6 +87,36 @@ func (s *Store) Deactivate(ctx context.Context, id string) error {
 	_, err := s.pool.Exec(ctx,
 		`UPDATE users SET deactivated_at=now() WHERE id=$1`, id)
 	return err
+}
+
+// IsPlatformAdmin reports whether the given user has platform-admin
+// standing, i.e. is allowed past middleware.RequireAdmin. See
+// migrations/019_platform_admin.sql.
+func (s *Store) IsPlatformAdmin(ctx context.Context, id string) (bool, error) {
+	var isAdmin bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT COALESCE(is_platform_admin, false) FROM users WHERE id=$1`, id,
+	).Scan(&isAdmin)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return isAdmin, nil
+}
+
+// SetPlatformAdmin promotes or demotes the user with the given email to/from
+// platform-admin standing. Used by the one-time bootstrap procedure
+// documented in SECURITY.md to establish the first admin. Returns false if
+// no user with that email exists.
+func (s *Store) SetPlatformAdmin(ctx context.Context, email string, admin bool) (bool, error) {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE users SET is_platform_admin=$2, updated_at=now() WHERE email=$1`, email, admin)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
 func (s *Store) GetByEmail(ctx context.Context, email string) (*User, error) {

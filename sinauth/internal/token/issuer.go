@@ -41,6 +41,13 @@ type IDTokenClaims struct {
 	Picture       string `json:"picture,omitempty"`
 	Nonce         string `json:"nonce,omitempty"`
 	Azp           string `json:"azp,omitempty"` // authorized party (client_id)
+	// OrgID, OrgRole, OrgType (ADR 005 v1.1) are only set when the token was
+	// issued with a validated organization_id. omitempty ensures individual
+	// (non-org) tokens carry none of these keys at all — additive, not a
+	// breaking change to the token shape.
+	OrgID   string `json:"org_id,omitempty"`
+	OrgRole string `json:"org_role,omitempty"`
+	OrgType string `json:"org_type,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -71,7 +78,9 @@ func (i *Issuer) IssueAccessToken(sub, clientID string, scopes []string, ttl tim
 // IssueAccessTokenWithRoles creates a signed RS256 access token that includes
 // per-client role assignments in the "client_roles" claim. If clientRoles is
 // non-empty, the first entry is also set as the primary "role" claim.
-func (i *Issuer) IssueAccessTokenWithRoles(sub, clientID string, scopes, clientRoles []string, ttl time.Duration) (string, error) {
+// orgID/orgRole/orgType (ADR 005 v1.1) are empty strings for tokens with no
+// organization context; omitempty drops those keys from the JWT entirely.
+func (i *Issuer) IssueAccessTokenWithRoles(sub, clientID string, scopes, clientRoles []string, orgID, orgRole, orgType string, ttl time.Duration) (string, error) {
 	now := time.Now()
 
 	type accessTokenWithRolesClaims struct {
@@ -80,6 +89,9 @@ func (i *Issuer) IssueAccessTokenWithRoles(sub, clientID string, scopes, clientR
 		Scopes      []string `json:"scope"`
 		Role        string   `json:"role,omitempty"`
 		ClientRoles []string `json:"client_roles,omitempty"`
+		OrgID       string   `json:"org_id,omitempty"`
+		OrgRole     string   `json:"org_role,omitempty"`
+		OrgType     string   `json:"org_type,omitempty"`
 		jwt.RegisteredClaims
 	}
 
@@ -94,6 +106,9 @@ func (i *Issuer) IssueAccessTokenWithRoles(sub, clientID string, scopes, clientR
 		Scopes:      scopes,
 		Role:        primaryRole,
 		ClientRoles: clientRoles,
+		OrgID:       orgID,
+		OrgRole:     orgRole,
+		OrgType:     orgType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.NewString(),
 			Issuer:    i.issuer,
@@ -111,8 +126,11 @@ func (i *Issuer) IssueAccessTokenWithRoles(sub, clientID string, scopes, clientR
 	return tok.SignedString(i.privateKey)
 }
 
-// IssueIDToken creates a signed RS256 ID token.
-func (i *Issuer) IssueIDToken(sub, clientID, nonce, email, name, picture string, emailVerified bool, ttl time.Duration) (string, error) {
+// IssueIDToken creates a signed RS256 ID token. orgID/orgRole/orgType
+// (ADR 005 v1.1) are empty strings for tokens with no organization context;
+// omitempty on IDTokenClaims drops those keys from the JWT entirely in that
+// case, keeping individual-only tokens identical in shape to pre-ADR-005.
+func (i *Issuer) IssueIDToken(sub, clientID, nonce, email, name, picture string, emailVerified bool, orgID, orgRole, orgType string, ttl time.Duration) (string, error) {
 	now := time.Now()
 	claims := IDTokenClaims{
 		Sub:           sub,
@@ -122,6 +140,9 @@ func (i *Issuer) IssueIDToken(sub, clientID, nonce, email, name, picture string,
 		Picture:       picture,
 		Nonce:         nonce,
 		Azp:           clientID,
+		OrgID:         orgID,
+		OrgRole:       orgRole,
+		OrgType:       orgType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.NewString(),
 			Issuer:    i.issuer,

@@ -97,6 +97,19 @@ func (s *Service) Deactivate(ctx context.Context, id string) error {
 	return s.store.Deactivate(ctx, id)
 }
 
+// IsPlatformAdmin reports whether the given user id has platform-admin
+// standing. Implements middleware.AdminChecker.
+func (s *Service) IsPlatformAdmin(ctx context.Context, id string) (bool, error) {
+	return s.store.IsPlatformAdmin(ctx, id)
+}
+
+// SetPlatformAdmin promotes or demotes the user with the given email
+// to/from platform-admin standing. Used by the first-admin bootstrap
+// procedure documented in SECURITY.md.
+func (s *Service) SetPlatformAdmin(ctx context.Context, email string, admin bool) (bool, error) {
+	return s.store.SetPlatformAdmin(ctx, email, admin)
+}
+
 func (s *Service) GetByEmail(ctx context.Context, email string) (*User, error) {
 	return s.store.GetByEmail(ctx, email)
 }

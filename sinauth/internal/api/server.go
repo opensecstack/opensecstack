@@ -9,6 +9,7 @@ import (
 	"github.com/opensecstack/sinauth/internal/api/handlers"
 	"github.com/opensecstack/sinauth/internal/api/middleware"
 	"github.com/opensecstack/sinauth/internal/audit"
+	"github.com/opensecstack/sinauth/internal/authz"
 	"github.com/opensecstack/sinauth/internal/client"
 	"github.com/opensecstack/sinauth/internal/config"
 	"github.com/opensecstack/sinauth/internal/consent"
@@ -17,6 +18,7 @@ import (
 	"github.com/opensecstack/sinauth/internal/keys"
 	"github.com/opensecstack/sinauth/internal/mfa"
 	"github.com/opensecstack/sinauth/internal/oidc"
+	"github.com/opensecstack/sinauth/internal/organization"
 	"github.com/opensecstack/sinauth/internal/rbac"
 	"github.com/opensecstack/sinauth/internal/session"
 	"github.com/opensecstack/sinauth/internal/token"
@@ -38,8 +40,18 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool, km *keys.Manager) http.Ha
 	verifier     := token.NewVerifier(km.PublicKey(), cfg.Issuer)
 	discovery    := oidc.Build(cfg.Issuer)
 	fedStore     := federation.NewStore(pool)
-	rbacStore    := rbac.NewStore(pool)
+	// authzChecker is the single authorization-engine handle used to sync
+	// RBAC/organization relationship writes to Permify (best-effort — see
+	// rbac.Store/organization.Store's syncWrite/syncDelete comments), and to
+	// evaluate real per-resource permissions (rbac.Store.Evaluate, the
+	// org-delegation check in organization.go). Construction is centralized
+	// in authz.New(cfg): real Permify when configured, NoopChecker
+	// (fail-open, no-op sync) otherwise — the same real-vs-noop pattern the
+	// SMS provider below uses.
+	authzChecker := authz.New(cfg)
+	rbacStore    := rbac.NewStore(pool, authzChecker)
 	auditStore   := audit.NewStore(pool)
+	orgStore     := organization.NewStore(pool, authzChecker)
 
 	mailer := email.New(email.Config{
 		Host:     cfg.SMTPHost,
@@ -90,6 +102,8 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool, km *keys.Manager) http.Ha
 		FedStore:   fedStore,
 		RBAC:       rbacStore,
 		Audit:      auditStore,
+		OrgSvc:     orgStore,
+		Authz:      authzChecker,
 	}
 
 	mux := http.NewServeMux()
@@ -124,15 +138,18 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool, km *keys.Manager) http.Ha
 	mux.Handle("POST /api/v1/auth/resend-verification", authRL(http.HandlerFunc(handlers.ResendVerification(d))))
 
 	// ── Admin (client management) ────────────────────────────────────────────
+	// These routes require platform-admin standing (RequireAdmin), not just a
+	// validly-signed token — see auth.go.
 	adminAuth := middleware.BearerAuth(verifier)
-	mux.Handle("GET /api/v1/admin/clients",          adminAuth(http.HandlerFunc(handlers.ListClients(d))))
-	mux.Handle("POST /api/v1/admin/clients",         adminAuth(http.HandlerFunc(handlers.CreateClient(d))))
-	mux.Handle("DELETE /api/v1/admin/clients/{id}",  adminAuth(http.HandlerFunc(handlers.DeleteClient(d))))
-	mux.Handle("GET /api/v1/admin/users",            adminAuth(http.HandlerFunc(handlers.ListUsers(d))))
-	mux.Handle("POST /api/v1/admin/users/{id}/deactivate", adminAuth(http.HandlerFunc(handlers.DeactivateUser(d))))
-	mux.Handle("GET /api/v1/admin/audit",            adminAuth(http.HandlerFunc(handlers.ListAuditLog(d))))
-	mux.Handle("GET /api/v1/admin/sessions",         adminAuth(http.HandlerFunc(handlers.ListSessions(d))))
-	mux.Handle("DELETE /api/v1/admin/sessions/{id}", adminAuth(http.HandlerFunc(handlers.RevokeSession(d))))
+	requireAdmin := middleware.RequireAdmin(verifier, userSvc)
+	mux.Handle("GET /api/v1/admin/clients",          requireAdmin(http.HandlerFunc(handlers.ListClients(d))))
+	mux.Handle("POST /api/v1/admin/clients",         requireAdmin(http.HandlerFunc(handlers.CreateClient(d))))
+	mux.Handle("DELETE /api/v1/admin/clients/{id}",  requireAdmin(http.HandlerFunc(handlers.DeleteClient(d))))
+	mux.Handle("GET /api/v1/admin/users",            requireAdmin(http.HandlerFunc(handlers.ListUsers(d))))
+	mux.Handle("POST /api/v1/admin/users/{id}/deactivate", requireAdmin(http.HandlerFunc(handlers.DeactivateUser(d))))
+	mux.Handle("GET /api/v1/admin/audit",            requireAdmin(http.HandlerFunc(handlers.ListAuditLog(d))))
+	mux.Handle("GET /api/v1/admin/sessions",         requireAdmin(http.HandlerFunc(handlers.ListSessions(d))))
+	mux.Handle("DELETE /api/v1/admin/sessions/{id}", requireAdmin(http.HandlerFunc(handlers.RevokeSession(d))))
 
 	// ── MFA: WebAuthn / FIDO2 ────────────────────────────────────────────────
 	mux.Handle("POST /api/v1/mfa/webauthn/register/begin",
@@ -151,9 +168,11 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool, km *keys.Manager) http.Ha
 	mux.Handle("POST /api/v1/mfa/sms/verify", adminAuth(http.HandlerFunc(handlers.VerifySMSOTP(d))))
 
 	// ── Federation (SSO / external IDPs) ────────────────────────────────────
+	// Provider admin routes require platform-admin standing (RequireAdmin),
+	// not just a validly-signed token — see auth.go.
 	mux.HandleFunc("GET /api/v1/federation/providers",          handlers.ListIdentityProviders(d))
-	mux.Handle("POST /admin/federation/providers",              adminAuth(http.HandlerFunc(handlers.CreateIdentityProvider(d))))
-	mux.Handle("DELETE /admin/federation/providers/{id}",       adminAuth(http.HandlerFunc(handlers.DeleteIdentityProvider(d))))
+	mux.Handle("POST /admin/federation/providers",              requireAdmin(http.HandlerFunc(handlers.CreateIdentityProvider(d))))
+	mux.Handle("DELETE /admin/federation/providers/{id}",       requireAdmin(http.HandlerFunc(handlers.DeleteIdentityProvider(d))))
 	mux.HandleFunc("GET /federation/oidc/{slug}/authorize",     handlers.InitiateOIDCUpstream(d))
 	mux.HandleFunc("GET /federation/oidc/{slug}/callback",      handlers.OIDCUpstreamCallback(d))
 	mux.HandleFunc("POST /federation/ldap/{slug}/login",        handlers.LDAPLogin(d))
@@ -161,22 +180,50 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool, km *keys.Manager) http.Ha
 	mux.HandleFunc("POST /federation/saml/{slug}/acs",          handlers.SAMLAcs(d))
 
 	// ── RBAC admin ───────────────────────────────────────────────────────────
-	mux.Handle("GET /admin/rbac/groups",                          adminAuth(http.HandlerFunc(handlers.ListGroups(d))))
-	mux.Handle("POST /admin/rbac/groups",                         adminAuth(http.HandlerFunc(handlers.CreateGroup(d))))
-	mux.Handle("DELETE /admin/rbac/groups/{id}",                  adminAuth(http.HandlerFunc(handlers.DeleteGroup(d))))
-	mux.Handle("GET /admin/rbac/groups/{id}/members",             adminAuth(http.HandlerFunc(handlers.ListGroupMembers(d))))
-	mux.Handle("POST /admin/rbac/groups/{id}/members",            adminAuth(http.HandlerFunc(handlers.AddGroupMember(d))))
-	mux.Handle("DELETE /admin/rbac/groups/{id}/members/{userId}", adminAuth(http.HandlerFunc(handlers.RemoveGroupMember(d))))
-	mux.Handle("POST /admin/rbac/groups/{id}/roles",              adminAuth(http.HandlerFunc(handlers.AssignGroupRole(d))))
-	mux.Handle("GET /admin/rbac/clients/{clientId}/roles",        adminAuth(http.HandlerFunc(handlers.ListClientRoles(d))))
-	mux.Handle("POST /admin/rbac/clients/{clientId}/roles",       adminAuth(http.HandlerFunc(handlers.CreateClientRole(d))))
-	mux.Handle("DELETE /admin/rbac/roles/{id}",                   adminAuth(http.HandlerFunc(handlers.DeleteClientRole(d))))
-	mux.Handle("POST /admin/rbac/users/{userId}/roles",           adminAuth(http.HandlerFunc(handlers.AssignUserRole(d))))
-	mux.Handle("DELETE /admin/rbac/users/{userId}/roles",         adminAuth(http.HandlerFunc(handlers.RevokeUserRole(d))))
-	mux.Handle("GET /admin/rbac/users/{userId}/effective-roles",  adminAuth(http.HandlerFunc(handlers.GetUserEffectiveRoles(d))))
-	mux.Handle("GET /admin/rbac/policies",                        adminAuth(http.HandlerFunc(handlers.ListPolicies(d))))
-	mux.Handle("POST /admin/rbac/policies",                       adminAuth(http.HandlerFunc(handlers.CreatePolicy(d))))
-	mux.Handle("DELETE /admin/rbac/policies/{id}",                adminAuth(http.HandlerFunc(handlers.DeletePolicy(d))))
+	// All /admin/rbac/* routes require platform-admin standing (RequireAdmin),
+	// not just a validly-signed token — see auth.go.
+	mux.Handle("GET /admin/rbac/groups",                          requireAdmin(http.HandlerFunc(handlers.ListGroups(d))))
+	mux.Handle("POST /admin/rbac/groups",                         requireAdmin(http.HandlerFunc(handlers.CreateGroup(d))))
+	mux.Handle("DELETE /admin/rbac/groups/{id}",                  requireAdmin(http.HandlerFunc(handlers.DeleteGroup(d))))
+	mux.Handle("GET /admin/rbac/groups/{id}/members",             requireAdmin(http.HandlerFunc(handlers.ListGroupMembers(d))))
+	mux.Handle("POST /admin/rbac/groups/{id}/members",            requireAdmin(http.HandlerFunc(handlers.AddGroupMember(d))))
+	mux.Handle("DELETE /admin/rbac/groups/{id}/members/{userId}", requireAdmin(http.HandlerFunc(handlers.RemoveGroupMember(d))))
+	mux.Handle("POST /admin/rbac/groups/{id}/roles",              requireAdmin(http.HandlerFunc(handlers.AssignGroupRole(d))))
+	mux.Handle("GET /admin/rbac/clients/{clientId}/roles",        requireAdmin(http.HandlerFunc(handlers.ListClientRoles(d))))
+	mux.Handle("POST /admin/rbac/clients/{clientId}/roles",       requireAdmin(http.HandlerFunc(handlers.CreateClientRole(d))))
+	mux.Handle("DELETE /admin/rbac/roles/{id}",                   requireAdmin(http.HandlerFunc(handlers.DeleteClientRole(d))))
+	mux.Handle("POST /admin/rbac/users/{userId}/roles",           requireAdmin(http.HandlerFunc(handlers.AssignUserRole(d))))
+	mux.Handle("DELETE /admin/rbac/users/{userId}/roles",         requireAdmin(http.HandlerFunc(handlers.RevokeUserRole(d))))
+	mux.Handle("GET /admin/rbac/users/{userId}/effective-roles",  requireAdmin(http.HandlerFunc(handlers.GetUserEffectiveRoles(d))))
+	mux.Handle("GET /admin/rbac/policies",                        requireAdmin(http.HandlerFunc(handlers.ListPolicies(d))))
+	mux.Handle("POST /admin/rbac/policies",                       requireAdmin(http.HandlerFunc(handlers.CreatePolicy(d))))
+	mux.Handle("DELETE /admin/rbac/policies/{id}",                requireAdmin(http.HandlerFunc(handlers.DeletePolicy(d))))
+
+	// ── Organizations admin ─────────────────────────────────────────────────
+	// All routes require platform-admin standing (RequireAdmin), not just a
+	// validly-signed token — see auth.go. This is the model documented in
+	// SECURITY.md: organization membership/roles are platform-admin-managed
+	// only in this fix; a finer per-org-owner permission model is future work.
+	mux.Handle("GET /admin/organizations",                          requireAdmin(http.HandlerFunc(handlers.ListOrganizations(d))))
+	mux.Handle("POST /admin/organizations",                         requireAdmin(http.HandlerFunc(handlers.CreateOrganization(d))))
+	mux.Handle("GET /admin/organizations/{id}",                     requireAdmin(http.HandlerFunc(handlers.GetOrganization(d))))
+	mux.Handle("DELETE /admin/organizations/{id}",                  requireAdmin(http.HandlerFunc(handlers.DeleteOrganization(d))))
+	mux.Handle("GET /admin/organizations/{id}/members",             requireAdmin(http.HandlerFunc(handlers.ListOrganizationMembers(d))))
+	mux.Handle("POST /admin/organizations/{id}/members",            requireAdmin(http.HandlerFunc(handlers.AddOrganizationMember(d))))
+	mux.Handle("DELETE /admin/organizations/{id}/members/{userId}", requireAdmin(http.HandlerFunc(handlers.RemoveOrganizationMember(d))))
+
+	// ── Organizations self-service delegation (Permify Phase 1) ────────────
+	// Additive, NOT a replacement for the /admin/organizations/* routes
+	// above: BearerAuth only at the route level, with the handler itself
+	// enforcing "platform admin OR org owner/admin per authz.Checker" (see
+	// handlers.callerCanManageOrg's doc comment for why this is a separate
+	// route rather than a loosened admin route).
+	mux.Handle("POST /api/v1/organizations/{id}/members",            adminAuth(http.HandlerFunc(handlers.AddOwnOrganizationMember(d))))
+	mux.Handle("DELETE /api/v1/organizations/{id}/members/{userId}", adminAuth(http.HandlerFunc(handlers.RemoveOwnOrganizationMember(d))))
+
+	// ── Users (self-service) ─────────────────────────────────────────────────
+	mux.Handle("GET /api/v1/users/me/organizations",
+		middleware.BearerAuth(verifier)(http.HandlerFunc(handlers.MyOrganizations(d))))
 
 	// ── Health ───────────────────────────────────────────────────────────────
 	mux.HandleFunc("GET /api/v1/health", handlers.Health(d))

@@ -47,6 +47,14 @@ type Config struct {
 	// Site
 	SiteURL string
 
+	// BootstrapAdminEmail, when set, causes `sinauth serve` to promote the
+	// user with this email to platform-admin standing (users.is_platform_admin)
+	// on every startup, if that user already exists. This is the documented
+	// bootstrap path for standing up the very first platform admin (see
+	// SECURITY.md) — idempotent, so it is safe to leave set in the deploy
+	// environment permanently, or unset it again once the first admin exists.
+	BootstrapAdminEmail string
+
 	// SMS / Twilio
 	TwilioSID   string
 	TwilioToken string
@@ -57,4 +65,10 @@ type Config struct {
 	WebAuthnRPID          string   // e.g. "sin.to"
 	WebAuthnRPDisplayName string   // e.g. "SIN"
 	WebAuthnOrigins       []string // e.g. ["https://sin.to"]
+
+	// Permify (authorization engine) — see internal/authz and
+	// sinauth/adrs for the real-vs-noop Checker this backs.
+	PermifyURL     string // e.g. "permify:3478"; empty disables Permify (NoopChecker)
+	PermifyTimeout time.Duration
+	PermifyEnabled bool
 }

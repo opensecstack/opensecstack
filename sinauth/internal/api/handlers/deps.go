@@ -7,6 +7,7 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/opensecstack/sinauth/internal/audit"
+	"github.com/opensecstack/sinauth/internal/authz"
 	"github.com/opensecstack/sinauth/internal/client"
 	"github.com/opensecstack/sinauth/internal/config"
 	"github.com/opensecstack/sinauth/internal/consent"
@@ -15,6 +16,7 @@ import (
 	"github.com/opensecstack/sinauth/internal/keys"
 	"github.com/opensecstack/sinauth/internal/mfa"
 	"github.com/opensecstack/sinauth/internal/oidc"
+	"github.com/opensecstack/sinauth/internal/organization"
 	"github.com/opensecstack/sinauth/internal/rbac"
 	"github.com/opensecstack/sinauth/internal/session"
 	"github.com/opensecstack/sinauth/internal/token"
@@ -39,6 +41,14 @@ type Deps struct {
 	FedStore   *federation.Store
 	RBAC       *rbac.Store
 	Audit      *audit.Store
+	OrgSvc     *organization.Store
+	// Authz is the authorization-engine abstraction (Permify-backed, or a
+	// NoopChecker fail-open stand-in when no engine is configured) used for
+	// rbac.Evaluate's deny_role check and the per-organization delegation
+	// check in organization.go. Never nil in a server built via NewServer —
+	// handlers may still guard against nil for standalone unit tests that
+	// build a Deps by hand without setting it.
+	Authz authz.Checker
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {

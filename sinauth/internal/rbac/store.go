@@ -2,9 +2,11 @@ package rbac
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/opensecstack/sinauth/internal/authz"
 )
 
 // Group represents a named collection of users.
@@ -35,9 +37,64 @@ type Policy struct {
 }
 
 // Store handles all RBAC DB operations.
-type Store struct{ pool *pgxpool.Pool }
+type Store struct {
+	pool    *pgxpool.Pool
+	checker authz.Checker
+}
 
-func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
+// NewStore builds a Store. checker is variadic/optional so existing call
+// sites (e.g. the ephemeral rbac.NewStore(d.Pool) used by
+// handlers.effectiveAccessRoles, which only reads roles and never mutates
+// relation tables) keep compiling unchanged; when omitted, Store falls back
+// to authz.NoopChecker (i.e. Permify sync is skipped, matching pre-Permify
+// behavior). Pass a real authz.Checker (see internal/api/server.go) from
+// any call site that performs writes and wants them synced to Permify.
+func NewStore(pool *pgxpool.Pool, checker ...authz.Checker) *Store {
+	var c authz.Checker = authz.NoopChecker{}
+	if len(checker) > 0 && checker[0] != nil {
+		c = checker[0]
+	}
+	return &Store{pool: pool, checker: c}
+}
+
+// syncWrite performs a best-effort Permify relationship write after a
+// successful SQL mutation. Postgres remains the sole authoritative store
+// for RBAC data; if the Permify sync fails, we log it and continue rather
+// than failing the caller's request or rolling back the SQL change that
+// already succeeded. A sync failure only means authorization checks may be
+// stale until the next successful write or a `sinauth permify-sync`
+// backfill — it is never treated as a data-correctness error. This is a
+// deliberate design choice, not an oversight: do not change this to
+// propagate the error to callers.
+func (s *Store) syncWrite(ctx context.Context, rel authz.Relationship) {
+	if s.checker == nil {
+		return
+	}
+	if err := s.checker.WriteRelationship(ctx, rel); err != nil {
+		log.Printf("sinauth: rbac: permify WriteRelationship failed (entity=%s:%s relation=%s subject=%s:%s): %v",
+			rel.Entity.Type, rel.Entity.ID, rel.Relation, rel.Subject.Type, rel.Subject.ID, err)
+	}
+}
+
+// syncDelete is the delete-side counterpart to syncWrite — same best-effort,
+// logged-not-fatal semantics. See syncWrite's comment for why.
+func (s *Store) syncDelete(ctx context.Context, rel authz.Relationship) {
+	if s.checker == nil {
+		return
+	}
+	if err := s.checker.DeleteRelationship(ctx, rel); err != nil {
+		log.Printf("sinauth: rbac: permify DeleteRelationship failed (entity=%s:%s relation=%s subject=%s:%s): %v",
+			rel.Entity.Type, rel.Entity.ID, rel.Relation, rel.Subject.Type, rel.Subject.ID, err)
+	}
+}
+
+// clientRoleID composes the stable composite ID used for the Permify
+// client_role entity, since roles are named per-client (client_roles is
+// unique on (client_id, name)/(user_id, client_id, role_name)) rather than
+// having their own standalone UUID that user_client_roles references.
+func clientRoleID(clientID, roleName string) string {
+	return clientID + ":" + roleName
+}
 
 // --- Groups ---
 
@@ -77,12 +134,28 @@ func (s *Store) AddGroupMember(ctx context.Context, groupID, userID string) erro
 		`INSERT INTO group_members (group_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
 		groupID, userID,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	s.syncWrite(ctx, authz.Relationship{
+		Entity:   authz.Entity{Type: "group", ID: groupID},
+		Relation: "member",
+		Subject:  authz.Entity{Type: "user", ID: userID},
+	})
+	return nil
 }
 
 func (s *Store) RemoveGroupMember(ctx context.Context, groupID, userID string) error {
 	_, err := s.pool.Exec(ctx, `DELETE FROM group_members WHERE group_id=$1 AND user_id=$2`, groupID, userID)
-	return err
+	if err != nil {
+		return err
+	}
+	s.syncDelete(ctx, authz.Relationship{
+		Entity:   authz.Entity{Type: "group", ID: groupID},
+		Relation: "member",
+		Subject:  authz.Entity{Type: "user", ID: userID},
+	})
+	return nil
 }
 
 func (s *Store) ListGroupMembers(ctx context.Context, groupID string) ([]string, error) {
@@ -143,7 +216,15 @@ func (s *Store) AssignUserRole(ctx context.Context, userID, clientID, roleName s
 		`INSERT INTO user_client_roles (user_id, client_id, role_name) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
 		userID, clientID, roleName,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	s.syncWrite(ctx, authz.Relationship{
+		Entity:   authz.Entity{Type: "client_role", ID: clientRoleID(clientID, roleName)},
+		Relation: "assignee",
+		Subject:  authz.Entity{Type: "user", ID: userID},
+	})
+	return nil
 }
 
 func (s *Store) RevokeUserRole(ctx context.Context, userID, clientID, roleName string) error {
@@ -151,7 +232,15 @@ func (s *Store) RevokeUserRole(ctx context.Context, userID, clientID, roleName s
 		`DELETE FROM user_client_roles WHERE user_id=$1 AND client_id=$2 AND role_name=$3`,
 		userID, clientID, roleName,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	s.syncDelete(ctx, authz.Relationship{
+		Entity:   authz.Entity{Type: "client_role", ID: clientRoleID(clientID, roleName)},
+		Relation: "assignee",
+		Subject:  authz.Entity{Type: "user", ID: userID},
+	})
+	return nil
 }
 
 // GetEffectiveRoles returns all roles for a user in a specific client,
@@ -184,6 +273,15 @@ func (s *Store) GetEffectiveRoles(ctx context.Context, userID, clientID string) 
 }
 
 // --- Group role assignments ---
+//
+// NOTE: AssignGroupRole/RevokeGroupRole (group_client_roles) are
+// deliberately NOT synced to Permify here. The agreed Permify schema
+// (sinauth/permify/schema.perm) models `client_role#assignee` as `@user`
+// only — it has no relation for "role assigned to a whole group" — so
+// there is no tuple shape to write a group-to-client_role assignment into
+// without extending the schema. If/when the schema grows a userset-style
+// relation (e.g. `assignee @user @group#member`), write-through sync for
+// these two methods should be added to match.
 
 func (s *Store) AssignGroupRole(ctx context.Context, groupID, clientID, roleName string) error {
 	_, err := s.pool.Exec(ctx,

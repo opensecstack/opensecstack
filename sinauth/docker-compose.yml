@@ -20,10 +20,18 @@ services:
       # Rate limits
       SINAUTH_RATE_LIMIT_AUTH:   "5"
       SINAUTH_RATE_LIMIT_GLOBAL: "120"
+      # Permify (authorization engine) — unset falls back to
+      # authz.NoopChecker (fail-open, no per-resource gate). Set to enable
+      # the real Checker (org-owner delegation, rbac.Evaluate's deny_role/
+      # require_mfa/require_email_verified policies at token issuance).
+      SINAUTH_PERMIFY_URL:      "permify:3478"
+      SINAUTH_PERMIFY_TIMEOUT:  "3s"
     volumes:
       - sinauth-keys:/keys
     depends_on:
       postgres:
+        condition: service_healthy
+      permify:
         condition: service_healthy
 
   postgres:
@@ -40,6 +48,43 @@ services:
       timeout: 5s
       retries: 5
 
+  # Permify (https://permify.co) — Zanzibar-style ReBAC/RBAC engine backing
+  # sinauth's authz.Checker (see internal/authz,
+  # sinauth/adrs/006-permify-authorization-engine.md). Uses its own
+  # Postgres-backed store (permify-postgres, below) — kept independent of
+  # sinauth's own Postgres database, since these are two separate systems'
+  # schemas, not one shared one.
+  permify:
+    image: ghcr.io/permify/permify:latest
+    command: ["serve"]
+    environment:
+      PERMIFY_DATABASE_ENGINE:       "postgres"
+      PERMIFY_DATABASE_URI:          "postgres://permify:permify@permify-postgres:5432/permify?sslmode=disable"
+      PERMIFY_DATABASE_AUTO_MIGRATE: "true"
+    healthcheck:
+      test: ["CMD", "grpc_health_probe", "-addr=localhost:3478"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      permify-postgres:
+        condition: service_healthy
+
+  permify-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB:       permify
+      POSTGRES_USER:     permify
+      POSTGRES_PASSWORD: permify
+    volumes:
+      - permify-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U permify"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres-data:
   sinauth-keys:
+  permify-postgres-data:

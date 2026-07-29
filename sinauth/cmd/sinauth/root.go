@@ -15,4 +15,6 @@ func init() {
 	root.AddCommand(keysCmd)
 	root.AddCommand(versionCmd)
 	root.AddCommand(healthCmd)
+	root.AddCommand(promoteAdminCmd)
+	root.AddCommand(permifySyncCmd)
 }

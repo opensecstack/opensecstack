@@ -1,0 +1,22 @@
+entity user {}
+
+entity group {
+    relation member @user
+
+    permission view = member
+}
+
+entity client_role {
+    relation assignee @user
+
+    permission use = assignee
+}
+
+entity organization {
+    relation owner @user
+    relation admin @user
+    relation member @user
+
+    permission manage = owner or admin
+    permission view = owner or admin or member
+}

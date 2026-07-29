@@ -1,0 +1,16 @@
+-- Platform administrators.
+--
+-- sinauth previously had NO concept of a platform-level admin: every
+-- /admin/* route (client management, RBAC groups, organizations, ...) was
+-- protected only by BearerAuth, which verifies a token is validly-signed
+-- and unexpired but performs no authorization check at all. Any
+-- authenticated user could call any /admin/* endpoint, including granting
+-- themselves org_role=owner on an arbitrary organization or membership in
+-- any RBAC group (see the 2026-07-26 security review and ADR 005's
+-- implementation note).
+--
+-- This adds a minimal, coarse-grained "is_platform_admin" flag on users,
+-- checked by the new RequireAdmin middleware (internal/api/middleware/auth.go)
+-- ahead of every /admin/organizations/* and /admin/rbac/groups/* route.
+-- See SECURITY.md for how an operator bootstraps the first platform admin.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_platform_admin BOOLEAN NOT NULL DEFAULT false;

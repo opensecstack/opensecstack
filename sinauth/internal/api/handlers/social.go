@@ -115,7 +115,9 @@ func completeOAuthFromSocial(w http.ResponseWriter, r *http.Request, d Deps, use
 	}
 
 	scopes := strings.Fields(p.Scope)
-	code, err := issueAuthCode(r.Context(), d, p.ClientID, userID, p.RedirectURI, scopes, p.CodeChallenge, p.CodeChallengeMethod, p.Nonce)
+	// Social login has no organization-picker step; org context (if any) must
+	// be established via the standard /oauth/authorize + organization_id flow.
+	code, err := issueAuthCode(r.Context(), d, p.ClientID, userID, p.RedirectURI, scopes, p.CodeChallenge, p.CodeChallengeMethod, p.Nonce, nil)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server_error"})
 		return true

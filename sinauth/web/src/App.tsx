@@ -5,6 +5,7 @@ import ResetPassword from './pages/ResetPassword'
 import VerifyEmail from './pages/VerifyEmail'
 import SocialCallback from './pages/SocialCallback'
 import OAuthLogin from './pages/OAuthLogin'
+import OrgPicker from './pages/OrgPicker'
 import Users from './pages/admin/Users'
 import Clients from './pages/admin/Clients'
 import Groups from './pages/admin/Groups'
@@ -27,6 +28,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/oauth/login" element={<OAuthLogin />} />
+      <Route path="/oauth/org-picker" element={<OrgPicker />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/" element={<SocialCallback />} />

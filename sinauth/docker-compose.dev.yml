@@ -21,11 +21,18 @@ services:
       GOOGLE_CLIENT_SECRET:     "${GOOGLE_CLIENT_SECRET:-}"
       GITHUB_CLIENT_ID:         "${GITHUB_CLIENT_ID:-}"
       GITHUB_CLIENT_SECRET:     "${GITHUB_CLIENT_SECRET:-}"
+      # Permify (authorization engine) — unset (default) falls back to
+      # authz.NoopChecker (fail-open, no per-resource gate), same pattern as
+      # SMS/Twilio above. Point at the permify service below to exercise the
+      # real Checker locally.
+      SINAUTH_PERMIFY_URL:      "permify:3478"
+      SINAUTH_PERMIFY_TIMEOUT:  "3s"
     volumes:
       - .:/app
       - ./dev-keys:/app/dev-keys
     depends_on:
       - postgres
+      - permify
 
   postgres:
     image: postgres:16-alpine
@@ -35,3 +42,21 @@ services:
       POSTGRES_PASSWORD: sinauth
     ports:
       - "5433:5432"
+
+  # Permify (https://permify.co) — Zanzibar-style ReBAC/RBAC engine backing
+  # sinauth's authz.Checker (see internal/authz, sinauth/permify/schema.perm,
+  # sinauth/adrs/006-permify-authorization-engine.md). Runs with its own
+  # in-memory store for local dev: this is Permify's own tuple/schema
+  # storage, kept independent of sinauth's Postgres, and simplest for a dev
+  # loop where the schema/tuples are just rewritten/backfilled on restart.
+  permify:
+    image: ghcr.io/permify/permify:latest
+    command: ["serve", "--database-engine", "memory"]
+    ports:
+      - "3478:3478" # gRPC
+      - "3476:3476" # HTTP/REST
+    healthcheck:
+      test: ["CMD", "grpc_health_probe", "-addr=localhost:3478"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

@@ -2,6 +2,14 @@
 
 This guide covers sinauth's administrative operations: managing OAuth clients (platforms), managing users, and reading the audit log.
 
+> **`<admin_access_token>` below** is any validly-signed, unexpired sinauth
+> access token — the `/api/v1/admin/*` and `/admin/federation/*` routes on
+> this page do not currently check for platform-admin standing (see
+> SECURITY.md's Platform Admin Model section for the routes that *do*:
+> `/admin/organizations/*` and `/admin/rbac/groups/*`, gated by
+> `middleware.RequireAdmin`). See SECURITY.md for how to bootstrap a
+> platform admin account regardless.
+
 ## Registering a new OAuth client (platform)
 
 Each SIN platform must be registered as an OAuth client in sinauth before it can participate in the SSO flow.

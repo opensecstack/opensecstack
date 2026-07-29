@@ -57,7 +57,8 @@ non-dev process. Variables grouped by domain.
 | `OPENSCRUB_CITADEL_KEY_ID` | string | empty | no | Legacy single key id, paired with `_HMAC_SECRET`. |
 | `OPENSCRUB_CITADEL_KEY_IDS` | CSV of strings | empty | no | Key id list aligned by index with `_HMAC_SECRETS[i]`. |
 | `OPENSCRUB_CITADEL_DRY_RUN` | bool | `false` | no | When true, evidence is built and signed but not POSTed; useful for first-deploy smoke tests. |
-| `OPENSCRUB_CITADEL_SOURCE` | string | `openscrub` | no | `source` field on emitted events. Read by the CITADEL client, not by `config.FromEnv` directly. |
+| `OPENSCRUB_CITADEL_PROJECT_ID` | string | `openscrub` | no | `project_id` field on every `POST /api/v1/worm/emit` call and the Kerkese `ProjectID` on governed (MARSHAL-evaluated) manual rule-creation requests. See [citadel-integration.md](citadel-integration.md). |
+| `OPENSCRUB_CITADEL_SOURCE` | string | `openscrub` | no | **Currently dead / not wired to code.** Set in `docker-compose.yml` and `.env.example`, but `config.FromEnv` does not read it and the CITADEL client hardcodes `"source": "openscrub"` literally in `internal/citadel/client.go`'s `wrapWORMEmit`. Changing this env var has no effect today. |
 | `OPENSCRUB_MITIGATION_MIN_DURATION` | duration | `5s` | no | Minimum closed-window duration before a mitigation row is forwarded to CITADEL. Filters out flap noise. |
 
 ### ThreatFlow IOC puller

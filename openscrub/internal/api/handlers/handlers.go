@@ -9,10 +9,14 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
+
+	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
 
 	"github.com/opensecstack/openscrub/internal/auth"
 	"github.com/opensecstack/openscrub/internal/dataplane"
@@ -110,10 +114,48 @@ func (h *Health) Ready(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
+// CitadelGovernor is the subset of *sdkcitadel.Client the Rules handler
+// needs to submit a Kerkese governance request to CITADEL MARSHAL.
+// Decoupled so tests can inject a stub instead of a real HTTP server.
+type CitadelGovernor interface {
+	Evaluate(ctx context.Context, k sdkcitadel.Kerkese) (*sdkcitadel.Decision, error)
+}
+
+// citadelSystemVerifier is the fixed placeholder Verifier used on every
+// Kerkese this handler submits. OpenScrub has no genuine two-person
+// approval concept for firewall/mitigation rules (unlike, e.g.,
+// apiguard's scan approval flow) — building one is a separate, larger
+// product decision, out of scope here. This identifier is clearly
+// distinguishable from any real sinauth user id (never a UUID), so it
+// can never collide with a real Actor and — because it differs from
+// Actor — does not trip CITADEL Gate 3's NDS same-identity check.
+// VerifierToken is deliberately left empty; CITADEL's soft mode
+// (citadel.enforce_signatures=false, citadel.enforce_identity=false)
+// treats a missing Verifier token as a non-blocking warning today, not
+// a hard failure. See citadel/adrs/006-split-enforce-identity-and-signatures.md.
+const citadelSystemVerifier = "openscrub-system-verifier"
+
 // Rules carries the dependencies of the /api/v1/rules handler set.
 type Rules struct {
 	Service *rules.Service
 	Logger  zerolog.Logger
+
+	// Citadel, when non-nil, gates manual (human-triggered) rule
+	// insertion through POST /api/v1/rules on a CITADEL MARSHAL
+	// evaluation before the rule is installed — see the Create doc
+	// comment for exactly which path this covers and which it doesn't.
+	// nil disables the gate (e.g. unit tests, or CITADEL not configured
+	// — OPENSCRUB_CITADEL_API_URL empty), matching the pre-existing
+	// fire-and-forget WORM emit's fail-open posture elsewhere in this
+	// service.
+	Citadel CitadelGovernor
+	// CitadelProjectID is the Kerkese ProjectID field. Defaults to
+	// "openscrub" via config.FromEnv.
+	CitadelProjectID string
+	// CitadelDryRun mirrors config.Config.CitadelDryRun onto the
+	// Kerkese's DryRun field — CITADEL itself decides whether dry_run
+	// suppresses enforcement.
+	CitadelDryRun bool
 }
 
 // List handles GET /api/v1/rules.
@@ -141,7 +183,24 @@ func (h *Rules) List(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"rules": out, "count": len(out)})
 }
 
-// Create handles POST /api/v1/rules.
+// Create handles POST /api/v1/rules — a human operator (or any other
+// authenticated API caller; this route requires admin/operator role,
+// see internal/api/server.go) deliberately installing a mitigation
+// rule. This is the ONLY call site gated against CITADEL MARSHAL: a
+// null-route or rate-limit is a high blast-radius action when a human
+// pulls the trigger, so it is evaluated for REFUSE/HARD_STOP before
+// install.
+//
+// This is deliberately distinct from the automated IOC-driven path:
+// internal/ioc/puller.go's Tick() calls rules.Service.Create directly
+// (bypassing this HTTP handler and this gate entirely) for
+// threat-intel-sourced blocks. That path is intentionally audit-only —
+// it is automated and high-frequency; blocking it on a synchronous
+// governance round-trip would defeat the purpose of fast automated
+// mitigation. Both paths still get an immutable WORM audit trail via
+// rules.Service.emitChange → CITADEL POST /api/v1/worm/emit (see
+// internal/citadel/client.go); only this one additionally gates on a
+// MARSHAL EXECUTE/REFUSE/HARD_STOP decision beforehand.
 func (h *Rules) Create(w http.ResponseWriter, r *http.Request) {
 	var req rules.CreateRequest
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10))
@@ -161,6 +220,72 @@ func (h *Rules) Create(w http.ResponseWriter, r *http.Request) {
 	if req.Source == "" {
 		req.Source = rules.SourceOperator
 	}
+
+	if h.Citadel != nil {
+		// Real Operator identity — the authenticated caller of THIS
+		// endpoint. Deliberately not conditioned on req.Source: this
+		// handler is reached only via a human/API caller (the IOC
+		// puller never calls it), so every request here is a manual
+		// insertion regardless of what Source string the caller claims
+		// in the body — trusting a client-supplied field to decide
+		// whether governance applies would let an operator bypass the
+		// gate simply by setting source="threatflow" in the request.
+		actorUserID := "unauthenticated"
+		var actorToken string
+		if claims, ok := auth.FromContext(r.Context()); ok && claims != nil && claims.Sub != "" {
+			actorUserID = claims.Sub
+			actorToken = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		}
+
+		k := sdkcitadel.Kerkese{
+			KerkeseVersion: "1.0",
+			TsUTC:          time.Now().UTC(),
+			ProjectID:      h.CitadelProjectID,
+			ExecutionID:    uuid.New(),
+			Action: sdkcitadel.KerkeseAction{
+				Type:        "deploy_change",
+				Description: fmt.Sprintf("OpenScrub mitigation rule insertion: %s %s", req.Type, req.CIDR),
+			},
+			Actor: sdkcitadel.KerkeseActor{UserID: actorUserID, Role: "group_sig_operator"},
+			// Known, documented gap — see citadelSystemVerifier.
+			Verifier: sdkcitadel.KerkeseVerifier{UserID: citadelSystemVerifier, Role: "group_sig_verifier"},
+			Evidence: sdkcitadel.KerkeseEvidence{
+				Extra: map[string]any{
+					"rule_type":   string(req.Type),
+					"cidr":        req.CIDR,
+					"pps":         req.PPS,
+					"port":        req.Port,
+					"ttl_seconds": req.TTLSeconds,
+				},
+			},
+			SoD:    sdkcitadel.KerkeseSoD{OperatorUserID: actorUserID, VerifierUserID: citadelSystemVerifier},
+			DryRun: h.CitadelDryRun,
+			// ActorToken forwards the caller's own bearer token so
+			// CITADEL can verify it directly against sinauth's JWKS —
+			// see citadel/adrs/005-sinauth-identity-bridge.md.
+			// SigOperator/SigVerifier are intentionally left empty: no
+			// per-user Ed25519 key custody UX exists anywhere in the
+			// ecosystem yet (citadel/adrs/004).
+			ActorToken: actorToken,
+		}
+
+		decision, evalErr := h.Citadel.Evaluate(r.Context(), k)
+		if evalErr != nil {
+			// Fail open, matching apiguard's documented pattern: a
+			// CITADEL outage must not take down mitigation rule
+			// creation. Logged loudly so ops can see MARSHAL is
+			// unreachable.
+			h.Logger.Warn().Err(evalErr).Msg("CITADEL marshal evaluate failed — proceeding with rule insertion")
+		} else if decision != nil && (decision.Outcome == sdkcitadel.OutcomeRefuse || decision.Outcome == sdkcitadel.OutcomeHardStop) {
+			reasons := decision.Reasons
+			if len(reasons) == 0 {
+				reasons = []string{"CITADEL governance check rejected this rule insertion"}
+			}
+			writeError(w, http.StatusForbidden, "citadel_refused", strings.Join(reasons, "; "))
+			return
+		}
+	}
+
 	out, err := h.Service.Create(r.Context(), req, principal, createdBy)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "create_failed", err.Error())
@@ -169,7 +294,21 @@ func (h *Rules) Create(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, out)
 }
 
-// Delete handles DELETE /api/v1/rules/{id}.
+// Delete handles DELETE /api/v1/rules/{id} — manual (human-initiated)
+// rule withdrawal.
+//
+// Classification decision: withdrawal is left audit-only (WORM emit
+// via rules.Service.emitChange, no CITADEL MARSHAL gate), unlike
+// Create's manual-insertion path. Rationale: withdrawal is reversible —
+// re-inserting the same rule fully restores the block — and this route
+// already requires admin/operator role (internal/api/server.go), so an
+// authorization decision has already been made by RBAC before this
+// handler runs. Gating a reversible, already-authorized action behind a
+// second synchronous MARSHAL round-trip adds latency and a new failure
+// mode (CITADEL outage blocking an operator trying to remove a
+// mistaken block) without a proportional safety benefit — if anything,
+// making withdrawal slower during an incident is the wrong tradeoff.
+// This is a deliberate judgment call, not an oversight.
 func (h *Rules) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {

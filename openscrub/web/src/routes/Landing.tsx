@@ -12,8 +12,8 @@ const FEATURES = [
   },
   {
     icon: Network,
-    title: 'GoBGP route signaling',
-    body: 'Signal upstream networks and scrubbing centers automatically via GoBGP to divert or blackhole attack traffic.',
+    title: 'ThreatFlow IOC blocklisting',
+    body: 'Automatically pull malicious-IP indicators from ThreatFlow into the XDP blocklist map, no manual copy-paste required.',
   },
   {
     icon: Activity,
@@ -70,8 +70,8 @@ export default function Landing(): JSX.Element {
           <h1 className="text-4xl font-bold tracking-tight sm:text-6xl">OpenScrub</h1>
           <p className="mt-4 text-xl font-medium text-indigo-600 sm:text-2xl">DDoS Mitigation at Line Rate</p>
           <p className="mx-auto mt-6 max-w-2xl text-base text-slate-600 sm:text-lg">
-            OpenScrub filters volumetric attacks in the kernel with XDP/eBPF and signals upstream networks
-            through BGP — keeping your services online while absorbing traffic at line rate.
+            OpenScrub filters volumetric attacks in the kernel with XDP/eBPF — dropping malicious
+            traffic at line rate before it ever reaches your application stack.
           </p>
           {error && (
             <p className="mx-auto mt-6 max-w-md rounded bg-red-50 p-2 text-sm text-red-600">{error}</p>

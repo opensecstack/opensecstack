@@ -1,7 +1,20 @@
 # ADR-002: Use GoBGP for BGP blackhole announcements
 
 ## Status
-Accepted
+Proposed
+
+> **Status as of 2026-07-27: not implemented.** This ADR records a
+> design decision for a tier-2 (upstream BGP blackhole) mitigation
+> capability. As of v1.0.0, no code implementing this decision exists
+> in the codebase — there is no `internal/mitigation/bgp/` package,
+> and OpenScrub does not run an embedded GoBGP instance or speak BGP
+> to any peer. The only mitigation mechanism actually shipped is the
+> XDP/eBPF in-kernel tier-1 data plane described in
+> [ADR-001](001-xdp-over-iptables.md) and `internal/dataplane/`. This
+> ADR is retained as a record of intended future work; do not treat it
+> as documentation of current behaviour. It was previously marked
+> "Accepted" in error — no GoBGP integration was ever built, so that
+> status did not reflect reality.
 
 ## Context
 Remotely Triggered Black Hole (RTBH) routing requires OpenScrub to programmatically announce /32 (IPv4) and /128 (IPv6) prefixes tagged with the blackhole community (RFC 7999: `65535:666`) to one or more upstream BGP peers. These announcements must be created, refreshed, and withdrawn automatically as the mitigation lifecycle progresses — on detection, on timeout, and on manual release.

@@ -1,5 +1,19 @@
 # BGP Blackhole Setup
 
+> **⚠️ PLANNED / NOT YET IMPLEMENTED.** This document describes a
+> tier-2 upstream BGP blackhole mitigation capability that is
+> **not present in the shipped v1.0.0 codebase**. There is no
+> `internal/mitigation/bgp/` package, no embedded GoBGP server, and no
+> `mitigation.bgp.*` configuration support in OpenScrub today. The
+> only mitigation OpenScrub actually performs is **tier-1 XDP/eBPF
+> in-kernel filtering** (blocklist / rate-limit / SYN-cookie rules) —
+> see [xdp-program-guide.md](xdp-program-guide.md) and
+> [architecture.md](architecture.md). This design is recorded in
+> [ADR-002](../adrs/002-gobgp-integration.md) (status: Proposed) as
+> intended future work and kept here for its design value, but nothing
+> below is deployable against the current release. Do not configure
+> `mitigation.bgp.*` expecting it to work.
+
 ## Concept: Remotely Triggered Black Hole (RTBH)
 
 RTBH is a BGP-based DDoS mitigation technique. When a prefix is under attack, the scrubbing node announces that prefix to upstream transit providers with a community string that signals the upstream router to discard traffic destined for that prefix at the provider edge. This shifts the drop point upstream, protecting scrubbing infrastructure bandwidth.

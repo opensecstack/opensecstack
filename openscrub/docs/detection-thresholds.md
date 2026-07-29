@@ -1,5 +1,20 @@
 # Detection Thresholds
 
+> **⚠️ PLANNED / NOT YET IMPLEMENTED.** This document describes an
+> automated threshold-based detection engine that is **not present in
+> the shipped v1.0.0 codebase**. There is no `internal/detection/`
+> package — no `thresholds.go`, no `engine.go`, no `openscrub.yaml`
+> `detection.*` config support, and no `openscrub reload` command.
+> OpenScrub v1.0.0 does not evaluate traffic against PPS/BPS
+> thresholds and has no adaptive-threshold or detection-only mode.
+> Mitigation rules are created manually via the REST API or from
+> ThreatFlow IOC pulls, and enforcement is **tier-1 XDP/eBPF in-kernel
+> filtering** only — see [xdp-program-guide.md](xdp-program-guide.md).
+> The FastNetMon integration referenced below is likewise unimplemented
+> (see [ADR-003](../adrs/003-fastnetmon-adapter.md), status: Proposed).
+> This content is kept for its design value but nothing below is
+> deployable against the current release.
+
 ## Overview
 
 OpenScrub uses configurable PPS (packets per second) and BPS (bits per second) thresholds to decide when traffic on a protected prefix crosses into attack territory. Thresholds are defined per-protocol and evaluated continuously against counters collected from XDP telemetry and FastNetMon flow data.

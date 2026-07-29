@@ -83,6 +83,26 @@ func New(d Deps) *Service {
 // principal is recorded in the rule_change event (JWT subject for
 // operator calls, "threatflow-puller" for IOC-driven, "system" for
 // internal use).
+//
+// Create has exactly two call sites, and this is the seam that
+// distinguishes human-triggered from automated rule insertion:
+//   - internal/api/handlers/handlers.go Rules.Create — the manual API
+//     path (POST /api/v1/rules, admin/operator role required). That
+//     handler evaluates a CITADEL MARSHAL Kerkese BEFORE calling this
+//     method and blocks on REFUSE/HARD_STOP; a human deliberately
+//     null-routing/rate-limiting production traffic is high blast
+//     radius and warrants governance.
+//   - internal/ioc/puller.go Puller.Tick — the automated IOC-driven
+//     path (principal="threatflow-puller", req.Source=SourceThreatFlow).
+//     It calls this method directly, bypassing the HTTP handler (and
+//     therefore the MARSHAL gate) entirely — high-frequency automated
+//     mitigation must not block on a synchronous governance
+//     round-trip.
+//
+// Both paths still get an unconditional, immutable WORM audit-log
+// entry below via emitChange → CITADEL POST /api/v1/worm/emit; only
+// the manual path additionally requires an EXECUTE decision upstream
+// of this call.
 func (s *Service) Create(ctx context.Context, req CreateRequest, principal string, createdBy *uuid.UUID) (Rule, error) {
 	if err := req.Validate(); err != nil {
 		return Rule{}, err

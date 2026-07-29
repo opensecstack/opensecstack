@@ -1,13 +1,30 @@
 // Package citadel emits openscrub.* WORM events to CITADEL.
 //
-// Wire format: docs/citadel-integration.md.
-//   POST {BaseURL}/api/v1/evidence
-//   X-Source: openscrub
-//   X-Signature: HMAC-SHA256({HMACSecret}, body)  // hex-encoded
-//   X-Timestamp: <unix epoch seconds>
+// Wire format:
+//   POST {BaseURL}/api/v1/worm/emit
+//   Content-Type: application/json
+//   body: {"source":"openscrub","event_type":<event's "type">,
+//          "project_id":<Config.ProjectID>,"payload":<the marshalled event>}
 //
-// Replay window is ±5 minutes (server-enforced). Each event has a UUIDv4
-// `id` so CITADEL ingest is idempotent.
+// This is CITADEL's actual WORM ingest endpoint — see
+// citadel/internal/api/handlers/worm.go (emitRequest/emitResponse) for the
+// server-side contract this mirrors. This client previously posted to
+// /api/v1/evidence (and, per an earlier doc comment, /api/v1/events) —
+// neither of those routes exists on CITADEL, so every submission failed
+// silently. /api/v1/worm/emit is a plain immutable audit-log append; it
+// does not perform an authorization decision (that's
+// POST /api/v1/marshal/evaluate, used separately for governed actions —
+// see internal/api/handlers/handlers.go Rules.Create).
+//
+// X-Source/X-Signature/X-Timestamp are still computed and sent (Sign,
+// below) over the final wrapped body for defense-in-depth / forward
+// compatibility, but note CITADEL's /worm/emit handler does not currently
+// verify them — there is no signature or replay-window enforcement on
+// this endpoint server-side today.
+//
+// Each event has a UUIDv4 `id` (inside the payload) so retries are
+// correlated for logging/metrics, though CITADEL ingest idempotency is
+// not guaranteed by that field on this endpoint.
 package citadel
 
 import (
@@ -81,6 +98,10 @@ type DeliveryConfirmation struct {
 // Config carries client tunables.
 type Config struct {
 	BaseURL string
+	// ProjectID is sent as the `project_id` field on every
+	// POST /api/v1/worm/emit call. Defaults to "openscrub" when empty
+	// (see New).
+	ProjectID string
 	// HMACSecret is the legacy single-key knob. When HMACSecrets is
 	// non-empty it takes precedence; HMACSecret is then treated as a
 	// fallback so existing single-key deployments keep working.
@@ -145,6 +166,9 @@ type retryItem struct {
 // StartRetryLoop once before Submit if they want transient failures to
 // be retried.
 func New(cfg Config, logger zerolog.Logger) *Client {
+	if cfg.ProjectID == "" {
+		cfg.ProjectID = "openscrub"
+	}
 	if cfg.HTTPTimeout <= 0 {
 		cfg.HTTPTimeout = 5 * time.Second
 	}
@@ -328,11 +352,15 @@ func (c *Client) Submit(ctx context.Context, event any) (SubmitOutcome, error) {
 		c.logger.Info().RawJSON("event", body).Msg("CITADEL submission (dry-run / standalone)")
 		return SubmitDryRun, nil
 	}
-	if err := c.send(ctx, body); err != nil {
+	wormBody, err := wrapWORMEmit(body, c.cfg.ProjectID)
+	if err != nil {
+		return SubmitDelivered, fmt.Errorf("wrap worm emit envelope: %w", err)
+	}
+	if err := c.send(ctx, wormBody); err != nil {
 		if isTransient(err) {
 			c.logger.Warn().Err(err).Msg("citadel submit transient — queued for retry")
 			eventID := extractEventID(body)
-			if !c.enqueue(retryItem{body: body, eventID: eventID}) {
+			if !c.enqueue(retryItem{body: wormBody, eventID: eventID}) {
 				return SubmitDropped, err
 			}
 			return SubmitQueued, nil
@@ -340,6 +368,30 @@ func (c *Client) Submit(ctx context.Context, event any) (SubmitOutcome, error) {
 		return SubmitDelivered, err
 	}
 	return SubmitDelivered, nil
+}
+
+// wormEmitRequest is the body posted to POST /api/v1/worm/emit. Field
+// names and JSON tags MUST match citadel/internal/api/handlers/worm.go's
+// emitRequest exactly — that is the server-side source of truth this
+// mirrors.
+type wormEmitRequest struct {
+	Source    string          `json:"source"`
+	EventType string          `json:"event_type"`
+	ProjectID string          `json:"project_id"`
+	Payload   json.RawMessage `json:"payload"`
+}
+
+// wrapWORMEmit wraps a marshalled openscrub.* event (payload) in the
+// envelope CITADEL's /worm/emit endpoint expects. event_type is pulled
+// from the event's own `type` field (every openscrub.* event embeds
+// EventEnvelope, which has one).
+func wrapWORMEmit(payload []byte, projectID string) ([]byte, error) {
+	return json.Marshal(wormEmitRequest{
+		Source:    "openscrub",
+		EventType: extractEventType(payload),
+		ProjectID: projectID,
+		Payload:   payload,
+	})
 }
 
 // extractEventID pulls the envelope `id` field out of a marshalled
@@ -353,10 +405,22 @@ func extractEventID(body []byte) string {
 	return probe.ID
 }
 
+// extractEventType pulls the envelope `type` field out of a marshalled
+// event (e.g. "openscrub.rule_change"). Best-effort — empty string if
+// the body isn't an object with a `type` key.
+func extractEventType(body []byte) string {
+	var probe struct {
+		Type string `json:"type"`
+	}
+	_ = json.Unmarshal(body, &probe)
+	return probe.Type
+}
+
 // send performs one POST attempt and returns either nil, a transient
-// error (wrapped via transientError), or a permanent error.
+// error (wrapped via transientError), or a permanent error. body must
+// already be wrapped via wrapWORMEmit.
 func (c *Client) send(ctx context.Context, body []byte) error {
-	url := c.cfg.BaseURL + "/api/v1/evidence"
+	url := c.cfg.BaseURL + "/api/v1/worm/emit"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return err

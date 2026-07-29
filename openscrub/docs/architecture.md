@@ -108,9 +108,20 @@ the malicious-IP feed from ThreatFlow, diffs against the existing
 
 ## CITADEL evidence
 
-See [citadel-integration.md](citadel-integration.md). Every distinct
-mitigation event (per-rule, per-source-IP, aggregated to 1 s windows)
-emits an `openscrub.mitigation` event to CITADEL, HMAC-SHA256 signed.
+See [citadel-integration.md](citadel-integration.md) for the full wire
+schema and delivery semantics. Every distinct mitigation event
+(per-rule, per-source-IP, aggregated to 1 s windows) emits an
+`openscrub.mitigation` event to CITADEL's WORM ingest
+(`POST /api/v1/worm/emit`), HMAC-SHA256 signed. This is an
+audit-only append — it cannot block anything.
+
+Separately, **manual** rule creation (`POST /api/v1/rules`, a human
+operator or API caller) is additionally gated on a CITADEL MARSHAL
+governance decision before the rule is installed
+(`internal/api/handlers/handlers.go`'s `Rules.Create`); the
+ThreatFlow-IOC-driven automated path (`internal/ioc/puller.go`) calls
+the rules service directly and is not gated, by design — see
+[citadel-integration.md § Governance](citadel-integration.md#governance-manual-rule-creation).
 
 ## Process model
 

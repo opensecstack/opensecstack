@@ -24,6 +24,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
+
 	"github.com/opensecstack/openscrub/internal/api"
 	"github.com/opensecstack/openscrub/internal/api/handlers"
 	"github.com/opensecstack/openscrub/internal/auth"
@@ -100,6 +102,7 @@ func main() {
 	}
 	citadelClient := citadel.New(citadel.Config{
 		BaseURL:     cfg.CitadelURL,
+		ProjectID:   cfg.CitadelProjectID,
 		HMACSecret:  cfg.CitadelKeySecret,
 		HMACSecrets: cfg.CitadelKeySecrets,
 		KeyID:       cfg.CitadelKeyID,
@@ -108,6 +111,17 @@ func main() {
 		DryRun:      cfg.CitadelDryRun,
 	}, logger)
 	citadelClient.StartRetryLoop(ctx)
+
+	// CITADEL MARSHAL governance client — separate from citadelClient
+	// (which only does WORM audit-log appends). Only wired when
+	// OPENSCRUB_CITADEL_API_URL is set; nil disables the governance gate
+	// on manual rule insertion (see handlers.Rules.Create), matching the
+	// WORM emitter's own fail-open posture when CITADEL isn't
+	// configured.
+	var governor handlers.CitadelGovernor
+	if cfg.CitadelURL != "" {
+		governor = sdkcitadel.NewClient(cfg.CitadelURL, nil)
+	}
 
 	// Mitigation lifecycle: opens a `mitigations` row on rule create,
 	// finalizes it on rule delete / TTL sweep, so the CITADEL watcher
@@ -200,7 +214,13 @@ func main() {
 	if dbHandle != nil {
 		healthH.DB = dbHandle
 	}
-	rulesH := &handlers.Rules{Service: ruleSvc, Logger: logger}
+	rulesH := &handlers.Rules{
+		Service:          ruleSvc,
+		Logger:           logger,
+		Citadel:          governor,
+		CitadelProjectID: cfg.CitadelProjectID,
+		CitadelDryRun:    cfg.CitadelDryRun,
+	}
 	var mitigationsH *handlers.Mitigations
 	if mitStore != nil {
 		mitigationsH = &handlers.Mitigations{

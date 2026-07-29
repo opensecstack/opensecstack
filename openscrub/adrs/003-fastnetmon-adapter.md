@@ -1,7 +1,21 @@
 # ADR-003: Integrate FastNetMon as the primary flow-based attack detector
 
 ## Status
-Accepted
+Proposed
+
+> **Status as of 2026-07-27: not implemented.** This ADR records a
+> design decision for an external flow-based detection layer. As of
+> v1.0.0, no code implementing this decision exists in the codebase —
+> there is no `internal/detection/` package, no `fastnetmon.go`
+> adapter, and no `Detector` interface. OpenScrub v1.0.0 has no
+> automated attack-detection engine; mitigation rules (blocklist,
+> ratelimit, syncookie) are created manually via the REST API or
+> populated automatically from ThreatFlow IOC pulls — not from
+> flow-based threshold breaches. This ADR is retained as a record of
+> intended future work; do not treat it as documentation of current
+> behaviour. It was previously marked "Accepted" in error — no
+> FastNetMon integration was ever built, so that status did not
+> reflect reality.
 
 ## Context
 Volumetric DDoS detection at ISP/CSIRT scale requires continuous analysis of NetFlow v5/v9, sFlow, or IPFIX telemetry exported by routers and switches. Building a full flow collector and traffic baselining engine inside OpenScrub for v1.0.0 would be a significant scope expansion: it would require implementing flow protocol decoders, per-prefix traffic counters, anomaly thresholds, and sustained maintenance of that subsystem independent of mitigation.

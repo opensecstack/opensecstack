@@ -7,6 +7,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.4
+	github.com/opensecstack/sdk/go/citadel v0.0.0
 	github.com/opensecstack/sdk/go/sinauth v0.0.0
 	github.com/prometheus/client_golang v1.20.5
 	github.com/rs/zerolog v1.34.0
@@ -36,3 +37,5 @@ require (
 )
 
 replace github.com/opensecstack/sdk/go/sinauth => ../sdk/go/sinauth
+
+replace github.com/opensecstack/sdk/go/citadel => ../sdk/go/citadel

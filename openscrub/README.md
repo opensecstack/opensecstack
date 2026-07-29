@@ -17,7 +17,14 @@ ecosystem. It exists to close two operational gaps:
 2. **Audit-grade mitigation evidence** — every block decision emits a
    signed `openscrub.mitigation` event into CITADEL WORM, so a NIS2
    auditor can reconstruct *which* IP was blocked, *why* (rule, IOC
-   source), and *when* — without trusting a vendor log.
+   source), and *when* — without trusting a vendor log. Separately,
+   **manual** mitigation-rule creation (a human operator hitting
+   `POST /api/v1/rules`) is gated on a real CITADEL MARSHAL governance
+   check before the rule is installed; the automated ThreatFlow-IOC
+   path is not gated, by design, so automated threat response isn't
+   held up waiting on human approval. See
+   [docs/citadel-integration.md § Governance](docs/citadel-integration.md#governance-manual-rule-creation)
+   for exactly which paths are governed and which aren't, and why.
 
 OpenScrub does not replace upstream BGP-based scrubbing for volumetric
 attacks past NIC capacity. It is the on-prem first-line filter that
@@ -163,6 +170,7 @@ OPENSCRUB_DATAPLANE_SOCKET=/run/openscrub/dataplane.sock
 OPENSCRUB_JWT_SECRET=<32+ random bytes>
 OPENSCRUB_CITADEL_API_URL=https://citadel.internal
 OPENSCRUB_CITADEL_HMAC_SECRET=<hmac secret>
+OPENSCRUB_CITADEL_PROJECT_ID=openscrub   # optional; this is the default
 OPENSCRUB_THREATFLOW_API_URL=https://threatflow.internal
 OPENSCRUB_THREATFLOW_TOKEN=<bearer token>
 OPENSCRUB_IFACE=eth0

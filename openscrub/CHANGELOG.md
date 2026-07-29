@@ -7,8 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **CITADEL WORM emission was silently broken.** `internal/citadel/client.go`
+  was posting to `/api/v1/evidence` (and, before that, `/api/v1/events`) —
+  neither route ever existed on CITADEL, so every `openscrub.mitigation`
+  and `openscrub.rule_change` event failed silently and nothing reached
+  the audit trail. The client now posts to CITADEL's real WORM ingest
+  endpoint, `POST /api/v1/worm/emit`. Added `Config.ProjectID` /
+  `OPENSCRUB_CITADEL_PROJECT_ID` (default `openscrub`), sent as the
+  `project_id` field on every emit.
+
 ### Added
 
+- **CITADEL MARSHAL governance on manual mitigation-rule creation.**
+  `POST /api/v1/rules` (`Rules.Create` in `internal/api/handlers/handlers.go`)
+  now builds a real Kerkese from the authenticated operator's identity
+  and token and submits it to `POST /api/v1/marshal/evaluate`, blocking
+  the request with `403 citadel_refused` on a `REFUSE` / `HARD_STOP`
+  decision. This applies **only** to manual/API-driven rule creation —
+  the automated ThreatFlow-IOC puller path (`internal/ioc/puller.go`)
+  calls the rules service directly, bypassing this handler and the gate
+  entirely, by design (automated threat response shouldn't wait on
+  human approval). The gate is applied unconditionally in the handler,
+  not based on a client-supplied `source` field, so it cannot be
+  spoofed by an operator claiming `source: "threatflow"`; a regression
+  test covers this. Rule withdrawal (`DELETE`) remains audit-only /
+  ungated — it's reversible and already RBAC-authorized. See
+  [docs/citadel-integration.md § Governance](docs/citadel-integration.md#governance-manual-rule-creation).
 - sinauth SSO integration — authenticate via the SIN identity provider (OAuth 2.0 / OIDC, authorization_code + PKCE); web dashboard added a sinauth.ts client and /auth/callback route.
 
 ## [1.0.0] — 2026-05-09

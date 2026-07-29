@@ -159,15 +159,29 @@ rule covering too much.
    ORDER BY created_at DESC;
    ```
 
-   For full provenance, dump the last 5 minutes of mutations from
-   the CITADEL audit log (every `openscrub.rule_change` event is
-   signed and append-only):
+   Every `openscrub.rule_change` event is submitted to CITADEL's WORM
+   chain (append-only), but **CITADEL v1.0.0 has no query/list
+   endpoint** for reading entries back by source or event type — only
+   `POST /api/v1/worm/emit` (write) and `GET /api/v1/worm/verify`
+   (integrity check, not content) exist. So the Postgres `rules` table
+   above is the fastest way to identify the offending rules during an
+   incident. To confirm the CITADEL WORM chain segment covering the
+   incident window is intact (not to read event content):
 
    ```bash
-   curl -sf -H "Authorization: Bearer $CITADEL_TOKEN" \
-     "https://citadel.internal/api/v1/events?source=openscrub&type=openscrub.rule_change&since=$(date -u -d '5 min ago' --iso-8601=seconds)" \
-     | jq '.events[] | {ts, payload}'
+   curl -sf "https://citadel.internal/api/v1/worm/verify?from=$(date -u -d '5 min ago' --iso-8601=seconds)&to=$(date -u --iso-8601=seconds)" \
+     | jq '{valid, entries_verified}'
    ```
+
+   Reading the actual event payloads for a postmortem requires direct
+   read access to CITADEL's WORM table today — see
+   [citadel-integration.md § Verification path](citadel-integration.md#verification-path-auditor-side).
+   Also note: only `rule_change` events that were successfully
+   delivered (or already retried at the time of the incident) will be
+   there — unlike `mitigation` events, `rule_change` emission is not
+   backed by a durable outbox, so an event lost to a process restart
+   or a full in-memory retry buffer will not appear (same doc,
+   § Delivery semantics).
 
 3. **Withdraw in bulk** via the API (one DELETE per id):
 
@@ -181,9 +195,14 @@ rule covering too much.
    The loader removes each map entry as the DELETE lands. Watch
    `openscrub_rules_total` drop in real-time.
 
-4. **Postmortem-ready facts** are already in the CITADEL log — every
-   rule add and withdraw is signed and timestamped, no extra
-   capture needed.
+4. **Postmortem-ready facts** are intended to already be in the
+   CITADEL WORM log — every rule add and withdraw *should* have a
+   signed, timestamped `rule_change` event — but per the caveat above,
+   confirm delivery rather than assuming it: `rule_change` emission has
+   no durable outbox, so cross-check against the Postgres `rules` /
+   `audit_log` tables (which are always authoritative, independent of
+   CITADEL reachability) before relying solely on CITADEL for the
+   incident timeline.
 
 5. **Re-enable ThreatFlow** only after confirming the upstream feed
    is clean (or after pinning the puller to an older feed snapshot

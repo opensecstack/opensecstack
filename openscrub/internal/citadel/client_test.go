@@ -59,7 +59,7 @@ func TestClientSubmitSignsAndPosts(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(Config{BaseURL: srv.URL, HMACSecret: "key", NodeName: "n"}, zerolog.Nop())
+	c := New(Config{BaseURL: srv.URL, HMACSecret: "key", NodeName: "n", ProjectID: "openscrub-test"}, zerolog.Nop())
 	ev := NewEnvelope("openscrub.test", "n")
 	out, err := c.Submit(context.Background(), ev)
 	if err != nil {
@@ -77,12 +77,57 @@ func TestClientSubmitSignsAndPosts(t *testing.T) {
 	if got.sig != Sign("key", got.ts, got.body) {
 		t.Fatalf("signature mismatch")
 	}
-	var decoded map[string]any
+	// Wire contract: POST /api/v1/worm/emit with the
+	// {source, event_type, project_id, payload} envelope — see
+	// citadel/internal/api/handlers/worm.go's emitRequest.
+	var decoded struct {
+		Source    string          `json:"source"`
+		EventType string          `json:"event_type"`
+		ProjectID string          `json:"project_id"`
+		Payload   json.RawMessage `json:"payload"`
+	}
 	if err := json.Unmarshal(got.body, &decoded); err != nil {
 		t.Fatalf("body not json: %v", err)
 	}
-	if decoded["type"] != "openscrub.test" {
-		t.Fatalf("type = %v", decoded["type"])
+	if decoded.Source != "openscrub" {
+		t.Fatalf("source = %v", decoded.Source)
+	}
+	if decoded.EventType != "openscrub.test" {
+		t.Fatalf("event_type = %v", decoded.EventType)
+	}
+	if decoded.ProjectID != "openscrub-test" {
+		t.Fatalf("project_id = %v", decoded.ProjectID)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(decoded.Payload, &payload); err != nil {
+		t.Fatalf("payload not json: %v", err)
+	}
+	if payload["type"] != "openscrub.test" {
+		t.Fatalf("payload type = %v", payload["type"])
+	}
+}
+
+func TestClientSubmitHitsWORMEmitPath(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := New(Config{BaseURL: srv.URL, HMACSecret: "key"}, zerolog.Nop())
+	if _, err := c.Submit(context.Background(), NewEnvelope("openscrub.rule_change", "n")); err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "/api/v1/worm/emit" {
+		t.Fatalf("expected POST /api/v1/worm/emit, got %q", gotPath)
+	}
+}
+
+func TestClientDefaultsProjectID(t *testing.T) {
+	c := New(Config{}, zerolog.Nop())
+	if c.cfg.ProjectID != "openscrub" {
+		t.Fatalf("expected default project_id 'openscrub', got %q", c.cfg.ProjectID)
 	}
 }
 

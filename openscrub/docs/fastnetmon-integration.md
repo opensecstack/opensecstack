@@ -1,5 +1,19 @@
 # FastNetMon Integration
 
+> **⚠️ PLANNED / NOT YET IMPLEMENTED.** This document describes an
+> automated flow-based detection integration that is **not present in
+> the shipped v1.0.0 codebase**. There is no `internal/detection/`
+> package, no `fastnetmon.go` adapter, and no
+> `/api/v1/detection/fastnetmon` endpoint in OpenScrub today. v1.0.0
+> has no automated attack-detection engine: mitigation rules are
+> created manually via the REST API or populated from ThreatFlow IOC
+> pulls, and enforcement is **tier-1 XDP/eBPF in-kernel filtering**
+> only — see [xdp-program-guide.md](xdp-program-guide.md) and
+> [threatflow-integration.md](threatflow-integration.md). This design
+> is recorded in [ADR-003](../adrs/003-fastnetmon-adapter.md) (status:
+> Proposed) as intended future work and kept here for its design
+> value, but nothing below is deployable against the current release.
+
 ## Role of FastNetMon
 
 FastNetMon is a high-performance network traffic analyser that collects flow data (NetFlow v5/v9, IPFIX, sFlow, mirror port) and generates per-host attack alerts when traffic exceeds configured thresholds. In OpenScrub, FastNetMon acts as the primary flow-collection and initial attack-detection layer, feeding alerts into the OpenScrub detection engine.

@@ -1,5 +1,17 @@
 # PyramidOS Layer 1: Network Defense
 
+> **⚠️ Partially planned / not yet implemented.** The XDP/kernel
+> sections of this document describe OpenScrub's actual, shipped
+> v1.0.0 capability. The **"BGP Blackhole as Sovereign Routing
+> Control"** section below describes a tier-2 upstream BGP mitigation
+> capability that is **not present in the shipped codebase** — there
+> is no `internal/mitigation/bgp/` package and no embedded GoBGP
+> server. See [ADR-002](../adrs/002-gobgp-integration.md) (status:
+> Proposed) for the design record, and
+> [bgp-blackhole-setup.md](bgp-blackhole-setup.md) for the full
+> (also planned) design. As shipped, OpenScrub's Layer 1 enforcement
+> is XDP/eBPF in-kernel filtering only.
+
 ## OpenScrub in the PyramidOS Stack
 
 PyramidOS is a sovereign infrastructure framework that layers security controls from the network edge inward. OpenScrub occupies Layer 1 — the network layer — and is the first component to process inbound traffic. Every packet enters the PyramidOS stack through OpenScrub before reaching any other component.
@@ -35,6 +47,10 @@ Higher PyramidOS layers can request XDP rule insertion via the OpenScrub REST AP
 ---
 
 ## BGP Blackhole as Sovereign Routing Control
+
+> **⚠️ Planned / not yet implemented** — see the banner at the top of
+> this document. Nothing in this section is present in the shipped
+> codebase.
 
 Layer 1 sovereignty extends beyond the scrubbing host. Via GoBGP and RTBH announcements, OpenScrub can influence routing decisions at upstream transit providers and internet exchange points — shifting the enforcement boundary to the provider edge.
 

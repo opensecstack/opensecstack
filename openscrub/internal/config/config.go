@@ -61,6 +61,10 @@ type Config struct {
 	CitadelKeyIDs []string
 	CitadelDryRun bool
 	NodeName      string
+	// CitadelProjectID is sent as the `project_id` field on every
+	// POST /api/v1/worm/emit call and as the Kerkese ProjectID on
+	// governed (MARSHAL-evaluated) actions. Defaults to "openscrub".
+	CitadelProjectID string
 
 	// Mitigation gating — minimum duration before a mitigation event is
 	// emitted to CITADEL. Default 5s per the prompt.
@@ -105,6 +109,7 @@ func FromEnv() Config {
 		CitadelKeyIDs:         splitCSV(os.Getenv("OPENSCRUB_CITADEL_KEY_IDS")),
 		CitadelDryRun:         envBool("OPENSCRUB_CITADEL_DRY_RUN", false),
 		NodeName:              envDefault("OPENSCRUB_NODE", hostnameOr("openscrub-edge")),
+		CitadelProjectID:      envDefault("OPENSCRUB_CITADEL_PROJECT_ID", "openscrub"),
 		MitigationMinDuration: envDuration("OPENSCRUB_MITIGATION_MIN_DURATION", 5*time.Second),
 		DataplaneTransport:    envDefault("OPENSCRUB_DATAPLANE_TRANSPORT", "noop"),
 		DataplaneSocket:       envDefault("OPENSCRUB_DATAPLANE_SOCKET", "/run/openscrub/dataplane.sock"),

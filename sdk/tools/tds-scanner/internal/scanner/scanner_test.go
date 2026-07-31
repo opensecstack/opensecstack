@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/opensecstack/tds-scanner/internal/checks"
 )
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -396,17 +398,42 @@ func TestResolveRunners_UnknownCheckID_ZeroRunners(t *testing.T) {
 
 func TestFilterBySeverity_DefaultMinLow_KeepsLow(t *testing.T) {
 	s := &Scanner{MinSeverity: ""} // defaults to "low"
-	findings := []struct {
-		severity string
-	}{
-		{"info"}, {"low"}, {"medium"}, {"high"}, {"critical"},
-	}
-	var input []interface{}
-	_ = input
 
-	// Build findings via checks.Finding directly isn't accessible here (wrong package),
-	// but we can test via ScanPath integration above. Verify the default works.
-	_ = s.filterBySeverity(nil) // nil slice → no panic
+	severities := []string{"info", "low", "medium", "high", "critical"}
+	findings := make([]checks.Finding, len(severities))
+	for i, sev := range severities {
+		findings[i] = checks.Finding{CheckID: "TDS-TEST-000", Severity: sev}
+	}
+
+	out := s.filterBySeverity(findings)
+
+	// Default minimum is "low" (rank 2), so "info" (rank 1) must be dropped
+	// while low/medium/high/critical (ranks 2-5) must all be kept.
+	if len(out) != 4 {
+		t.Fatalf("expected 4 findings at or above 'low', got %d: %+v", len(out), out)
+	}
+	for _, f := range out {
+		if f.Severity == "info" {
+			t.Errorf("expected 'info' findings to be filtered out by default min severity, found one: %+v", f)
+		}
+	}
+	for _, want := range []string{"low", "medium", "high", "critical"} {
+		found := false
+		for _, f := range out {
+			if f.Severity == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("expected severity %q to be kept, but it was filtered out", want)
+		}
+	}
+
+	// nil slice must not panic and must yield no findings.
+	if got := s.filterBySeverity(nil); len(got) != 0 {
+		t.Errorf("expected 0 findings for nil input, got %d", len(got))
+	}
 }
 
 // ── DetectedLanguage ──────────────────────────────────────────────────────────

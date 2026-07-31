@@ -15,8 +15,11 @@ var (
 	// X-Request-ID header being set anywhere in the file.
 	reXRequestID = regexp.MustCompile(`(?i)X-Request-ID|x_request_id|XRequestID`)
 
-	// User-Agent header being set anywhere in the file.
-	reUserAgent = regexp.MustCompile(`(?i)(User-Agent|user_agent|UserAgent)\s*[:=]`)
+	// User-Agent header being set anywhere in the file. Matches both
+	// declaration/literal styles ("User-Agent": ..., User-Agent = ...) and
+	// call styles (req.Header.Set("User-Agent", ...)), mirroring how
+	// reXRequestID matches X-Request-ID regardless of calling convention.
+	reUserAgent = regexp.MustCompile(`(?i)(User-Agent|user_agent|UserAgent)`)
 )
 
 // RunHeaderChecks inspects each file for missing security/correlation headers

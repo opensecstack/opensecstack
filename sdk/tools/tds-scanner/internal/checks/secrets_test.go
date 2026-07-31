@@ -93,7 +93,7 @@ func TestRunSecretChecks_SECRET003_PasswordInConnectionString(t *testing.T) {
 		`amqp := "amqp://rabbit:secretpassword@mq:5672"`,
 	}
 	for _, line := range cases {
-		t.Run(line[:40], func(t *testing.T) {
+		t.Run(line, func(t *testing.T) {
 			f := makeFile("db.go", line)
 			findings := RunSecretChecks([]ScannedFile{f})
 			s003 := findingsByID(findings, "TDS-SECRET-003")

@@ -53,7 +53,7 @@ func TestRunTLSChecks_TLS001_CommentLine_Skipped(t *testing.T) {
 		`* InsecureSkipVerify: true — DO NOT USE`,
 	}
 	for _, line := range cases {
-		t.Run(line[:20], func(t *testing.T) {
+		t.Run(line, func(t *testing.T) {
 			f := makeFile("doc.go", line)
 			findings := RunTLSChecks([]ScannedFile{f})
 			if len(findingsByID(findings, "TDS-TLS-001")) != 0 {

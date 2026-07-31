@@ -1,6 +1,6 @@
 module github.com/opensecstack/community
 
-go 1.25.0
+go 1.25
 
 require (
 	github.com/SherClockHolmes/webpush-go v1.4.0

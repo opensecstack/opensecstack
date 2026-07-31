@@ -1,6 +1,6 @@
 module github.com/opensecstack/cyberpath
 
-go 1.25.0
+go 1.25
 
 require (
 	github.com/docker/docker v28.5.2+incompatible

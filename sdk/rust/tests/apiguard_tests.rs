@@ -379,7 +379,7 @@ async fn test_retry_on_5xx() {
         .await;
 
     // Build a client with max_retries=2 and a tiny base wait so the test is fast.
-    let client = APIGuardClient::builder(&server.uri(), "test_api_key")
+    let client = APIGuardClient::builder(server.uri(), "test_api_key")
         .max_retries(2)
         .retry_wait_base(Duration::from_millis(1))
         .build();
@@ -414,7 +414,7 @@ async fn test_no_retry_on_4xx() {
         .mount(&server)
         .await;
 
-    let client = APIGuardClient::builder(&server.uri(), "test_api_key")
+    let client = APIGuardClient::builder(server.uri(), "test_api_key")
         .max_retries(2)
         .build();
 

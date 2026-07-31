@@ -26,7 +26,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Encode bytes to URL-safe base64 with no padding (mirrors the SDK's decoder).
 fn b64_url_no_pad(data: &[u8]) -> String {
-    use std::fmt::Write as _;
     // Manual base64 URL-safe without padding using the standard alphabet.
     // We embed only what we need: map the standard chars to URL-safe ones.
     let standard = base64_encode(data);
@@ -45,7 +44,7 @@ fn b64_url_no_pad(data: &[u8]) -> String {
 /// Minimal base64 standard encoder (no external deps required by the test).
 fn base64_encode(data: &[u8]) -> String {
     const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = Vec::with_capacity((data.len() + 2) / 3 * 4);
+    let mut out = Vec::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
         let b0 = chunk[0] as u32;
         let b1 = chunk.get(1).copied().unwrap_or(0) as u32;

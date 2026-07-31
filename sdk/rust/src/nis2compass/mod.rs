@@ -580,7 +580,7 @@ impl NIS2CompassClient {
 
         let artifact_type_str = serde_json::to_value(&artifact_type)
             .ok()
-            .and_then(|v| v.as_str().map(|s| s.to_string()))
+            .and_then(|v| v.as_str().map(str::to_string))
             .unwrap_or_else(|| "other".to_string());
 
         let file_part = multipart::Part::bytes(contents)

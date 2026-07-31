@@ -7,7 +7,7 @@ use opensecstack::{CITADELClient, CitadelGetEventsOptions, Error, SecurityEvent}
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::time::Duration;
-use wiremock::matchers::{body_json_schema, header_exists, method, path, query_param};
+use wiremock::matchers::{header_exists, method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 // ---------- helpers ----------

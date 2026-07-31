@@ -24,7 +24,7 @@ func makeAPIGuardServer(t *testing.T, token string, handler http.HandlerFunc) *h
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/auth/token" && r.Method == http.MethodPost {
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"access_token":%q}`, token)
+			_, _ = fmt.Fprintf(w, `{"access_token":%q}`, token)
 			return
 		}
 		handler(w, r)
@@ -43,7 +43,7 @@ func TestAPIGuardAuthenticate_Success(t *testing.T) {
 		if r.URL.Path == "/api/v1/auth/token" {
 			atomic.AddInt32(&authCalls, 1)
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"access_token":%q}`, token)
+			_, _ = fmt.Fprintf(w, `{"access_token":%q}`, token)
 			return
 		}
 	}))
@@ -75,7 +75,7 @@ func TestAPIGuardAuthenticate_Cached(t *testing.T) {
 		if r.URL.Path == "/api/v1/auth/token" {
 			atomic.AddInt32(&authCalls, 1)
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"access_token":%q}`, token)
+			_, _ = fmt.Fprintf(w, `{"access_token":%q}`, token)
 		}
 	}))
 	defer srv.Close()
@@ -123,7 +123,7 @@ func TestListScans_Success(t *testing.T) {
 			PerPage: 20,
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 	defer srv.Close()
 
@@ -162,7 +162,7 @@ func TestGetFindings_WithFilters(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(wantFindings)
+		_ = json.NewEncoder(w).Encode(wantFindings)
 	})
 	defer srv.Close()
 
@@ -198,7 +198,7 @@ func TestGetReport_Format(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(reportData)
+		_, _ = w.Write(reportData)
 	})
 	defer srv.Close()
 
@@ -256,7 +256,7 @@ func TestUploadSpec_Multipart(t *testing.T) {
 			Size:     fh.Size,
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 	defer srv.Close()
 
@@ -290,7 +290,7 @@ func TestRetryOn5xx(t *testing.T) {
 		}
 		// Third call succeeds.
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(Scan{ID: "scan-retried", Status: ScanStatusCompleted})
+		_ = json.NewEncoder(w).Encode(Scan{ID: "scan-retried", Status: ScanStatusCompleted})
 	})
 	defer srv.Close()
 
@@ -367,7 +367,7 @@ func TestCreateScanFull_Success(t *testing.T) {
 		scan := Scan{ID: "new-scan-id", SpecURL: req.SpecURL, Status: ScanStatusPending}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(scan)
+		_ = json.NewEncoder(w).Encode(scan)
 	})
 	defer srv.Close()
 
@@ -434,7 +434,7 @@ func TestPatchFinding_Success(t *testing.T) {
 		}
 		want.TriageNote = req.Note
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(want)
+		_ = json.NewEncoder(w).Encode(want)
 	})
 	defer srv.Close()
 
@@ -475,7 +475,7 @@ func TestGetAuditLog_APIGuard_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(wantEntries)
+		_ = json.NewEncoder(w).Encode(wantEntries)
 	})
 	defer srv.Close()
 
@@ -507,7 +507,7 @@ func TestListFindings_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(wantFindings)
+		_ = json.NewEncoder(w).Encode(wantFindings)
 	})
 	defer srv.Close()
 
@@ -535,7 +535,7 @@ func TestGetFinding_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(want)
+		_ = json.NewEncoder(w).Encode(want)
 	})
 	defer srv.Close()
 
@@ -567,7 +567,7 @@ func TestGetReportStream_APIGuard_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, reportData)
+		_, _ = fmt.Fprint(w, reportData)
 	})
 	defer srv.Close()
 

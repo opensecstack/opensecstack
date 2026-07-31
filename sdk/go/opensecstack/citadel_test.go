@@ -18,21 +18,6 @@ import (
 // Helpers
 // ---------------------------------------------------------------------------
 
-// citadelEventJSON builds a minimal JSON representation of a SecurityEvent.
-func citadelEventJSON(id, eventType, chainHash string, payload json.RawMessage) string {
-	b, _ := json.Marshal(SecurityEvent{
-		ID:        id,
-		EventType: eventType,
-		Source:    "apiguard",
-		ActorID:   "actor-1",
-		ActorType: "api_key",
-		ChainHash: chainHash,
-		Payload:   payload,
-		Timestamp: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
-	})
-	return string(b)
-}
-
 // computeChainHash recomputes the expected chain hash for two consecutive
 // events, mirroring the logic in VerifyChain.
 func computeChainHash(prevChainHash string, payload json.RawMessage) string {
@@ -148,12 +133,8 @@ func TestCITADELClient_SendEvent_DeliveredWithSignature(t *testing.T) {
 	}
 
 	// Verify signature.
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(receivedBody)
-	expected := "sha256=" + hex.EncodeToString(mac.Sum(nil))
-	if receivedSig != expected {
-		t.Errorf("signature mismatch: got %q want %q", receivedSig, expected)
-	}
+	req := &http.Request{Header: http.Header{"X-Citadel-Signature": []string{receivedSig}}}
+	verifySignatureHeader(t, req, receivedBody, secret)
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +194,7 @@ func TestCITADELClient_GetEvents_PlainArray(t *testing.T) {
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(events)
+		_ = json.NewEncoder(w).Encode(events)
 	}))
 	defer srv.Close()
 
@@ -238,7 +219,7 @@ func TestCITADELClient_GetEvents_Envelope(t *testing.T) {
 	payload := json.RawMessage(`{}`)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"items": []SecurityEvent{
 				{ID: "e-env-1", EventType: "test", ChainHash: "h",
 					Timestamp: time.Now(), Payload: payload},
@@ -279,7 +260,7 @@ func TestCITADELClient_GetEvents_FilterParams(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, "[]")
+		_, _ = fmt.Fprint(w, "[]")
 	}))
 	defer srv.Close()
 
@@ -313,7 +294,7 @@ func TestCITADELClient_GetEvent_ByID(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(wantEvent)
+		_ = json.NewEncoder(w).Encode(wantEvent)
 	}))
 	defer srv.Close()
 

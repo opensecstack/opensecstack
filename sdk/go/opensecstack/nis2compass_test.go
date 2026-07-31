@@ -128,7 +128,7 @@ func TestDo_401Retry(t *testing.T) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`[]`))
+			_, _ = w.Write([]byte(`[]`))
 		}
 	}))
 	defer srv.Close()
@@ -171,12 +171,12 @@ func TestDo_RateLimitRetry(t *testing.T) {
 				// First attempt: 429 with short Retry-After.
 				w.Header().Set("Retry-After", "1")
 				w.WriteHeader(http.StatusTooManyRequests)
-				w.Write([]byte(`{"error":"rate limited"}`))
+				_, _ = w.Write([]byte(`{"error":"rate limited"}`))
 				return
 			}
 			// Second attempt: success.
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`[]`))
+			_, _ = w.Write([]byte(`[]`))
 		}
 	}))
 	defer srv.Close()
@@ -215,7 +215,7 @@ func TestDo_RateLimitImmediate(t *testing.T) {
 			atomic.AddInt32(&reqCalls, 1)
 			w.Header().Set("Retry-After", "120")
 			w.WriteHeader(http.StatusTooManyRequests)
-			w.Write([]byte(`{"error":"rate limited"}`))
+			_, _ = w.Write([]byte(`{"error":"rate limited"}`))
 		}
 	}))
 	defer srv.Close()
@@ -316,7 +316,7 @@ func TestProactiveTokenExpiry(t *testing.T) {
 		}
 		if r.URL.Path == "/api/v1/organisations" {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`[]`))
+			_, _ = w.Write([]byte(`[]`))
 		}
 	}))
 	defer srv.Close()
@@ -360,7 +360,7 @@ func TestGetOrganisations_Success(t *testing.T) {
 		}
 		if r.URL.Path == "/api/v1/organisations" {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(want)
+			_ = json.NewEncoder(w).Encode(want)
 		}
 	}))
 	defer srv.Close()
@@ -402,7 +402,7 @@ func TestCreateOrganisation_Success(t *testing.T) {
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(created)
+			_ = json.NewEncoder(w).Encode(created)
 		}
 	}))
 	defer srv.Close()
@@ -452,7 +452,7 @@ func TestGetOrganisation_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(want)
+		_ = json.NewEncoder(w).Encode(want)
 	})
 	defer srv.Close()
 
@@ -485,7 +485,7 @@ func TestPatchOrganisation_Success(t *testing.T) {
 		}
 		updated := Organisation{ID: "org-patch-1", Name: req.Name, Industry: "tech", Country: "DE"}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(updated)
+		_ = json.NewEncoder(w).Encode(updated)
 	})
 	defer srv.Close()
 
@@ -542,7 +542,7 @@ func TestGetAssessments_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(want)
+		_ = json.NewEncoder(w).Encode(want)
 	})
 	defer srv.Close()
 
@@ -576,7 +576,7 @@ func TestCreateAssessment_Success(t *testing.T) {
 		created := Assessment{ID: "asmt-new", OrgID: "org-2", Title: req.Title, Status: "draft"}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(created)
+		_ = json.NewEncoder(w).Encode(created)
 	})
 	defer srv.Close()
 
@@ -608,7 +608,7 @@ func TestGetAssessment_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(want)
+		_ = json.NewEncoder(w).Encode(want)
 	})
 	defer srv.Close()
 
@@ -641,7 +641,7 @@ func TestPatchAssessment_Success(t *testing.T) {
 		}
 		updated := Assessment{ID: "asmt-patch-1", OrgID: "org-1", Title: "Updated", Status: req.Status}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(updated)
+		_ = json.NewEncoder(w).Encode(updated)
 	})
 	defer srv.Close()
 
@@ -699,7 +699,7 @@ func TestGetControls_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(want)
+		_ = json.NewEncoder(w).Encode(want)
 	})
 	defer srv.Close()
 
@@ -736,7 +736,7 @@ func TestListControls_WithFilters(t *testing.T) {
 		}
 		want := []Control{{ID: "ctrl-c", MeasureRef: "c", Status: "non_compliant"}}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(want)
+		_ = json.NewEncoder(w).Encode(want)
 	})
 	defer srv.Close()
 
@@ -767,7 +767,7 @@ func TestGetControl_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(want)
+		_ = json.NewEncoder(w).Encode(want)
 	})
 	defer srv.Close()
 
@@ -800,7 +800,7 @@ func TestPatchControl_Success(t *testing.T) {
 		}
 		updated := Control{ID: "ctrl-f", AssessmentID: "asmt-4", MeasureRef: "f", Status: req.Status, Notes: req.Notes}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(updated)
+		_ = json.NewEncoder(w).Encode(updated)
 	})
 	defer srv.Close()
 
@@ -833,7 +833,7 @@ func TestListArtifacts_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(want)
+		_ = json.NewEncoder(w).Encode(want)
 	})
 	defer srv.Close()
 
@@ -882,7 +882,7 @@ func TestUploadArtifact_Success(t *testing.T) {
 		art := Artifact{ID: "art-new", AssessmentID: "asmt-6", Type: "evidence", Filename: "evidence.txt"}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(art)
+		_ = json.NewEncoder(w).Encode(art)
 	})
 	defer srv.Close()
 
@@ -910,7 +910,7 @@ func TestGetArtifact_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(want)
+		_ = json.NewEncoder(w).Encode(want)
 	})
 	defer srv.Close()
 
@@ -938,7 +938,7 @@ func TestDownloadArtifact_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Write(content)
+		_, _ = w.Write(content)
 	})
 	defer srv.Close()
 
@@ -1000,7 +1000,7 @@ func TestListAPIKeys_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(want)
+		_ = json.NewEncoder(w).Encode(want)
 	})
 	defer srv.Close()
 
@@ -1029,7 +1029,7 @@ func TestCreateAPIKey_Success(t *testing.T) {
 		created := APIKey{ID: "key-new", Scope: "read", IsActive: true, Key: "plaintext-key-value"}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(created)
+		_ = json.NewEncoder(w).Encode(created)
 	})
 	defer srv.Close()
 
@@ -1084,7 +1084,7 @@ func TestGenerateReport_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/pdf")
-		w.Write(pdfData)
+		_, _ = w.Write(pdfData)
 	})
 	defer srv.Close()
 
@@ -1116,7 +1116,7 @@ func TestGetReportStream_NIS2_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, sarifData)
+		_, _ = fmt.Fprint(w, sarifData)
 	})
 	defer srv.Close()
 
@@ -1151,7 +1151,7 @@ func TestGetAuditLog_NIS2_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(want)
+		_ = json.NewEncoder(w).Encode(want)
 	})
 	defer srv.Close()
 
@@ -1179,7 +1179,7 @@ func TestGetAuditEntry_NIS2_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(want)
+		_ = json.NewEncoder(w).Encode(want)
 	})
 	defer srv.Close()
 

@@ -450,27 +450,27 @@ func TestAugur_NilClient(t *testing.T) {
 	// To make this truly safe, callers must check for nil before use.
 	// This test documents the current behaviour.
 	func() {
-		defer func() { recover() }()
+		defer func() { _ = recover() }()
 		_, _ = c.CreateAdvisory(context.Background(), CreateAdvisoryRequest{})
 	}()
 	func() {
-		defer func() { recover() }()
+		defer func() { _ = recover() }()
 		_, _ = c.ListAdvisories(context.Background(), nil)
 	}()
 	func() {
-		defer func() { recover() }()
+		defer func() { _ = recover() }()
 		_, _ = c.GetAdvisory(context.Background(), "id")
 	}()
 	func() {
-		defer func() { recover() }()
+		defer func() { _ = recover() }()
 		_, _ = c.PatchAdvisory(context.Background(), "id", PatchAdvisoryRequest{})
 	}()
 	func() {
-		defer func() { recover() }()
+		defer func() { _ = recover() }()
 		_ = c.DeleteAdvisory(context.Background(), "id")
 	}()
 	func() {
-		defer func() { recover() }()
+		defer func() { _ = recover() }()
 		_, _ = c.GetActiveAdvisories(context.Background())
 	}()
 }

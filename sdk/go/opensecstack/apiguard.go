@@ -98,7 +98,7 @@ func (c *APIGuardClient) authenticate(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("auth request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return fmt.Errorf("authentication failed: invalid API key")
@@ -171,7 +171,7 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 			return nil, err
 		}
 		if r.StatusCode == http.StatusUnauthorized {
-			r.Body.Close()
+			_ = r.Body.Close()
 			// Double-checked locking: only re-authenticate if another goroutine
 			// has not already refreshed the token while we waited.
 			c.mu.Lock()
@@ -200,7 +200,7 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 		if r.StatusCode == http.StatusTooManyRequests {
 			retryAfter, _ := strconv.Atoi(r.Header.Get("Retry-After"))
 			if retryAfter > 0 && retryAfter <= 60 {
-				r.Body.Close()
+				_ = r.Body.Close()
 				select {
 				case <-ctx.Done():
 					return nil, ctx.Err()
@@ -214,7 +214,7 @@ func (c *APIGuardClient) do(ctx context.Context, method, path string, body io.Re
 			}
 			// retryAfter > 60 or not present: return immediately.
 			raw, _ := io.ReadAll(r.Body)
-			r.Body.Close()
+			_ = r.Body.Close()
 			return nil, &RateLimitError{
 				Message:    fmt.Sprintf("rate limited (HTTP 429): %s", string(raw)),
 				RetryAfter: retryAfter,
@@ -342,7 +342,7 @@ func (c *APIGuardClient) GetReportStream(ctx context.Context, scanID, format str
 	if err != nil {
 		return fmt.Errorf("GetReportStream: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		// Token expired mid-flight: re-authenticate and retry once.
@@ -357,7 +357,7 @@ func (c *APIGuardClient) GetReportStream(ctx context.Context, scanID, format str
 		if err != nil {
 			return fmt.Errorf("GetReportStream: retry after 401: %w", err)
 		}
-		defer resp2.Body.Close()
+		defer func() { _ = resp2.Body.Close() }()
 		if resp2.StatusCode != http.StatusOK {
 			return fmt.Errorf("GetReportStream: HTTP %d", resp2.StatusCode)
 		}
@@ -382,7 +382,7 @@ func (c *APIGuardClient) GetReportStream(ctx context.Context, scanID, format str
 // HTTP 429 is reported with a "rate limited" prefix so callers can detect and
 // handle it distinctly.
 func checkResponse(resp *http.Response) ([]byte, error) {
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("reading response body: %w", err)
@@ -662,7 +662,7 @@ func (c *APIGuardClient) UploadSpec(ctx context.Context, filePath string) (*Uplo
 	if err != nil {
 		return nil, fmt.Errorf("UploadSpec: opening file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
@@ -682,7 +682,7 @@ func (c *APIGuardClient) UploadSpec(ctx context.Context, filePath string) (*Uplo
 			pw.CloseWithError(fmt.Errorf("UploadSpec: closing multipart writer: %w", err))
 			return
 		}
-		pw.Close()
+		_ = pw.Close()
 	}()
 
 	resp, err := c.do(ctx, http.MethodPost, "specs/upload", pr,

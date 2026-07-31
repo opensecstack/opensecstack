@@ -667,7 +667,7 @@ func (c *NIS2CompassClient) UploadArtifact(ctx context.Context, assessmentID, fi
 	if err != nil {
 		return nil, fmt.Errorf("UploadArtifact: opening file: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	pr, pw := io.Pipe()
 	mw := multipart.NewWriter(pw)
@@ -703,7 +703,7 @@ func (c *NIS2CompassClient) UploadArtifact(ctx context.Context, assessmentID, fi
 			pw.CloseWithError(fmt.Errorf("UploadArtifact: closing multipart writer: %w", err))
 			return
 		}
-		pw.Close()
+		_ = pw.Close()
 	}()
 
 	path := "assessments/" + assessmentID + "/artifacts"

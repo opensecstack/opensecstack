@@ -49,6 +49,8 @@ class RateLimitError(APIError):
         or cannot be parsed as an integer.
     """
 
-    def __init__(self, detail: Any = "rate limited", retry_after: Optional[int] = None) -> None:
+    def __init__(
+        self, detail: Any = "rate limited", retry_after: Optional[int] = None
+    ) -> None:
         super().__init__(429, detail)
         self.retry_after = retry_after

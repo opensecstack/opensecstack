@@ -13,8 +13,8 @@ Quick start
 """
 
 from .apiguard import APIGuardClient, AsyncAPIGuardClient
-from .nis2compass import NIS2CompassClient, AsyncNIS2CompassClient
-from .citadel import CITADELClient, SecurityEvent, GetEventsOptions
+from .citadel import CITADELClient, GetEventsOptions, SecurityEvent
+from .nis2compass import AsyncNIS2CompassClient, NIS2CompassClient
 
 # AsyncCITADELClient is only available when httpx is installed.
 try:
@@ -22,39 +22,38 @@ try:
 except ImportError:
     pass
 
-from .models import (
-    Organisation,
-    Assessment,
-    Control,
-    Scan,
-    Finding,
-    AuditEntry,
-    CitadelEvent,
-)
 from .exceptions import (
-    OpenSecStackError,
     APIError,
     AuthenticationError,
     NotFoundError,
+    OpenSecStackError,
     RateLimitError,
 )
+from .models import (
+    Assessment,
+    AuditEntry,
+    CitadelEvent,
+    Control,
+    Finding,
+    Organisation,
+    Scan,
+)
+
+# Router and event envelope, plus event type constants for APIGuard,
+# NIS2 Compass, and CITADEL.
 from .webhook import (
-    # Router and event envelope
-    WebhookRouter,
-    WebhookEvent,
-    verify_signature,
-    InvalidSignatureError,
-    # Event type constants — APIGuard
+    APIGUARD_FINDING_CRITICAL,
     APIGUARD_SCAN_COMPLETED,
     APIGUARD_SCAN_FAILED,
-    APIGUARD_FINDING_CRITICAL,
-    # Event type constants — NIS2 Compass
-    NIS2COMPASS_CONTROL_UPDATED,
-    NIS2COMPASS_ASSESSMENT_COMPLETED,
-    # Event type constants — CITADEL
     CITADEL_HARD_STOP,
-    CITADEL_VIGIL_RED,
     CITADEL_VIGIL_AMBER,
+    CITADEL_VIGIL_RED,
+    NIS2COMPASS_ASSESSMENT_COMPLETED,
+    NIS2COMPASS_CONTROL_UPDATED,
+    InvalidSignatureError,
+    WebhookEvent,
+    WebhookRouter,
+    verify_signature,
 )
 
 __version__ = "1.0.0"

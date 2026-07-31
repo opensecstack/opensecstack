@@ -19,7 +19,7 @@ import os
 import threading
 import time
 import uuid
-from typing import Optional
+from typing import Optional, cast
 
 import httpx
 import requests
@@ -109,10 +109,10 @@ class APIGuardClient:
         # Parse the JWT exp claim for proactive token refresh (SDK-M5).
         expiry: Optional[float] = None
         try:
-            payload_b64 = token.split('.')[1]
-            payload_b64 += '=' * (4 - len(payload_b64) % 4)
+            payload_b64 = token.split(".")[1]
+            payload_b64 += "=" * (4 - len(payload_b64) % 4)
             payload = json.loads(base64.urlsafe_b64decode(payload_b64))
-            exp = payload.get('exp')
+            exp = payload.get("exp")
             if exp is not None:
                 expiry = float(exp)
         except Exception:
@@ -186,8 +186,7 @@ class APIGuardClient:
     def _ensure_authenticated(self) -> None:
         with self._auth_lock:
             token_expiring = (
-                self._token_expiry is not None
-                and time.time() > self._token_expiry - 60
+                self._token_expiry is not None and time.time() > self._token_expiry - 60
             )
             needs_auth = self._jwt is None
         if token_expiring or needs_auth:
@@ -198,7 +197,9 @@ class APIGuardClient:
                     self._session.headers.pop("Authorization", None)
             self._authenticate()
 
-    def _check_content_type(self, resp: requests.Response, expected: str = "application/json") -> None:
+    def _check_content_type(
+        self, resp: requests.Response, expected: str = "application/json"
+    ) -> None:
         """Raise APIError when the response Content-Type does not match *expected*.
 
         Called on successful (2xx) responses before the caller decodes the body
@@ -211,7 +212,10 @@ class APIGuardClient:
             return
         ct = resp.headers.get("Content-Type", "")
         if not ct.startswith(expected):
-            raise APIError(resp.status_code, f"Unexpected Content-Type: {ct!r}, expected {expected!r}")
+            raise APIError(
+                resp.status_code,
+                f"Unexpected Content-Type: {ct!r}, expected {expected!r}",
+            )
 
     def _raise_for_status(self, resp: requests.Response) -> None:
         if resp.status_code == 401:
@@ -223,7 +227,7 @@ class APIGuardClient:
                 detail = resp.text
             retry_after = None
             try:
-                retry_after = int(resp.headers.get('Retry-After', ''))
+                retry_after = int(resp.headers.get("Retry-After", ""))
             except (ValueError, TypeError):
                 pass
             raise RateLimitError(detail, retry_after=retry_after)
@@ -260,8 +264,7 @@ class APIGuardClient:
         # (SDK-M5).
         with self._auth_lock:
             token_expiring = (
-                self._token_expiry is not None
-                and time.time() > self._token_expiry - 60
+                self._token_expiry is not None and time.time() > self._token_expiry - 60
             )
             needs_auth = self._jwt is None
         if token_expiring or needs_auth:
@@ -292,11 +295,17 @@ class APIGuardClient:
             if resp.status_code == 401:
                 # Token may have expired — re-authenticate using double-checked
                 # locking to avoid redundant refreshes from concurrent threads.
-                logger.debug("Received 401 on %s %s; attempting token refresh", method.upper(), path)
+                logger.debug(
+                    "Received 401 on %s %s; attempting token refresh",
+                    method.upper(),
+                    path,
+                )
                 with self._auth_lock:
                     if self._session.headers.get("Authorization") != old_auth:
                         # Another thread already refreshed the token; just retry.
-                        logger.debug("Token already refreshed by another thread; retrying request")
+                        logger.debug(
+                            "Token already refreshed by another thread; retrying request"
+                        )
                     else:
                         # Clear state so _authenticate() proceeds unconditionally.
                         self._jwt = None
@@ -308,7 +317,8 @@ class APIGuardClient:
                             logger.warning(
                                 "%s %s — re-authentication failed after 401; "
                                 "API key may be invalid or revoked",
-                                method.upper(), path,
+                                method.upper(),
+                                path,
                             )
                             raise
                 resp = self._session.request(
@@ -330,7 +340,9 @@ class APIGuardClient:
             if retry_after is not None and retry_after <= 60:
                 logger.debug(
                     "429 on %s %s; sleeping %ss before single retry",
-                    method.upper(), path, retry_after,
+                    method.upper(),
+                    path,
+                    retry_after,
                 )
                 time.sleep(retry_after)
                 resp = _do_once()
@@ -346,7 +358,13 @@ class APIGuardClient:
                 break
             logger.warning(
                 "%s %s returned HTTP %s (X-Request-ID: %s); retrying in %.1fs (attempt %d/%d)",
-                method.upper(), path, resp.status_code, req_id, _wait, attempt + 1, self._max_retries,
+                method.upper(),
+                path,
+                resp.status_code,
+                req_id,
+                _wait,
+                attempt + 1,
+                self._max_retries,
             )
             time.sleep(_wait)
             _wait *= 2
@@ -355,7 +373,10 @@ class APIGuardClient:
         if resp.status_code >= 400:
             logger.warning(
                 "%s %s returned HTTP %s (X-Request-ID: %s)",
-                method.upper(), path, resp.status_code, req_id,
+                method.upper(),
+                path,
+                resp.status_code,
+                req_id,
             )
         self._raise_for_status(resp)
         self._check_content_type(resp)
@@ -491,6 +512,7 @@ class APIGuardClient:
         elif spec_url:
             # Use the spec URL host as a sensible default target.
             from urllib.parse import urlparse
+
             parsed = urlparse(spec_url)
             body["target"] = f"{parsed.scheme}://{parsed.netloc}"
         if modules:
@@ -508,7 +530,9 @@ class APIGuardClient:
         """Return a single scan by UUID."""
         return self._get(f"scans/{scan_id}").json()
 
-    def get_findings(self, scan_id: str, page: int = 1, per_page: int = 100) -> list[dict]:
+    def get_findings(
+        self, scan_id: str, page: int = 1, per_page: int = 100
+    ) -> list[dict]:
         """
         Return all findings for a completed scan.
 
@@ -548,16 +572,19 @@ class APIGuardClient:
         """
         resp = self._get(f"scans/{scan_id}/report", params={"format": format})
         expected_types = {
-            'json': 'application/json',
-            'sarif': 'application/json',
-            'html': 'text/html',
-            'pdf': 'application/pdf',
-            'text': 'text/plain',
+            "json": "application/json",
+            "sarif": "application/json",
+            "html": "text/html",
+            "pdf": "application/pdf",
+            "text": "text/plain",
         }
-        ct = resp.headers.get('Content-Type', '')
-        expected = expected_types.get(format, '')
+        ct = resp.headers.get("Content-Type", "")
+        expected = expected_types.get(format, "")
         if expected and not ct.lower().startswith(expected):
-            raise APIError(resp.status_code, f"Unexpected Content-Type: {ct!r}, expected {expected!r}")
+            raise APIError(
+                resp.status_code,
+                f"Unexpected Content-Type: {ct!r}, expected {expected!r}",
+            )
         return resp.content
 
     def stream_report(
@@ -584,7 +611,8 @@ class APIGuardClient:
         self._ensure_authenticated()
         url = self._api_url(f"scans/{scan_id}/report")
         resp = self._request_with_retry(
-            "GET", url,
+            "GET",
+            url,
             params={"format": format},
             headers={"Authorization": f"Bearer {self._jwt}"},
             stream=True,
@@ -592,7 +620,8 @@ class APIGuardClient:
         if resp.status_code == 401:
             self._authenticate()
             resp = self._request_with_retry(
-                "GET", url,
+                "GET",
+                url,
                 params={"format": format},
                 headers={"Authorization": f"Bearer {self._jwt}"},
                 stream=True,
@@ -679,6 +708,7 @@ class APIGuardClient:
 # ---------------------------------------------------------------------------
 # Async client
 # ---------------------------------------------------------------------------
+
 
 class AsyncAPIGuardClient:
     """
@@ -815,8 +845,7 @@ class AsyncAPIGuardClient:
         """Re-authenticate if the token is missing or expires within 60 s."""
         async with self._get_auth_lock():
             token_expiring = (
-                self._token_expiry is not None
-                and time.time() > self._token_expiry - 60
+                self._token_expiry is not None and time.time() > self._token_expiry - 60
             )
             needs_auth = self._jwt is None
 
@@ -829,7 +858,9 @@ class AsyncAPIGuardClient:
         if token_expiring or needs_auth:
             await self.authenticate()
 
-    def _check_content_type(self, resp: httpx.Response, expected: str = "application/json") -> None:
+    def _check_content_type(
+        self, resp: httpx.Response, expected: str = "application/json"
+    ) -> None:
         """Raise APIError when the response Content-Type does not match *expected*.
 
         Called on successful (2xx) responses before the caller decodes the body
@@ -842,7 +873,10 @@ class AsyncAPIGuardClient:
             return
         ct = resp.headers.get("Content-Type", "")
         if not ct.startswith(expected):
-            raise APIError(resp.status_code, f"Unexpected Content-Type: {ct!r}, expected {expected!r}")
+            raise APIError(
+                resp.status_code,
+                f"Unexpected Content-Type: {ct!r}, expected {expected!r}",
+            )
 
     def _raise_for_status(self, resp: httpx.Response) -> None:
         if resp.status_code == 401:
@@ -939,7 +973,11 @@ class AsyncAPIGuardClient:
                 method, self._url(path), timeout=self._timeout, **kwargs
             )
             if r.status_code == 401:
-                logger.debug("Received 401 on %s %s; attempting token refresh", method.upper(), path)
+                logger.debug(
+                    "Received 401 on %s %s; attempting token refresh",
+                    method.upper(),
+                    path,
+                )
                 async with self._get_auth_lock():
                     if self._http.headers.get("Authorization") != old_auth:
                         logger.debug("Token already refreshed; retrying request")
@@ -951,7 +989,9 @@ class AsyncAPIGuardClient:
                     await self.authenticate()
                 except AuthenticationError:
                     logger.warning(
-                        "%s %s — re-authentication failed after 401", method.upper(), path
+                        "%s %s — re-authentication failed after 401",
+                        method.upper(),
+                        path,
                     )
                     raise
                 r = await self._http.request(
@@ -969,7 +1009,9 @@ class AsyncAPIGuardClient:
             except (ValueError, TypeError):
                 pass
             if retry_after is not None and retry_after <= 60:
-                logger.debug("429 on %s %s; sleeping %ss", method.upper(), path, retry_after)
+                logger.debug(
+                    "429 on %s %s; sleeping %ss", method.upper(), path, retry_after
+                )
                 await asyncio.sleep(retry_after)
                 resp = await _do_once()
 
@@ -981,7 +1023,13 @@ class AsyncAPIGuardClient:
                 break
             logger.warning(
                 "%s %s returned HTTP %s (X-Request-ID: %s); retrying in %.1fs (attempt %d/%d)",
-                method.upper(), path, resp.status_code, req_id, _wait, attempt + 1, self._max_retries,
+                method.upper(),
+                path,
+                resp.status_code,
+                req_id,
+                _wait,
+                attempt + 1,
+                self._max_retries,
             )
             await asyncio.sleep(_wait)
             _wait *= 2
@@ -990,7 +1038,10 @@ class AsyncAPIGuardClient:
         if resp.status_code >= 400:
             logger.warning(
                 "%s %s returned HTTP %s (X-Request-ID: %s)",
-                method.upper(), path, resp.status_code, req_id,
+                method.upper(),
+                path,
+                resp.status_code,
+                req_id,
             )
         self._raise_for_status(resp)
         self._check_content_type(resp)
@@ -1033,6 +1084,7 @@ class AsyncAPIGuardClient:
             body["target"] = target
         elif spec_url:
             from urllib.parse import urlparse
+
             parsed = urlparse(spec_url)
             body["target"] = f"{parsed.scheme}://{parsed.netloc}"
         if modules:
@@ -1059,10 +1111,12 @@ class AsyncAPIGuardClient:
         Returns the ``items`` list from the API envelope, or the raw list
         if the server responds with a plain array.
         """
-        resp = await self._request("GET", "scans", params={"page": page, "per_page": per_page})
+        resp = await self._request(
+            "GET", "scans", params={"page": page, "per_page": per_page}
+        )
         payload = resp.json()
         if isinstance(payload, dict):
-            return payload.get("items", payload.get("data", []))
+            return cast(list, payload.get("items", payload.get("data", [])))
         return payload  # plain list
 
     async def get_findings(
@@ -1087,7 +1141,10 @@ class AsyncAPIGuardClient:
             return payload["data"]
         if isinstance(payload, list):
             return payload
-        raise APIError(200, f"Unexpected response format from get_findings: got {type(payload).__name__}")
+        raise APIError(
+            200,
+            f"Unexpected response format from get_findings: got {type(payload).__name__}",
+        )
 
     async def stream_report(
         self,
@@ -1212,18 +1269,23 @@ class AsyncAPIGuardClient:
         format:  Report format — one of ``json`` (default), ``sarif``,
                  ``html``, ``pdf``.
         """
-        resp = await self._request("GET", f"scans/{scan_id}/report", params={"format": format})
+        resp = await self._request(
+            "GET", f"scans/{scan_id}/report", params={"format": format}
+        )
         expected_types = {
-            'json': 'application/json',
-            'sarif': 'application/json',
-            'html': 'text/html',
-            'pdf': 'application/pdf',
-            'text': 'text/plain',
+            "json": "application/json",
+            "sarif": "application/json",
+            "html": "text/html",
+            "pdf": "application/pdf",
+            "text": "text/plain",
         }
-        ct = resp.headers.get('Content-Type', '')
-        expected = expected_types.get(format, '')
+        ct = resp.headers.get("Content-Type", "")
+        expected = expected_types.get(format, "")
         if expected and not ct.lower().startswith(expected):
-            raise APIError(resp.status_code, f"Unexpected Content-Type: {ct!r}, expected {expected!r}")
+            raise APIError(
+                resp.status_code,
+                f"Unexpected Content-Type: {ct!r}, expected {expected!r}",
+            )
         return resp.content
 
     async def upload_spec(self, spec_path: str) -> dict:
@@ -1270,7 +1332,9 @@ class AsyncAPIGuardClient:
             self._http.headers["Authorization"] = f"Bearer {self._jwt}"
         return data
 
-    async def get_audit_log(self, limit: int = 50, page: Optional[int] = None) -> list[dict]:
+    async def get_audit_log(
+        self, limit: int = 50, page: Optional[int] = None
+    ) -> list[dict]:
         """
         Return audit log entries (async, default 50, up to 100 per page).
 

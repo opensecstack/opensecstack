@@ -157,12 +157,14 @@ class WebhookRouter:
         Returns:
             The original function, unchanged (decorator pass-through).
         """
+
         def decorator(func: Callable) -> Callable:
             if event_type == "*":
                 self._catch_all = func
             else:
                 self._handlers[event_type] = func
             return func
+
         return decorator
 
     # ------------------------------------------------------------------
@@ -230,14 +232,14 @@ class WebhookRouter:
         Returns:
             A zero-argument callable suitable for use as a Flask view.
         """
+
         def view():
             # Import Flask here so it remains an optional dependency.
             try:
-                from flask import request, Response
+                from flask import Response, request
             except ImportError as exc:
                 raise ImportError(
-                    "Flask must be installed to use flask_view(): "
-                    "pip install flask"
+                    "Flask must be installed to use flask_view(): " "pip install flask"
                 ) from exc
 
             body: bytes = request.data
@@ -269,10 +271,10 @@ class WebhookRouter:
         Returns:
             An async callable compatible with FastAPI's dependency system.
         """
+
         async def endpoint(request: Any) -> Any:
             # Import FastAPI types here so they remain optional dependencies.
             try:
-                from fastapi import Request
                 from fastapi.responses import Response
             except ImportError as exc:
                 raise ImportError(

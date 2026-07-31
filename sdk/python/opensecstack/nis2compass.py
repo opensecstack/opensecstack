@@ -112,10 +112,10 @@ class NIS2CompassClient:
         # Parse the JWT exp claim for proactive token refresh (SDK-M5).
         expiry: Optional[float] = None
         try:
-            payload_b64 = token.split('.')[1]
-            payload_b64 += '=' * (4 - len(payload_b64) % 4)
+            payload_b64 = token.split(".")[1]
+            payload_b64 += "=" * (4 - len(payload_b64) % 4)
             payload = json.loads(base64.urlsafe_b64decode(payload_b64))
-            exp = payload.get('exp')
+            exp = payload.get("exp")
             if exp is not None:
                 expiry = float(exp)
         except Exception:
@@ -189,8 +189,7 @@ class NIS2CompassClient:
     def _ensure_authenticated(self) -> None:
         with self._auth_lock:
             token_expiring = (
-                self._token_expiry is not None
-                and time.time() > self._token_expiry - 60
+                self._token_expiry is not None and time.time() > self._token_expiry - 60
             )
             needs_auth = "Authorization" not in self._session.headers
         if token_expiring or needs_auth:
@@ -200,7 +199,9 @@ class NIS2CompassClient:
                     self._token_expiry = None
             self._authenticate()
 
-    def _check_content_type(self, resp: requests.Response, expected: str = "application/json") -> None:
+    def _check_content_type(
+        self, resp: requests.Response, expected: str = "application/json"
+    ) -> None:
         """Raise APIError when the response Content-Type does not match *expected*.
 
         Called on successful (2xx) responses before the caller decodes the body
@@ -213,7 +214,10 @@ class NIS2CompassClient:
             return
         ct = resp.headers.get("Content-Type", "")
         if not ct.startswith(expected):
-            raise APIError(resp.status_code, f"Unexpected Content-Type: {ct!r}, expected {expected!r}")
+            raise APIError(
+                resp.status_code,
+                f"Unexpected Content-Type: {ct!r}, expected {expected!r}",
+            )
 
     def _raise_for_status(self, resp: requests.Response) -> None:
         if resp.status_code == 401:
@@ -225,7 +229,7 @@ class NIS2CompassClient:
                 detail = resp.text
             retry_after = None
             try:
-                retry_after = int(resp.headers.get('Retry-After', ''))
+                retry_after = int(resp.headers.get("Retry-After", ""))
             except (ValueError, TypeError):
                 pass
             raise RateLimitError(detail, retry_after=retry_after)
@@ -261,8 +265,7 @@ class NIS2CompassClient:
         # (SDK-M5).
         with self._auth_lock:
             token_expiring = (
-                self._token_expiry is not None
-                and time.time() > self._token_expiry - 60
+                self._token_expiry is not None and time.time() > self._token_expiry - 60
             )
             needs_auth = "Authorization" not in self._session.headers
         if token_expiring or needs_auth:
@@ -286,18 +289,26 @@ class NIS2CompassClient:
             # Capture the current auth header before making the request so we
             # can detect whether another thread already refreshed it on 401.
             old_auth = self._session.headers.get("Authorization")
-            resp = getattr(self._session, method)(self._url(path), timeout=self._timeout, **kwargs)
+            resp = getattr(self._session, method)(
+                self._url(path), timeout=self._timeout, **kwargs
+            )
             if resp.status_code == 401:
                 # Token expired — re-authenticate and retry once, using
                 # double-checked locking to avoid redundant refreshes.
                 # NOTE: _authenticate() must be called OUTSIDE the lock because
                 # it also acquires _auth_lock (threading.Lock is not reentrant).
-                logger.debug("Received 401 on %s %s; attempting token refresh", method.upper(), path)
+                logger.debug(
+                    "Received 401 on %s %s; attempting token refresh",
+                    method.upper(),
+                    path,
+                )
                 _should_refresh = False
                 with self._auth_lock:
                     if self._session.headers.get("Authorization") != old_auth:
                         # Another thread already refreshed the token; just retry.
-                        logger.debug("Token already refreshed by another thread; retrying request")
+                        logger.debug(
+                            "Token already refreshed by another thread; retrying request"
+                        )
                     else:
                         # Clear expiry so _authenticate() proceeds unconditionally.
                         self._token_expiry = None
@@ -310,10 +321,13 @@ class NIS2CompassClient:
                         logger.warning(
                             "%s %s — re-authentication failed after 401; "
                             "API key may be invalid or revoked",
-                            method.upper(), path,
+                            method.upper(),
+                            path,
                         )
                         raise
-                resp = getattr(self._session, method)(self._url(path), timeout=self._timeout, **kwargs)
+                resp = getattr(self._session, method)(
+                    self._url(path), timeout=self._timeout, **kwargs
+                )
             return resp
 
         resp = _do_once()
@@ -330,7 +344,9 @@ class NIS2CompassClient:
             if retry_after is not None and retry_after <= 60:
                 logger.debug(
                     "429 on %s %s; sleeping %ss before single retry",
-                    method.upper(), path, retry_after,
+                    method.upper(),
+                    path,
+                    retry_after,
                 )
                 time.sleep(retry_after)
                 resp = _do_once()
@@ -346,7 +362,12 @@ class NIS2CompassClient:
                 break
             logger.warning(
                 "Received HTTP %s on %s %s; retrying in %.1fs (attempt %d/%d)",
-                resp.status_code, method.upper(), path, _wait, attempt + 1, self._max_retries,
+                resp.status_code,
+                method.upper(),
+                path,
+                _wait,
+                attempt + 1,
+                self._max_retries,
             )
             time.sleep(_wait)
             _wait *= 2
@@ -355,7 +376,10 @@ class NIS2CompassClient:
         if resp.status_code >= 400:
             logger.warning(
                 "%s %s returned HTTP %s (X-Request-ID: %s)",
-                method.upper(), path, resp.status_code, req_id,
+                method.upper(),
+                path,
+                resp.status_code,
+                req_id,
             )
         self._raise_for_status(resp)
         self._check_content_type(resp)
@@ -804,7 +828,10 @@ class NIS2CompassClient:
 
         self._raise_for_status(resp)
         content_type = resp.headers.get("Content-Type", "")
-        if "application/pdf" not in content_type and "application/octet-stream" not in content_type:
+        if (
+            "application/pdf" not in content_type
+            and "application/octet-stream" not in content_type
+        ):
             resp.close()
             raise APIError(
                 resp.status_code,
@@ -835,7 +862,9 @@ class NIS2CompassClient:
         """Return all API keys belonging to the current actor."""
         return self._get("api-keys").json()
 
-    def create_api_key(self, label: Optional[str] = None, scope: str = "read_write") -> dict:
+    def create_api_key(
+        self, label: Optional[str] = None, scope: str = "read_write"
+    ) -> dict:
         """
         Create a new API key.
 
@@ -896,7 +925,10 @@ class NIS2CompassClient:
         resp = _stream_report()
         if resp.status_code == 401:
             # Token expired — re-authenticate and retry once.
-            logger.debug("Received 401 on report generation for %s; refreshing token", assessment_id)
+            logger.debug(
+                "Received 401 on report generation for %s; refreshing token",
+                assessment_id,
+            )
             _should_refresh = False
             with self._auth_lock:
                 if self._session.headers.get("Authorization") == old_auth:
@@ -909,7 +941,10 @@ class NIS2CompassClient:
 
         self._raise_for_status(resp)
         content_type = resp.headers.get("Content-Type", "")
-        if "application/pdf" not in content_type and "application/octet-stream" not in content_type:
+        if (
+            "application/pdf" not in content_type
+            and "application/octet-stream" not in content_type
+        ):
             raise APIError(
                 resp.status_code,
                 f"Unexpected Content-Type for report: {content_type!r}",
@@ -1010,6 +1045,7 @@ class NIS2CompassClient:
 # ---------------------------------------------------------------------------
 # Async client
 # ---------------------------------------------------------------------------
+
 
 class AsyncNIS2CompassClient:
     """
@@ -1151,8 +1187,7 @@ class AsyncNIS2CompassClient:
         """Re-authenticate if the token is missing or expires within 60 s."""
         async with self._get_auth_lock():
             token_expiring = (
-                self._token_expiry is not None
-                and time.time() > self._token_expiry - 60
+                self._token_expiry is not None and time.time() > self._token_expiry - 60
             )
             needs_auth = self._jwt is None
 
@@ -1165,7 +1200,9 @@ class AsyncNIS2CompassClient:
         if token_expiring or needs_auth:
             await self.authenticate()
 
-    def _check_content_type(self, resp: httpx.Response, expected: str = "application/json") -> None:
+    def _check_content_type(
+        self, resp: httpx.Response, expected: str = "application/json"
+    ) -> None:
         """Raise APIError when the response Content-Type does not match *expected*.
 
         Called on successful (2xx) responses before the caller decodes the body
@@ -1178,7 +1215,10 @@ class AsyncNIS2CompassClient:
             return
         ct = resp.headers.get("Content-Type", "")
         if not ct.startswith(expected):
-            raise APIError(resp.status_code, f"Unexpected Content-Type: {ct!r}, expected {expected!r}")
+            raise APIError(
+                resp.status_code,
+                f"Unexpected Content-Type: {ct!r}, expected {expected!r}",
+            )
 
     def _raise_for_status(self, resp: httpx.Response) -> None:
         if resp.status_code == 401:
@@ -1275,7 +1315,11 @@ class AsyncNIS2CompassClient:
                 method, self._url(path), timeout=self._timeout, **kwargs
             )
             if r.status_code == 401:
-                logger.debug("Received 401 on %s %s; attempting token refresh", method.upper(), path)
+                logger.debug(
+                    "Received 401 on %s %s; attempting token refresh",
+                    method.upper(),
+                    path,
+                )
                 async with self._get_auth_lock():
                     if self._http.headers.get("Authorization") != old_auth:
                         logger.debug("Token already refreshed; retrying request")
@@ -1287,7 +1331,9 @@ class AsyncNIS2CompassClient:
                     await self.authenticate()
                 except AuthenticationError:
                     logger.warning(
-                        "%s %s — re-authentication failed after 401", method.upper(), path
+                        "%s %s — re-authentication failed after 401",
+                        method.upper(),
+                        path,
                     )
                     raise
                 r = await self._http.request(
@@ -1305,7 +1351,9 @@ class AsyncNIS2CompassClient:
             except (ValueError, TypeError):
                 pass
             if retry_after is not None and retry_after <= 60:
-                logger.debug("429 on %s %s; sleeping %ss", method.upper(), path, retry_after)
+                logger.debug(
+                    "429 on %s %s; sleeping %ss", method.upper(), path, retry_after
+                )
                 await asyncio.sleep(retry_after)
                 resp = await _do_once()
 
@@ -1317,7 +1365,13 @@ class AsyncNIS2CompassClient:
                 break
             logger.warning(
                 "%s %s returned HTTP %s (X-Request-ID: %s); retrying in %.1fs (attempt %d/%d)",
-                method.upper(), path, resp.status_code, req_id, _wait, attempt + 1, self._max_retries,
+                method.upper(),
+                path,
+                resp.status_code,
+                req_id,
+                _wait,
+                attempt + 1,
+                self._max_retries,
             )
             await asyncio.sleep(_wait)
             _wait *= 2
@@ -1326,7 +1380,10 @@ class AsyncNIS2CompassClient:
         if resp.status_code >= 400:
             logger.warning(
                 "%s %s returned HTTP %s (X-Request-ID: %s)",
-                method.upper(), path, resp.status_code, req_id,
+                method.upper(),
+                path,
+                resp.status_code,
+                req_id,
             )
         self._raise_for_status(resp)
         self._check_content_type(resp)
@@ -1400,7 +1457,9 @@ class AsyncNIS2CompassClient:
             body["assessor"] = assessor
         if due_date is not None:
             body["due_date"] = due_date
-        resp = await self._request("POST", f"organisations/{org_id}/assessments", json=body)
+        resp = await self._request(
+            "POST", f"organisations/{org_id}/assessments", json=body
+        )
         return resp.json()
 
     async def get_assessment(self, assessment_id: str) -> dict:
@@ -1463,7 +1522,9 @@ class AsyncNIS2CompassClient:
 
     async def get_organisations(self, page: int = 1, per_page: int = 20) -> list[dict]:
         """Return a list of organisations (async)."""
-        resp = await self._request("GET", "organisations", params={"page": page, "per_page": per_page})
+        resp = await self._request(
+            "GET", "organisations", params={"page": page, "per_page": per_page}
+        )
         return resp.json()
 
     async def patch_organisation(
@@ -1516,7 +1577,9 @@ class AsyncNIS2CompassClient:
         params: dict = {"page": page, "per_page": per_page}
         if status is not None:
             params["status"] = status
-        resp = await self._request("GET", f"organisations/{org_id}/assessments", params=params)
+        resp = await self._request(
+            "GET", f"organisations/{org_id}/assessments", params=params
+        )
         return resp.json()
 
     async def patch_assessment(
@@ -1573,7 +1636,9 @@ class AsyncNIS2CompassClient:
 
     async def get_control(self, assessment_id: str, measure_ref: str) -> dict:
         """Return a single control by its measure reference letter (async)."""
-        resp = await self._request("GET", f"assessments/{assessment_id}/controls/{measure_ref}")
+        resp = await self._request(
+            "GET", f"assessments/{assessment_id}/controls/{measure_ref}"
+        )
         return resp.json()
 
     async def patch_control(
@@ -1691,7 +1756,9 @@ class AsyncNIS2CompassClient:
         resp = await self._request("GET", "api-keys")
         return resp.json()
 
-    async def create_api_key(self, label: Optional[str] = None, scope: str = "read_write") -> dict:
+    async def create_api_key(
+        self, label: Optional[str] = None, scope: str = "read_write"
+    ) -> dict:
         """Create a new API key (async)."""
         body: dict = {"scope": scope}
         if label is not None:

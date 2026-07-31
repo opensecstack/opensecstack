@@ -103,20 +103,21 @@ try:
 
     class AuditEntry(BaseModel):
         """Covers both NIS2 Compass and APIGuard audit log shapes."""
+
         id: str
         action: str
-        actor: Optional[str] = None        # NIS2 Compass field
-        actor_id: Optional[str] = None     # APIGuard field
-        actor_type: Optional[str] = None   # APIGuard field
+        actor: Optional[str] = None  # NIS2 Compass field
+        actor_id: Optional[str] = None  # APIGuard field
+        actor_type: Optional[str] = None  # APIGuard field
         resource_type: str
         resource_id: Optional[str] = None
-        risk_class: Optional[str] = None   # NIS2 Compass field
+        risk_class: Optional[str] = None  # NIS2 Compass field
         metadata: Optional[Any] = None
         object_fingerprint: Optional[str] = None
         prev_hash: Optional[str] = None
         chain_hash: Optional[str] = None
-        timestamp: Optional[str] = None    # NIS2 Compass field
-        created_at: Optional[str] = None   # APIGuard field
+        timestamp: Optional[str] = None  # NIS2 Compass field
+        created_at: Optional[str] = None  # APIGuard field
 
     class CitadelEvent(BaseModel):
         """
@@ -126,14 +127,15 @@ try:
         validation (log_id, action_type, actor_role, result_status, etc.)
         plus a free-form payload for platform-specific data.
         """
-        event_id: str                       # UUID — unique per event
+
+        event_id: str  # UUID — unique per event
         event_version: str = "2.0"
-        source_platform: str               # e.g. "apiguard", "nis2compass"
-        action_type: str                   # e.g. "scan_completed"
-        actor_role: str                    # e.g. "system", "analyst"
-        result_status: str                 # e.g. "SUCCESS", "FAILURE"
-        ts_utc: str                        # ISO 8601 UTC timestamp
-        prev_hash: Optional[str] = None   # chain anchor — None for first event
+        source_platform: str  # e.g. "apiguard", "nis2compass"
+        action_type: str  # e.g. "scan_completed"
+        actor_role: str  # e.g. "system", "analyst"
+        result_status: str  # e.g. "SUCCESS", "FAILURE"
+        ts_utc: str  # ISO 8601 UTC timestamp
+        prev_hash: Optional[str] = None  # chain anchor — None for first event
         chain_hash: Optional[str] = None  # computed by CITADEL on ingest
         payload: dict[str, Any] = Field(default_factory=dict)
 
@@ -167,7 +169,7 @@ except ImportError:
     from dataclasses import dataclass, field
 
     @dataclass
-    class Organisation:
+    class Organisation:  # type: ignore[no-redef]
         id: str
         name: str
         industry: str
@@ -180,7 +182,7 @@ except ImportError:
         updated_at: Optional[str] = None
 
     @dataclass
-    class Assessment:
+    class Assessment:  # type: ignore[no-redef]
         id: str
         org_id: str
         title: str
@@ -195,7 +197,7 @@ except ImportError:
         stats: Optional[dict[str, Any]] = None
 
     @dataclass
-    class Control:
+    class Control:  # type: ignore[no-redef]
         id: str
         assessment_id: str
         article_ref: str
@@ -216,7 +218,7 @@ except ImportError:
         updated_at: Optional[str] = None
 
     @dataclass
-    class Scan:
+    class Scan:  # type: ignore[no-redef]
         id: str
         target_url: str
         status: str
@@ -236,7 +238,7 @@ except ImportError:
         error_message: Optional[str] = None
 
     @dataclass
-    class Finding:
+    class Finding:  # type: ignore[no-redef]
         id: str
         scan_id: str
         owasp_id: str
@@ -260,7 +262,7 @@ except ImportError:
         updated_at: Optional[str] = None
 
     @dataclass
-    class AuditEntry:
+    class AuditEntry:  # type: ignore[no-redef]
         id: str
         action: str
         resource_type: str
@@ -277,7 +279,7 @@ except ImportError:
         created_at: Optional[str] = None
 
     @dataclass
-    class CitadelEvent:
+    class CitadelEvent:  # type: ignore[no-redef]
         event_id: str
         source_platform: str
         action_type: str
@@ -290,14 +292,14 @@ except ImportError:
         payload: dict[str, Any] = field(default_factory=dict)
 
     @dataclass
-    class HealthStatus:
+    class HealthStatus:  # type: ignore[no-redef]
         status: str
         version: Optional[str] = None
         db: Optional[str] = None
         redis: Optional[str] = None
 
     @dataclass
-    class Artifact:
+    class Artifact:  # type: ignore[no-redef]
         id: str
         assessment_id: str
         filename: str
@@ -309,7 +311,7 @@ except ImportError:
         created_at: Optional[str] = None
 
     @dataclass
-    class APIKey:
+    class APIKey:  # type: ignore[no-redef]
         id: str
         scope: str = "read_write"
         label: Optional[str] = None

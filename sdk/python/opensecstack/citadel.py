@@ -50,13 +50,13 @@ class SecurityEvent:
     """A structured audit event delivered to / retrieved from CITADEL."""
 
     id: str
-    event_type: str        # e.g. "apiguard.scan.completed"
-    source: str            # "apiguard" | "nis2compass"
+    event_type: str  # e.g. "apiguard.scan.completed"
+    source: str  # "apiguard" | "nis2compass"
     actor_id: str
-    actor_type: str        # "api_key" | "system"
+    actor_type: str  # "api_key" | "system"
     resource_type: str
     resource_id: str
-    severity: str          # "info" | "warning" | "critical"
+    severity: str  # "info" | "warning" | "critical"
     payload: dict[str, Any]
     chain_hash: str
     timestamp: datetime
@@ -315,7 +315,9 @@ def _verify_chain_integrity(events: list[SecurityEvent]) -> None:
     for i in range(len(events) - 1):
         prev = events[i]
         nxt = events[i + 1]
-        payload_bytes = json.dumps(nxt.payload, separators=(",", ":"), sort_keys=True).encode()
+        payload_bytes = json.dumps(
+            nxt.payload, separators=(",", ":"), sort_keys=True
+        ).encode()
         raw = prev.chain_hash.encode() + payload_bytes
         computed = hashlib.sha256(raw).hexdigest()
         if computed != nxt.chain_hash:
@@ -411,7 +413,9 @@ class CITADELClient:
                 )
             except requests.RequestException as exc:
                 last_exc = exc
-                logger.warning("citadel: POST %s attempt %d failed: %s", url, attempt + 1, exc)
+                logger.warning(
+                    "citadel: POST %s attempt %d failed: %s", url, attempt + 1, exc
+                )
                 continue
 
             if resp.status_code < 500:
@@ -454,7 +458,9 @@ class CITADELClient:
                 f"send_event: CITADEL returned HTTP {resp.status_code}: {resp.text[:200]}"
             )
 
-    def get_events(self, opts: Optional[GetEventsOptions] = None) -> list[SecurityEvent]:
+    def get_events(
+        self, opts: Optional[GetEventsOptions] = None
+    ) -> list[SecurityEvent]:
         """
         Query the CITADEL audit chain with optional filters.
 
@@ -522,7 +528,11 @@ class CITADELClient:
         )
         resp.raise_for_status()
         data = resp.json()
-        items = data if isinstance(data, list) else (data.get("items") or data.get("data") or [])
+        items = (
+            data
+            if isinstance(data, list)
+            else (data.get("items") or data.get("data") or [])
+        )
         return [Advisory.from_dict(item) for item in items]
 
     def get_advisory(self, advisory_id: str) -> Advisory:
@@ -536,9 +546,7 @@ class CITADELClient:
         resp.raise_for_status()
         return Advisory.from_dict(resp.json())
 
-    def patch_advisory(
-        self, advisory_id: str, req: PatchAdvisoryRequest
-    ) -> Advisory:
+    def patch_advisory(self, advisory_id: str, req: PatchAdvisoryRequest) -> Advisory:
         """Update an existing advisory. Returns the updated advisory."""
         if not self._base:
             raise ValueError("CITADELClient is disabled (base_url is empty)")
@@ -666,7 +674,10 @@ try:
                 except httpx.RequestError as exc:
                     last_exc = exc
                     logger.warning(
-                        "citadel: async POST %s attempt %d failed: %s", url, attempt + 1, exc
+                        "citadel: async POST %s attempt %d failed: %s",
+                        url,
+                        attempt + 1,
+                        exc,
                     )
                     continue
                 if resp.status_code < 500:
@@ -749,7 +760,11 @@ try:
             resp = await self._http().get(self._url("augur/advisories"), params=params)
             resp.raise_for_status()
             data = resp.json()
-            items = data if isinstance(data, list) else (data.get("items") or data.get("data") or [])
+            items = (
+                data
+                if isinstance(data, list)
+                else (data.get("items") or data.get("data") or [])
+            )
             return [Advisory.from_dict(item) for item in items]
 
         async def get_advisory(self, advisory_id: str) -> Advisory:
@@ -779,7 +794,9 @@ try:
             """Delete an advisory by ID."""
             if not self._base:
                 return
-            resp = await self._http().delete(self._url(f"augur/advisories/{advisory_id}"))
+            resp = await self._http().delete(
+                self._url(f"augur/advisories/{advisory_id}")
+            )
             resp.raise_for_status()
 
         async def get_active_advisories(self) -> list[Advisory]:

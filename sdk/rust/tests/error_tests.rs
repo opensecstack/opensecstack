@@ -118,7 +118,10 @@ fn api_display_includes_status_and_message() {
         message: "missing required field".to_string(),
     };
     let s = err.to_string();
-    assert!(s.contains("422"), "expected status 422 in display; got: {s:?}");
+    assert!(
+        s.contains("422"),
+        "expected status 422 in display; got: {s:?}"
+    );
     assert!(
         s.contains("missing required field"),
         "expected message in display; got: {s:?}"
@@ -177,7 +180,10 @@ fn max_retries_exceeded_display_is_non_empty() {
     };
     let s = err.to_string();
     assert!(!s.is_empty(), "Display should not be empty");
-    assert!(s.contains('5'), "expected attempt count in display; got: {s:?}");
+    assert!(
+        s.contains('5'),
+        "expected attempt count in display; got: {s:?}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -279,9 +285,6 @@ fn all_inline_variants_have_non_empty_display() {
     ];
     for err in errors {
         let s = err.to_string();
-        assert!(
-            !s.is_empty(),
-            "Display for {err:?} should not be empty"
-        );
+        assert!(!s.is_empty(), "Display for {err:?} should not be empty");
     }
 }

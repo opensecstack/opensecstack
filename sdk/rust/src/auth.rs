@@ -30,7 +30,7 @@ pub(crate) fn parse_jwt_exp(token: &str) -> Option<u64> {
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
     use base64::Engine as _;
 
-    let payload = token.splitn(3, '.').nth(1)?;
+    let payload = token.split('.').nth(1)?;
     let bytes = URL_SAFE_NO_PAD.decode(payload).ok()?;
     let value: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
     value.get("exp")?.as_u64()

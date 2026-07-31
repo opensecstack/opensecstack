@@ -49,6 +49,11 @@ pub struct NIS2CompassClient {
 
 impl NIS2CompassClient {
     /// Creates a new client with default settings (30 s timeout, 2 retries).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying `reqwest` HTTP client fails to build (this
+    /// only happens if the TLS backend cannot be initialised).
     pub fn new(base_url: impl Into<String>, api_key: impl Into<String>) -> Self {
         let http = Client::builder()
             .timeout(DEFAULT_TIMEOUT)
@@ -83,11 +88,7 @@ impl NIS2CompassClient {
     // ---------- internal helpers ----------
 
     fn api_url(&self, path: &str) -> String {
-        format!(
-            "{}/api/v1/{}",
-            self.base_url,
-            path.trim_start_matches('/')
-        )
+        format!("{}/api/v1/{}", self.base_url, path.trim_start_matches('/'))
     }
 
     // ---------- auth ----------
@@ -240,9 +241,7 @@ impl NIS2CompassClient {
         }
         Err(Error::MaxRetriesExceeded {
             attempts: self.max_retries + 1,
-            last_error: last_err
-                .map(|e| e.to_string())
-                .unwrap_or_default(),
+            last_error: last_err.map(|e| e.to_string()).unwrap_or_default(),
         })
     }
 
@@ -301,7 +300,8 @@ impl NIS2CompassClient {
         let url = if let Some(ref q) = query {
             let mut url = reqwest::Url::parse(&base_url)
                 .map_err(|e| Error::UnexpectedResponse(e.to_string()))?;
-            url.query_pairs_mut().extend_pairs(q.iter().map(|(k, v)| (*k, v.as_str())));
+            url.query_pairs_mut()
+                .extend_pairs(q.iter().map(|(k, v)| (*k, v.as_str())));
             url.to_string()
         } else {
             base_url
@@ -363,6 +363,11 @@ impl NIS2CompassClient {
     // ---------- public API — organisations ----------
 
     /// Create a new organisation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the server returns a
+    /// non-success response.
     pub async fn create_organisation(
         &self,
         req: CreateOrganisationRequest,
@@ -371,11 +376,20 @@ impl NIS2CompassClient {
     }
 
     /// Get an organisation by UUID string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the organisation does not exist or the request fails.
     pub async fn get_organisation(&self, id: &str) -> Result<Organisation> {
         self.get_json(&format!("organisations/{id}"), None).await
     }
 
     /// List organisations with optional pagination.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the server returns a
+    /// non-success response.
     pub async fn list_organisations(
         &self,
         page: Option<u32>,
@@ -393,6 +407,10 @@ impl NIS2CompassClient {
     }
 
     /// Update organisation fields (partial update).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the organisation does not exist or the request fails.
     pub async fn patch_organisation(
         &self,
         id: &str,
@@ -402,6 +420,10 @@ impl NIS2CompassClient {
     }
 
     /// Delete an organisation by UUID string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the organisation does not exist or the request fails.
     pub async fn delete_organisation(&self, id: &str) -> Result<()> {
         self.delete_no_content(&format!("organisations/{id}")).await
     }
@@ -409,6 +431,11 @@ impl NIS2CompassClient {
     // ---------- public API — assessments ----------
 
     /// Create a new NIS2 assessment for an organisation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the server returns a
+    /// non-success response.
     pub async fn create_assessment(
         &self,
         org_id: &str,
@@ -419,11 +446,20 @@ impl NIS2CompassClient {
     }
 
     /// Get a single assessment by UUID string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the assessment does not exist or the request fails.
     pub async fn get_assessment(&self, id: &str) -> Result<Assessment> {
         self.get_json(&format!("assessments/{id}"), None).await
     }
 
     /// List assessments for an organisation, optionally filtered by status.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the server returns a
+    /// non-success response.
     pub async fn list_assessments(
         &self,
         org_id: &str,
@@ -433,7 +469,7 @@ impl NIS2CompassClient {
         if let Some(s) = status {
             let s_str = serde_json::to_value(&s)
                 .ok()
-                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                .and_then(|v| v.as_str().map(str::to_string))
                 .unwrap_or_default();
             q.push(("status", s_str));
         }
@@ -445,6 +481,10 @@ impl NIS2CompassClient {
     }
 
     /// Update assessment fields (partial update).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the assessment does not exist or the request fails.
     pub async fn patch_assessment(
         &self,
         id: &str,
@@ -454,6 +494,10 @@ impl NIS2CompassClient {
     }
 
     /// Delete an assessment by UUID string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the assessment does not exist or the request fails.
     pub async fn delete_assessment(&self, id: &str) -> Result<()> {
         self.delete_no_content(&format!("assessments/{id}")).await
     }
@@ -461,12 +505,20 @@ impl NIS2CompassClient {
     // ---------- public API — controls ----------
 
     /// Get all controls for an assessment.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the assessment does not exist or the request fails.
     pub async fn get_controls(&self, assessment_id: &str) -> Result<Vec<Control>> {
         self.get_json(&format!("assessments/{assessment_id}/controls"), None)
             .await
     }
 
     /// Get a single control by its measure reference letter ('a' through 'j').
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the control does not exist or the request fails.
     pub async fn get_control(&self, assessment_id: &str, measure_ref: char) -> Result<Control> {
         self.get_json(
             &format!("assessments/{assessment_id}/controls/{measure_ref}"),
@@ -476,6 +528,10 @@ impl NIS2CompassClient {
     }
 
     /// Update a control's status, evidence, remediation or risk score.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the control does not exist or the request fails.
     pub async fn patch_control(
         &self,
         assessment_id: &str,
@@ -492,12 +548,20 @@ impl NIS2CompassClient {
     // ---------- public API — artifacts ----------
 
     /// List all artifacts for an assessment.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the assessment does not exist or the request fails.
     pub async fn list_artifacts(&self, assessment_id: &str) -> Result<Vec<Artifact>> {
         self.get_json(&format!("assessments/{assessment_id}/artifacts"), None)
             .await
     }
 
     /// Upload an artifact file (multipart form) and associate it with an assessment.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or the upload request fails.
     pub async fn upload_artifact(
         &self,
         assessment_id: &str,
@@ -548,6 +612,11 @@ impl NIS2CompassClient {
     }
 
     /// Download an artifact to a local file path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails, the server returns a
+    /// non-success response, or writing the file fails.
     pub async fn download_artifact(&self, artifact_id: &str, dest_path: &str) -> Result<()> {
         use futures_util::StreamExt;
 
@@ -578,6 +647,10 @@ impl NIS2CompassClient {
     }
 
     /// Delete an artifact by UUID string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the artifact does not exist or the request fails.
     pub async fn delete_artifact(&self, artifact_id: &str) -> Result<()> {
         self.delete_no_content(&format!("artifacts/{artifact_id}"))
             .await
@@ -586,17 +659,31 @@ impl NIS2CompassClient {
     // ---------- public API — API keys ----------
 
     /// List all API keys for the current principal.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the server returns a
+    /// non-success response.
     pub async fn list_api_keys(&self) -> Result<Vec<APIKey>> {
         self.get_json("api-keys", None).await
     }
 
     /// Create a new API key. The `plaintext_key` field in the response is
     /// only present at creation time and cannot be retrieved later.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the server returns a
+    /// non-success response.
     pub async fn create_api_key(&self, req: CreateAPIKeyRequest) -> Result<APIKey> {
         self.post_json("api-keys", &req).await
     }
 
     /// Revoke (delete) an API key by UUID string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the key does not exist or the request fails.
     pub async fn revoke_api_key(&self, key_id: &str) -> Result<()> {
         self.delete_no_content(&format!("api-keys/{key_id}")).await
     }
@@ -606,6 +693,11 @@ impl NIS2CompassClient {
     /// Generate a PDF compliance report for an assessment, returned as bytes.
     ///
     /// Uses the extended 120-second timeout client.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the server returns a
+    /// non-success response.
     pub async fn generate_report(&self, assessment_id: &str) -> Result<Bytes> {
         let url = format!(
             "{}?format=pdf",
@@ -630,6 +722,11 @@ impl NIS2CompassClient {
     }
 
     /// Stream a compliance report to an async writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails, the server returns a
+    /// non-success response, or writing to `writer` fails.
     pub async fn get_report_stream(
         &self,
         assessment_id: &str,
@@ -669,17 +766,24 @@ impl NIS2CompassClient {
     // ---------- public API — audit ----------
 
     /// Retrieve the NIS2 Compass audit log with pagination.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the server returns a
+    /// non-success response.
     pub async fn get_audit_log(&self, limit: u32, page: u32) -> Result<Vec<NIS2AuditEntry>> {
-        let q = vec![
-            ("per_page", limit.to_string()),
-            ("page", page.to_string()),
-        ];
+        let q = vec![("per_page", limit.to_string()), ("page", page.to_string())];
         self.get_json("audit", Some(q)).await
     }
 
     // ---------- public API — health ----------
 
     /// Basic health check. Does **not** require authentication.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the server returns a
+    /// non-success response.
     pub async fn get_health(&self) -> Result<HealthStatus> {
         let url = format!("{}/api/v1/health", self.base_url);
         let resp = self.http.get(&url).send().await?;
@@ -687,11 +791,20 @@ impl NIS2CompassClient {
     }
 
     /// Detailed health check (includes DB/Redis status). Requires authentication.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the server returns a
+    /// non-success response.
     pub async fn get_health_detail(&self) -> Result<HealthStatus> {
         self.get_json("health/detail", None).await
     }
 
     /// Retrieve a single audit entry by UUID string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the entry does not exist or the request fails.
     pub async fn get_audit_entry(&self, entry_id: &str) -> Result<NIS2AuditEntry> {
         self.get_json(&format!("audit/{entry_id}"), None).await
     }
@@ -733,30 +846,39 @@ impl NIS2CompassClientBuilder {
     }
 
     /// Set the HTTP request timeout.
+    #[must_use]
     pub fn timeout(mut self, t: Duration) -> Self {
         self.timeout = t;
         self
     }
 
     /// Maximum number of retry attempts for transient failures.
+    #[must_use]
     pub fn max_retries(mut self, n: u32) -> Self {
         self.max_retries = n;
         self
     }
 
     /// Base wait duration for exponential back-off between retries.
+    #[must_use]
     pub fn retry_wait_base(mut self, d: Duration) -> Self {
         self.retry_wait_base = d;
         self
     }
 
     /// Accept invalid TLS certificates. **Do not use in production.**
+    #[must_use]
     pub fn danger_accept_invalid_certs(mut self, v: bool) -> Self {
         self.verify_ssl = !v;
         self
     }
 
     /// Consume the builder and produce a [`NIS2CompassClient`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying `reqwest` HTTP client fails to build (this
+    /// only happens if the TLS backend cannot be initialised).
     pub fn build(self) -> NIS2CompassClient {
         let http = Client::builder()
             .timeout(self.timeout)

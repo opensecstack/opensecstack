@@ -42,12 +42,7 @@ fn compute_chain_hash(prev_chain_hash: &str, payload: &serde_json::Value) -> Str
 }
 
 fn client(server: &MockServer) -> CITADELClient {
-    CITADELClient::with_options(
-        server.uri(),
-        "test-secret",
-        3,
-        Duration::from_millis(1),
-    )
+    CITADELClient::with_options(server.uri(), "test-secret", 3, Duration::from_millis(1))
 }
 
 // ---------- test 1: disabled mode — send_event ok ----------
@@ -57,7 +52,10 @@ async fn test_disabled_send_event_is_noop() {
     // No mock server: any real HTTP request would fail.
     let c = CITADELClient::new("", "secret");
     let result = c.send_event(make_event("e1", "genesis")).await;
-    assert!(result.is_ok(), "send_event in disabled mode should return Ok");
+    assert!(
+        result.is_ok(),
+        "send_event in disabled mode should return Ok"
+    );
 }
 
 // ---------- test 2: disabled mode — get_events returns empty ----------
@@ -65,8 +63,14 @@ async fn test_disabled_send_event_is_noop() {
 #[tokio::test]
 async fn test_disabled_get_events_returns_empty() {
     let c = CITADELClient::new("", "secret");
-    let events = c.get_events(CitadelGetEventsOptions::default()).await.unwrap();
-    assert!(events.is_empty(), "get_events in disabled mode should return empty vec");
+    let events = c
+        .get_events(CitadelGetEventsOptions::default())
+        .await
+        .unwrap();
+    assert!(
+        events.is_empty(),
+        "get_events in disabled mode should return empty vec"
+    );
 }
 
 // ---------- test 3: disabled mode — get_event returns error ----------
@@ -75,7 +79,10 @@ async fn test_disabled_get_events_returns_empty() {
 async fn test_disabled_get_event_returns_error() {
     let c = CITADELClient::new("", "secret");
     let result = c.get_event("any-id").await;
-    assert!(result.is_err(), "get_event in disabled mode should return Err");
+    assert!(
+        result.is_err(),
+        "get_event in disabled mode should return Err"
+    );
 }
 
 // ---------- test 4: disabled mode — drain ok ----------
@@ -134,7 +141,10 @@ async fn test_send_event_signature_has_sha256_prefix() {
         .expect("X-Citadel-Signature header present")
         .to_str()
         .unwrap();
-    assert!(sig.starts_with("sha256="), "signature should start with 'sha256=', got: {sig}");
+    assert!(
+        sig.starts_with("sha256="),
+        "signature should start with 'sha256=', got: {sig}"
+    );
 }
 
 // ---------- test 7: get_events — plain array response ----------
@@ -143,10 +153,7 @@ async fn test_send_event_signature_has_sha256_prefix() {
 async fn test_get_events_plain_array() {
     let server = MockServer::start().await;
 
-    let body = json!([
-        event_json("e1", "hash1"),
-        event_json("e2", "hash2")
-    ]);
+    let body = json!([event_json("e1", "hash1"), event_json("e2", "hash2")]);
 
     Mock::given(method("GET"))
         .and(path("/api/v1/events"))
@@ -155,7 +162,10 @@ async fn test_get_events_plain_array() {
         .await;
 
     let c = client(&server);
-    let events = c.get_events(CitadelGetEventsOptions::default()).await.unwrap();
+    let events = c
+        .get_events(CitadelGetEventsOptions::default())
+        .await
+        .unwrap();
     assert_eq!(events.len(), 2);
     assert_eq!(events[0].id, "e1");
     assert_eq!(events[1].id, "e2");
@@ -179,7 +189,10 @@ async fn test_get_events_envelope() {
         .await;
 
     let c = client(&server);
-    let events = c.get_events(CitadelGetEventsOptions::default()).await.unwrap();
+    let events = c
+        .get_events(CitadelGetEventsOptions::default())
+        .await
+        .unwrap();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].id, "env-1");
 }
@@ -239,9 +252,7 @@ async fn test_get_event_by_id() {
 
     Mock::given(method("GET"))
         .and(path(format!("/api/v1/events/{event_id}")))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(event_json(event_id, "hash-abc")),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(event_json(event_id, "hash-abc")))
         .mount(&server)
         .await;
 
@@ -261,14 +272,16 @@ async fn test_get_event_not_found() {
     Mock::given(method("GET"))
         .and(path("/api/v1/events/missing"))
         .respond_with(
-            ResponseTemplate::new(404)
-                .set_body_json(json!({"message": "event not found"})),
+            ResponseTemplate::new(404).set_body_json(json!({"message": "event not found"})),
         )
         .mount(&server)
         .await;
 
     let c = client(&server);
-    let err = c.get_event("missing").await.expect_err("should fail with NotFound");
+    let err = c
+        .get_event("missing")
+        .await
+        .expect_err("should fail with NotFound");
     assert!(
         matches!(err, Error::NotFound(_)),
         "expected Error::NotFound, got: {err:?}"
@@ -324,10 +337,7 @@ async fn test_verify_chain_broken_link() {
     let ev1 = make_event("e1", "wrong-hash"); // deliberate mismatch
 
     let result = CITADELClient::verify_chain(&[ev0, ev1]);
-    assert!(
-        result.is_err(),
-        "broken chain should return Err"
-    );
+    assert!(result.is_err(), "broken chain should return Err");
 }
 
 // ---------- test 17: retry on 5xx — succeeds on 3rd attempt ----------
@@ -359,7 +369,11 @@ async fn test_send_event_retry_on_5xx() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let requests = server.received_requests().await.unwrap();
-    assert!(requests.len() >= 3, "expected at least 3 attempts, got {}", requests.len());
+    assert!(
+        requests.len() >= 3,
+        "expected at least 3 attempts, got {}",
+        requests.len()
+    );
 }
 
 // ---------- test 18: get_events — empty response ----------
@@ -375,6 +389,9 @@ async fn test_get_events_empty() {
         .await;
 
     let c = client(&server);
-    let events = c.get_events(CitadelGetEventsOptions::default()).await.unwrap();
+    let events = c
+        .get_events(CitadelGetEventsOptions::default())
+        .await
+        .unwrap();
     assert!(events.is_empty());
 }

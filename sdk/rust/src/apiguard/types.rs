@@ -24,9 +24,10 @@ pub enum FindingSeverity {
     Info,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum FindingStatus {
+    #[default]
     Open,
     Confirmed,
     FalsePositive,
@@ -147,10 +148,4 @@ pub struct ListScansOptions {
     pub page: Option<u32>,
     pub per_page: Option<u32>,
     pub status: Option<ScanStatus>,
-}
-
-impl Default for FindingStatus {
-    fn default() -> Self {
-        FindingStatus::Open
-    }
 }

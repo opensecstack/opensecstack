@@ -39,7 +39,6 @@ use tokio::time::sleep;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-
     let base_url = require_env("CITADEL_URL");
     let shared_secret = require_env("CITADEL_SHARED_SECRET");
     let source = env::var("CITADEL_SOURCE").unwrap_or_else(|_| "apiguard".to_string());
@@ -51,8 +50,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = CITADELClient::with_options(
         &base_url,
         &shared_secret,
-        3,                                // max_retries
-        Duration::from_millis(500),       // retry_wait_base
+        3,                          // max_retries
+        Duration::from_millis(500), // retry_wait_base
     );
 
     // ------------------------------------------------------------------
@@ -122,7 +121,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 4. Verify the hash chain.
     // ------------------------------------------------------------------
     if events.len() >= 2 {
-        println!("\n[3] Verifying hash chain across {} events …", events.len());
+        println!(
+            "\n[3] Verifying hash chain across {} events …",
+            events.len()
+        );
         match CITADELClient::verify_chain(&events) {
             Ok(()) => println!("    Chain intact — all links verified."),
             Err(err) => println!("    Chain verification FAILED: {err}"),

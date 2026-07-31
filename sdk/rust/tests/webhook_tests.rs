@@ -28,8 +28,7 @@ fn test_verify_signature_valid() {
     let body = br#"{"id":"evt_001","event_type":"apiguard.scan.completed"}"#;
     let sig = sign(body, secret);
 
-    verify_signature(body, &sig, secret)
-        .expect("valid signature should not return an error");
+    verify_signature(body, &sig, secret).expect("valid signature should not return an error");
 }
 
 // ---------------------------------------------------------------------------
@@ -74,7 +73,10 @@ fn test_verify_signature_missing_prefix() {
         hex::encode(mac.finalize().into_bytes())
     };
     let result = verify_signature(body, &raw_hex, "s");
-    assert!(result.is_err(), "signature without 'sha256=' prefix should fail");
+    assert!(
+        result.is_err(),
+        "signature without 'sha256=' prefix should fail"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +127,11 @@ fn test_constant_time_matching_branch() {
     let sig = sign(body, secret);
 
     let result = verify_signature(body, &sig, secret);
-    assert!(result.is_ok(), "identical signatures should verify: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "identical signatures should verify: {:?}",
+        result
+    );
 }
 
 #[test]

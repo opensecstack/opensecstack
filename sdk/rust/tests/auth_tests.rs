@@ -256,7 +256,10 @@ async fn cached_token_is_reused_across_requests() {
     let client = APIGuardClient::new(server.uri(), "ak_test");
 
     // First request — triggers authentication.
-    client.get_scan(scan_id).await.expect("first get_scan failed");
+    client
+        .get_scan(scan_id)
+        .await
+        .expect("first get_scan failed");
 
     // Second request — must use the cached token, no new auth call.
     client
@@ -335,7 +338,10 @@ async fn expired_token_triggers_re_authentication() {
     // First call: populates the cache with the expired token.
     // The CachedToken::is_valid() check (now + 60 < expires_at) will fail for
     // the past-exp token, so the second call must re-authenticate.
-    client.get_scan(scan_id).await.expect("first get_scan failed");
+    client
+        .get_scan(scan_id)
+        .await
+        .expect("first get_scan failed");
     client
         .get_scan(scan_id)
         .await

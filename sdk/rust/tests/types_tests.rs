@@ -6,19 +6,19 @@
 ///   - Optional fields default to None when absent or null.
 ///   - Required fields cause a parse error when absent.
 use opensecstack::{
-    // APIGuard types
-    Finding,
-    FindingSeverity,
-    FindingStatus,
-    Scan,
-    ScanStatus,
     // NIS2 Compass types
     Assessment,
     AssessmentStatus,
     Control,
     ControlStatus,
+    // APIGuard types
+    Finding,
+    FindingSeverity,
+    FindingStatus,
     Organisation,
     OrganisationSize,
+    Scan,
+    ScanStatus,
 };
 
 // ---------------------------------------------------------------------------
@@ -221,8 +221,14 @@ fn scan_optional_fields_default_to_none_when_null() {
     let json = scan_json(id, "pending");
     let scan: Scan = serde_json::from_str(&json).expect("scan should deserialize");
 
-    assert!(scan.spec_hash.is_none(), "spec_hash should be None for null");
-    assert!(scan.started_at.is_none(), "started_at should be None for null");
+    assert!(
+        scan.spec_hash.is_none(),
+        "spec_hash should be None for null"
+    );
+    assert!(
+        scan.started_at.is_none(),
+        "started_at should be None for null"
+    );
     assert!(
         scan.completed_at.is_none(),
         "completed_at should be None for null"
@@ -253,7 +259,8 @@ fn scan_optional_fields_absent_also_deserialize_to_none() {
             "info_count": 0
         }}"#
     );
-    let scan: Scan = serde_json::from_str(&json).expect("scan should deserialize without optional fields");
+    let scan: Scan =
+        serde_json::from_str(&json).expect("scan should deserialize without optional fields");
 
     assert!(scan.spec_url.is_none());
     assert!(scan.spec_hash.is_none());
@@ -300,7 +307,10 @@ fn scan_fails_without_required_status_field() {
         }}"#
     );
     let result: Result<Scan, _> = serde_json::from_str(&json);
-    assert!(result.is_err(), "expected error when 'status' field is absent");
+    assert!(
+        result.is_err(),
+        "expected error when 'status' field is absent"
+    );
 }
 
 #[test]
@@ -323,7 +333,8 @@ fn scan_with_error_message_deserializes() {
             "error_message": "spec URL not reachable"
         }}"#
     );
-    let scan: Scan = serde_json::from_str(&json).expect("scan with error_message should deserialize");
+    let scan: Scan =
+        serde_json::from_str(&json).expect("scan with error_message should deserialize");
     assert_eq!(scan.status, ScanStatus::Failed);
     assert_eq!(
         scan.error_message.as_deref(),
@@ -392,7 +403,8 @@ fn finding_with_all_optional_fields_populated() {
             "updated_at": "2024-02-01T09:00:00Z"
         }}"#
     );
-    let f: Finding = serde_json::from_str(&json).expect("finding with all fields should deserialize");
+    let f: Finding =
+        serde_json::from_str(&json).expect("finding with all fields should deserialize");
 
     assert_eq!(f.status, FindingStatus::Confirmed);
     assert_eq!(f.severity, FindingSeverity::High);
@@ -511,7 +523,10 @@ fn assessment_status_in_progress_uses_snake_case() {
 fn control_status_deserializes_all_variants() {
     let cases = [
         (r#""compliant""#, ControlStatus::Compliant),
-        (r#""partially_compliant""#, ControlStatus::PartiallyCompliant),
+        (
+            r#""partially_compliant""#,
+            ControlStatus::PartiallyCompliant,
+        ),
         (r#""non_compliant""#, ControlStatus::NonCompliant),
         (r#""not_applicable""#, ControlStatus::NotApplicable),
         (r#""not_assessed""#, ControlStatus::NotAssessed),
@@ -563,7 +578,8 @@ fn organisation_optional_fields_absent_become_none() {
             "updated_at": "2024-03-01T12:00:00Z"
         }}"#
     );
-    let org: Organisation = serde_json::from_str(&json).expect("Organisation should deserialize with minimal fields");
+    let org: Organisation =
+        serde_json::from_str(&json).expect("Organisation should deserialize with minimal fields");
 
     assert!(org.industry.is_none());
     assert!(org.country.is_none());

@@ -7,7 +7,7 @@ use serde_json::Value;
 // ---------------------------------------------------------------------------
 
 /// A structured security audit event delivered to the CITADEL governance
-/// platform by APIGuard or NIS2 Compass.
+/// platform by `APIGuard` or NIS2 Compass.
 ///
 /// Events are chained together via SHA-256 hash links to form a tamper-evident
 /// WORM audit log.  The ``chain_hash`` of event *N* is computed as:

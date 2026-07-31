@@ -8,8 +8,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 // ---------- helpers ----------
 
-const FAKE_JWT: &str =
-    "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTl9.fake_signature_for_tests";
+const FAKE_JWT: &str = "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTl9.fake_signature_for_tests";
 
 fn auth_response() -> serde_json::Value {
     serde_json::json!({
@@ -55,7 +54,12 @@ fn assessment_json(id: &str, org_id: &str) -> serde_json::Value {
     })
 }
 
-fn control_json(id: &str, assessment_id: &str, measure_ref: &str, status: &str) -> serde_json::Value {
+fn control_json(
+    id: &str,
+    assessment_id: &str,
+    measure_ref: &str,
+    status: &str,
+) -> serde_json::Value {
     serde_json::json!({
         "id": id,
         "assessment_id": assessment_id,
@@ -135,10 +139,7 @@ async fn test_create_organisation() {
     assert_eq!(org.industry.as_deref(), Some("finance"));
     assert_eq!(org.country.as_deref(), Some("DE"));
     assert_eq!(org.size, Some(OrganisationSize::Medium));
-    assert_eq!(
-        org.registration_number.as_deref(),
-        Some("DE123456789")
-    );
+    assert_eq!(org.registration_number.as_deref(), Some("DE123456789"));
 }
 
 // ---------- test 2: create assessment ----------
@@ -154,8 +155,7 @@ async fn test_create_assessment() {
     Mock::given(method("POST"))
         .and(path(format!("/api/v1/organisations/{org_id}/assessments")))
         .respond_with(
-            ResponseTemplate::new(201)
-                .set_body_json(assessment_json(assessment_id, org_id)),
+            ResponseTemplate::new(201).set_body_json(assessment_json(assessment_id, org_id)),
         )
         .mount(&server)
         .await;
@@ -293,10 +293,7 @@ async fn test_audit_log_chain() {
         .await;
 
     let c = client(&server);
-    let entries = c
-        .get_audit_log(50, 1)
-        .await
-        .expect("get_audit_log failed");
+    let entries = c.get_audit_log(50, 1).await.expect("get_audit_log failed");
 
     assert_eq!(entries.len(), 2);
 

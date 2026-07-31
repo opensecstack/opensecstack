@@ -81,6 +81,11 @@ impl CITADELClient {
     }
 
     /// Creates a new [`CITADELClient`] with explicit retry parameters.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying `reqwest::Client` cannot be built (extremely
+    /// unlikely on supported platforms).
     pub fn with_options(
         base_url: impl Into<String>,
         shared_secret: impl Into<String>,
@@ -123,18 +128,13 @@ impl CITADELClient {
     // -----------------------------------------------------------------------
 
     fn api_url(&self, path: &str) -> String {
-        format!(
-            "{}/api/v1/{}",
-            self.base_url,
-            path.trim_start_matches('/')
-        )
+        format!("{}/api/v1/{}", self.base_url, path.trim_start_matches('/'))
     }
 
     /// Compute `"sha256=<hex>"` HMAC-SHA256 over `body` using the shared secret.
     fn sign_body(&self, body: &[u8]) -> String {
-        let mut mac =
-            HmacSha256::new_from_slice(self.shared_secret.as_bytes())
-                .expect("HMAC-SHA256 accepts any key length");
+        let mut mac = HmacSha256::new_from_slice(self.shared_secret.as_bytes())
+            .expect("HMAC-SHA256 accepts any key length");
         mac.update(body);
         format!("sha256={}", hex::encode(mac.finalize().into_bytes()))
     }
@@ -167,8 +167,7 @@ impl CITADELClient {
 
         for attempt in 0..=self.max_retries {
             if attempt > 0 {
-                let wait = self.retry_wait_base
-                    * 2u32.pow(attempt - 1);
+                let wait = self.retry_wait_base * 2u32.pow(attempt - 1);
                 tokio::time::sleep(wait).await;
             }
 
@@ -185,7 +184,6 @@ impl CITADELClient {
                 Err(e) => {
                     warn!(attempt, error = %e, "citadel: HTTP transport error");
                     last_err = Some(Error::Transport(e));
-                    continue;
                 }
                 Ok(resp) => {
                     let status = resp.status();
@@ -202,7 +200,11 @@ impl CITADELClient {
                         });
                     }
                     // 5xx — retry.
-                    warn!(attempt, status = status.as_u16(), "citadel: server error, will retry");
+                    warn!(
+                        attempt,
+                        status = status.as_u16(),
+                        "citadel: server error, will retry"
+                    );
                     last_err = Some(Error::Api {
                         status: status.as_u16(),
                         code: "server_error".to_string(),
@@ -214,9 +216,7 @@ impl CITADELClient {
 
         Err(Error::MaxRetriesExceeded {
             attempts: self.max_retries + 1,
-            last_error: last_err
-                .map(|e| e.to_string())
-                .unwrap_or_else(|| "unknown".to_string()),
+            last_error: last_err.map_or_else(|| "unknown".to_string(), |e| e.to_string()),
         })
     }
 
@@ -233,6 +233,10 @@ impl CITADELClient {
     /// the client is operating and the channel was somehow dropped.
     ///
     /// If `base_url` is empty (disabled mode), returns `Ok(())` immediately.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the internal dispatch channel is closed.
     pub async fn send_event(&self, event: SecurityEvent) -> Result<()> {
         if self.base_url.is_empty() {
             return Ok(());
@@ -247,6 +251,11 @@ impl CITADELClient {
     /// Query the CITADEL audit chain with optional filters.
     ///
     /// Returns an empty `Vec` when `base_url` is empty (disabled mode).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the server returns a
+    /// non-success response.
     pub async fn get_events(&self, opts: GetEventsOptions) -> Result<Vec<SecurityEvent>> {
         if self.base_url.is_empty() {
             return Ok(vec![]);
@@ -286,6 +295,11 @@ impl CITADELClient {
     ///
     /// Returns `Err(Error::NotFound(...))` when the event does not exist.
     /// Returns `Err(...)` with a descriptive message if `base_url` is empty.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the client is disabled, the event does not exist,
+    /// or the request fails.
     pub async fn get_event(&self, event_id: &str) -> Result<SecurityEvent> {
         if self.base_url.is_empty() {
             return Err(Error::UnexpectedResponse(
@@ -334,6 +348,11 @@ impl CITADELClient {
     ///
     /// Returns `Ok(())` for slices of 0 or 1 events (no links to verify).
     /// Returns `Err` with a descriptive message on the first broken link.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any event's payload cannot be re-serialised to
+    /// JSON, or if a chain link is broken.
     pub fn verify_chain(events: &[SecurityEvent]) -> Result<()> {
         if events.len() < 2 {
             return Ok(());
@@ -377,6 +396,11 @@ impl CITADELClient {
     /// events (though the borrow checker does not enforce this for `&self`).
     ///
     /// A `timeout` of `None` waits indefinitely.
+    ///
+    /// # Errors
+    ///
+    /// This implementation currently always returns `Ok(())`; the `Result`
+    /// return type is reserved for future precise drain semantics.
     pub async fn drain(&self, timeout: Option<Duration>) -> Result<()> {
         if self.base_url.is_empty() {
             return Ok(());

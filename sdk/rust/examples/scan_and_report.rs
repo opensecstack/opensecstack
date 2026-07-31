@@ -23,8 +23,8 @@ use tokio::time::sleep;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let base_url = env::var("APIGUARD_URL").expect("APIGUARD_URL must be set");
     let api_key = env::var("APIGUARD_API_KEY").expect("APIGUARD_API_KEY must be set");
-    let spec_url = env::var("SPEC_URL")
-        .unwrap_or_else(|_| "https://api.example.com/openapi.json".to_string());
+    let spec_url =
+        env::var("SPEC_URL").unwrap_or_else(|_| "https://api.example.com/openapi.json".to_string());
 
     let client = APIGuardClient::new(&base_url, &api_key);
 
@@ -33,7 +33,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ------------------------------------------------------------------
     println!("Starting scan for spec: {spec_url}");
     let scan = client.create_scan(&spec_url).await?;
-    println!("Scan started: {} (initial status: {:?})", scan.id, scan.status);
+    println!(
+        "Scan started: {} (initial status: {:?})",
+        scan.id, scan.status
+    );
 
     // ------------------------------------------------------------------
     // 2. Poll until terminal state
@@ -52,7 +55,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if completed.status == ScanStatus::Failed {
         eprintln!(
             "Scan failed: {}",
-            completed.error_message.as_deref().unwrap_or("unknown error")
+            completed
+                .error_message
+                .as_deref()
+                .unwrap_or("unknown error")
         );
         std::process::exit(1);
     }

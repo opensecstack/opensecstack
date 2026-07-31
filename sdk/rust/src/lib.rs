@@ -1,7 +1,7 @@
-//! # OpenSecStack Rust SDK
+//! # `OpenSecStack` Rust SDK
 //!
 //! Async Rust clients for the [OpenSecStack](https://github.com/opensecstack/opensecstack)
-//! platform, covering both **APIGuard** (API security scanning) and
+//! platform, covering both **`APIGuard`** (API security scanning) and
 //! **NIS2 Compass** (compliance management).
 //!
 //! ## Quick start
@@ -50,9 +50,9 @@ pub use nis2compass::NIS2CompassClient;
 // Re-export webhook utilities for convenient top-level access.
 pub use webhook::{
     parse_event, verify_signature, WebhookEvent, EVENT_APIGUARD_FINDING_CRITICAL,
-    EVENT_APIGUARD_SCAN_COMPLETED, EVENT_APIGUARD_SCAN_FAILED,
-    EVENT_CITADEL_HARD_STOP, EVENT_CITADEL_VIGIL_AMBER, EVENT_CITADEL_VIGIL_RED,
-    EVENT_NIS2COMPASS_ASSESSMENT_COMPLETED, EVENT_NIS2COMPASS_CONTROL_UPDATED,
+    EVENT_APIGUARD_SCAN_COMPLETED, EVENT_APIGUARD_SCAN_FAILED, EVENT_CITADEL_HARD_STOP,
+    EVENT_CITADEL_VIGIL_AMBER, EVENT_CITADEL_VIGIL_RED, EVENT_NIS2COMPASS_ASSESSMENT_COMPLETED,
+    EVENT_NIS2COMPASS_CONTROL_UPDATED,
 };
 
 // Re-export all public APIGuard types for ergonomic use.
@@ -63,8 +63,8 @@ pub use apiguard::types::{
 };
 
 // Re-export CITADEL client and types for ergonomic use.
-pub use citadel::CITADELClient;
 pub use citadel::types::{GetEventsOptions as CitadelGetEventsOptions, SecurityEvent};
+pub use citadel::CITADELClient;
 
 // Re-export all public NIS2 Compass types for ergonomic use.
 pub use nis2compass::types::{

@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-/// All errors returned by the OpenSecStack SDK.
+/// All errors returned by the `OpenSecStack` SDK.
 #[derive(Debug, Error)]
 pub enum Error {
     /// The server returned a non-2xx response with a structured error body.
@@ -26,10 +26,7 @@ pub enum Error {
 
     /// All retry attempts were exhausted without a successful response.
     #[error("request failed after {attempts} attempts: {last_error}")]
-    MaxRetriesExceeded {
-        attempts: u32,
-        last_error: String,
-    },
+    MaxRetriesExceeded { attempts: u32, last_error: String },
 
     /// An underlying `reqwest` transport error.
     #[error("HTTP transport error: {0}")]

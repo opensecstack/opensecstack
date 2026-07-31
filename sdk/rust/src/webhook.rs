@@ -2,7 +2,7 @@
 //!
 //! # Receiving webhooks
 //!
-//! All opensecstack platforms (APIGuard, NIS2 Compass, CITADEL) sign webhook
+//! All opensecstack platforms (`APIGuard`, NIS2 Compass, CITADEL) sign webhook
 //! payloads with an HMAC-SHA256 digest delivered via the
 //! `X-APIGuard-Signature` or `X-Citadel-Signature` HTTP header, in the
 //! format `"sha256=<hex_digest>"`.
@@ -67,10 +67,10 @@ use sha2::Sha256;
 // Event type constants
 // ---------------------------------------------------------------------------
 
-/// Emitted when an APIGuard scan finishes successfully.
+/// Emitted when an `APIGuard` scan finishes successfully.
 pub const EVENT_APIGUARD_SCAN_COMPLETED: &str = "apiguard.scan.completed";
 
-/// Emitted when an APIGuard scan fails (parse error, unreachable target, etc.).
+/// Emitted when an `APIGuard` scan fails (parse error, unreachable target, etc.).
 pub const EVENT_APIGUARD_SCAN_FAILED: &str = "apiguard.scan.failed";
 
 /// Emitted immediately when a critical-severity finding is detected.
@@ -133,8 +133,8 @@ pub struct WebhookEvent {
 ///
 /// * `body`      – Raw request body bytes (before any decoding).
 /// * `signature` – Value of the `X-APIGuard-Signature` or
-///                 `X-Citadel-Signature` header.  Must be in the form
-///                 `"sha256=<hex_digest>"`.
+///   `X-Citadel-Signature` header.  Must be in the form
+///   `"sha256=<hex_digest>"`.
 /// * `secret`    – The shared webhook secret configured on the platform.
 ///
 /// # Errors

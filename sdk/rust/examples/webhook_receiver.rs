@@ -265,7 +265,5 @@ async fn main() {
         .await
         .expect("failed to bind TCP listener");
 
-    axum::serve(listener, app)
-        .await
-        .expect("server error");
+    axum::serve(listener, app).await.expect("server error");
 }

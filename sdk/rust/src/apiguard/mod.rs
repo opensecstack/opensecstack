@@ -17,9 +17,9 @@ const REPORT_TIMEOUT: Duration = Duration::from_secs(120);
 const DEFAULT_MAX_RETRIES: u32 = 2;
 const DEFAULT_RETRY_BASE: Duration = Duration::from_millis(500);
 
-/// Client for the APIGuard platform.
+/// Client for the `APIGuard` platform.
 ///
-/// Provides a fully async, token-managed interface to the APIGuard REST API.
+/// Provides a fully async, token-managed interface to the `APIGuard` REST API.
 /// Authentication is handled automatically: the client exchanges the API key
 /// for a JWT on the first request, caches it, and refreshes it proactively
 /// before expiry (SDK-M5).
@@ -47,6 +47,11 @@ pub struct APIGuardClient {
 
 impl APIGuardClient {
     /// Creates a new client with default settings (30 s timeout, 2 retries).
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying `reqwest` HTTP client fails to build (this
+    /// only happens if the TLS backend cannot be initialised).
     pub fn new(base_url: impl Into<String>, api_key: impl Into<String>) -> Self {
         let http = Client::builder()
             .timeout(DEFAULT_TIMEOUT)
@@ -81,11 +86,7 @@ impl APIGuardClient {
     // ---------- internal helpers ----------
 
     fn api_url(&self, path: &str) -> String {
-        format!(
-            "{}/api/v1/{}",
-            self.base_url,
-            path.trim_start_matches('/')
-        )
+        format!("{}/api/v1/{}", self.base_url, path.trim_start_matches('/'))
     }
 
     // ---------- auth ----------
@@ -243,9 +244,7 @@ impl APIGuardClient {
         }
         Err(Error::MaxRetriesExceeded {
             attempts: self.max_retries + 1,
-            last_error: last_err
-                .map(|e| e.to_string())
-                .unwrap_or_default(),
+            last_error: last_err.map(|e| e.to_string()).unwrap_or_default(),
         })
     }
 
@@ -305,7 +304,8 @@ impl APIGuardClient {
         let url = if let Some(ref q) = query {
             let mut url = reqwest::Url::parse(&base_url)
                 .map_err(|e| Error::UnexpectedResponse(e.to_string()))?;
-            url.query_pairs_mut().extend_pairs(q.iter().map(|(k, v)| (*k, v.as_str())));
+            url.query_pairs_mut()
+                .extend_pairs(q.iter().map(|(k, v)| (*k, v.as_str())));
             url.to_string()
         } else {
             base_url
@@ -366,9 +366,14 @@ impl APIGuardClient {
 
     // ---------- public API — scans ----------
 
-    /// Start a scan from an OpenAPI spec URL.
+    /// Start a scan from an `OpenAPI` spec URL.
     ///
     /// This is a convenience wrapper around [`create_scan_full`](Self::create_scan_full).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the server returns a
+    /// non-success response.
     pub async fn create_scan(&self, spec_url: &str) -> Result<Scan> {
         self.create_scan_full(CreateScanOptions {
             spec_url: Some(spec_url.to_string()),
@@ -378,16 +383,30 @@ impl APIGuardClient {
     }
 
     /// Start a scan with full control over all options.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the server returns a
+    /// non-success response.
     pub async fn create_scan_full(&self, opts: CreateScanOptions) -> Result<Scan> {
         self.post_json("scans", &opts).await
     }
 
     /// Fetch a scan by its UUID string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the scan does not exist or the request fails.
     pub async fn get_scan(&self, scan_id: &str) -> Result<Scan> {
         self.get_json(&format!("scans/{scan_id}"), None).await
     }
 
     /// List scans with optional pagination and status filters.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the server returns a
+    /// non-success response.
     pub async fn list_scans(&self, opts: Option<ListScansOptions>) -> Result<Vec<Scan>> {
         let mut q: Vec<(&'static str, String)> = vec![];
         if let Some(o) = opts {
@@ -403,6 +422,10 @@ impl APIGuardClient {
     }
 
     /// Delete a scan by its UUID string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the scan does not exist or the request fails.
     pub async fn delete_scan(&self, scan_id: &str) -> Result<()> {
         self.delete_no_content(&format!("scans/{scan_id}")).await
     }
@@ -412,6 +435,10 @@ impl APIGuardClient {
     /// Get all findings for a scan, with optional filtering.
     ///
     /// Handles both plain-array and `{"data":[...]}` envelope response formats.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the response cannot be parsed.
     pub async fn get_findings(
         &self,
         scan_id: &str,
@@ -457,11 +484,19 @@ impl APIGuardClient {
     }
 
     /// Get a single finding by its UUID string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the finding does not exist or the request fails.
     pub async fn get_finding(&self, finding_id: &str) -> Result<Finding> {
         self.get_json(&format!("findings/{finding_id}"), None).await
     }
 
     /// Update a finding's triage status and optional note.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the finding does not exist or the request fails.
     pub async fn patch_finding(
         &self,
         finding_id: &str,
@@ -475,6 +510,11 @@ impl APIGuardClient {
 
     /// Download a report into memory. Prefer [`get_report_stream`](Self::get_report_stream)
     /// for large reports to avoid buffering the entire payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the server returns a
+    /// non-success response.
     pub async fn get_report(&self, scan_id: &str, format: &str) -> Result<Bytes> {
         let url = format!(
             "{}?format={format}",
@@ -499,6 +539,11 @@ impl APIGuardClient {
     }
 
     /// Stream a report directly to an async writer (ideal for large files).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails, the server returns a
+    /// non-success response, or writing to `writer` fails.
     pub async fn get_report_stream(
         &self,
         scan_id: &str,
@@ -537,7 +582,11 @@ impl APIGuardClient {
 
     // ---------- public API — specs ----------
 
-    /// Upload an OpenAPI spec file via multipart form upload.
+    /// Upload an `OpenAPI` spec file via multipart form upload.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or the upload request fails.
     pub async fn upload_spec(&self, file_path: &str) -> Result<UploadSpecResponse> {
         let path = Path::new(file_path);
         let file_name = path
@@ -568,11 +617,13 @@ impl APIGuardClient {
     // ---------- public API — audit ----------
 
     /// Retrieve the audit log with pagination.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails or the server returns a
+    /// non-success response.
     pub async fn get_audit_log(&self, limit: u32, page: u32) -> Result<Vec<AuditEntry>> {
-        let q = vec![
-            ("per_page", limit.to_string()),
-            ("page", page.to_string()),
-        ];
+        let q = vec![("per_page", limit.to_string()), ("page", page.to_string())];
         self.get_json("audit", Some(q)).await
     }
 }
@@ -613,30 +664,39 @@ impl APIGuardClientBuilder {
     }
 
     /// Set the HTTP request timeout.
+    #[must_use]
     pub fn timeout(mut self, t: Duration) -> Self {
         self.timeout = t;
         self
     }
 
     /// Maximum number of retry attempts for transient failures.
+    #[must_use]
     pub fn max_retries(mut self, n: u32) -> Self {
         self.max_retries = n;
         self
     }
 
     /// Base wait duration for exponential back-off between retries.
+    #[must_use]
     pub fn retry_wait_base(mut self, d: Duration) -> Self {
         self.retry_wait_base = d;
         self
     }
 
     /// Accept invalid TLS certificates. **Do not use in production.**
+    #[must_use]
     pub fn danger_accept_invalid_certs(mut self, v: bool) -> Self {
         self.verify_ssl = !v;
         self
     }
 
     /// Consume the builder and produce an [`APIGuardClient`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying `reqwest` HTTP client fails to build (this
+    /// only happens if the TLS backend cannot be initialised).
     pub fn build(self) -> APIGuardClient {
         let http = Client::builder()
             .timeout(self.timeout)
@@ -662,4 +722,3 @@ impl APIGuardClientBuilder {
         }
     }
 }
-

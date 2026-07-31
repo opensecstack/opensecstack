@@ -14,8 +14,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 
 /// A minimal valid JWT with exp = 9999999999 (year 2286), suitable for tests.
 /// Header.Payload.Signature — payload is base64url({"exp":9999999999})
-const FAKE_JWT: &str =
-    "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTl9.fake_signature_for_tests";
+const FAKE_JWT: &str = "eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjk5OTk5OTk5OTl9.fake_signature_for_tests";
 
 fn auth_response() -> serde_json::Value {
     serde_json::json!({
@@ -112,7 +111,10 @@ async fn test_authenticate_success() {
     assert_eq!(scan.status, ScanStatus::Completed);
 
     // Verify the token was cached: a second call should NOT hit the auth endpoint again.
-    let scan2 = c.get_scan(scan_id).await.expect("second get_scan should succeed");
+    let scan2 = c
+        .get_scan(scan_id)
+        .await
+        .expect("second get_scan should succeed");
     assert_eq!(scan2.id.to_string(), scan_id);
 
     // wiremock's `expect(1)` will fail the test at drop if auth was called != 1 time.
@@ -184,12 +186,10 @@ async fn test_get_scan_not_found() {
     let scan_id = "00000000-0000-0000-0000-000000000000";
     Mock::given(method("GET"))
         .and(path(format!("/api/v1/scans/{scan_id}")))
-        .respond_with(
-            ResponseTemplate::new(404).set_body_json(serde_json::json!({
-                "code": "SCAN_NOT_FOUND",
-                "message": "scan not found"
-            })),
-        )
+        .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+            "code": "SCAN_NOT_FOUND",
+            "message": "scan not found"
+        })))
         .mount(&server)
         .await;
 

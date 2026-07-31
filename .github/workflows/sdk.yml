@@ -203,7 +203,7 @@ jobs:
             sdk/tools/tds-scanner/go.sum
 
       - name: Build tds-scanner
-        run: go build -o tds-scanner ./...
+        run: go build -o tds-scanner .
 
       - name: Scan Go SDK
         run: ./tds-scanner scan --lang go --format json --output tds-go-results.json ../../go/opensecstack/ || true

@@ -39,7 +39,7 @@ jobs:
       deploy:          ${{ steps.filter.outputs.deploy }}
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
-      - uses: dorny/paths-filter@de90cc6fb38505f5d1dba880b5b18bd2de29a3be # v3
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         id: filter
         with:
           filters: |
@@ -704,6 +704,7 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   ci-gate:
     needs:
+      - changes
       - test-apiguard
       - lint-apiguard
       - security-apiguard

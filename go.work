@@ -11,6 +11,7 @@ use (
 	./sdk/go
 	./sdk/go/citadel
 	./sdk/go/sinauth
+	./sdk/tests/integration
 	./securelab
 	./sinauth
 	./threatflow

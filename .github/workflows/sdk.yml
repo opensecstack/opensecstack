@@ -239,9 +239,26 @@ jobs:
 
       - name: Start mock API server
         run: |
-          mockoon-cli start --data sdk/tests/integration/mockoon-env.json --port 3000 &
-          sleep 3
-          curl -sf http://localhost:3000/api/v1/health || (echo "Mock API not ready" && exit 1)
+          # Fully detach mockoon-cli from this step's shell (setsid + disown +
+          # redirected output) so it cannot be reaped when the step's process
+          # exits, and survives for the lifetime of the job. Wait for it with
+          # a polling loop instead of a fixed sleep, since a fixed sleep can
+          # pass or fail on unrelated runner-load timing.
+          setsid nohup mockoon-cli start --data sdk/tests/integration/mockoon-env.json --port 3000 > /tmp/mockoon.log 2>&1 < /dev/null &
+          disown
+
+          echo "Waiting for mock API server on :3000 ..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/v1/health > /dev/null; then
+              echo "Mock API ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "::error::Mock API not ready after 30s"
+          cat /tmp/mockoon.log || true
+          exit 1
 
       - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
         with:
@@ -253,12 +270,37 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Verify mock API server is still up
+        run: |
+          # The mock server is started once and shared by the Go/Python/Rust
+          # steps below. Re-verify it here (after toolchain setup, which can
+          # take a while on a cold cache) so a dead server fails fast with a
+          # clear diagnostic instead of surfacing as an opaque
+          # ConnectionRefused deep inside a language's test runner.
+          if ! curl -sf http://localhost:3000/api/v1/health > /dev/null; then
+            echo "::error::Mock API server on :3000 is no longer reachable"
+            cat /tmp/mockoon.log || true
+            exit 1
+          fi
+          echo "Mock API still reachable."
+
       - name: Go integration tests
-        working-directory: sdk
+        # The integration test file (go_test.go, package integration_test)
+        # lives under sdk/tests/integration, which is its own Go module
+        # (with a `replace` back to sdk/go) since it sits outside the
+        # sdk/go module tree — `cd sdk/go && go test ./...` can never reach
+        # it. Point the step at the module that actually owns the file.
+        working-directory: sdk/tests/integration
         env:
           INTEGRATION_APIGUARD_URL: http://localhost:3000
           INTEGRATION_NIS2_URL: http://localhost:3000
-        run: cd go && go test -tags integration ./... -v -run TestGo
+        # Only the APIGuard/NIS2 tests are scoped here: this job's mock
+        # server (mockoon-env.json) serves those two, but stands up nothing
+        # on the CITADEL port (INTEGRATION_CITADEL_URL is unset, defaulting
+        # to :3001 with nothing listening), so TestGoCitadelIntegration
+        # would fail for lack of a mock, not a real code defect. Tracked
+        # separately from the mock-API connectivity fix in this workflow.
+        run: go test -tags integration ./... -v -run 'TestGoAPIGuardIntegration|TestGoNIS2CompassIntegration'
 
       - name: Python integration tests
         working-directory: sdk/python
@@ -268,6 +310,15 @@ jobs:
         run: |
           pip install -r requirements.txt
           pytest ../tests/integration/test_python_integration.py -v
+
+      - name: Verify mock API server is still up before Rust tests
+        run: |
+          if ! curl -sf http://localhost:3000/api/v1/health > /dev/null; then
+            echo "::error::Mock API server on :3000 is no longer reachable before the Rust integration step"
+            cat /tmp/mockoon.log || true
+            exit 1
+          fi
+          echo "Mock API still reachable."
 
       - name: Rust integration tests
         working-directory: sdk/rust

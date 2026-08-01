@@ -4,10 +4,11 @@ package integration_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 
-	"github.com/opensecstack/sdk/go/opensecstack"
+	"github.com/opensecstack/sdk/opensecstack"
 )
 
 func apiGuardURL() string {
@@ -29,7 +30,7 @@ func TestGoAPIGuardIntegration(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("list_scans", func(t *testing.T) {
-		scans, err := client.ListScans(ctx, nil)
+		scans, err := client.ListScans(ctx, opensecstack.ListScansOptions{})
 		if err != nil {
 			t.Fatalf("ListScans: %v", err)
 		}
@@ -43,7 +44,7 @@ func TestGoAPIGuardIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateScan: %v", err)
 		}
-		if scan.ID.String() == "" {
+		if scan.ID == "" {
 			t.Error("expected scan ID")
 		}
 	})
@@ -59,7 +60,7 @@ func TestGoAPIGuardIntegration(t *testing.T) {
 	})
 
 	t.Run("get_findings", func(t *testing.T) {
-		findings, err := client.GetFindings(ctx, "11111111-1111-1111-1111-111111111111", nil)
+		findings, err := client.GetFindings(ctx, "11111111-1111-1111-1111-111111111111", opensecstack.GetFindingsOptions{})
 		if err != nil {
 			t.Fatalf("GetFindings: %v", err)
 		}
@@ -77,7 +78,10 @@ func citadelURL() string {
 }
 
 func TestGoCitadelIntegration(t *testing.T) {
-	client := opensecstack.NewCITADELClient(citadelURL(), "test-shared-secret")
+	client := opensecstack.NewCITADELClient(opensecstack.CITADELClientOptions{
+		BaseURL:      citadelURL(),
+		SharedSecret: "test-shared-secret",
+	})
 	ctx := context.Background()
 
 	var sentEventID string
@@ -92,7 +96,7 @@ func TestGoCitadelIntegration(t *testing.T) {
 			ResourceType: "scan",
 			ResourceID:   "scan-integ-001",
 			Severity:     "info",
-			Payload:      map[string]interface{}{"score": 95},
+			Payload:      json.RawMessage(`{"score": 95}`),
 			ChainHash:    "integ-genesis-go",
 		}
 		if err := client.SendEvent(ctx, event); err != nil {
@@ -102,7 +106,7 @@ func TestGoCitadelIntegration(t *testing.T) {
 	})
 
 	t.Run("get_events", func(t *testing.T) {
-		events, err := client.GetEvents(ctx, nil)
+		events, err := client.GetEvents(ctx, opensecstack.GetEventsOptions{})
 		if err != nil {
 			t.Fatalf("GetEvents: %v", err)
 		}
@@ -125,11 +129,11 @@ func TestGoCitadelIntegration(t *testing.T) {
 	})
 
 	t.Run("verify_chain", func(t *testing.T) {
-		events, err := client.GetEvents(ctx, nil)
+		events, err := client.GetEvents(ctx, opensecstack.GetEventsOptions{})
 		if err != nil {
 			t.Fatalf("GetEvents for chain verification: %v", err)
 		}
-		if err := client.VerifyChain(events); err != nil {
+		if err := client.VerifyChain(ctx, events); err != nil {
 			t.Fatalf("VerifyChain: %v", err)
 		}
 	})
@@ -146,7 +150,7 @@ func TestGoNIS2CompassIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateOrganisation: %v", err)
 		}
-		if org.ID.String() == "" {
+		if org.ID == "" {
 			t.Error("expected org ID")
 		}
 	})
@@ -158,7 +162,7 @@ func TestGoNIS2CompassIntegration(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CreateAssessment: %v", err)
 		}
-		if assessment.ID.String() == "" {
+		if assessment.ID == "" {
 			t.Error("expected assessment ID")
 		}
 	})

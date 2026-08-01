@@ -465,8 +465,9 @@ class APIGuardClient:
         """
         payload = self._get("scans", params={"page": page, "per_page": per_page}).json()
         if isinstance(payload, dict):
-            return payload.get("data", payload.get("items", []))
-        return payload  # plain list
+            data = payload.get("data", payload.get("items", []))
+            return data if isinstance(data, list) else []
+        return payload if isinstance(payload, list) else []
 
     def delete_scan(self, scan_id: str) -> None:
         """

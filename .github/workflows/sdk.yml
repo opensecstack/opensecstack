@@ -5,10 +5,12 @@ on:
     branches: [main, develop]
     paths:
       - 'sdk/**'
+      - '.github/workflows/sdk.yml'
   pull_request:
     branches: [main]
     paths:
       - 'sdk/**'
+      - '.github/workflows/sdk.yml'
 
 jobs:
   test-go-sdk:

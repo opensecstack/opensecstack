@@ -403,10 +403,17 @@ impl APIGuardClient {
 
     /// List scans with optional pagination and status filters.
     ///
+    /// Handles both plain-array and `{"data":[...]}` envelope response
+    /// formats — the real APIGuard API wraps `GET /scans` in a
+    /// `{"data":[...],"total":...,"page":...,"per_page":...}` envelope
+    /// (see `apiguard/internal/api/handlers/scans.go`'s `List` handler),
+    /// so deserializing the body directly as `Vec<Scan>` fails against
+    /// the real API and the mock alike.
+    ///
     /// # Errors
     ///
-    /// Returns an error if the request fails or the server returns a
-    /// non-success response.
+    /// Returns an error if the request fails or the response cannot be
+    /// parsed.
     pub async fn list_scans(&self, opts: Option<ListScansOptions>) -> Result<Vec<Scan>> {
         let mut q: Vec<(&'static str, String)> = vec![];
         if let Some(o) = opts {
@@ -417,8 +424,14 @@ impl APIGuardClient {
                 q.push(("per_page", pp.min(100).to_string()));
             }
         }
-        self.get_json("scans", if q.is_empty() { None } else { Some(q) })
-            .await
+        let value: serde_json::Value = self
+            .get_json("scans", if q.is_empty() { None } else { Some(q) })
+            .await?;
+        if let Some(arr) = value.get("data") {
+            Ok(serde_json::from_value(arr.clone())?)
+        } else {
+            Ok(serde_json::from_value(value)?)
+        }
     }
 
     /// Delete a scan by its UUID string.

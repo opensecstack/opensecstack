@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GO_VERSION: "1.24"
+  GO_VERSION: "1.25"
   PYTHON_VERSION: "3.12"
 
 jobs:
@@ -33,8 +33,8 @@ jobs:
             go_sum_path: apiguard/go.sum
           - component: citadel
             language: go
-            working_dir: .citadel
-            go_sum_path: .citadel/go.sum
+            working_dir: citadel
+            go_sum_path: citadel/go.sum
           - component: irflow
             language: go
             working_dir: irflow
@@ -152,8 +152,8 @@ jobs:
       - name: Python SDK tests
         working-directory: sdk/python
         run: |
-          pip install -r requirements.txt pytest pytest-cov
-          pytest tests/ -v --timeout=300
+          pip install -r requirements.txt -r requirements-dev.txt
+          pytest tests/ -v
 
       - name: TypeScript SDK tests
         working-directory: sdk/typescript
@@ -166,8 +166,12 @@ jobs:
         run: cargo test --all-features
 
       - name: Rust SDK tests
+        # Deliberately not --all-features: the "integration" feature lifts
+        # #[cfg_attr(not(feature = "integration"), ignore)] off
+        # tests/integration_tests.rs, and this job has no mock API server -
+        # see .github/workflows/sdk.yml's test-rust-sdk job for the same fix.
         working-directory: sdk/rust
-        run: cargo test --all-features
+        run: cargo test --features axum,tracing-subscriber
 
   # ──────────────────────────────────────────────────────────────────────────
   # 2. dependency-audit — parallel with test-all
@@ -191,7 +195,7 @@ jobs:
         run: govulncheck ./...
 
       - name: govulncheck — citadel
-        working-directory: .citadel
+        working-directory: citadel
         run: govulncheck ./...
 
       - name: govulncheck — IRFlow
@@ -350,21 +354,21 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: .citadel/go.sum
+          cache-dependency-path: citadel/go.sum
 
       - name: Run CITADEL migrations
         env:
           DATABASE_URL: postgres://citadel:citadel@localhost:5432/citadel_worm?sslmode=disable
-        working-directory: .citadel
+        working-directory: citadel
         run: |
           go install github.com/golang-migrate/migrate/v4/cmd/migrate@latest
-          migrate -path db/migrations -database "$DATABASE_URL" up
+          migrate -path migrations -database "$DATABASE_URL" up
 
       - name: Verify WORM chain integrity
         env:
           DATABASE_URL: postgres://citadel:citadel@localhost:5432/citadel_worm?sslmode=disable
-        working-directory: .citadel
-        run: go test -run TestVerify -v -count=1 -timeout=10m ./internal/worm/...
+        working-directory: citadel
+        run: go test -tags integration -run TestWORM_Integration_ChainVerification -v -count=1 -timeout=10m ./internal/api/handlers/...
 
   # ──────────────────────────────────────────────────────────────────────────
   # 5. notify-on-failure — open a GitHub Issue when any job fails

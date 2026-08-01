@@ -39,7 +39,7 @@ func authHandler(t *testing.T, token string, counter *int32) http.HandlerFunc {
 		}
 		atomic.AddInt32(counter, 1)
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"token":%q}`, token)
+		_, _ = fmt.Fprintf(w, `{"token":%q}`, token)
 	}
 }
 
@@ -116,7 +116,7 @@ func TestDo_401Retry(t *testing.T) {
 			atomic.AddInt32(&authCalls, 1)
 			// Always return the fresh token so the retry after 401 succeeds.
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"token":%q}`, freshToken)
+			_, _ = fmt.Fprintf(w, `{"token":%q}`, freshToken)
 			return
 		}
 		if r.URL.Path == "/api/v1/organisations" {
@@ -162,7 +162,7 @@ func TestDo_RateLimitRetry(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/auth/token" {
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"token":%q}`, token)
+			_, _ = fmt.Fprintf(w, `{"token":%q}`, token)
 			return
 		}
 		if r.URL.Path == "/api/v1/organisations" {
@@ -208,7 +208,7 @@ func TestDo_RateLimitImmediate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/auth/token" {
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"token":%q}`, token)
+			_, _ = fmt.Fprintf(w, `{"token":%q}`, token)
 			return
 		}
 		if r.URL.Path == "/api/v1/organisations" {
@@ -273,7 +273,7 @@ func TestDo_NoRedirectFollow(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/auth/token" {
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"token":%q}`, token)
+			_, _ = fmt.Fprintf(w, `{"token":%q}`, token)
 			return
 		}
 		if r.URL.Path == "/api/v1/organisations" {
@@ -311,7 +311,7 @@ func TestProactiveTokenExpiry(t *testing.T) {
 				tok = nearlyExpiredToken
 			}
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"token":%q}`, tok)
+			_, _ = fmt.Fprintf(w, `{"token":%q}`, tok)
 			return
 		}
 		if r.URL.Path == "/api/v1/organisations" {
@@ -355,7 +355,7 @@ func TestGetOrganisations_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/auth/token" {
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"token":%q}`, token)
+			_, _ = fmt.Fprintf(w, `{"token":%q}`, token)
 			return
 		}
 		if r.URL.Path == "/api/v1/organisations" {
@@ -385,7 +385,7 @@ func TestCreateOrganisation_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/auth/token" {
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"token":%q}`, token)
+			_, _ = fmt.Fprintf(w, `{"token":%q}`, token)
 			return
 		}
 		if r.URL.Path == "/api/v1/organisations" && r.Method == http.MethodPost {
@@ -431,7 +431,7 @@ func makeNIS2Server(t *testing.T, token string, handler http.HandlerFunc) *httpt
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/auth/token" && r.Method == http.MethodPost {
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"token":%q}`, token)
+			_, _ = fmt.Fprintf(w, `{"token":%q}`, token)
 			return
 		}
 		handler(w, r)
@@ -1212,7 +1212,7 @@ func TestGetHealth_Success(t *testing.T) {
 			t.Error("GetHealth sent an Authorization header; endpoint should be unauthenticated")
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"status":"ok"}`)
+		_, _ = fmt.Fprint(w, `{"status":"ok"}`)
 	}))
 	defer srv.Close()
 
@@ -1239,7 +1239,7 @@ func TestGetHealthDetail_Success(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"status":"ok","version":"1.0.0","db":"ok","redis":"ok"}`)
+		_, _ = fmt.Fprint(w, `{"status":"ok","version":"1.0.0","db":"ok","redis":"ok"}`)
 	})
 	defer srv.Close()
 
@@ -1261,7 +1261,7 @@ func TestGetHealth_ServiceUnavailable(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		fmt.Fprint(w, `{"status":"degraded"}`)
+		_, _ = fmt.Fprint(w, `{"status":"degraded"}`)
 	}))
 	defer srv.Close()
 

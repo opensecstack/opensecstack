@@ -593,7 +593,7 @@ func TestRefreshToken_Concurrent(t *testing.T) {
 		if r.URL.Path == "/api/v1/auth/refresh" && r.Method == http.MethodPost {
 			atomic.AddInt32(&refreshCalls, 1)
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"access_token":%q,"refresh_token":"ref2","expires_in":3600}`, newToken)
+			_, _ = fmt.Fprintf(w, `{"access_token":%q,"refresh_token":"ref2","expires_in":3600}`, newToken)
 			return
 		}
 		http.NotFound(w, r)

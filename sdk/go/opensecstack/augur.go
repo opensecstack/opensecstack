@@ -46,7 +46,7 @@ func (c *CITADELClient) augurDo(ctx context.Context, method, path string, body i
 	if err != nil {
 		return fmt.Errorf("augurDo %s %s: %w", method, path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("augurDo: reading body: %w", err)

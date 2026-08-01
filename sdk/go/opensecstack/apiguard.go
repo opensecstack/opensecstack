@@ -470,7 +470,7 @@ func (c *APIGuardClient) deleteJSON(ctx context.Context, path string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusNoContent {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		return nil
@@ -640,7 +640,7 @@ func (c *APIGuardClient) GetReport(ctx context.Context, scanID, format string) (
 	if err != nil {
 		return nil, fmt.Errorf("GetReport %s: %w", scanID, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("GetReport %s: reading response: %w", scanID, err)

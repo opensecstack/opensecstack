@@ -137,7 +137,7 @@ func (c *NIS2CompassClient) authenticate(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("auth request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return fmt.Errorf("authentication failed: invalid API key")
@@ -221,7 +221,7 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 			return nil, err
 		}
 		if r.StatusCode == http.StatusUnauthorized {
-			r.Body.Close()
+			_ = r.Body.Close()
 			// Double-checked locking: only re-authenticate if another thread
 			// has not already refreshed the token while we waited.
 			c.mu.Lock()
@@ -250,7 +250,7 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 		if r.StatusCode == http.StatusTooManyRequests {
 			retryAfter, _ := strconv.Atoi(r.Header.Get("Retry-After"))
 			if retryAfter > 0 && retryAfter <= 60 {
-				r.Body.Close()
+				_ = r.Body.Close()
 				select {
 				case <-ctx.Done():
 					return nil, ctx.Err()
@@ -264,7 +264,7 @@ func (c *NIS2CompassClient) do(ctx context.Context, method, path string, body io
 			}
 			// retryAfter > 60 or not present: return immediately.
 			raw, _ := io.ReadAll(r.Body)
-			r.Body.Close()
+			_ = r.Body.Close()
 			return nil, &RateLimitError{
 				Message:    fmt.Sprintf("rate limited (HTTP 429): %s", string(raw)),
 				RetryAfter: retryAfter,
@@ -362,7 +362,7 @@ func (c *NIS2CompassClient) GetReportStream(ctx context.Context, assessmentID, f
 	if err != nil {
 		return fmt.Errorf("GetReportStream: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("GetReportStream: HTTP %d", resp.StatusCode)
@@ -738,7 +738,7 @@ func (c *NIS2CompassClient) DownloadArtifact(ctx context.Context, artifactID, de
 	if err != nil {
 		return fmt.Errorf("DownloadArtifact %s: %w", artifactID, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		raw, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("DownloadArtifact %s: API error HTTP %d: %s", artifactID, resp.StatusCode, string(raw))
@@ -816,7 +816,7 @@ func (c *NIS2CompassClient) GenerateReport(ctx context.Context, assessmentID str
 	if err != nil {
 		return nil, fmt.Errorf("GenerateReport %s: %w", assessmentID, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("GenerateReport %s: reading response: %w", assessmentID, err)
@@ -889,7 +889,7 @@ func (c *NIS2CompassClient) GetHealth(ctx context.Context) (*HealthStatus, error
 	if err != nil {
 		return nil, fmt.Errorf("GetHealth: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("GetHealth: HTTP %d", resp.StatusCode)
 	}

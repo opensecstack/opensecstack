@@ -404,7 +404,7 @@ impl APIGuardClient {
     /// List scans with optional pagination and status filters.
     ///
     /// Handles both plain-array and `{"data":[...]}` envelope response
-    /// formats — the real APIGuard API wraps `GET /scans` in a
+    /// formats — the real `APIGuard` API wraps `GET /scans` in a
     /// `{"data":[...],"total":...,"page":...,"per_page":...}` envelope
     /// (see `apiguard/internal/api/handlers/scans.go`'s `List` handler),
     /// so deserializing the body directly as `Vec<Scan>` fails against

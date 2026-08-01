@@ -463,9 +463,7 @@ class APIGuardClient:
         this unwraps that envelope and returns the inner list directly,
         mirroring :meth:`AsyncAPIGuardClient.list_scans`.
         """
-        payload = self._get(
-            "scans", params={"page": page, "per_page": per_page}
-        ).json()
+        payload = self._get("scans", params={"page": page, "per_page": per_page}).json()
         if isinstance(payload, dict):
             return payload.get("data", payload.get("items", []))
         return payload  # plain list

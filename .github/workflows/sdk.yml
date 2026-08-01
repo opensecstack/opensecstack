@@ -343,7 +343,7 @@ jobs:
         # same reason. Tracked separately from the mock-API connectivity
         # fix in this workflow.
         run: |
-          pip install -r requirements.txt
+          pip install -r requirements.txt -r requirements-dev.txt
           pip install -e .
           pytest ../tests/integration/test_python_integration.py -v -k "not TestCitadelIntegration"
 

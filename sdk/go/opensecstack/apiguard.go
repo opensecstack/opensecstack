@@ -757,7 +757,7 @@ func (c *APIGuardClient) ListScans(ctx context.Context, opts ListScansOptions) (
 	if err := c.getJSON(ctx, "scans", params, &envelope); err != nil {
 		return nil, fmt.Errorf("ListScans: %w", err)
 	}
-	return envelope.Items, nil
+	return envelope.Data, nil
 }
 
 // DeleteScan deletes a scan by UUID via DELETE /api/v1/scans/{id}.

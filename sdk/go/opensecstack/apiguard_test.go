@@ -117,7 +117,7 @@ func TestListScans_Success(t *testing.T) {
 			return
 		}
 		resp := scansResponse{
-			Items:   wantScans,
+			Data:    wantScans,
 			Total:   2,
 			Page:    1,
 			PerPage: 20,

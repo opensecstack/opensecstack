@@ -393,8 +393,12 @@ type RefreshTokenResponse struct {
 }
 
 // scansResponse is the paginated envelope returned by GET /api/v1/scans.
+//
+// The real APIGuard server (apiguard/internal/api/handlers/scans.go's
+// listScansResponse) wraps results under a "data" key, not "items" — keep
+// this struct's JSON tags in sync with that handler.
 type scansResponse struct {
-	Items   []Scan `json:"items"`
+	Data    []Scan `json:"data"`
 	Total   int    `json:"total"`
 	Page    int    `json:"page"`
 	PerPage int    `json:"per_page"`

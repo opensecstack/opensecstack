@@ -135,7 +135,15 @@ jobs:
       - name: clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: test
-        run: cargo test --all-features
+        # Deliberately not --all-features: the "integration" feature lifts
+        # #[cfg_attr(not(feature = "integration"), ignore)] off the tests in
+        # tests/integration_tests.rs, causing them to actually run here. This
+        # job has no mock API server (that's only started in the separate
+        # cross-language-integration job), so those tests fail with
+        # ConnectionRefused on 127.0.0.1:3000. Enable every feature except
+        # "integration" so unit tests still cover the axum/tracing-subscriber
+        # gated code without pulling in the network-dependent tests.
+        run: cargo test --features axum,tracing-subscriber
 
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin --quiet

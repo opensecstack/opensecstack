@@ -65,7 +65,7 @@ def client() -> APIGuardClient:
 def test_authenticate_success(client: APIGuardClient) -> None:
     token = _fresh_jwt()
     rsps_lib.add(rsps_lib.POST, AUTH_URL, json={"access_token": token}, status=200)
-    rsps_lib.add(rsps_lib.GET, f"{BASE_URL}/api/v1/scans", json={"items": [], "total": 0, "page": 1, "per_page": 20}, status=200)
+    rsps_lib.add(rsps_lib.GET, f"{BASE_URL}/api/v1/scans", json={"data": [], "total": 0, "page": 1, "per_page": 20}, status=200)
 
     client.list_scans()
 
@@ -78,8 +78,8 @@ def test_authenticate_success(client: APIGuardClient) -> None:
 def test_token_cached_no_reauth(client: APIGuardClient) -> None:
     token = _fresh_jwt()
     rsps_lib.add(rsps_lib.POST, AUTH_URL, json={"access_token": token}, status=200)
-    rsps_lib.add(rsps_lib.GET, f"{BASE_URL}/api/v1/scans", json={"items": [], "total": 0, "page": 1, "per_page": 20}, status=200)
-    rsps_lib.add(rsps_lib.GET, f"{BASE_URL}/api/v1/scans", json={"items": [], "total": 0, "page": 1, "per_page": 20}, status=200)
+    rsps_lib.add(rsps_lib.GET, f"{BASE_URL}/api/v1/scans", json={"data": [], "total": 0, "page": 1, "per_page": 20}, status=200)
+    rsps_lib.add(rsps_lib.GET, f"{BASE_URL}/api/v1/scans", json={"data": [], "total": 0, "page": 1, "per_page": 20}, status=200)
 
     client.list_scans()
     client.list_scans()
@@ -100,10 +100,10 @@ def test_401_triggers_reauth_and_retry(client: APIGuardClient) -> None:
     rsps_lib.add(rsps_lib.POST, AUTH_URL, json={"access_token": token_v1}, status=200)
     rsps_lib.add(rsps_lib.GET, f"{BASE_URL}/api/v1/scans", status=401)
     rsps_lib.add(rsps_lib.POST, AUTH_URL, json={"access_token": token_v2}, status=200)
-    rsps_lib.add(rsps_lib.GET, f"{BASE_URL}/api/v1/scans", json={"items": [], "total": 0, "page": 1, "per_page": 20}, status=200)
+    rsps_lib.add(rsps_lib.GET, f"{BASE_URL}/api/v1/scans", json={"data": [], "total": 0, "page": 1, "per_page": 20}, status=200)
 
     result = client.list_scans()
-    assert result == {"items": [], "total": 0, "page": 1, "per_page": 20}
+    assert result == []
     assert client._jwt == token_v2
 
 
@@ -142,7 +142,7 @@ def test_rate_limit_retry_after_le_60_sleeps_and_retries(client: APIGuardClient)
     rsps_lib.add(
         rsps_lib.GET,
         f"{BASE_URL}/api/v1/scans",
-        json={"items": [], "total": 0, "page": 1, "per_page": 20},
+        json={"data": [], "total": 0, "page": 1, "per_page": 20},
         status=200,
     )
 
@@ -150,7 +150,7 @@ def test_rate_limit_retry_after_le_60_sleeps_and_retries(client: APIGuardClient)
         result = client.list_scans()
 
     mock_sleep.assert_any_call(5)
-    assert result["items"] == []
+    assert result == []
 
 
 @rsps_lib.activate
@@ -180,13 +180,13 @@ def test_rate_limit_retry_after_gt_60_raises_immediately(client: APIGuardClient)
 @rsps_lib.activate
 def test_list_scans_pagination(client: APIGuardClient) -> None:
     token = _fresh_jwt()
-    page2_response = {"items": [{"id": "scan-1"}], "total": 1, "page": 2, "per_page": 10}
+    page2_response = {"data": [{"id": "scan-1"}], "total": 1, "page": 2, "per_page": 10}
     rsps_lib.add(rsps_lib.POST, AUTH_URL, json={"access_token": token}, status=200)
     rsps_lib.add(rsps_lib.GET, f"{BASE_URL}/api/v1/scans", json=page2_response, status=200)
 
     result = client.list_scans(page=2, per_page=10)
 
-    assert result["page"] == 2
+    assert result == [{"id": "scan-1"}]
     scans_call = next(c for c in rsps_lib.calls if "/scans" in c.request.url)
     assert "page=2" in scans_call.request.url
     assert "per_page=10" in scans_call.request.url
@@ -256,7 +256,7 @@ def test_proactive_token_refresh(client: APIGuardClient) -> None:
     rsps_lib.add(
         rsps_lib.GET,
         f"{BASE_URL}/api/v1/scans",
-        json={"items": [], "total": 0, "page": 1, "per_page": 20},
+        json={"data": [], "total": 0, "page": 1, "per_page": 20},
         status=200,
     )
 

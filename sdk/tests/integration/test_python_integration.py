@@ -32,17 +32,17 @@ class TestAPIGuardIntegration:
         assert len(scans) > 0
 
     def test_create_scan(self, ag_client):
-        scan = ag_client.create_scan("https://api.example.com/openapi.json")
-        assert scan.id is not None
+        scan = ag_client.create_scan(spec_url="https://api.example.com/openapi.json")
+        assert scan["id"] is not None
 
     def test_get_scan(self, ag_client):
         scan = ag_client.get_scan("11111111-1111-1111-1111-111111111111")
-        assert scan.status is not None
+        assert scan["status"] is not None
 
     def test_get_findings(self, ag_client):
         findings = ag_client.get_findings("11111111-1111-1111-1111-111111111111")
         assert len(findings) > 0
-        assert findings[0].severity is not None
+        assert findings[0]["severity"] is not None
 
 @pytest.fixture
 def citadel_client():
@@ -95,12 +95,16 @@ class TestCitadelIntegration:
 
 class TestNIS2CompassIntegration:
     def test_create_organisation(self, nis2_client):
-        org = nis2_client.create_organisation({"name": "Python Integration Test Org"})
-        assert org.id is not None
+        org = nis2_client.create_organisation(
+            name="Python Integration Test Org",
+            industry="technology",
+            country="DE",
+        )
+        assert org["id"] is not None
 
     def test_create_assessment(self, nis2_client):
         assessment = nis2_client.create_assessment(
-            "44444444-4444-4444-4444-444444444444",
-            {"title": "Python Integration Assessment"}
+            org_id="44444444-4444-4444-4444-444444444444",
+            title="Python Integration Assessment",
         )
-        assert assessment.id is not None
+        assert assessment["id"] is not None

@@ -453,14 +453,22 @@ class APIGuardClient:
     # Scans
     # ------------------------------------------------------------------
 
-    def list_scans(self, page: int = 1, per_page: int = 20) -> dict:
+    def list_scans(self, page: int = 1, per_page: int = 20) -> list[dict]:
         """
         Return a paginated list of scans.
 
-        Issues ``GET /api/v1/scans`` and returns the envelope dict with
-        keys ``items``, ``total``, ``page``, ``per_page``.
+        Issues ``GET /api/v1/scans``. The real APIGuard server wraps
+        results in an envelope under a ``data`` key (see
+        ``apiguard/internal/api/handlers/scans.go`` / ``docs/api.md``);
+        this unwraps that envelope and returns the inner list directly,
+        mirroring :meth:`AsyncAPIGuardClient.list_scans`.
         """
-        return self._get("scans", params={"page": page, "per_page": per_page}).json()
+        payload = self._get(
+            "scans", params={"page": page, "per_page": per_page}
+        ).json()
+        if isinstance(payload, dict):
+            return payload.get("data", payload.get("items", []))
+        return payload  # plain list
 
     def delete_scan(self, scan_id: str) -> None:
         """
@@ -1108,7 +1116,7 @@ class AsyncAPIGuardClient:
         """
         Return a paginated list of scans (async).
 
-        Returns the ``items`` list from the API envelope, or the raw list
+        Returns the ``data`` list from the API envelope, or the raw list
         if the server responds with a plain array.
         """
         resp = await self._request(
@@ -1116,7 +1124,7 @@ class AsyncAPIGuardClient:
         )
         payload = resp.json()
         if isinstance(payload, dict):
-            return cast(list, payload.get("items", payload.get("data", [])))
+            return cast(list, payload.get("data", payload.get("items", [])))
         return payload  # plain list
 
     async def get_findings(

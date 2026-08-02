@@ -4,7 +4,7 @@
 # eBPF/XDP data plane is stubbed in dev — no root/Linux kernel required.
 FROM golang:1.25-alpine
 RUN apk add --no-cache git ca-certificates curl && \
-    go install github.com/air-verse/air@latest
+    go install github.com/air-verse/air@v1.67.1
 WORKDIR /src
 COPY sdk/go ./sdk/go
 COPY openscrub/ ./openscrub/

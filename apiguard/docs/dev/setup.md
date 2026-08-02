@@ -240,7 +240,7 @@ The Docker dev environment uses [air](https://github.com/air-verse/air) for auto
 
 ```bash
 # If running manually, install air and run:
-go install github.com/air-verse/air@latest
+go install github.com/air-verse/air@v1.67.1
 air
 ```
 

@@ -4,7 +4,7 @@
 # ML gRPC + rust FFI disabled in dev.
 FROM golang:1.25-alpine
 RUN apk add --no-cache git ca-certificates curl && \
-    go install github.com/air-verse/air@latest
+    go install github.com/air-verse/air@v1.67.1
 WORKDIR /src
 COPY sdk/go ./sdk/go
 COPY vertguard/ ./vertguard/

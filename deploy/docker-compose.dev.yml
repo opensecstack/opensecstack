@@ -76,6 +76,13 @@ services:
       - CITADEL_HTTP_ADDR=:8099
       - CITADEL_DEV_MODE=true
       - CITADEL_MASTER_KEY=dev-master-key-do-not-use-in-production-32b
+      # Required — internal/config.CitadelConfig.SinauthIssuerURL: server init
+      # (internal/api.NewServer -> auth.NewSinauthVerifier) fetches the OIDC
+      # discovery document from this URL at startup and log.Fatal's if the
+      # fetch fails, which it always does against an empty issuer URL. That
+      # crash loop is what shows up as "container ... is unhealthy" — the
+      # process never gets far enough to open the health endpoint.
+      - CITADEL_SINAUTH_ISSUER_URL=http://sinauth-api:8100
     volumes:
       - ../citadel/cmd:/src/citadel/cmd
       - ../citadel/internal:/src/citadel/internal
@@ -90,6 +97,11 @@ services:
       start_period: 10s
     depends_on:
       postgres:
+        condition: service_healthy
+      sinauth-api:
+        # NewSinauthVerifier fetches the discovery doc once, synchronously,
+        # at startup — if sinauth-api isn't already serving, citadel-api
+        # fatal-exits before its own health endpoint ever comes up.
         condition: service_healthy
       citadel-migrate:
         condition: service_completed_successfully

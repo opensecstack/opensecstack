@@ -25,6 +25,25 @@ def _create_org(client, headers):
     return resp.get_json()['id']
 
 
+# Assessments are created in 'draft' status. app/api/assessments.py's
+# VALID_TRANSITIONS state machine only allows single-step moves
+# (draft -> in_progress -> under_review -> completed -> archived), so
+# jumping straight from 'draft' to e.g. 'under_review' in one PATCH is
+# rejected (400) and the assessment silently stays in 'draft'. That in turn
+# made every approve/reject call below fail with 409 (assessment not
+# 'under_review') even though the test *looked* like it had set the status
+# correctly, since the single PATCH's response was never checked. Walk the
+# state machine one step at a time instead, matching the convention already
+# used in tests/test_assessments.py::TestAssessmentStateMachine.
+_STATUS_PATH = {
+    'draft':        [],
+    'in_progress':  ['in_progress'],
+    'under_review': ['in_progress', 'under_review'],
+    'completed':    ['in_progress', 'under_review', 'completed'],
+    'archived':     ['in_progress', 'under_review', 'completed', 'archived'],
+}
+
+
 def _create_assessment(client, headers, org_id, status='in_progress'):
     resp = client.post(f'/api/v1/organisations/{org_id}/assessments', json={
         'title': 'Compliance Test Assessment',
@@ -32,8 +51,9 @@ def _create_assessment(client, headers, org_id, status='in_progress'):
     assert resp.status_code == 201
     data = resp.get_json()
     asmt_id = data['id']
-    if status != 'draft':
-        client.patch(f'/api/v1/assessments/{asmt_id}', json={'status': status}, headers=headers)
+    for step in _STATUS_PATH[status]:
+        resp = client.patch(f'/api/v1/assessments/{asmt_id}', json={'status': step}, headers=headers)
+        assert resp.status_code == 200, f'Failed to transition assessment to {step!r}: {resp.get_json()}'
     return asmt_id
 
 

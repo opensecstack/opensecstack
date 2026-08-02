@@ -85,7 +85,17 @@ class TestListOrganisations:
         body = resp.get_json()
         count_header = int(resp.headers['X-Total-Count'])
         assert count_header == body['total']
-        assert count_header == len(body['data'])
+        # X-Total-Count / body['total'] reflect the *unpaginated* COUNT(*) of
+        # every organisation visible to this actor, while body['data'] is a
+        # single page (default per_page=20 — see app/api/organisations.py).
+        # Other tests in this suite create organisations under the same
+        # actor and are not rolled back between tests (no DB-transaction
+        # isolation in tests/conftest.py — see the per-test-unique-name
+        # convention used elsewhere, e.g. tests/test_compliance.py), so by
+        # the time this test runs there are commonly more than per_page
+        # organisations total. Assert the pagination invariant instead of
+        # assuming every row fits on one page.
+        assert len(body['data']) == min(count_header, body['per_page'])
 
 
 class TestGetOrganisation:

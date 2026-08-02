@@ -276,22 +276,34 @@ jobs:
       - name: Start full stack
         run: docker compose -f deploy/docker-compose.dev.yml up -d --wait --wait-timeout 120
 
+      # --retry-all-errors covers transient connection resets/empty replies
+      # during container startup (e.g. Air still compiling the dev binary)
+      # that curl's default retry policy does not retry on its own — see
+      # apiguard-api / citadel-api healthchecks in docker-compose.dev.yml
+      # for the primary fix (compose now waits for the app to actually
+      # serve, not just for the container to be running); this is a
+      # defense-in-depth backstop for any remaining transient blips.
       - name: Wait for APIGuard health endpoint
         run: |
-          curl -sf --retry 15 --retry-delay 5 --retry-connrefused \
+          curl -sf --retry-all-errors --retry 15 --retry-delay 5 --retry-connrefused \
             http://localhost:8080/api/v1/health
 
+      # NIS2 Compass registers its health blueprint without the /api/v1
+      # prefix used by every other route (see
+      # nis2compass/app/api/__init__.py) and only listens on 8090 (see
+      # docker-compose.dev.yml) — there is no service on port 5000.
       - name: Wait for NIS2 Compass health endpoint
         run: |
-          curl -sf --retry 15 --retry-delay 5 --retry-connrefused \
-            http://localhost:5000/api/v1/health || \
-          curl -sf --retry 15 --retry-delay 5 --retry-connrefused \
-            http://localhost:8090/api/v1/health
+          curl -sf --retry-all-errors --retry 15 --retry-delay 5 --retry-connrefused \
+            http://localhost:8090/health
 
+      # Citadel's health route is /api/v1/health (see
+      # citadel/internal/api/server.go) on port 8099 (see
+      # docker-compose.dev.yml) — there is no service on port 9000.
       - name: Wait for Citadel health endpoint
         run: |
-          curl -sf --retry 15 --retry-delay 5 --retry-connrefused \
-            http://localhost:9000/health
+          curl -sf --retry-all-errors --retry 15 --retry-delay 5 --retry-connrefused \
+            http://localhost:8099/api/v1/health
 
       - name: Install Nuclei
         run: |
@@ -307,14 +319,14 @@ jobs:
 
       - name: DAST — NIS2 Compass
         run: |
-          nuclei -u http://localhost:5000 \
+          nuclei -u http://localhost:8090 \
             -tags api,owasp \
             -jsonl -output dast-nis2compass.jsonl \
             -severity medium,high,critical || true
 
       - name: DAST — Citadel
         run: |
-          nuclei -u http://localhost:9000 \
+          nuclei -u http://localhost:8099 \
             -tags api \
             -jsonl -output dast-citadel.jsonl \
             -severity medium,high,critical || true

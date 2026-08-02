@@ -1,9 +1,13 @@
+# Dev image with Air hot-reload. BUILD CONTEXT = repo root (../ from deploy),
+# because go.mod uses `replace => ../sdk/...` which must resolve at build time.
+# Source (cmd/internal) is volume-mounted over /src/community in docker-compose.
 FROM golang:1.25-alpine
 RUN apk add --no-cache git ca-certificates tzdata wget && \
-    go install github.com/air-verse/air@latest
-WORKDIR /app
-COPY go.mod go.sum ./
+    go install github.com/air-verse/air@v1.67.1
+WORKDIR /src
+COPY sdk/go ./sdk/go
+COPY community/ ./community/
+WORKDIR /src/community
 RUN go mod download
-COPY . .
 EXPOSE 8090
 CMD ["air", "-c", ".air.toml"]

@@ -55,7 +55,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U ${{ matrix.component }}" --health-interval 10s
+          --health-cmd "pg_isready -U ${{ matrix.component }} -d ${{ matrix.component }}_test" --health-interval 10s
           --health-timeout 5s --health-retries 5
       redis:
         image: redis:7-alpine
@@ -360,7 +360,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U citadel" --health-interval 10s
+          --health-cmd "pg_isready -U citadel -d citadel_worm" --health-interval 10s
           --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
@@ -374,7 +374,7 @@ jobs:
           DATABASE_URL: postgres://citadel:citadel@localhost:5432/citadel_worm?sslmode=disable
         working-directory: citadel
         run: |
-          go install github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+          go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
           migrate -path migrations -database "$DATABASE_URL" up
 
       - name: Verify WORM chain integrity

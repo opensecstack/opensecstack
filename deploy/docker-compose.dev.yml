@@ -79,6 +79,15 @@ services:
     volumes:
       - ../citadel/cmd:/src/citadel/cmd
       - ../citadel/internal:/src/citadel/internal
+    # Same rationale as apiguard-api: Air rebuilds the binary before serving,
+    # so without an explicit healthcheck `--wait` reports ready before the
+    # HTTP server is actually listening.
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8099/api/v1/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
@@ -181,6 +190,17 @@ services:
     volumes:
       - ../apiguard/cmd:/src/apiguard/cmd
       - ../apiguard/internal:/src/apiguard/internal
+    # Air hot-reload runs `go build` before the server starts listening, which
+    # can take well past the container's "running" state. Without this,
+    # `docker compose up --wait` considers apiguard-api ready the instant the
+    # `air` process starts — not when it's actually serving — causing a race
+    # where external health checks hit a port that isn't listening yet.
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/api/v1/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,0 +1,7 @@
+# Force LF line endings for POSIX shell scripts regardless of the checkout
+# platform's core.autocrlf setting. Several deploy/scripts/*.sh files are
+# bind-mounted straight into Alpine (busybox `sh`) containers; a CRLF-mangled
+# script fails fast and non-obviously (e.g. `set: line 6: illegal option -`
+# from a stray \r after `set -e`), which breaks every docker-compose service
+# that depends on that script via `condition: service_completed_successfully`.
+*.sh text eol=lf

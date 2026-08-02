@@ -11,12 +11,25 @@ services:
       - "5434:5432"
     volumes:
       - citadel_pgdata:/var/lib/postgresql/data
-      - ./migrations/001_initial.sql:/docker-entrypoint-initdb.d/001_initial.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U citadel -d citadel"]
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # One-shot: apply migrations/*.up.sql (golang-migrate naming convention)
+  # in order, then exit. `citadel` waits for this to complete successfully.
+  migrate:
+    image: migrate/migrate:v4.19.1
+    volumes:
+      - ./migrations:/migrations
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://citadel:citadel_secret@postgres:5432/citadel?sslmode=disable"
+      - "up"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   citadel:
     build:
@@ -33,6 +46,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8099/api/v1/health || exit 1"]
       interval: 10s

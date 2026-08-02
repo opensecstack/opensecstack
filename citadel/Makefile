@@ -1,4 +1,4 @@
-.PHONY: run build test bench migrate docker-up docker-down
+.PHONY: run build test bench migrate migrate-down docker-up docker-down
 
 ## run: start CITADEL locally (requires postgres running)
 run:
@@ -21,10 +21,16 @@ test:
 bench:
 	go test -tags bench -bench=. -benchmem -count=10 ./benches/
 
-## migrate: apply migrations to local postgres
+## migrate: apply all pending migrations to local postgres (golang-migrate;
+## migrations/ uses its <version>_<title>.up.sql / .down.sql convention)
 migrate:
-	psql "postgres://citadel:citadel_secret@localhost:5434/citadel?sslmode=disable" \
-	  -f migrations/001_initial.sql
+	@command -v migrate >/dev/null 2>&1 || go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+	migrate -path migrations -database "postgres://citadel:citadel_secret@localhost:5434/citadel?sslmode=disable" up
+
+## migrate-down: roll back one migration on local postgres
+migrate-down:
+	@command -v migrate >/dev/null 2>&1 || go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+	migrate -path migrations -database "postgres://citadel:citadel_secret@localhost:5434/citadel?sslmode=disable" down 1
 
 ## docker-up: start CITADEL + postgres via docker-compose
 docker-up:

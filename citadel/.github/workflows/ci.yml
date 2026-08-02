@@ -54,10 +54,10 @@ jobs:
           cache-dependency-path: citadel/go.sum
       - name: Apply migrations
         env:
-          PGPASSWORD: citadel_secret
+          DATABASE_URL: postgres://citadel:citadel_secret@localhost:5434/citadel?sslmode=disable
         run: |
-          apt-get update && apt-get install -y postgresql-client
-          psql -h localhost -p 5434 -U citadel -d citadel -f migrations/001_initial.sql
+          go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+          migrate -path migrations -database "$DATABASE_URL" up
       - name: Unit + integration tests
         env:
           CITADEL_DB_URL: postgres://citadel:citadel_secret@localhost:5434/citadel?sslmode=disable

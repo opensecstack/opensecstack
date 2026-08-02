@@ -5,6 +5,8 @@ Unit tests (no database): use the `app` and `client` fixtures.
 Integration tests (real PostgreSQL): set NIS2_TEST_DB_URL env var.
 """
 import os
+import shutil
+import tempfile
 import pytest
 from app import create_app
 from app.config import Config
@@ -24,12 +26,20 @@ class TestConfig(Config):
     REDIS_URL = os.getenv('NIS2_TEST_REDIS_URL', 'redis://localhost:6380/1')
     NIS2_ENV = 'development'
     DEBUG = True
+    # The production default (NIS2_UPLOAD_DIR -> /app/uploads) assumes the
+    # app is running inside its Docker image, rooted at /app and owned by
+    # the container's runtime user. That path does not exist (and is not
+    # writable) on a plain CI runner / local venv, so artifact-upload tests
+    # would fail with PermissionError. Point uploads at an isolated temp
+    # directory for the lifetime of the test session instead.
+    UPLOAD_DIR = os.getenv('NIS2_TEST_UPLOAD_DIR', tempfile.mkdtemp(prefix='nis2compass-test-uploads-'))
 
 
 @pytest.fixture(scope='session')
 def app():
     app = create_app(TestConfig)
-    return app
+    yield app
+    shutil.rmtree(TestConfig.UPLOAD_DIR, ignore_errors=True)
 
 
 @pytest.fixture()

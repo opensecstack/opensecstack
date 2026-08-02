@@ -103,12 +103,14 @@ def list_artifacts(assessment_id):
 
     total = query.count()
     items = query.offset((page - 1) * per_page).limit(per_page).all()
-    return jsonify({
+    response = jsonify({
         'data': [a.to_dict() for a in items],
         'total': total,
         'page': page,
         'per_page': per_page,
-    }), 200
+    })
+    response.headers['X-Total-Count'] = str(total)
+    return response, 200
 
 
 # ------------------------------------------------------------------ #

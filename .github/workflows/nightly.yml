@@ -55,7 +55,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready --health-interval 10s
+          --health-cmd "pg_isready -U ${{ matrix.component }}" --health-interval 10s
           --health-timeout 5s --health-retries 5
       redis:
         image: redis:7-alpine
@@ -360,7 +360,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready --health-interval 10s
+          --health-cmd "pg_isready -U citadel" --health-interval 10s
           --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4

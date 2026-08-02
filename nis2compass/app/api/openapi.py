@@ -159,7 +159,7 @@ _SPEC = {
                     "content": {"application/json": {"schema": {"type": "object", "required": ["api_key"], "properties": {"api_key": {"type": "string"}}}}}
                 },
                 "responses": {
-                    "200": {"description": "Token issued", "content": {"application/json": {"schema": {"type": "object", "properties": {"token": {"type": "string"}, "expires_at": {"type": "string", "format": "date-time"}}}}}},
+                    "200": {"description": "Token issued", "content": {"application/json": {"schema": {"type": "object", "properties": {"access_token": {"type": "string"}, "refresh_token": {"type": "string"}, "token_type": {"type": "string"}, "expires_in": {"type": "integer"}}}}}},
                     "401": {"description": "Invalid API key", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}},
                     "429": {"description": "Rate limit exceeded"}
                 }

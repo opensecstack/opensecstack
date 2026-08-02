@@ -403,7 +403,7 @@ class TestE2EApiKeyLifecycle:
         assert token_resp.status_code == 200, (
             'Token exchange with new API key should return 200'
         )
-        new_token = token_resp.get_json()['token']
+        new_token = token_resp.get_json()['access_token']
         new_headers = {'Authorization': f'Bearer {new_token}'}
 
         # Use the new token to hit a protected endpoint

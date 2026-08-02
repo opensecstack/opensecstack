@@ -3,7 +3,7 @@
 
 # Build artifacts
 /bin/
-apiguard
+/apiguard
 
 # Reports (generated, keep .gitkeep)
 /reports/*.html

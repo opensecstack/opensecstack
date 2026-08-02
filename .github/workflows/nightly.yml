@@ -273,8 +273,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Building ~13 Go/Rust/Python Dockerfiles from scratch (fresh runner,
+      # no layer cache) can itself take several minutes. Split this out from
+      # `up --wait` so a build failure is reported as a build failure, not
+      # folded into a "timeout waiting for dependencies" from the next step.
+      - name: Build stack images
+        run: docker compose -f deploy/docker-compose.dev.yml build --parallel
+
+      # wait-timeout must cover more than raw startup: apiguard-api and
+      # citadel-api healthchecks alone allow up to retries(30) * interval(5s)
+      # = 150s to go healthy, and dependants (e.g. apiguard-api waiting on
+      # both citadel-api and sinauth-api) stack those budgets across the
+      # dependency chain. 120s was never enough even with images pre-built.
       - name: Start full stack
-        run: docker compose -f deploy/docker-compose.dev.yml up -d --wait --wait-timeout 120
+        run: docker compose -f deploy/docker-compose.dev.yml up -d --wait --wait-timeout 600
 
       # --retry-all-errors covers transient connection resets/empty replies
       # during container startup (e.g. Air still compiling the dev binary)

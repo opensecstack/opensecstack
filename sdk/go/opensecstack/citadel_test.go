@@ -91,16 +91,27 @@ func TestCITADELClient_DisabledMode_Drain(t *testing.T) {
 
 func TestCITADELClient_SendEvent_DeliveredWithSignature(t *testing.T) {
 	const secret = "test-secret-key"
-	var receivedBody []byte
-	var receivedSig string
+
+	type delivery struct {
+		body []byte
+		sig  string
+	}
+	// Buffered so the handler goroutine never blocks on send, even if the
+	// test goroutine is late to receive.
+	deliveredCh := make(chan delivery, 1)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/v1/events" && r.Method == http.MethodPost {
 			var buf [4096]byte
 			n, _ := r.Body.Read(buf[:])
-			receivedBody = buf[:n]
-			receivedSig = r.Header.Get("X-Citadel-Signature")
+			body := make([]byte, n)
+			copy(body, buf[:n])
+			sig := r.Header.Get("X-Citadel-Signature")
 			w.WriteHeader(http.StatusCreated)
+			// Send the captured request details to the test goroutine
+			// instead of writing to a shared variable, so there is a
+			// proper happens-before relationship (no data race).
+			deliveredCh <- delivery{body: body, sig: sig}
 			return
 		}
 		http.NotFound(w, r)
@@ -125,16 +136,23 @@ func TestCITADELClient_SendEvent_DeliveredWithSignature(t *testing.T) {
 		t.Fatalf("SendEvent: %v", err)
 	}
 
-	// Allow background worker to deliver.
-	time.Sleep(100 * time.Millisecond)
+	// Wait for the background worker to deliver the event to the server,
+	// receiving the captured request details over the channel rather than
+	// polling a shared variable.
+	var d delivery
+	select {
+	case d = <-deliveredCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for server to receive event")
+	}
 
-	if len(receivedBody) == 0 {
+	if len(d.body) == 0 {
 		t.Fatal("server received no body")
 	}
 
 	// Verify signature.
-	req := &http.Request{Header: http.Header{"X-Citadel-Signature": []string{receivedSig}}}
-	verifySignatureHeader(t, req, receivedBody, secret)
+	req := &http.Request{Header: http.Header{"X-Citadel-Signature": []string{d.sig}}}
+	verifySignatureHeader(t, req, d.body, secret)
 }
 
 // ---------------------------------------------------------------------------

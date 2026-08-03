@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'sdk/go/v*'
+  workflow_dispatch:  # manual test run — see the `tag` job's `if` guard below
 
 jobs:
   test:
@@ -22,6 +23,9 @@ jobs:
 
   tag:
     needs: test
+    # GITHUB_REF is only a tag ref on a real sdk/go/v* tag push — a manual
+    # workflow_dispatch run stops after the test job above.
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: write

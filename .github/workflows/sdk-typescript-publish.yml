@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'sdk/typescript/v*'
+  workflow_dispatch:  # manual test/build run — see the publish step's `if` guard below
 
 permissions:
   contents: read
@@ -37,6 +38,10 @@ jobs:
         run: npm run build
 
       - name: Publish to npm
+        # Only a real sdk/typescript/v* tag push publishes — a manual
+        # workflow_dispatch run (used to preview/test this workflow without
+        # cutting a release) stops after the build step above.
+        if: startsWith(github.ref, 'refs/tags/')
         working-directory: sdk/typescript
         run: npm publish --provenance --access public
         env:

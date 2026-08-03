@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'sdk/python/v*'
+  workflow_dispatch:  # manual test/build run — see the publish step's `if` guard below
 
 jobs:
   publish:
@@ -25,6 +26,10 @@ jobs:
         working-directory: sdk/python
         run: hatch build
       - name: Publish to PyPI
+        # Only a real sdk/python/v* tag push publishes — a manual
+        # workflow_dispatch run (used to preview/test this workflow without
+        # cutting a release) stops after the build step above.
+        if: startsWith(github.ref, 'refs/tags/')
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: sdk/python/dist/

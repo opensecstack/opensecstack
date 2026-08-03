@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'installation', label: 'Installation' },
@@ -20,6 +21,20 @@ export default function SdkGoPage() {
       prev={{ label: 'Evidence & Audit', path: '/docs/citadel/evidence' }}
       next={{ label: 'Python', path: '/docs/sdk/python' }}
     >
+      <Helmet>
+        <title>Go SDK | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="The opensecstack Go SDK provides typed, dependency-free clients for APIGuard, NIS2 Compass, and CITADEL, requiring Go 1.22+."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/sdk/go" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/sdk/go" />
+        <meta property="og:title" content="Go SDK | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="The opensecstack Go SDK provides typed, dependency-free clients for APIGuard, NIS2 Compass, and CITADEL, requiring Go 1.22+."
+        />
+      </Helmet>
       <h1>Go SDK</h1>
       <p>
         The Go client provides typed clients for <strong><a href="/docs/platforms/apiguard">APIGuard</a></strong>,{' '}

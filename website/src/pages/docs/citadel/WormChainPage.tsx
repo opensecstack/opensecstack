@@ -1,5 +1,6 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -26,6 +27,20 @@ export default function WormChainPage() {
       prev={{ label: 'MARSHAL Engine', path: '/docs/citadel/marshal' }}
       next={{ label: 'Separation of Duties', path: '/docs/citadel/sod' }}
     >
+      <Helmet>
+        <title>WORM Chain &amp; TripleHash | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="The append-only WORM audit chain's TripleHash construction (SHA-256, SHA-512, BLAKE3), per-entry chain linkage, and Ed25519 chain anchors for tamper-evident verification."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/citadel/worm" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/citadel/worm" />
+        <meta property="og:title" content="WORM Chain & TripleHash | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="The append-only WORM audit chain's TripleHash construction (SHA-256, SHA-512, BLAKE3), per-entry chain linkage, and Ed25519 chain anchors for tamper-evident verification."
+        />
+      </Helmet>
       <h1>WORM Chain &amp; TripleHash</h1>
       <p>
         Every <a href="/docs/citadel/marshal">MARSHAL</a> decision and every cross-platform governance event is recorded in

@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'what-is-sinauth', label: 'What is sinauth?' },
@@ -21,6 +22,20 @@ export default function IdentityPage() {
       prev={{ label: 'SIN Community', path: '/docs/platforms/community' }}
       next={{ label: 'Governance (CITADEL)', path: '/docs/governance' }}
     >
+      <Helmet>
+        <title>Identity (sinauth) | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="sinauth is the OAuth 2.0 / OpenID Connect identity provider for opensecstack — single sign-on, PKCE, TOTP MFA, and social login shared by every platform."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/identity" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/identity" />
+        <meta property="og:title" content="Identity (sinauth) | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="sinauth is the OAuth 2.0 / OpenID Connect identity provider for opensecstack — single sign-on, PKCE, TOTP MFA, and social login shared by every platform."
+        />
+      </Helmet>
       <h1>Identity (sinauth)</h1>
       <p>
         <strong>sinauth</strong> is the dedicated OAuth 2.0 / OpenID Connect authorization server

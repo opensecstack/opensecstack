@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'prerequisites', label: 'Prerequisites' },
@@ -18,6 +19,20 @@ export default function QuickStartPage() {
       prev={{ label: 'Introduction', path: '/docs/intro' }}
       next={{ label: 'Installation', path: '/docs/installation' }}
     >
+      <Helmet>
+        <title>Quick Start | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="Bring up the full opensecstack ecosystem with Docker Compose in under ten minutes, or run a single platform from source with make dev."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/quickstart" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/quickstart" />
+        <meta property="og:title" content="Quick Start | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="Bring up the full opensecstack ecosystem with Docker Compose in under ten minutes, or run a single platform from source with make dev."
+        />
+      </Helmet>
       <h1>Quick Start</h1>
       <p>
         Bring up the full opensecstack ecosystem with Docker Compose in under ten minutes, or run a

@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import type { MouseEvent } from 'react'
 import type { Platform } from '../data/platforms'
 import MediaVideo from './MediaVideo'
 import { platformMedia } from '../data/media'
@@ -11,14 +12,28 @@ interface Props {
 export default function PlatformCard({ platform, index }: Props) {
   const clip = platformMedia[platform.id]
 
+  function handleClick(e: MouseEvent<HTMLAnchorElement>) {
+    e.preventDefault()
+    const el = document.getElementById(platform.sectionId)
+    if (el) el.scrollIntoView({ behavior: 'smooth' })
+  }
+
   return (
-    <motion.div
+    <motion.a
+      href={`#${platform.sectionId}`}
+      onClick={handleClick}
       className="glass-card"
       initial={{ opacity: 0, y: 30 }}
       whileInView={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.08, duration: 0.5 }}
       viewport={{ once: true }}
-      style={{ borderColor: `${platform.color}18` }}
+      style={{
+        borderColor: `${platform.color}18`,
+        display: 'block',
+        color: 'inherit',
+        textDecoration: 'none',
+        cursor: 'pointer',
+      }}
     >
       {clip && (
         <MediaVideo
@@ -50,6 +65,6 @@ export default function PlatformCard({ platform, index }: Props) {
         {platform.stack.map(t => <span key={t} className="tech-tag">{t}</span>)}
         <span className="tech-tag" style={{ opacity: 0.5 }}>{platform.licence}</span>
       </div>
-    </motion.div>
+    </motion.a>
   )
 }

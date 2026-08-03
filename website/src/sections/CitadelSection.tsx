@@ -1,14 +1,13 @@
-import ScrollSection from '../components/ScrollSection'
+import PlatformDetailSection, { CardStack, GradientTitle, TextCard } from '../components/PlatformDetailSection'
 import { marshalGates } from '../data/marshalGates'
 
 export default function CitadelSection() {
   return (
-    <ScrollSection id="citadel">
-      <h2 className="section-title"><span className="gradient-text">CITADEL</span> Governance</h2>
-      <p className="section-subtitle">
-        Immutable WORM audit chain, MARSHAL 5-gate evaluation, VIGIL health monitoring, and AUGUR advisory system.
-      </p>
-      <div className="grid-2">
+    <PlatformDetailSection
+      id="citadel"
+      title={<><GradientTitle>CITADEL</GradientTitle> Governance</>}
+      subtitle="Immutable WORM audit chain, MARSHAL 5-gate evaluation, VIGIL health monitoring, and AUGUR advisory system."
+      left={
         <div className="glass-card">
           <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem' }}>MARSHAL — 5-Gate Evaluation</h3>
           {marshalGates.map(g => (
@@ -27,37 +26,27 @@ export default function CitadelSection() {
             </div>
           ))}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <div className="glass-card">
-            <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Name Meaning</h3>
-            <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.6 }}>
-              A citadel is a fortified centre built to protect what matters. In fiction, it can mean a place where knowledge is preserved.
-              In opensecstack, CITADEL is the cryptographic governance centre that protects audit truth, privileged decisions, and institutional memory.
-            </p>
-          </div>
-          <div className="glass-card">
-            <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>WORM Chain</h3>
-            <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.6 }}>
-              Write-Once-Read-Many immutable audit log. SHA-256 hash chain with Ed25519 anchor rotation.
-              Every governance decision is permanently recorded and tamper-detectable.
-            </p>
-          </div>
-          <div className="glass-card">
-            <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>VIGIL</h3>
-            <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.6 }}>
-              Real-time health monitor. Background polling with mirror freshness tracking.
-              Triggers alerts on degraded state across any connected platform.
-            </p>
-          </div>
-          <div className="glass-card">
-            <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>AUGUR</h3>
-            <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.6 }}>
-              Advisory system with ERP mirror reader. Real-time project state polling
-              with staleness detection and rules engine.
-            </p>
-          </div>
-        </div>
-      </div>
-    </ScrollSection>
+      }
+      right={
+        <CardStack>
+          <TextCard heading="Name Meaning">
+            A citadel is a fortified centre built to protect what matters. In fiction, it can mean a place where knowledge is preserved.
+            In opensecstack, CITADEL is the cryptographic governance centre that protects audit truth, privileged decisions, and institutional memory.
+          </TextCard>
+          <TextCard heading="WORM Chain">
+            Write-Once-Read-Many immutable audit log. SHA-256 hash chain with Ed25519 anchor rotation.
+            Every governance decision is permanently recorded and tamper-detectable.
+          </TextCard>
+          <TextCard heading="VIGIL">
+            Real-time health monitor. Background polling with mirror freshness tracking.
+            Triggers alerts on degraded state across any connected platform.
+          </TextCard>
+          <TextCard heading="AUGUR">
+            Advisory system with ERP mirror reader. Real-time project state polling
+            with staleness detection and rules engine.
+          </TextCard>
+        </CardStack>
+      }
+    />
   )
 }

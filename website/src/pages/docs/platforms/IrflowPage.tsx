@@ -1,5 +1,6 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -19,6 +20,20 @@ export default function IrflowPage() {
       prev={{ label: 'NIS2 Compass', path: '/docs/platforms/nis2compass' }}
       next={{ label: 'ThreatFlow', path: '/docs/platforms/threatflow' }}
     >
+      <Helmet>
+        <title>IRFlow — Incident Response Orchestration | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="IRFlow is the incident response workflow engine for opensecstack, managing the full incident lifecycle from detection through containment with governed playbooks and NIS2 72-hour notification."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/platforms/irflow" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/platforms/irflow" />
+        <meta property="og:title" content="IRFlow — Incident Response Orchestration | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="IRFlow is the incident response workflow engine for opensecstack, managing the full incident lifecycle from detection through containment with governed playbooks and NIS2 72-hour notification."
+        />
+      </Helmet>
       <h1>IRFlow</h1>
       <p>
         <strong>IRFlow</strong> is the incident response workflow engine for the opensecstack

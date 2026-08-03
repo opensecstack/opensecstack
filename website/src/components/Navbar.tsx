@@ -114,14 +114,27 @@ export default function Navbar() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
 
-  const links = [
-    { label: t('nav.platforms'), href: '#platforms' },
-    { label: t('nav.apiguard'), href: '#apiguard' },
-    { label: t('nav.nis2'), href: '#nis2compass' },
+  // All platform sections (generated from data/platforms so every platform
+  // stays reachable from the nav, not just a hand-picked subset).
+  const platformLinks = useMemo(
+    () => platforms.map(p => ({ label: p.name, href: `#${p.sectionId}` })),
+    []
+  )
+
+  // Non-platform nav entries (kept as special cases).
+  const otherLinks = [
     { label: t('nav.citadel'), href: '#citadel' },
     { label: t('nav.sdks'), href: '#sdks' },
     { label: t('nav.roadmap'), href: '#roadmap' },
     { label: 'Docs', href: '/docs' },
+  ]
+
+  // Flat list used by the mobile drawer, where a dropdown doesn't make
+  // sense -- everything is already in a scrollable column.
+  const mobileLinks = [
+    { label: t('nav.platforms'), href: '#platforms' },
+    ...platformLinks,
+    ...otherLinks,
   ]
 
   // ---- Search state ----
@@ -141,6 +154,19 @@ export default function Navbar() {
     function handleClick(e: MouseEvent) {
       if (themeRef.current && !themeRef.current.contains(e.target as Node)) {
         setThemeOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  // ---- Platforms dropdown state ----
+  const [platformsOpen, setPlatformsOpen] = useState(false)
+  const platformsRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (platformsRef.current && !platformsRef.current.contains(e.target as Node)) {
+        setPlatformsOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClick)
@@ -170,6 +196,8 @@ export default function Navbar() {
       if (e.key === 'Escape') {
         setOpen(false)
         setMenuOpen(false)
+        setThemeOpen(false)
+        setPlatformsOpen(false)
         inputRef.current?.blur()
       }
     }
@@ -230,8 +258,55 @@ export default function Navbar() {
       {/* ---------- Desktop layout ---------- */}
       {!isMobile && (
         <>
-          <div style={{ display: 'flex', gap: '1.5rem', marginLeft: 'auto', fontSize: '0.85rem' }}>
-            {links.map(l => (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', marginLeft: 'auto', fontSize: '0.85rem' }}>
+            <div ref={platformsRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setPlatformsOpen(o => !o)}
+                aria-haspopup="menu"
+                aria-expanded={platformsOpen}
+                style={{
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  color: isDark ? '#8892a8' : '#64748b',
+                  fontSize: '0.85rem', fontFamily: 'inherit',
+                  padding: 0, display: 'flex', alignItems: 'center', gap: 4,
+                  transition: 'color 0.2s, text-shadow 0.2s',
+                }}
+              >
+                {t('nav.platforms')}
+                <span aria-hidden="true" style={{ fontSize: '0.65rem' }}>▾</span>
+              </button>
+              {platformsOpen && (
+                <div role="menu" style={{
+                  position: 'absolute', top: 28, left: 0, minWidth: 200,
+                  maxHeight: '70vh', overflowY: 'auto',
+                  background: isDark ? 'rgba(10,10,20,0.97)' : 'rgba(255,255,255,0.98)',
+                  border: isDark ? '1px solid rgba(0,240,255,0.18)' : '1px solid rgba(0,0,0,0.1)',
+                  borderRadius: 10, padding: 6,
+                  boxShadow: isDark ? '0 8px 30px rgba(0,0,0,0.5)' : '0 8px 30px rgba(0,0,0,0.12)',
+                  backdropFilter: 'blur(12px)', zIndex: 200,
+                }}>
+                  {platformLinks.map(pl => (
+                    <a
+                      key={pl.href}
+                      href={pl.href}
+                      role="menuitem"
+                      onClick={() => setPlatformsOpen(false)}
+                      style={{
+                        display: 'block', width: '100%', padding: '8px 10px', borderRadius: 7,
+                        color: isDark ? '#c8d0e0' : '#334155',
+                        fontSize: '0.85rem', fontFamily: 'inherit',
+                        textDecoration: 'none',
+                        transition: 'background 0.15s, color 0.15s',
+                      }}
+                    >
+                      {pl.label}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {otherLinks.map(l => (
               <a key={l.href} href={l.href} style={{
                 color: isDark ? '#8892a8' : '#64748b',
                 textDecoration: 'none',
@@ -263,8 +338,9 @@ export default function Navbar() {
                 onChange={e => { setQuery(e.target.value); setOpen(true) }}
                 onFocus={() => { if (query.trim()) setOpen(true) }}
                 aria-label="Search the site"
+                className="search-input"
                 style={{
-                  background: 'transparent', border: 'none', outline: 'none',
+                  background: 'transparent', border: 'none',
                   color: isDark ? '#e2e8f0' : '#1e293b',
                   fontSize: '0.8rem', width: 150,
                   fontFamily: 'inherit',
@@ -469,7 +545,7 @@ export default function Navbar() {
                 zIndex: 99,
               }}
             >
-              {links.map(l => (
+              {mobileLinks.map(l => (
                 <a
                   key={l.href}
                   href={l.href}

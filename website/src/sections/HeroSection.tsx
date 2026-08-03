@@ -35,7 +35,7 @@ export default function HeroSection() {
           style={{
             display: 'inline-block', padding: '5px 14px', borderRadius: 8, marginBottom: '1.5rem',
             background: 'rgba(0,240,255,0.06)', border: '1px solid rgba(0,240,255,0.15)',
-            fontSize: '0.8rem', fontFamily: 'var(--mono)', color: '#00f0ff', letterSpacing: '0.08em',
+            fontSize: '0.8rem', fontFamily: 'var(--mono)', color: 'var(--accent)', letterSpacing: '0.08em',
           }}
         >
           {t('hero.badge')}
@@ -100,7 +100,7 @@ export default function HeroSection() {
           </a>
           <a href="https://github.com/opensecstack/opensecstack" target="_blank" rel="noopener noreferrer" style={{
             padding: '13px 30px', borderRadius: 11, fontWeight: 600, fontSize: '0.95rem',
-            border: '1px solid rgba(0,240,255,0.25)', color: '#00f0ff',
+            border: '1px solid rgba(0,240,255,0.25)', color: 'var(--accent)',
             textDecoration: 'none', backdropFilter: 'blur(8px)',
             transition: 'border-color 0.3s, box-shadow 0.3s',
           }}>

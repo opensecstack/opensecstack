@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
+import { Helmet } from 'react-helmet-async'
 import { motion } from 'framer-motion'
 import { mobileLayers, mvnoEvents, mvnoFeatures, mobilePhases } from '../data/citadelOSMobile'
 
@@ -15,6 +16,20 @@ const fadeUp = {
 export default function CitadelOSMobilePage() {
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
+      <Helmet>
+        <title>CitadelOS Mobile — ARM TrustZone MVNO OS | opensecstack</title>
+        <meta
+          name="description"
+          content="CitadelOS Mobile is a Rust + WebAssembly mobile OS running MVNO operations natively on the microkernel stack, with every SIM activation and roaming event governed as a CITADEL audit event."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/citadelos/mobile" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/citadelos/mobile" />
+        <meta property="og:title" content="CitadelOS Mobile — ARM TrustZone MVNO OS | opensecstack" />
+        <meta
+          property="og:description"
+          content="ARM TrustZone, SIM governance, and MVNO-native operations on the same Rust microkernel security stack as CitadelOS Desktop."
+        />
+      </Helmet>
       <Suspense fallback={null}>
         <MobileScene />
       </Suspense>

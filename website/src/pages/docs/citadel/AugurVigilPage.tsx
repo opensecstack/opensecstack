@@ -1,5 +1,6 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -29,6 +30,20 @@ export default function AugurVigilPage() {
       prev={{ label: 'Separation of Duties', path: '/docs/citadel/sod' }}
       next={{ label: 'Evidence & Audit', path: '/docs/citadel/evidence' }}
     >
+      <Helmet>
+        <title>AUGUR &amp; VIGIL | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="AUGUR's behavioural heuristics for pre-emptive anomaly detection at MARSHAL Gate 4, and VIGIL, the GREEN/AMBER/RED ecosystem health monitor."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/citadel/augur-vigil" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/citadel/augur-vigil" />
+        <meta property="og:title" content="AUGUR & VIGIL | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="AUGUR's behavioural heuristics for pre-emptive anomaly detection at MARSHAL Gate 4, and VIGIL, the GREEN/AMBER/RED ecosystem health monitor."
+        />
+      </Helmet>
       <h1>AUGUR &amp; VIGIL</h1>
       <p>
         This page covers the two behavioural and health-monitoring subsystems of CITADEL.

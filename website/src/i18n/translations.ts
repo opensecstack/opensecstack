@@ -1,6 +1,5 @@
 export const translations = {
-  en: {
-    // Navbar
+  // Navbar
     'nav.platforms': 'Platforms',
     'nav.apiguard': 'APIGuard',
     'nav.nis2': 'NIS2',
@@ -64,74 +63,6 @@ export const translations = {
     // Footer
     'footer.tagline': 'Security Intelligence Network — Open-source cybersecurity & compliance for the EU Digital Decade.',
     'footer.contribute': 'Contribute',
-  },
-  al: {
-    // Navbar
-    'nav.platforms': 'Platformat',
-    'nav.apiguard': 'APIGuard',
-    'nav.nis2': 'NIS2',
-    'nav.citadel': 'CITADEL',
-    'nav.sdks': 'SDK-te',
-    'nav.roadmap': 'Udherrefimi',
-    'nav.citadelos': 'CitadelOS',
-    'nav.github': 'GitHub',
-    'nav.search.placeholder': 'Kerko...',
-
-    // Hero
-    'hero.badge': 'Perputhshmeria e Dekades Digjitale te BE-se',
-    'hero.title.line1': 'Me Burim te Hapur',
-    'hero.title.line2': 'Siguria &',
-    'hero.title.line3': 'Perputhshmeria',
-    'hero.subtitle': '11 platforma. 4 SDK. 1 zinxhir qeverisje i pandryshueshëm.',
-    'hero.subtitle2': 'Ndërtuar për Dekadën Digjitale të BE-së.',
-    'hero.cta.platforms': 'Eksploro Platformat',
-    'hero.cta.github': 'Shiko në GitHub',
-    'hero.cta.tryit': 'Provojë live',
-    'hero.tryit.welcome': 'Mirësevini',
-    'hero.tryit.logout': 'Dilni',
-    'hero.tryit.error.blocked': 'Lejo popup-et për këtë faqe për të provuar sinauth.',
-    'hero.stat.owasp': 'OWASP API Top 10',
-    'hero.stat.nis2': 'Kontrollet NIS2',
-    'hero.stat.marshal': 'Portat MARSHAL',
-    'hero.stat.sdks': 'SDK-te',
-
-    // Section titles
-    'section.platforms.title': 'Ekosistemi i Platformave',
-    'section.platforms.subtitle': 'Tetë platforma të integruara që mbulojnë ciklin e plotë të sigurisë kibernetike',
-    'section.apiguard.title': 'APIGuard',
-    'section.apiguard.subtitle': 'Skanues i Sigurisë API',
-    'section.nis2.title': 'NIS2 Compass',
-    'section.nis2.subtitle': 'Platforma e Përputhshmërisë NIS2',
-    'section.citadel.title': 'CITADEL',
-    'section.citadel.subtitle': 'Motori i Qeverisjes',
-    'section.citadelos.title': 'CitadelOS',
-    'section.citadelos.subtitle': 'Sistem Operativ i Forcuar',
-    'section.sdks.title': 'SDK-të & Libraritë',
-    'section.sdks.subtitle': 'Mjete zhvilluesi për çdo stack',
-    'section.roadmap.title': 'Udherrefimi',
-    'section.roadmap.subtitle': 'Afati kohor i zhvillimit dhe piketa kryesore',
-    'section.threatflow.title': 'ThreatFlow',
-    'section.threatflow.subtitle': 'Inteligjenca e Kërcënimeve',
-    'section.irflow.title': 'IRFlow',
-    'section.irflow.subtitle': 'Reagimi ndaj Incidenteve',
-    'section.openscrub.title': 'OpenScrub',
-    'section.openscrub.subtitle': 'Zbutja e DDoS',
-    'section.vertguard.title': 'VertGuard',
-    'section.vertguard.subtitle': 'Mbrojtja nga Sulmet AI',
-    'section.sin.title': 'SIN Community',
-    'section.sin.subtitle': 'Qendra e Njohurive për Zhvilluesit',
-    'section.cyberpath.title': 'CyberPath',
-    'section.cyberpath.subtitle': 'Trajnimi i Sigurisë',
-    'section.securelab.title': 'SecureLab',
-    'section.securelab.subtitle': 'Mjedisi Sandbox',
-    'section.opencsirt.title': 'OpenCSIRT',
-    'section.opencsirt.subtitle': 'Operacionet CSIRT',
-
-    // Footer
-    'footer.tagline': 'Rrjeti i Inteligjencës së Sigurisë — Siguria kibernetike dhe përputhshmëria me burim të hapur për Dekadën Digjitale të BE-së.',
-    'footer.contribute': 'Kontribuo',
-  },
 } as const
 
-export type TranslationKey = keyof typeof translations.en
-export type Language = 'en' | 'al'
+export type TranslationKey = keyof typeof translations

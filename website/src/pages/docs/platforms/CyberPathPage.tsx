@@ -1,5 +1,6 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -19,6 +20,20 @@ export default function CyberPathPage() {
       prev={{ label: 'OpenScrub', path: '/docs/platforms/openscrub' }}
       next={{ label: 'SecureLab', path: '/docs/platforms/securelab' }}
     >
+      <Helmet>
+        <title>CyberPath — Security Training & Certification | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="CyberPath delivers hands-on, lab-based cybersecurity training using Docker and WebAssembly labs, with certification tracks and NIS2-aligned evidence."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/platforms/cyberpath" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/platforms/cyberpath" />
+        <meta property="og:title" content="CyberPath — Security Training & Certification | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="CyberPath delivers hands-on, lab-based cybersecurity training using Docker and WebAssembly labs, with certification tracks and NIS2-aligned evidence."
+        />
+      </Helmet>
       <h1>CyberPath</h1>
       <p>
         <strong>CyberPath</strong> is the security training and certification platform in the

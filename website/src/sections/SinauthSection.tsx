@@ -1,4 +1,4 @@
-import ScrollSection from '../components/ScrollSection'
+import PlatformDetailSection, { GradientTitle } from '../components/PlatformDetailSection'
 
 const features = [
   'OAuth2 / OIDC Authorization Server',
@@ -28,15 +28,12 @@ function SinauthLogo() {
 
 export default function SinauthSection() {
   return (
-    <ScrollSection id="sinauth">
-      <h2 className="section-title"><span className="gradient-text">sinauth</span></h2>
-      <p className="section-subtitle">
-        Everything identity — OAuth2 / OIDC identity provider powering every platform in the ecosystem.
-        Triple-Hash WORM audit, RS256 JWT, PKCE, and federation built-in.
-      </p>
-
-      <div className="grid-2">
-        {/* Login UI mockup */}
+    <PlatformDetailSection
+      id="sinauth"
+      title={<GradientTitle>sinauth</GradientTitle>}
+      subtitle="Everything identity — OAuth2 / OIDC identity provider powering every platform in the ecosystem. Triple-Hash WORM audit, RS256 JWT, PKCE, and federation built-in."
+      left={
+        // Login UI mockup
         <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2rem' }}>
           <SinauthLogo />
           <div style={{ marginTop: '0.75rem', fontSize: '1.1rem', fontWeight: 700, color: '#e2e8f0' }}>
@@ -103,8 +100,9 @@ export default function SinauthSection() {
             ))}
           </div>
         </div>
-
-        {/* Features */}
+      }
+      right={
+        // Features
         <div className="glass-card">
           <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem' }}>Capabilities</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
@@ -122,7 +120,7 @@ export default function SinauthSection() {
             <div><span className="tech-tag">Licence</span> Apache 2.0</div>
           </div>
         </div>
-      </div>
-    </ScrollSection>
+      }
+    />
   )
 }

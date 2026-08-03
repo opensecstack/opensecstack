@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -21,6 +22,20 @@ export default function WebhooksPage() {
       prev={{ label: 'CITADEL Integration', path: '/docs/citadel-integration' }}
       next={{ label: 'Overview', path: '/docs/platforms' }}
     >
+      <Helmet>
+        <title>Webhooks &amp; Events | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="The cross-platform reference for opensecstack's signed, replay-protected webhooks — HMAC-SHA256 signing, a five-minute replay window, and per-source shared secrets."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/webhooks" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/webhooks" />
+        <meta property="og:title" content="Webhooks & Events | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="The cross-platform reference for opensecstack's signed, replay-protected webhooks — HMAC-SHA256 signing, a five-minute replay window, and per-source shared secrets."
+        />
+      </Helmet>
       <h1>Webhooks &amp; Events</h1>
       <p>
         Platforms in the opensecstack ecosystem communicate through signed, replay-protected

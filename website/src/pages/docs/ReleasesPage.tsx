@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'versioning', label: 'Semantic versioning' },
@@ -18,6 +19,20 @@ export default function ReleasesPage() {
       editPath="ReleasesPage.tsx"
       prev={{ label: 'Security', path: '/docs/security' }}
     >
+      <Helmet>
+        <title>Versioning &amp; Releases | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="opensecstack's per-platform semantic versioning, ecosystem release tags, compatibility matrix, support windows, deprecation policy, and post-quantum migration timeline."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/releases" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/releases" />
+        <meta property="og:title" content="Versioning & Releases | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="opensecstack's per-platform semantic versioning, ecosystem release tags, compatibility matrix, support windows, deprecation policy, and post-quantum migration timeline."
+        />
+      </Helmet>
       <h1>Versioning &amp; Releases</h1>
       <p>
         The opensecstack ecosystem uses <strong>per-platform semantic versioning</strong> for

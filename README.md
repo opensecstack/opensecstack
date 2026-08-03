@@ -8,8 +8,11 @@ intelligence, AI-attack defence, and security operations — all
 connected through typed SDK contracts, fronted by a single sign-on
 identity provider (sinauth), and governed by an immutable audit trail.
 
-> **Status (Q2 2026):** All 11 platforms + SDK at v1.0.0 production.
-> See [ROADMAP.md](ROADMAP.md) for the long-term roadmap.
+> **Status (Q2 2026):** 6 platforms + sinauth + SDK at v1.0.0 production
+> (APIGuard, NIS2 Compass, IRFlow, ThreatFlow, CITADEL, SIN Community).
+> VertGuard is scaffolded (Phase 4.1); OpenScrub, CyberPath, SecureLab,
+> and OpenCSIRT are planned (Phases 2-3). See
+> [ROADMAP.md](ROADMAP.md) for the long-term roadmap.
 
 ---
 
@@ -66,11 +69,11 @@ zero vendor lock-in.
 | [**CITADEL**](citadel/) | Cryptographic governance engine — MARSHAL, WORM, NDS, AUGUR, chain anchors | Go | AGPL-3.0 | ✅ **v1.0.0** |
 | [**IRFlow**](irflow/) | Incident response orchestration — playbooks, governed actions, NIS2 72-hour notification | Go + Python | AGPL-3.0 | ✅ **v1.0.0** |
 | [**ThreatFlow**](threatflow/) | Threat intelligence aggregation — IOC ingestion, STIX 2.1, MITRE ATT&CK | Rust + Go | Apache 2.0 | ✅ **v1.0.0** |
-| [**VertGuard**](vertguard/) | AI-attack defence — deepfake, prompt injection, AI threat intel, MITRE ATLAS | Go + Rust + Python | AGPL-3.0 | ✅ **v1.0.0** |
-| [**OpenScrub**](openscrub/) | DDoS mitigation at kernel level (XDP/eBPF, GoBGP) | Rust + C + Go | Apache 2.0 | ✅ **v1.0.0** |
-| [**CyberPath**](cyberpath/) | Security training — Docker/Wasm labs, NIS2 Art. 21(2)(g) evidence | Go + React + Python | Apache 2.0 | ✅ **v1.0.0** |
-| [**SecureLab**](securelab/) | Attack simulation — MITRE ATT&CK coverage, detection validation | Python + Rust + Go | Apache 2.0 | ✅ **v1.0.0** |
-| [**OpenCSIRT**](opencsirt/) | National/sector CSIRT operations — TAXII 2.1, STIX 2.1, CSAF 2.0 | Go + Python | AGPL-3.0 | ✅ **v1.0.0** |
+| [**VertGuard**](vertguard/) | AI-attack defence — prompt injection defence, AI threat intel feed (MITRE ATLAS); deepfake detection and other modules planned | Go + Rust + Python | AGPL-3.0 | 🔨 **Scaffold** (Phase 4.1) |
+| [**OpenScrub**](openscrub/) | DDoS mitigation at kernel level (XDP/eBPF, GoBGP) | Rust + C + Go | Apache 2.0 | 📋 **Planned** (Phase 2) |
+| [**CyberPath**](cyberpath/) | Security training — Docker/Wasm labs, NIS2 Art. 21(2)(g) evidence | Go + React + Python | Apache 2.0 | 📋 **Planned** (Phase 2) |
+| [**SecureLab**](securelab/) | Attack simulation — MITRE ATT&CK coverage, detection validation | Python + Rust + Go | Apache 2.0 | 📋 **Planned** (Phase 3) |
+| [**OpenCSIRT**](opencsirt/) | National/sector CSIRT operations — TAXII 2.1, STIX 2.1, CSAF 2.0 | Go + Python | AGPL-3.0 | 📋 **Planned** (Phase 3) |
 | [**SIN Community**](community/) | Developer knowledge hub — posts, tags, full-text search, notifications, TOTP, API keys, spaces | Go + React + TypeScript | Apache 2.0 | ✅ **v1.0.0** |
 
 **Identity layer:** [**sinauth**](sinauth/) — dedicated OAuth 2.0 /
@@ -117,12 +120,12 @@ TypeScript, Rust. Shared Argon2id + pepper password hashing module
 │                                                                      │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
 │  │  VertGuard   │  │  OpenScrub   │  │  OpenCSIRT   │              │
-│  │  v1.0.0 ✅   │  │  v1.0.0 ✅   │  │  v1.0.0 ✅   │              │
+│  │  scaffold 🔨 │  │  planned 📋  │  │  planned 📋  │              │
 │  └──────────────┘  └──────────────┘  └──────────────┘              │
 │                                                                      │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │
 │  │  CyberPath   │  │  SecureLab   │  │     SIN Community        │  │
-│  │  v1.0.0 ✅   │  │  v1.0.0 ✅   │  │  v1.0.0 ✅               │  │
+│  │  planned 📋  │  │  planned 📋  │  │  v1.0.0 ✅               │  │
 │  └──────────────┘  └──────────────┘  └──────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -230,7 +233,8 @@ platform depends on.
 - **VIGIL** — ecosystem health monitor (GREEN / AMBER / RED),
   design-stage for v2.0
 
-**Benchmarks** (Go 1.24.4, Intel i7-7600U):
+**Benchmarks** (Go 1.24.4, Intel i7-7600U; single-machine
+micro-benchmark, not independently verified):
 
 - TripleHash: 1.52 µs / 100-byte payload
 - WORM chain step: 427 ns, 0 allocations
@@ -410,8 +414,8 @@ tier:
 
 | Profile | v1.0.0 verdict |
 |---|---|
-| **Standard** — single region, trusted operator, NGOs / public admin / SaaS | **Production-ready** |
-| **Elevated** — multi-region, multi-tenant, zero-trust | **Production-ready** with Vault + service mesh + OpenTelemetry |
+| **Standard** — single region, trusted operator, NGOs / public admin / SaaS | **Internally tested; external audit not yet performed** |
+| **Elevated** — multi-region, multi-tenant, zero-trust | **Internally tested; external audit not yet performed** — with Vault + service mesh + OpenTelemetry |
 | **High assurance** — banking Tier 1, national CSIRTs, NIS2 essential entities | **Not yet** — wait for v1.1 (JWKS, mTLS, third-party audit) |
 
 Full tier matrix: [docs/security-maturity.md](docs/security-maturity.md).

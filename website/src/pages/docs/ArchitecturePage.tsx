@@ -1,4 +1,5 @@
 import DocsLayout from './DocsLayout'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -18,6 +19,20 @@ export default function ArchitecturePage() {
       prev={{ label: 'Local Development', path: '/docs/local-dev' }}
       next={{ label: 'SDK & Contracts', path: '/docs/contracts' }}
     >
+      <Helmet>
+        <title>Architecture Overview | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="How opensecstack's three layers fit together: the 11 security platforms, the typed opensecstack/sdk contract layer, and the sinauth identity and CITADEL governance cross-cutting layers."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/architecture" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/architecture" />
+        <meta property="og:title" content="Architecture Overview | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="How opensecstack's three layers fit together: the 11 security platforms, the typed opensecstack/sdk contract layer, and the sinauth identity and CITADEL governance cross-cutting layers."
+        />
+      </Helmet>
       <h1>Architecture Overview</h1>
       <p>
         opensecstack is structured as three concentric layers: the <strong>11 security

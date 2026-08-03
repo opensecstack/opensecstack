@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /auth/callback
 
 Sitemap: https://opensecstack.github.io/opensecstack/sitemap.xml

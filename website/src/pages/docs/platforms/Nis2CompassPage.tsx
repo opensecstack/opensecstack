@@ -1,5 +1,6 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -19,6 +20,20 @@ export default function Nis2CompassPage() {
       prev={{ label: 'APIGuard', path: '/docs/platforms/apiguard' }}
       next={{ label: 'IRFlow', path: '/docs/platforms/irflow' }}
     >
+      <Helmet>
+        <title>NIS2 Compass — Compliance Management | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="NIS2 Compass helps organisations subject to the EU NIS2 Directive manage Article 21(2) security measures, compliance evidence, and Article 23 incident notification."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/platforms/nis2compass" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/platforms/nis2compass" />
+        <meta property="og:title" content="NIS2 Compass — Compliance Management | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="NIS2 Compass helps organisations subject to the EU NIS2 Directive manage Article 21(2) security measures, compliance evidence, and Article 23 incident notification."
+        />
+      </Helmet>
       <h1>NIS2 Compass</h1>
       <p>
         <strong>NIS2 Compass</strong> is the compliance management platform in the opensecstack

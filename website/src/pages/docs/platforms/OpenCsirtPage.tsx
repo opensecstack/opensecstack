@@ -1,5 +1,6 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -19,6 +20,20 @@ export default function OpenCsirtPage() {
       prev={{ label: 'SecureLab', path: '/docs/platforms/securelab' }}
       next={{ label: 'VertGuard', path: '/docs/platforms/vertguard' }}
     >
+      <Helmet>
+        <title>OpenCSIRT — CSIRT Operations Platform | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="OpenCSIRT gives national or sector CSIRTs a single governance-tier working surface for TAXII 2.1 and CSAF 2.0 advisory sharing and NIS2 Article 23 peer federation."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/platforms/opencsirt" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/platforms/opencsirt" />
+        <meta property="og:title" content="OpenCSIRT — CSIRT Operations Platform | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="OpenCSIRT gives national or sector CSIRTs a single governance-tier working surface for TAXII 2.1 and CSAF 2.0 advisory sharing and NIS2 Article 23 peer federation."
+        />
+      </Helmet>
       <h1>OpenCSIRT</h1>
       <p>
         <strong>OpenCSIRT</strong> is the governance-tier CSIRT operations platform in the

@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -22,6 +23,20 @@ export default function CitadelIntegrationPage() {
       prev={{ label: 'Time Dimension Segmentation', path: '/docs/tds' }}
       next={{ label: 'Webhooks & Events', path: '/docs/webhooks' }}
     >
+      <Helmet>
+        <title>CITADEL Integration | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="How opensecstack platforms submit governed actions (Kerkese) to CITADEL, interpret MARSHAL verdicts, and forward evidence to the WORM audit chain."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/citadel-integration" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/citadel-integration" />
+        <meta property="og:title" content="CITADEL Integration | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="How opensecstack platforms submit governed actions (Kerkese) to CITADEL, interpret MARSHAL verdicts, and forward evidence to the WORM audit chain."
+        />
+      </Helmet>
       <h1>CITADEL Integration</h1>
       <p>
         <strong>CITADEL</strong> is the governance and audit layer shared by every opensecstack

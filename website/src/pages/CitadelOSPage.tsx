@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
+import { Helmet } from 'react-helmet-async'
 import { motion } from 'framer-motion'
 import { desktopLayers, sandboxTiers, osPhases } from '../data/citadelOS'
 
@@ -15,6 +16,20 @@ const fadeUp = {
 export default function CitadelOSPage() {
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
+      <Helmet>
+        <title>CitadelOS — Rust Microkernel Security OS | opensecstack</title>
+        <meta
+          name="description"
+          content="CitadelOS is a Rust microkernel and WebAssembly operating system with CITADEL governance built in natively — isolated drivers, cryptographic grid sandboxes, and a WORM-verified boot chain."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/citadelos" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/citadelos" />
+        <meta property="og:title" content="CitadelOS — Rust Microkernel Security OS | opensecstack" />
+        <meta
+          property="og:description"
+          content="A Rust microkernel + WebAssembly OS built for security from the ground up, with CITADEL governance running natively at the kernel level."
+        />
+      </Helmet>
       <Suspense fallback={null}>
         <DesktopScene />
       </Suspense>

@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'installation', label: 'Installation' },
@@ -20,6 +21,20 @@ export default function SdkPythonPage() {
       prev={{ label: 'Go', path: '/docs/sdk/go' }}
       next={{ label: 'TypeScript', path: '/docs/sdk/typescript' }}
     >
+      <Helmet>
+        <title>Python SDK | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="The opensecstack Python SDK provides synchronous and async typed clients for APIGuard, NIS2 Compass, and CITADEL, requiring Python 3.11+."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/sdk/python" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/sdk/python" />
+        <meta property="og:title" content="Python SDK | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="The opensecstack Python SDK provides synchronous and async typed clients for APIGuard, NIS2 Compass, and CITADEL, requiring Python 3.11+."
+        />
+      </Helmet>
       <h1>Python SDK</h1>
       <p>
         The Python client provides typed clients for <strong><a href="/docs/platforms/apiguard">APIGuard</a></strong>,{' '}

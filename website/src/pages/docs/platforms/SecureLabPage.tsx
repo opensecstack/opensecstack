@@ -1,5 +1,6 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -19,6 +20,20 @@ export default function SecureLabPage() {
       prev={{ label: 'CyberPath', path: '/docs/platforms/cyberpath' }}
       next={{ label: 'OpenCSIRT', path: '/docs/platforms/opencsirt' }}
     >
+      <Helmet>
+        <title>SecureLab — Attack Simulation & Detection Validation | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="SecureLab runs MITRE ATT&CK-mapped attack simulation scenarios to validate whether detection stacks actually catch real adversary techniques."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/platforms/securelab" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/platforms/securelab" />
+        <meta property="og:title" content="SecureLab — Attack Simulation & Detection Validation | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="SecureLab runs MITRE ATT&CK-mapped attack simulation scenarios to validate whether detection stacks actually catch real adversary techniques."
+        />
+      </Helmet>
       <h1>SecureLab</h1>
       <p>
         <strong>SecureLab</strong> is the attack simulation and detection validation platform

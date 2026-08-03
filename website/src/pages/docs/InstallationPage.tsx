@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'requirements', label: 'Requirements' },
@@ -18,6 +19,20 @@ export default function InstallationPage() {
       prev={{ label: 'Quick Start', path: '/docs/quickstart' }}
       next={{ label: 'Local Development', path: '/docs/local-dev' }}
     >
+      <Helmet>
+        <title>Installation | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="Install opensecstack via Docker Compose, Kubernetes manifests or Helm, or build each platform from source — requirements and toolchain versions for every path."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/installation" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/installation" />
+        <meta property="og:title" content="Installation | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="Install opensecstack via Docker Compose, Kubernetes manifests or Helm, or build each platform from source — requirements and toolchain versions for every path."
+        />
+      </Helmet>
       <h1>Installation</h1>
       <p>
         opensecstack can be installed in three ways: via Docker Compose (recommended for{' '}

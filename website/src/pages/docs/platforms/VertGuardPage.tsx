@@ -1,5 +1,6 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -19,6 +20,20 @@ export default function VertGuardPage() {
       prev={{ label: 'OpenCSIRT', path: '/docs/platforms/opencsirt' }}
       next={{ label: 'SIN Community', path: '/docs/platforms/community' }}
     >
+      <Helmet>
+        <title>VertGuard — AI-Attack Defence | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="VertGuard defends against AI-native attacks — prompt injection, deepfakes, and MITRE ATLAS techniques — for NIS-scope European organisations deploying LLMs."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/platforms/vertguard" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/platforms/vertguard" />
+        <meta property="og:title" content="VertGuard — AI-Attack Defence | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="VertGuard defends against AI-native attacks — prompt injection, deepfakes, and MITRE ATLAS techniques — for NIS-scope European organisations deploying LLMs."
+        />
+      </Helmet>
       <h1>VertGuard</h1>
       <p>
         <strong>VertGuard</strong> is the AI-attack defence platform in the opensecstack

@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'what-is-tds', label: 'What is TDS?' },
@@ -21,6 +22,20 @@ export default function TdsPage() {
       prev={{ label: 'SDK & Contracts', path: '/docs/contracts' }}
       next={{ label: 'CITADEL Integration', path: '/docs/citadel-integration' }}
     >
+      <Helmet>
+        <title>Time Dimension Segmentation | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="Time Dimension Segmentation (TDS) assigns every opensecstack API endpoint and background job to one of three latency tiers, enforced at runtime by the tds-scanner tool."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/tds" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/tds" />
+        <meta property="og:title" content="Time Dimension Segmentation | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="Time Dimension Segmentation (TDS) assigns every opensecstack API endpoint and background job to one of three latency tiers, enforced at runtime by the tds-scanner tool."
+        />
+      </Helmet>
       <h1>Time Dimension Segmentation</h1>
       <p>
         <strong>Time Dimension Segmentation (TDS)</strong> is a cross-cutting architectural

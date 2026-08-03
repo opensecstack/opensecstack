@@ -1,5 +1,6 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -24,6 +25,20 @@ export default function SodPage() {
       prev={{ label: 'WORM Chain & TripleHash', path: '/docs/citadel/worm' }}
       next={{ label: 'AUGUR & VIGIL', path: '/docs/citadel/augur-vigil' }}
     >
+      <Helmet>
+        <title>Separation of Duties | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="CITADEL's NDS gate enforces cryptographic separation of duties with a two-key principle across canonical role groups, refusing single-operator privileged actions."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/citadel/sod" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/citadel/sod" />
+        <meta property="og:title" content="Separation of Duties | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="CITADEL's NDS gate enforces cryptographic separation of duties with a two-key principle across canonical role groups, refusing single-operator privileged actions."
+        />
+      </Helmet>
       <h1>Separation of Duties</h1>
       <p>
         <strong>NDS</strong> (Ndarja e Detyrimeve të Sigurisë — Separation of Security Duties)

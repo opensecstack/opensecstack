@@ -1,5 +1,6 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -19,6 +20,20 @@ export default function ThreatflowPage() {
       prev={{ label: 'IRFlow', path: '/docs/platforms/irflow' }}
       next={{ label: 'OpenScrub', path: '/docs/platforms/openscrub' }}
     >
+      <Helmet>
+        <title>ThreatFlow — Threat Intelligence Hub | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="ThreatFlow ingests and normalises indicators of compromise from multiple feed types into STIX 2.1 and correlates them against MITRE ATT&CK."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/platforms/threatflow" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/platforms/threatflow" />
+        <meta property="og:title" content="ThreatFlow — Threat Intelligence Hub | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="ThreatFlow ingests and normalises indicators of compromise from multiple feed types into STIX 2.1 and correlates them against MITRE ATT&CK."
+        />
+      </Helmet>
       <h1>ThreatFlow</h1>
       <p>
         <strong>ThreatFlow</strong> is the threat intelligence hub for the opensecstack ecosystem.

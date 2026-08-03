@@ -1,4 +1,5 @@
 import DocsLayout from './DocsLayout'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'all-platforms', label: 'All platforms' },
@@ -18,6 +19,20 @@ export default function PlatformsPage() {
       prev={{ label: 'SDK & Contracts', path: '/docs/contracts' }}
       next={{ label: 'APIGuard', path: '/docs/platforms/apiguard' }}
     >
+      <Helmet>
+        <title>Platforms Overview | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="A complete reference table of all 11 opensecstack security platforms — purpose, tech stack, and licence — plus the sinauth identity and CITADEL governance layers."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/platforms" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/platforms" />
+        <meta property="og:title" content="Platforms Overview | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="A complete reference table of all 11 opensecstack security platforms — purpose, tech stack, and licence — plus the sinauth identity and CITADEL governance layers."
+        />
+      </Helmet>
       <h1>Platforms Overview</h1>
       <p>
         opensecstack ships <strong>11 security platforms</strong> plus two cross-cutting

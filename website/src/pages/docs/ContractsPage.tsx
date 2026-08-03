@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'the-sdk', label: 'The SDK' },
@@ -18,6 +19,20 @@ export default function ContractsPage() {
       prev={{ label: 'Overview', path: '/docs/architecture' }}
       next={{ label: 'Time Dimension Segmentation', path: '/docs/tds' }}
     >
+      <Helmet>
+        <title>SDK &amp; Contracts | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="How opensecstack platforms communicate through the typed opensecstack/sdk event contracts available in Go, Python, TypeScript, and Rust, including signed webhooks and contract versioning."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/contracts" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/contracts" />
+        <meta property="og:title" content="SDK & Contracts | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="How opensecstack platforms communicate through the typed opensecstack/sdk event contracts available in Go, Python, TypeScript, and Rust, including signed webhooks and contract versioning."
+        />
+      </Helmet>
       <h1>SDK &amp; Contracts</h1>
       <p>
         All inter-platform communication in opensecstack uses the <strong>opensecstack/sdk</strong> —

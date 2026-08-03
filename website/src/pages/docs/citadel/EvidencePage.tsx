@@ -1,5 +1,6 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -32,6 +33,20 @@ export default function EvidencePage() {
       prev={{ label: 'AUGUR & VIGIL', path: '/docs/citadel/augur-vigil' }}
       next={{ label: 'Go SDK', path: '/docs/sdk/go' }}
     >
+      <Helmet>
+        <title>Evidence &amp; Audit | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="How to export and verify CITADEL evidence bundles — custody manifests, chain anchors, and the auditor walkthrough for validating WORM chain integrity."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/citadel/evidence" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/citadel/evidence" />
+        <meta property="og:title" content="Evidence & Audit | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="How to export and verify CITADEL evidence bundles — custody manifests, chain anchors, and the auditor walkthrough for validating WORM chain integrity."
+        />
+      </Helmet>
       <h1>Evidence &amp; Auditor Walkthrough</h1>
       <p>
         The <a href="/docs/citadel/worm">WORM chain</a> is evidence. Making it <em>admissible</em> evidence — for a regulator,

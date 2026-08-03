@@ -1,5 +1,6 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -19,6 +20,20 @@ export default function ApiGuardPage() {
       prev={{ label: 'Platforms Overview', path: '/docs/platforms' }}
       next={{ label: 'NIS2 Compass', path: '/docs/platforms/nis2compass' }}
     >
+      <Helmet>
+        <title>APIGuard — API Security Scanning | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="APIGuard runs OWASP API Top 10 security testing against any OpenAPI, Swagger, or GraphQL schema, producing CVSS-scored SARIF, HTML, PDF, and JSON reports."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/platforms/apiguard" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/platforms/apiguard" />
+        <meta property="og:title" content="APIGuard — API Security Scanning | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="APIGuard runs OWASP API Top 10 security testing against any OpenAPI, Swagger, or GraphQL schema, producing CVSS-scored SARIF, HTML, PDF, and JSON reports."
+        />
+      </Helmet>
       <h1>APIGuard</h1>
       <p>
         <strong>APIGuard</strong> is the API security testing platform in the opensecstack

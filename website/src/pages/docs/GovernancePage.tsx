@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'what-is-citadel', label: 'What is CITADEL?' },
@@ -21,6 +22,20 @@ export default function GovernancePage() {
       prev={{ label: 'Identity (sinauth)', path: '/docs/identity' }}
       next={{ label: 'MARSHAL Engine', path: '/docs/citadel/marshal' }}
     >
+      <Helmet>
+        <title>Governance (CITADEL) | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="CITADEL is opensecstack's cryptographic governance engine — the MARSHAL 5-gate decision engine, the append-only WORM audit chain, separation-of-duties enforcement, and AUGUR behavioural heuristics."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/governance" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/governance" />
+        <meta property="og:title" content="Governance (CITADEL) | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="CITADEL is opensecstack's cryptographic governance engine — the MARSHAL 5-gate decision engine, the append-only WORM audit chain, separation-of-duties enforcement, and AUGUR behavioural heuristics."
+        />
+      </Helmet>
       <h1>Governance (CITADEL)</h1>
       <p>
         <strong>CITADEL</strong> is the cryptographic governance engine for the opensecstack

@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="SIN — Security Intelligence Network. Open-source cybersecurity and compliance platform for the EU Digital Decade. API security, NIS2 compliance, and immutable governance." />
   <title>SIN — Security Intelligence Network</title>
+  <!-- Fallback canonical/og tags for the homepage and non-JS crawlers. Every
+       route sets its own via react-helmet-async at runtime; helmet replaces
+       these same-attribute tags in <head> rather than duplicating them. -->
   <link rel="canonical" href="https://opensecstack.github.io/opensecstack/" />
   <meta property="og:url" content="https://opensecstack.github.io/opensecstack/" />
   <meta property="og:type" content="website" />
@@ -12,6 +15,30 @@
   <meta property="og:description" content="APIGuard, NIS2 Compass, and CITADEL governance engine — open-source tools for EU Digital Decade compliance." />
   <meta name="twitter:card" content="summary" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "name": "opensecstack",
+        "alternateName": "SIN — Security Intelligence Network",
+        "url": "https://opensecstack.github.io/opensecstack/",
+        "logo": "https://opensecstack.github.io/opensecstack/favicon.svg",
+        "description": "Open-source cybersecurity ecosystem for Europe and beyond: 11 integrated security platforms, a single sign-on identity layer (sinauth), and a cryptographic governance layer (CITADEL), connected through typed SDK contracts.",
+        "sameAs": [
+          "https://github.com/opensecstack/opensecstack"
+        ]
+      },
+      {
+        "@type": "WebSite",
+        "name": "opensecstack",
+        "url": "https://opensecstack.github.io/opensecstack/",
+        "description": "Open-source cybersecurity and compliance ecosystem for the EU Digital Decade — API security, NIS2 compliance, incident response, threat intelligence, and immutable governance."
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
   <div id="root"></div>

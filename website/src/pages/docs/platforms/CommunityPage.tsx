@@ -1,5 +1,6 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -19,6 +20,20 @@ export default function CommunityPage() {
       prev={{ label: 'VertGuard', path: '/docs/platforms/vertguard' }}
       next={{ label: 'Identity (sinauth)', path: '/docs/identity' }}
     >
+      <Helmet>
+        <title>SIN Community — Developer Knowledge Hub | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="SIN Community is the publishing platform for post-mortems, detection recipes, and NIS2 guides shared across the opensecstack developer community, powered by Meilisearch."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/platforms/community" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/platforms/community" />
+        <meta property="og:title" content="SIN Community — Developer Knowledge Hub | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="SIN Community is the publishing platform for post-mortems, detection recipes, and NIS2 guides shared across the opensecstack developer community, powered by Meilisearch."
+        />
+      </Helmet>
       <h1>SIN Community</h1>
       <p>
         <strong>SIN Community</strong> is the developer knowledge hub of the opensecstack

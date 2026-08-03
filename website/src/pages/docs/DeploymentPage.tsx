@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'deployment-options', label: 'Deployment options' },
@@ -20,6 +21,20 @@ export default function DeploymentPage() {
       prev={{ label: 'NIS2 & EU AI Act', path: '/docs/nis2' }}
       next={{ label: 'Security', path: '/docs/security' }}
     >
+      <Helmet>
+        <title>Deployment | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="Docker Compose and Kubernetes/Helm deployment topologies for opensecstack, including the port matrix, environment and secrets, and CITADEL wiring across network zones."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/deployment" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/deployment" />
+        <meta property="og:title" content="Deployment | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="Docker Compose and Kubernetes/Helm deployment topologies for opensecstack, including the port matrix, environment and secrets, and CITADEL wiring across network zones."
+        />
+      </Helmet>
       <h1>Deployment</h1>
       <p>
         opensecstack supports two primary deployment topologies: a single-host Docker Compose stack

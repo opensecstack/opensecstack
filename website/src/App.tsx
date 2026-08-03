@@ -1,4 +1,6 @@
 import { lazy, Suspense } from 'react'
+import { MotionConfig } from 'framer-motion'
+import { HelmetProvider, Helmet } from 'react-helmet-async'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import ScrollToTop from './components/ScrollToTop'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -76,6 +78,20 @@ function HomePage() {
 
   return (
     <>
+      <Helmet>
+        <title>SIN — Security Intelligence Network</title>
+        <meta
+          name="description"
+          content="SIN — Security Intelligence Network. Open-source cybersecurity and compliance platform for the EU Digital Decade. API security, NIS2 compliance, and immutable governance."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/" />
+        <meta property="og:title" content="SIN — Security Intelligence Network" />
+        <meta
+          property="og:description"
+          content="APIGuard, NIS2 Compass, and CITADEL governance engine — open-source tools for EU Digital Decade compliance."
+        />
+      </Helmet>
       {webgl && (
         // Isolate WebGL / Three.js failures so a driver issue or runtime
         // error in the 3D scene never takes down the whole page. Falling
@@ -114,6 +130,8 @@ function HomePage() {
 
 export default function App() {
   return (
+    <HelmetProvider>
+    <MotionConfig reducedMotion="user">
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <ScrollToTop />
       <Routes>
@@ -179,5 +197,7 @@ export default function App() {
         } />
       </Routes>
     </BrowserRouter>
+    </MotionConfig>
+    </HelmetProvider>
   )
 }

@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'installation', label: 'Installation' },
@@ -20,6 +21,20 @@ export default function SdkRustPage() {
       prev={{ label: 'TypeScript', path: '/docs/sdk/typescript' }}
       next={{ label: 'NIS2 & EU AI Act', path: '/docs/nis2' }}
     >
+      <Helmet>
+        <title>Rust SDK | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="The opensecstack Rust SDK provides async, type-safe clients for APIGuard and NIS2 Compass built on tokio and reqwest, requiring Rust 1.75+."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/sdk/rust" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/sdk/rust" />
+        <meta property="og:title" content="Rust SDK | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="The opensecstack Rust SDK provides async, type-safe clients for APIGuard and NIS2 Compass built on tokio and reqwest, requiring Rust 1.75+."
+        />
+      </Helmet>
       <h1>Rust SDK</h1>
       <p>
         The Rust client provides async, type-safe clients for <strong><a href="/docs/platforms/apiguard">APIGuard</a></strong> and{' '}

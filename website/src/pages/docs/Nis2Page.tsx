@@ -1,4 +1,5 @@
 import DocsLayout from './DocsLayout'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -18,6 +19,20 @@ export default function Nis2Page() {
       prev={{ label: 'Rust SDK', path: '/docs/sdk/rust' }}
       next={{ label: 'Deployment', path: '/docs/deployment' }}
     >
+      <Helmet>
+        <title>NIS2 &amp; EU AI Act | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="How the 11 opensecstack platforms satisfy NIS2 Directive Article 21 and 23 security measures, plus EU AI Act obligations intersecting with VertGuard and the projected NIS3 trajectory."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/nis2" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/nis2" />
+        <meta property="og:title" content="NIS2 & EU AI Act | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="How the 11 opensecstack platforms satisfy NIS2 Directive Article 21 and 23 security measures, plus EU AI Act obligations intersecting with VertGuard and the projected NIS3 trajectory."
+        />
+      </Helmet>
       <h1>NIS2 &amp; EU AI Act</h1>
       <p>
         The opensecstack ecosystem is designed around the European regulatory and threat

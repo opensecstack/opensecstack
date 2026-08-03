@@ -1,4 +1,5 @@
 import DocsLayout from './DocsLayout'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'deployment-tiers', label: 'Deployment tiers' },
@@ -19,6 +20,20 @@ export default function SecurityPage() {
       prev={{ label: 'Deployment', path: '/docs/deployment' }}
       next={{ label: 'Versioning & Releases', path: '/docs/releases' }}
     >
+      <Helmet>
+        <title>Security | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="opensecstack's three deployment security tiers, cross-platform cryptographic guarantees, responsible disclosure process, and post-quantum migration strategy."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/security" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/security" />
+        <meta property="og:title" content="Security | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="opensecstack's three deployment security tiers, cross-platform cryptographic guarantees, responsible disclosure process, and post-quantum migration strategy."
+        />
+      </Helmet>
       <h1>Security</h1>
       <p>
         opensecstack v1.0.0 ships with strong cryptographic primitives, structured audit, and

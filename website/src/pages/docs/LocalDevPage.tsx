@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'prerequisites', label: 'Prerequisites' },
@@ -22,6 +23,20 @@ export default function LocalDevPage() {
       prev={{ label: 'Installation', path: '/docs/installation' }}
       next={{ label: 'Overview', path: '/docs/architecture' }}
     >
+      <Helmet>
+        <title>Local Development | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="Run the opensecstack ecosystem locally — cloning the repo, full-stack or single-platform hot reload, working without Docker, and IDE setup for Go, Rust, TypeScript, and Python."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/local-dev" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/local-dev" />
+        <meta property="og:title" content="Local Development | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="Run the opensecstack ecosystem locally — cloning the repo, full-stack or single-platform hot reload, working without Docker, and IDE setup for Go, Rust, TypeScript, and Python."
+        />
+      </Helmet>
       <h1>Local Development</h1>
       <p>
         This guide walks through everything needed to run the opensecstack ecosystem on your local

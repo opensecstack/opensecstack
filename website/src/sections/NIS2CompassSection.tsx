@@ -1,14 +1,13 @@
-import ScrollSection from '../components/ScrollSection'
+import PlatformDetailSection, { GradientTitle } from '../components/PlatformDetailSection'
 import { nis2Measures } from '../data/nis2Measures'
 
 export default function NIS2CompassSection() {
   return (
-    <ScrollSection id="nis2compass">
-      <h2 className="section-title"><span className="gradient-text">NIS2 Compass</span></h2>
-      <p className="section-subtitle">
-        Full NIS2 Article 21(2) assessment lifecycle. 10 controls mapped to NIST CSF. Immutable audit trail.
-      </p>
-      <div className="grid-2">
+    <PlatformDetailSection
+      id="nis2compass"
+      title={<GradientTitle>NIS2 Compass</GradientTitle>}
+      subtitle="Full NIS2 Article 21(2) assessment lifecycle. 10 controls mapped to NIST CSF. Immutable audit trail."
+      left={
         <div className="glass-card">
           <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem' }}>10 NIS2 Measures (Art. 21)</h3>
           {nis2Measures.map(m => (
@@ -18,6 +17,8 @@ export default function NIS2CompassSection() {
             </div>
           ))}
         </div>
+      }
+      right={
         <div className="glass-card">
           <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem' }}>Assessment Lifecycle</h3>
           <div style={{ fontFamily: 'var(--mono)', fontSize: '0.85rem', color: '#94a3b8' }}>
@@ -37,7 +38,7 @@ export default function NIS2CompassSection() {
             </div>
           </div>
         </div>
-      </div>
-    </ScrollSection>
+      }
+    />
   )
 }

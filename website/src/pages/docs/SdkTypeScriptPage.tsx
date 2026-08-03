@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'installation', label: 'Installation' },
@@ -21,6 +22,20 @@ export default function SdkTypeScriptPage() {
       prev={{ label: 'Python', path: '/docs/sdk/python' }}
       next={{ label: 'Rust', path: '/docs/sdk/rust' }}
     >
+      <Helmet>
+        <title>TypeScript SDK | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="The opensecstack TypeScript SDK provides typed clients for APIGuard, NIS2 Compass, and CITADEL plus a webhook router with HMAC-SHA256 verification, for Node.js 18+ or the browser."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/sdk/typescript" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/sdk/typescript" />
+        <meta property="og:title" content="TypeScript SDK | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="The opensecstack TypeScript SDK provides typed clients for APIGuard, NIS2 Compass, and CITADEL plus a webhook router with HMAC-SHA256 verification, for Node.js 18+ or the browser."
+        />
+      </Helmet>
       <h1>TypeScript SDK</h1>
       <p>
         The TypeScript client provides typed clients for <strong><a href="/docs/platforms/apiguard">APIGuard</a></strong>,{' '}

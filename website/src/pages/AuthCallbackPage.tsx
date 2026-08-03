@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { Helmet } from 'react-helmet-async'
 
 const MESSAGE_TYPE = 'sinauth_callback'
 
@@ -26,6 +27,11 @@ export default function AuthCallbackPage() {
       justifyContent: 'center', background: '#030308', color: '#8892a8',
       fontFamily: 'system-ui, sans-serif', fontSize: 14,
     }}>
+      <Helmet>
+        <title>Signing in… | opensecstack</title>
+        <meta name="description" content="Completing the sinauth OAuth sign-in redirect." />
+        <meta name="robots" content="noindex" />
+      </Helmet>
       Completing sign in…
     </div>
   )

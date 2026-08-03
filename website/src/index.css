@@ -15,6 +15,10 @@
   --text-muted: #8892a8;
   --font:       'Inter', system-ui, -apple-system, sans-serif;
   --mono:       'JetBrains Mono', ui-monospace, monospace;
+  /* Docs: dark-mode defaults (light mode overrides these to a legible violet — see body.light-mode) */
+  --brand:      var(--cyan);
+  --accent:     var(--cyan);
+  --bg-sidebar: rgba(10, 10, 30, 0.9);
 }
 
 html {
@@ -28,6 +32,12 @@ body {
   color: var(--text);
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Visible keyboard-focus ring for search inputs (Navbar + Docs sidebar) */
+.search-input:focus-visible {
+  outline: 2px solid var(--accent, var(--cyan));
+  outline-offset: 2px;
 }
 
 /* Subtle scan-line overlay */

@@ -1,5 +1,6 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -26,6 +27,20 @@ export default function MarshalPage() {
       prev={{ label: 'Overview', path: '/docs/governance' }}
       next={{ label: 'WORM Chain & TripleHash', path: '/docs/citadel/worm' }}
     >
+      <Helmet>
+        <title>MARSHAL Engine | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="How CITADEL's MARSHAL 5-gate engine evaluates every governed action (Kerkese) — AuthN, AuthZ, NDS separation of duties, AUGUR heuristics, and WORM recording."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/citadel/marshal" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/citadel/marshal" />
+        <meta property="og:title" content="MARSHAL Engine | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="How CITADEL's MARSHAL 5-gate engine evaluates every governed action (Kerkese) — AuthN, AuthZ, NDS separation of duties, AUGUR heuristics, and WORM recording."
+        />
+      </Helmet>
       <h1>MARSHAL Engine</h1>
       <p>
         <strong>MARSHAL</strong> is CITADEL's 5-gate cryptographic authorisation engine. Every

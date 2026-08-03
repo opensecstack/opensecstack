@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { Helmet } from 'react-helmet-async'
 import { useThemeToggle } from '../hooks/useThemeToggle'
 
 /**
@@ -23,6 +24,11 @@ export default function NotFoundPage() {
       color: isDark ? '#e2e8f0' : '#1e293b',
       fontFamily: 'inherit',
     }}>
+      <Helmet>
+        <title>Page Not Found | opensecstack</title>
+        <meta name="description" content="This page does not exist on the opensecstack site. It may have moved, been renamed, or never existed." />
+        <meta name="robots" content="noindex" />
+      </Helmet>
       <p style={{
         fontSize: '0.75rem',
         letterSpacing: '0.2em',

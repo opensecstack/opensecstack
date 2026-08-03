@@ -1,5 +1,6 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -19,6 +20,20 @@ export default function OpenScrubPage() {
       prev={{ label: 'ThreatFlow', path: '/docs/platforms/threatflow' }}
       next={{ label: 'CyberPath', path: '/docs/platforms/cyberpath' }}
     >
+      <Helmet>
+        <title>OpenScrub — DDoS Mitigation | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="OpenScrub delivers line-rate L3/L4 DDoS packet filtering through an XDP/eBPF kernel data plane with GoBGP-driven blackhole routing."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/platforms/openscrub" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/platforms/openscrub" />
+        <meta property="og:title" content="OpenScrub — DDoS Mitigation | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="OpenScrub delivers line-rate L3/L4 DDoS packet filtering through an XDP/eBPF kernel data plane with GoBGP-driven blackhole routing."
+        />
+      </Helmet>
       <h1>OpenScrub</h1>
       <p>
         <strong>OpenScrub</strong> is the DDoS mitigation platform in the opensecstack (SIN)

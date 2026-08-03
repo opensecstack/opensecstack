@@ -28,6 +28,10 @@ const TECH_COLORS = [
   new THREE.Color('#00f0ff'), // accent
 ]
 
+// Constant rotation axis for the hand-mode orbit (hoisted so the hot loop
+// never allocates a fresh Vector3 for it — created exactly once).
+const Y_AXIS = new THREE.Vector3(0, 1, 0)
+
 interface Particle {
   // Shape morphing targets
   shapeTarget: THREE.Vector3
@@ -83,6 +87,17 @@ export default function HandParticles({ hand }: Props) {
   const _scl = useMemo(() => new THREE.Vector3(), [])
   const _quat = useMemo(() => new THREE.Quaternion(), [])
   const _color = useMemo(() => new THREE.Color(), [])
+  // Per-particle scratch vectors/colors — each holds exactly one semantic
+  // role, written then immediately consumed within a single loop iteration.
+  const _ambientTarget = useMemo(() => new THREE.Vector3(), [])
+  const _handTarget = useMemo(() => new THREE.Vector3(), [])
+  const _blended = useMemo(() => new THREE.Vector3(), [])
+  const _toTarget = useMemo(() => new THREE.Vector3(), [])
+  const _ambientColor = useMemo(() => new THREE.Color(), [])
+  // Per-frame (not per-particle) scratch objects
+  const _handCenter = useMemo(() => new THREE.Vector3(), [])
+  const _iconColor = useMemo(() => new THREE.Color(), [])
+  const _nextIconColor = useMemo(() => new THREE.Color(), [])
 
   const particles = useMemo<Particle[]>(() => {
     const result: Particle[] = []
@@ -139,14 +154,14 @@ export default function HandParticles({ hand }: Props) {
 
     // ── Hand mode targets ──
 
-    let handCenter = new THREE.Vector3(0, 0, 0)
+    const handCenter = _handCenter.set(0, 0, 0)
     let handRadius = BASE_RADIUS
     let handScale = 1
 
     if (handActive && hand.center) {
       const nx = -(hand.center[0] - 0.5) * 12
       const ny = -(hand.center[1] - 0.5) * 8
-      handCenter = new THREE.Vector3(nx, ny, 0)
+      handCenter.set(nx, ny, 0)
 
       if (hand.handDistance !== null) {
         handRadius = 0.5 + hand.handDistance * 8
@@ -156,7 +171,7 @@ export default function HandParticles({ hand }: Props) {
       handRadius *= 0.5 + avgOpenness * 0.8
     }
 
-    sm.center.lerp(handActive ? handCenter : new THREE.Vector3(0, 0, 0), 0.1)
+    sm.center.lerp(handCenter, 0.1)
     sm.radius += ((handActive ? handRadius : BASE_RADIUS) - sm.radius) * 0.08
     sm.scale += ((handActive ? handScale : 1) - sm.scale) * 0.1
 
@@ -182,8 +197,8 @@ export default function HandParticles({ hand }: Props) {
     }
 
     // Current icon color for ambient mode
-    const iconColor = new THREE.Color(iconShapes[currentShapeIdx].color)
-    const nextIconColor = new THREE.Color(iconShapes[nextShapeIdx].color)
+    const iconColor = _iconColor.set(iconShapes[currentShapeIdx].color)
+    const nextIconColor = _nextIconColor.set(iconShapes[nextShapeIdx].color)
 
     // ── Update all particles ──
 
@@ -196,7 +211,7 @@ export default function HandParticles({ hand }: Props) {
       const staggeredT = Math.max(0, Math.min(1, (morphT - p.morphDelay * 0.5) / (1 - p.morphDelay * 0.5 + 0.01)))
       const eased = staggeredT * staggeredT * (3 - 2 * staggeredT) // smoothstep
 
-      const ambientTarget = new THREE.Vector3().lerpVectors(
+      const ambientTarget = _ambientTarget.lerpVectors(
         p.shapeTarget,
         p.nextShapeTarget,
         eased,
@@ -208,21 +223,21 @@ export default function HandParticles({ hand }: Props) {
       // ── Hand target: orbit around hand center ──
 
       const orbitAngle = t * p.speed * 0.3 + p.phase
-      const handTarget = p.home.clone()
-        .applyAxisAngle(new THREE.Vector3(0, 1, 0), orbitAngle * 0.2)
+      const handTarget = _handTarget.copy(p.home)
+        .applyAxisAngle(Y_AXIS, orbitAngle * 0.2)
         .multiplyScalar(sm.radius / BASE_RADIUS)
         .add(sm.center)
 
       // ── Blend between ambient and hand mode ──
 
-      const blendedTarget = new THREE.Vector3().lerpVectors(
+      const blendedTarget = _blended.lerpVectors(
         ambientTarget,
         handTarget,
         sm.handIntensity,
       )
 
       // Spring physics
-      const toTarget = blendedTarget.clone().sub(p.pos)
+      const toTarget = _toTarget.copy(blendedTarget).sub(p.pos)
       p.vel.add(toTarget.multiplyScalar(0.04))
       p.vel.multiplyScalar(0.9)
       p.pos.add(p.vel)
@@ -239,7 +254,7 @@ export default function HandParticles({ hand }: Props) {
 
       // ── Color: blend between icon color and tech color ──
 
-      const ambientColor = _color.clone().lerpColors(iconColor, nextIconColor, eased)
+      const ambientColor = _ambientColor.lerpColors(iconColor, nextIconColor, eased)
       const techColor = TECH_COLORS[p.colorIdx]
       const finalColor = _color.lerpColors(ambientColor, techColor, sm.handIntensity)
 

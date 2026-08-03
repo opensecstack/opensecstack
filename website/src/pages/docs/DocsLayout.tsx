@@ -213,10 +213,11 @@ export default function DocsLayout({ children, breadcrumbs, toc = [], editPath, 
                 if (e.key === 'Enter' && results.length) navigate(results[0].path)
               }}
               placeholder="Search docs…"
+              className="search-input"
               style={{
                 width: '100%', boxSizing: 'border-box',
                 background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 8, padding: '8px 10px 8px 32px', color: 'var(--text)', fontSize: '0.82rem', outline: 'none',
+                borderRadius: 8, padding: '8px 10px 8px 32px', color: 'var(--text)', fontSize: '0.82rem',
               }}
             />
           </div>

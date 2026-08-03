@@ -1,4 +1,5 @@
 import DocsLayout from './DocsLayout'
+import { Helmet } from 'react-helmet-async'
 
 const toc = [
   { id: 'what-is-opensecstack', label: 'What is opensecstack?' },
@@ -15,6 +16,20 @@ export default function IntroPage() {
       editPath="IntroPage.tsx"
       next={{ label: 'Quick Start', path: '/docs/quickstart' }}
     >
+      <Helmet>
+        <title>Introduction | opensecstack Docs</title>
+        <meta
+          name="description"
+          content="What opensecstack is: 11 open-source security platforms, the sinauth identity layer, and CITADEL cryptographic governance, connected through typed SDK contracts."
+        />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/docs/intro" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/docs/intro" />
+        <meta property="og:title" content="Introduction | opensecstack Docs" />
+        <meta
+          property="og:description"
+          content="What opensecstack is: 11 open-source security platforms, the sinauth identity layer, and CITADEL cryptographic governance, connected through typed SDK contracts."
+        />
+      </Helmet>
       <h1>Introduction</h1>
       <p>
         <strong>opensecstack</strong> (SIN — Security Intelligence Network) is an open-source

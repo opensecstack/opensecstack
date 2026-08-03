@@ -11,6 +11,12 @@ on:
       # "v" at all). A bare "v*" trigger could never match either real
       # convention.
       - "ecosystem/v*"
+    # TEMPORARY: verifying the .citadel / ecosystem/v* tag fixes without
+    # waiting for a real tag. resolve-release-mode below forces every
+    # branches: push run into dry-run regardless of this trigger, so it
+    # cannot actually push images or publish packages. Remove this
+    # `branches: [main]` block once verified.
+    branches: [main]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -29,9 +35,42 @@ env:
   REGISTRY: ghcr.io
 
 # ---------------------------------------------------------------------------
-# 1. Parallel test stage (5 jobs running simultaneously)
+# 0. Resolve release mode — the one place that decides whether this run is
+#    allowed to actually push images / publish packages / cut a release.
 # ---------------------------------------------------------------------------
 jobs:
+  resolve-release-mode:
+    name: Resolve release mode
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.mode.outputs.publish }}
+    steps:
+      - name: Determine whether this run should actually publish
+        id: mode
+        run: |
+          # Real releases only ever come from a genuine ecosystem/v* tag
+          # push, or an explicit workflow_dispatch with dry_run=false. Every
+          # other trigger — including the temporary `branches: [main]` push
+          # trigger above — is forced into dry-run so it can exercise the
+          # whole pipeline without pushing/publishing/releasing anything for
+          # real.
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+              PUBLISH=false
+            else
+              PUBLISH=true
+            fi
+          elif [[ "${{ github.ref }}" == refs/tags/ecosystem/v* ]]; then
+            PUBLISH=true
+          else
+            PUBLISH=false
+          fi
+          echo "publish=${PUBLISH}" >> "$GITHUB_OUTPUT"
+          echo "This run will $([ "$PUBLISH" = "true" ] && echo "PUBLISH FOR REAL" || echo "run as a DRY RUN — no push/publish/release")."
+
+# ---------------------------------------------------------------------------
+# 1. Parallel test stage (5 jobs running simultaneously)
+# ---------------------------------------------------------------------------
   test-apiguard:
     runs-on: ubuntu-latest
     defaults:
@@ -141,6 +180,7 @@ jobs:
   # ---------------------------------------------------------------------------
   docker:
     needs:
+      - resolve-release-mode
       - test-apiguard
       - test-nis2compass
       - test-citadel
@@ -199,7 +239,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
-          push: ${{ !inputs.dry_run }}
+          push: ${{ needs.resolve-release-mode.outputs.publish == 'true' }}
           tags: |
             ghcr.io/${{ github.repository }}/${{ matrix.component }}:${{ steps.meta.outputs.version }}
             ghcr.io/${{ github.repository }}/${{ matrix.component }}:${{ steps.meta.outputs.short_sha }}
@@ -207,11 +247,11 @@ jobs:
           cache-to: type=gha,scope=${{ matrix.component }},mode=max
 
       - name: Install cosign
-        if: ${{ !inputs.dry_run }}
+        if: ${{ needs.resolve-release-mode.outputs.publish == 'true' }}
         uses: sigstore/cosign-installer@v3
 
       - name: Sign image with cosign (keyless)
-        if: ${{ !inputs.dry_run }}
+        if: ${{ needs.resolve-release-mode.outputs.publish == 'true' }}
         run: |
           cosign sign --yes ghcr.io/${{ github.repository }}/${{ matrix.component }}@${{ steps.build.outputs.digest }}
 
@@ -224,7 +264,7 @@ jobs:
           syft "${IMAGE}" -o spdx-json > sbom-${{ matrix.component }}.json
 
       - name: Attest SBOM to image
-        if: ${{ !inputs.dry_run }}
+        if: ${{ needs.resolve-release-mode.outputs.publish == 'true' }}
         run: |
           cosign attest --yes \
             --predicate sbom-${{ matrix.component }}.json \
@@ -242,6 +282,7 @@ jobs:
   # ---------------------------------------------------------------------------
   sdk-publish:
     needs:
+      - resolve-release-mode
       - test-apiguard
       - test-nis2compass
       - test-citadel
@@ -267,7 +308,7 @@ jobs:
           python -m build
 
       - name: Publish Python SDK to PyPI
-        if: ${{ !inputs.dry_run }}
+        if: ${{ needs.resolve-release-mode.outputs.publish == 'true' }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: sdk/python/dist/
@@ -280,7 +321,7 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
+          if [ "${{ needs.resolve-release-mode.outputs.publish }}" != "true" ]; then
             cargo publish --dry-run
           else
             cargo publish
@@ -292,7 +333,7 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
+          if [ "${{ needs.resolve-release-mode.outputs.publish }}" != "true" ]; then
             cargo publish --dry-run
           else
             cargo publish
@@ -313,7 +354,7 @@ jobs:
         run: npm run build
 
       - name: Publish TypeScript SDK to npm
-        if: ${{ !inputs.dry_run }}
+        if: ${{ needs.resolve-release-mode.outputs.publish == 'true' }}
         working-directory: sdk/typescript
         run: npm publish --provenance --access public
         env:
@@ -324,6 +365,7 @@ jobs:
   # ---------------------------------------------------------------------------
   github-release:
     needs:
+      - resolve-release-mode
       - docker
       - sdk-publish
     runs-on: ubuntu-latest
@@ -374,7 +416,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body_path: release-notes.md
-          draft: ${{ inputs.dry_run == true }}
+          draft: ${{ needs.resolve-release-mode.outputs.publish != 'true' }}
           files: |
             release-assets/**
 
@@ -383,6 +425,7 @@ jobs:
   # ---------------------------------------------------------------------------
   release-gate:
     needs:
+      - resolve-release-mode
       - test-apiguard
       - test-nis2compass
       - test-citadel

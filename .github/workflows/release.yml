@@ -87,6 +87,33 @@ jobs:
 
   test-nis2compass:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nis2compass
+    # nis2compass/app/config.py refuses to start without a DB password/URL,
+    # and its tests need an actual schema to run migrations against. This
+    # job had none of that wired up at all (no services, no migrations, no
+    # env vars) — nightly.yml's nis2compass matrix leg already solves this
+    # exact problem; mirrored that setup here instead of re-deriving it.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: nis2compass_test
+          POSTGRES_USER: nis2compass
+          POSTGRES_PASSWORD: nis2compass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nis2compass -d nis2compass_test" --health-interval 10s
+          --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 10s
+          --health-timeout 5s --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -99,9 +126,34 @@ jobs:
         # dependency list. The "pytest: command not found" failure this
         # produced is exactly why nightly.yml's equivalent step already
         # installs both files; this job just never got the same fix.
-        run: pip install -r nis2compass/requirements.txt -r nis2compass/requirements-dev.txt
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run migrations
+        # alembic (nis2compass/migrations/env.py) reads NIS2_DB_* components,
+        # not a single DATABASE_URL/NIS2_DB_URL — see nightly.yml for the
+        # same note against the same code path.
+        env:
+          NIS2_DB_HOST: localhost
+          NIS2_DB_PORT: "5432"
+          NIS2_DB_USER: nis2compass
+          NIS2_DB_PASSWORD: nis2compass
+          NIS2_DB_NAME: nis2compass_test
+        run: alembic upgrade head
+
       - name: Run tests
-        run: pytest nis2compass/
+        # app/config.py reads NIS2_DB_URL (and refuses to start without it
+        # or NIS2_DB_PASSWORD — the exact error this job was hitting);
+        # tests/conftest.py overrides the DB via NIS2_TEST_DB_URL and Redis
+        # via NIS2_TEST_REDIS_URL.
+        env:
+          NIS2_DB_URL: postgresql+psycopg2://nis2compass:nis2compass@localhost:5432/nis2compass_test
+          NIS2_TEST_DB_URL: postgresql+psycopg2://nis2compass:nis2compass@localhost:5432/nis2compass_test
+          NIS2_REDIS_URL: redis://localhost:6379/0
+          NIS2_TEST_REDIS_URL: redis://localhost:6379/0
+          NIS2_SECRET_KEY: release-ci-secret
+          NIS2_JWT_SECRET: release-ci-jwt-secret-at-least-32-chars-long
+          NIS2_ENV: testing
+        run: pytest tests/ --timeout=300
 
   test-citadel:
     runs-on: ubuntu-latest

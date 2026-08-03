@@ -48,7 +48,7 @@ jobs:
             nis2compass:
               - 'nis2compass/**'
             citadel:
-              - '.citadel/**'
+              - 'citadel/**'
             sdk:
               - 'sdk/**'
               - '!sdk/vantage-hash/**'
@@ -313,7 +313,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: .citadel
+        working-directory: citadel
     services:
       postgres:
         image: postgres:16-alpine
@@ -333,7 +333,7 @@ jobs:
       - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: .citadel/go.sum
+          cache-dependency-path: citadel/go.sum
       - name: Run tests
         env:
           DATABASE_URL: postgres://citadel:citadel@localhost:5432/citadel_test?sslmode=disable
@@ -351,7 +351,7 @@ jobs:
         if: always()
         with:
           name: citadel-coverage
-          path: .citadel/coverage.out
+          path: citadel/coverage.out
 
   # 3b. Citadel — WORM chain verification (runs after unit tests pass)
   test-citadel-worm:
@@ -360,7 +360,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: .citadel
+        working-directory: citadel
     services:
       postgres:
         image: postgres:16-alpine
@@ -380,14 +380,14 @@ jobs:
       - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: .citadel/go.sum
+          cache-dependency-path: citadel/go.sum
 
       - name: Run migrations
         env:
           DATABASE_URL: postgres://citadel:citadel@localhost:5432/citadel_worm_test?sslmode=disable
         run: |
           go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
-          migrate -path db/migrations -database "$DATABASE_URL" up
+          migrate -path migrations -database "$DATABASE_URL" up
 
       - name: WORM chain writer + verifier tests
         env:
@@ -481,12 +481,12 @@ jobs:
       - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: .citadel/go.sum
+          cache-dependency-path: citadel/go.sum
       - name: golangci-lint
         uses: golangci/golangci-lint-action@3a919529898de77ec3da873e3063ca4b10e7f5cc # v3
         with:
           version: v1.57
-          working-directory: .citadel
+          working-directory: citadel
 
   # 3e. Citadel — security
   security-citadel:
@@ -498,14 +498,14 @@ jobs:
       - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: .citadel/go.sum
+          cache-dependency-path: citadel/go.sum
       - name: govulncheck
-        working-directory: .citadel
+        working-directory: citadel
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
       - name: gosec (SAST)
-        working-directory: .citadel
+        working-directory: citadel
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@latest
           gosec -fmt json -out gosec-results.json -stdout -verbose=text ./...
@@ -514,7 +514,7 @@ jobs:
         if: always()
         with:
           name: citadel-gosec
-          path: .citadel/gosec-results.json
+          path: citadel/gosec-results.json
 
   # ──────────────────────────────────────────────────────────────────────────
   # 3d. NIS2 Compass — web frontend (React/Node)

@@ -31,7 +31,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          # HEAD~1 HEAD (the old range) only ever diffs the single most
+          # recent commit. A push that lands more than one commit at once
+          # (a merge commit, or several direct commits) silently dropped
+          # every track changed by the earlier commits. Comparing
+          # github.event.before/after instead covers the whole push, and
+          # that range can span arbitrarily far back, so fetch full history.
+          fetch-depth: 0
 
       - name: Build track matrix
         id: set-matrix
@@ -56,7 +62,15 @@ jobs:
               TRACKS=("$INPUT")
             fi
           else
-            CHANGED=$(git diff --name-only HEAD~1 HEAD -- 'cyberpath/content/tracks/' \
+            BEFORE="${{ github.event.before }}"
+            AFTER="${{ github.event.after }}"
+            # All-zeros `before` means there's no prior commit to diff
+            # against (e.g. the branch's first push) — fall back to git's
+            # well-known empty-tree hash as the diff root.
+            if [[ "$BEFORE" =~ ^0+$ ]]; then
+              BEFORE=$(git hash-object -t tree /dev/null)
+            fi
+            CHANGED=$(git diff --name-only "$BEFORE" "$AFTER" -- 'cyberpath/content/tracks/' \
               | grep -oP 'cyberpath/content/tracks/\K[^/]+' \
               | sort -u)
             TRACKS=()
@@ -211,17 +225,24 @@ jobs:
 
       - name: Stamp digest into labs/labs.yaml
         shell: bash
+        env:
+          LAB_ID: ${{ steps.meta.outputs.lab_id }}
+          DIGEST: ${{ steps.digest.outputs.value }}
+          LABS_YAML: cyberpath/labs/labs.yaml
         run: |
-          LAB_ID="${{ steps.meta.outputs.lab_id }}"
-          DIGEST="${{ steps.digest.outputs.value }}"
-          LABS_YAML="cyberpath/labs/labs.yaml"
-
+          # A quoted heredoc terminator ('PYEOF') disables shell expansion
+          # inside it, so $LAB_ID/$DIGEST/$LABS_YAML used to reach Python as
+          # the four literal characters "$LAB_ID" etc., not the real values -
+          # open("$LABS_YAML") always raised FileNotFoundError. Reading them
+          # from the environment instead sidesteps that shell-quoting pitfall
+          # entirely (and one less thing to escape if a digest ever contains
+          # a shell-special character).
           python3 - <<'PYEOF'
-          import sys, re
+          import os, sys, re
 
-          lab_id  = "$LAB_ID"
-          digest  = "$DIGEST"
-          path    = "$LABS_YAML"
+          lab_id = os.environ["LAB_ID"]
+          digest = os.environ["DIGEST"]
+          path   = os.environ["LABS_YAML"]
 
           with open(path, "r") as fh:
               content = fh.read()
@@ -273,6 +294,24 @@ jobs:
           else
             MSG="chore(labs): stamp digest for ${LAB_ID} [${VERSION}]"$'\n\n'"Automated by publish-track.yml after successful push + cosign sign + SBOM attestation."$'\n'"Image: ${IMAGE_REF}@${DIGEST}"
             git commit -m "$MSG"
-            git pull --rebase origin main
-            git push origin main
+
+            # Each matrix leg (one per changed track) reaches this step
+            # independently and in parallel. A single pull --rebase + push
+            # only survives if no other leg pushes in between; with several
+            # tracks changing in the same run, the second leg to arrive gets
+            # a non-fast-forward rejection and — with no retry — silently
+            # drops its digest stamp from this run. Rebase-and-retry instead.
+            MAX_ATTEMPTS=5
+            attempt=1
+            until git push origin main; do
+              if [[ "$attempt" -ge "$MAX_ATTEMPTS" ]]; then
+                echo "::error::git push origin main failed after ${MAX_ATTEMPTS} attempts (labs.yaml digest stamp for ${LAB_ID} was not published)"
+                exit 1
+              fi
+              echo "push rejected (attempt ${attempt}/${MAX_ATTEMPTS}) — rebasing onto origin/main and retrying..."
+              sleep "$((RANDOM % 5 + 1))"
+              git fetch origin main
+              git rebase origin/main
+              attempt=$((attempt + 1))
+            done
           fi

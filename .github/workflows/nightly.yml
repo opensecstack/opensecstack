@@ -273,6 +273,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # go install (below, for nuclei) puts the binary in $(go env GOPATH)/bin,
+      # which is only on PATH because setup-go adds it — unlike
+      # dependency-audit/worm-integrity, this job was missing this step, so
+      # the preinstalled runner Go could `go install` nuclei but the shell
+      # could never find it afterward ("nuclei: command not found", exit 127).
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
       # Building ~13 Go/Rust/Python Dockerfiles from scratch (fresh runner,
       # no layer cache) can itself take several minutes. Split this out from
       # `up --wait` so a build failure is reported as a build failure, not

@@ -174,10 +174,56 @@ jobs:
           echo "Version : ${VERSION}"
           echo "Image   : ${IMAGE_REF}"
 
+          # Several tracks only have lab.yaml authored so far — no Dockerfile,
+          # no compiled lab payload behind it yet. Others (e.g.
+          # phishing-detector) ship a Dockerfile that itself documents an
+          # unimplemented build step (a lab.wasm.placeholder standing in for
+          # a real lab.wasm the "track build process" is supposed to produce
+          # but nothing in this repo actually runs). Treat both as "not
+          # ready yet" rather than a hard CI failure: warn and skip the rest
+          # of this leg so a push to main isn't blocked on lab content that
+          # simply hasn't been authored.
+          DOCKERFILE="${LAB_DIR}/Dockerfile"
+          READY=true
+          REASON=""
+
+          if [[ ! -f "$DOCKERFILE" ]]; then
+            READY=false
+            REASON="no Dockerfile at ${DOCKERFILE}"
+          else
+            # Only handles single-source `COPY <src> <dest>` lines, which is
+            # this repo's convention for these scratch-image lab Dockerfiles
+            # — not a general Dockerfile parser. Plain awk field-splitting
+            # (not grep -P) deliberately, so this doesn't depend on the
+            # runner's locale supporting PCRE — that broke silently in local
+            # testing under a non-UTF8 locale, which would have made this
+            # check falsely report "ready" instead of catching a missing
+            # build input.
+            MISSING=()
+            while read -r src; do
+              [[ -z "$src" ]] && continue
+              if [[ ! -e "${LAB_DIR}/${src}" ]]; then
+                MISSING+=("$src")
+              fi
+            done < <(awk '$1=="COPY" && $2 !~ /^--from=/ {print $2}' "$DOCKERFILE")
+
+            if [[ ${#MISSING[@]} -gt 0 ]]; then
+              READY=false
+              REASON="Dockerfile references missing build input(s): ${MISSING[*]}"
+            fi
+          fi
+
+          echo "ready=${READY}" >> "$GITHUB_OUTPUT"
+
+          if [[ "$READY" == "false" ]]; then
+            echo "::warning::Skipping publish for ${TRACK} (${LAB_ID}) — ${REASON}. This lab's content isn't ready to publish yet."
+          fi
+
       # -----------------------------------------------------------------------
       # Authenticate to ghcr.io
       # -----------------------------------------------------------------------
       - name: Log in to ghcr.io
+        if: steps.meta.outputs.ready == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -189,6 +235,7 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Build and push lab image
         id: build
+        if: steps.meta.outputs.ready == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ${{ steps.meta.outputs.lab_dir }}
@@ -202,6 +249,7 @@ jobs:
       # Keyless OIDC signing (Sigstore / Rekor)
       # -----------------------------------------------------------------------
       - name: Sign image with cosign (keyless OIDC)
+        if: steps.meta.outputs.ready == 'true'
         shell: bash
         env:
           COSIGN_EXPERIMENTAL: "1"
@@ -213,12 +261,14 @@ jobs:
       # CycloneDX SBOM generation and attestation
       # -----------------------------------------------------------------------
       - name: Generate CycloneDX SBOM with syft
+        if: steps.meta.outputs.ready == 'true'
         shell: bash
         run: |
           IMAGE_DIGEST="${{ steps.meta.outputs.image_ref }}@${{ steps.build.outputs.digest }}"
           syft "${IMAGE_DIGEST}" -o cyclonedx-json > sbom.cdx.json
 
       - name: Attest SBOM with cosign
+        if: steps.meta.outputs.ready == 'true'
         shell: bash
         env:
           COSIGN_EXPERIMENTAL: "1"
@@ -234,6 +284,7 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Resolve canonical digest
         id: digest
+        if: steps.meta.outputs.ready == 'true'
         shell: bash
         run: |
           DIGEST=$(crane digest "${{ steps.meta.outputs.image_ref }}")
@@ -241,6 +292,7 @@ jobs:
           echo "Digest: ${DIGEST}"
 
       - name: Stamp digest into labs/labs.yaml
+        if: steps.meta.outputs.ready == 'true'
         shell: bash
         env:
           LAB_ID: ${{ steps.meta.outputs.lab_id }}
@@ -294,6 +346,7 @@ jobs:
       # Commit the updated labs/labs.yaml back to main
       # -----------------------------------------------------------------------
       - name: Commit updated labs.yaml
+        if: steps.meta.outputs.ready == 'true'
         shell: bash
         env:
           LAB_ID: ${{ steps.meta.outputs.lab_id }}

@@ -142,9 +142,26 @@ jobs:
             exit 1
           fi
 
-          LAB_ID=$(grep -m1 '^id:' "$LAB_YAML" | awk '{print $2}')
-          VERSION=$(grep -m1 '^version:' "$LAB_YAML" | awk '{print $2}')
-          IMAGE_REF=$(grep -m1 '^image:' "$LAB_YAML" | awk '{print $2}' | tr -d '"')
+          # Strip a leading UTF-8 BOM and any CRLF line endings before
+          # parsing. A lab.yaml saved by Windows tooling (e.g. PowerShell
+          # Out-File/Set-Content without -Encoding utf8) can carry both, and
+          # the BOM alone is enough to break the `^id:` anchor on line 1 -
+          # which, combined with this shell's `set -e -o pipefail`, used to
+          # kill this step with a bare "exit code 1" and no diagnostic at
+          # all (the grep failure aborted the script before the explicit
+          # error-handling below ever ran). `|| true` on each grep|awk
+          # pipeline defeats that so the emptiness check below can actually
+          # report what went wrong.
+          NORMALIZED=$(sed '1s/^\xef\xbb\xbf//' "$LAB_YAML" | tr -d '\r')
+
+          LAB_ID=$(grep -m1 '^id:' <<< "$NORMALIZED" | awk '{print $2}' || true)
+          VERSION=$(grep -m1 '^version:' <<< "$NORMALIZED" | awk '{print $2}' || true)
+          IMAGE_REF=$(grep -m1 '^image:' <<< "$NORMALIZED" | awk '{print $2}' | tr -d '"' || true)
+
+          if [[ -z "$LAB_ID" || -z "$VERSION" || -z "$IMAGE_REF" ]]; then
+            echo "ERROR: could not parse id/version/image from ${LAB_YAML} (lab_id='${LAB_ID}' version='${VERSION}' image_ref='${IMAGE_REF}')" >&2
+            exit 1
+          fi
 
           echo "lab_id=${LAB_ID}"        >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}"      >> "$GITHUB_OUTPUT"

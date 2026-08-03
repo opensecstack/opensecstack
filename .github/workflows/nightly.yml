@@ -2,15 +2,8 @@ name: Nightly
 
 # Full-stack nightly validation: no path filtering, every component, every check.
 # Runs at 02:00 UTC daily. Also triggerable manually via workflow_dispatch.
-#
-# TEMPORARY: `push` is enabled below while actively repairing this workflow,
-# so every fix can verify itself immediately instead of waiting for a manual
-# dispatch or the next 02:00 UTC run. Remove the `push:` block once Nightly
-# is fully green again and revert to schedule + workflow_dispatch only.
 
 on:
-  push:
-    branches: [main]
   schedule:
     - cron: '0 2 * * *'
   workflow_dispatch:

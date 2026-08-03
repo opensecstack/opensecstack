@@ -3,7 +3,14 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
+      # Per docs/release-process.md, this workflow builds and publishes
+      # all four platforms together plus the SDKs under one shared version
+      # stamp - that's the documented "ecosystem release" (e.g.
+      # ecosystem/v1.0.0-2026-Q2), not a per-platform release (those are
+      # tagged citadel/v1.1.0, apiguard/v1.3.0, etc. and don't start with
+      # "v" at all). A bare "v*" trigger could never match either real
+      # convention.
+      - "ecosystem/v*"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -57,13 +64,13 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: .citadel
+        working-directory: citadel
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: .citadel/go.sum
+          cache-dependency-path: citadel/go.sum
       - name: Run tests
         run: go test -race -count=1 ./...
 
@@ -154,7 +161,7 @@ jobs:
           - component: nis2compass
             context: nis2compass
           - component: citadel
-            context: .citadel
+            context: citadel
           - component: irflow
             context: irflow
     steps:
@@ -163,9 +170,17 @@ jobs:
       - name: Resolve version and short SHA
         id: meta
         run: |
-          RAW_TAG="${GITHUB_REF#refs/tags/}"
-          VERSION="${RAW_TAG#v}"
           SHORT_SHA="${GITHUB_SHA::7}"
+          if [[ "${GITHUB_REF}" == refs/tags/ecosystem/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/ecosystem/v}"
+          else
+            # workflow_dispatch (dry-run testing) has no ecosystem/v* tag to
+            # derive a version from - GITHUB_REF is just the ref that was
+            # dispatched against (e.g. refs/heads/main), and feeding that
+            # into an image tag below is invalid (Docker tags can't contain
+            # "/"). Use an obviously-synthetic, tag-safe placeholder instead.
+            VERSION="0.0.0-dryrun.${SHORT_SHA}"
+          fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
 
@@ -337,12 +352,20 @@ jobs:
       - name: Extract changelog for this version
         id: changelog
         run: |
-          RAW_TAG="${GITHUB_REF#refs/tags/}"
-          VERSION="${RAW_TAG#v}"
-          awk "/^## \[?v?${VERSION//./\\.}\]?/{found=1; next} found && /^## \[/{exit} found{print}" \
+          if [[ "${GITHUB_REF}" != refs/tags/ecosystem/v* ]]; then
+            echo "No ecosystem/v* tag on this run (workflow_dispatch dry run) — nothing to extract." > release-notes.md
+            exit 0
+          fi
+          VERSION="${GITHUB_REF#refs/tags/ecosystem/v}"
+
+          # Real CHANGELOG.md headings are e.g.
+          # "## [ecosystem/v1.2.0] - 2026-05-23" or
+          # "## [ecosystem/v1.0.0-2026-Q2]" — always "## [ecosystem/v<version>"
+          # with no separate "v"/bracket-optional leniency needed.
+          awk "/^## \[ecosystem\/v${VERSION//./\\.}\]/{found=1; next} found && /^## \[/{exit} found{print}" \
             CHANGELOG.md > release-notes.md
           if [ ! -s release-notes.md ]; then
-            echo "No changelog entry found for ${VERSION}." > release-notes.md
+            echo "No changelog entry found for ecosystem/v${VERSION}." > release-notes.md
             echo "" >> release-notes.md
             echo "See [CHANGELOG.md](CHANGELOG.md) for the full history." >> release-notes.md
           fi

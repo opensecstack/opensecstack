@@ -389,7 +389,7 @@ static INJECTION_PATTERNS: Lazy<Vec<(&'static str, &'static str, Regex)>> = Lazy
         (
             "xxe_indicator",
             "XXE indicator: server response contains unexpected XML entity content.",
-            Regex::new(r"(?i)(<!ENTITY|SYSTEM\s+['\"]file://|<!DOCTYPE[^>]*SYSTEM)").unwrap(),
+            Regex::new(r#"(?i)(<!ENTITY|SYSTEM\s+['"]file://|<!DOCTYPE[^>]*SYSTEM)"#).unwrap(),
         ),
     ]
 });

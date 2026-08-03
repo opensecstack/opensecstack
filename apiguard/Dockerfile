@@ -1,16 +1,28 @@
+# Build context is the repo root, not apiguard/, because go.mod's
+# `replace` directive for sdk/go/sinauth points outside this directory —
+# it only resolves if sdk/ is present alongside apiguard/ in the build
+# context.
+
 # Stage 1 — Rust builder
-FROM rust:1.76-slim AS rust-builder
+FROM rust:1.85-slim AS rust-builder
 WORKDIR /build
-COPY rust/ ./rust/
+COPY apiguard/rust/ ./rust/
 RUN cd rust && cargo build --release
 
 # Stage 2 — Go builder
-FROM golang:1.22-alpine AS go-builder
-WORKDIR /build
-COPY go.mod go.sum ./
+FROM golang:1.25-alpine AS go-builder
+WORKDIR /src
+COPY apiguard/go.mod apiguard/go.sum ./apiguard/
+COPY sdk/go/sinauth/go.mod sdk/go/sinauth/go.sum ./sdk/go/sinauth/
+WORKDIR /src/apiguard
 RUN go mod download
-COPY cmd/ ./cmd/
-COPY internal/ ./internal/
+
+WORKDIR /src
+COPY apiguard/cmd/ ./apiguard/cmd/
+COPY apiguard/internal/ ./apiguard/internal/
+COPY sdk/go/sinauth/ ./sdk/go/sinauth/
+WORKDIR /src/apiguard
+
 ARG VERSION=dev
 ARG COMMIT=unknown
 RUN CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION} -X main.commit=${COMMIT}" -o /apiguard ./cmd/apiguard/

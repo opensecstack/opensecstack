@@ -9,8 +9,11 @@ services:
   apiguard-api:
     image: ghcr.io/opensecstack/apiguard:latest
     build:
-      context: ../apiguard
-      dockerfile: Dockerfile
+      # Repo root, not ../apiguard: go.mod's replace directive for
+      # sdk/go/sinauth points outside apiguard/, so it only resolves if
+      # sdk/ is present in the build context too.
+      context: ..
+      dockerfile: apiguard/Dockerfile
     ports:
       - "8080:8080"
     environment:

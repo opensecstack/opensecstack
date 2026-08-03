@@ -1,11 +1,22 @@
-FROM golang:1.22-alpine AS builder
+# Build context is the repo root, not citadel/, because go.mod's
+# `replace` directive for sdk/go/sinauth points outside this directory —
+# it only resolves if sdk/ is present alongside citadel/ in the build
+# context.
+
+FROM golang:1.25-alpine AS builder
 
 RUN apk --no-cache add git
 
-WORKDIR /app
-COPY go.mod ./
+WORKDIR /src
+COPY citadel/go.mod citadel/go.sum ./citadel/
+COPY sdk/go/sinauth/go.mod sdk/go/sinauth/go.sum ./sdk/go/sinauth/
+WORKDIR /src/citadel
 RUN go mod download
-COPY . .
+
+WORKDIR /src
+COPY citadel/ ./citadel/
+COPY sdk/go/sinauth/ ./sdk/go/sinauth/
+WORKDIR /src/citadel
 
 ARG VERSION=dev
 ARG GIT_COMMIT=unknown
@@ -21,7 +32,7 @@ FROM alpine:3.20
 RUN apk --no-cache add ca-certificates wget
 RUN addgroup -S citadel && adduser -S citadel -G citadel
 WORKDIR /app
-COPY --from=builder /app/citadel .
+COPY --from=builder /src/citadel/citadel .
 USER citadel
 EXPOSE 8099
 ENTRYPOINT ["./citadel"]

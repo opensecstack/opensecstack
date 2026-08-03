@@ -257,14 +257,22 @@ jobs:
     strategy:
       matrix:
         include:
+          # apiguard/citadel/irflow build from the repo root: their go.mod
+          # `replace` directives point at sdk/go/* submodules outside their
+          # own directory, which only resolve if sdk/ is in the build
+          # context alongside the platform directory (see each Dockerfile).
           - component: apiguard
-            context: apiguard
+            context: .
+            dockerfile: apiguard/Dockerfile
           - component: nis2compass
             context: nis2compass
+            dockerfile: nis2compass/Dockerfile
           - component: citadel
-            context: citadel
+            context: .
+            dockerfile: citadel/Dockerfile
           - component: irflow
-            context: irflow
+            context: .
+            dockerfile: irflow/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -300,6 +308,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           push: ${{ needs.resolve-release-mode.outputs.publish == 'true' }}
           tags: |
             ghcr.io/${{ github.repository }}/${{ matrix.component }}:${{ steps.meta.outputs.version }}

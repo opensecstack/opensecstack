@@ -1,13 +1,26 @@
+# Build context is the repo root (see release.yml / docker-compose), not
+# irflow/, because go.mod's `replace` directives for the SDK submodules
+# (sdk/go/password, sdk/go/sinauth) point outside this directory — they
+# only resolve if the sdk/ tree is present alongside irflow/ in the
+# build context.
+
 # ---- Build stage ----
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates
 
 WORKDIR /src
-COPY go.mod go.sum ./
+COPY irflow/go.mod irflow/go.sum ./irflow/
+COPY sdk/go/password/go.mod sdk/go/password/go.sum ./sdk/go/password/
+COPY sdk/go/sinauth/go.mod sdk/go/sinauth/go.sum ./sdk/go/sinauth/
+WORKDIR /src/irflow
 RUN go mod download
 
-COPY . .
+WORKDIR /src
+COPY irflow/ ./irflow/
+COPY sdk/go/password/ ./sdk/go/password/
+COPY sdk/go/sinauth/ ./sdk/go/sinauth/
+WORKDIR /src/irflow
 
 ARG VERSION=dev
 ARG GIT_COMMIT=unknown
@@ -26,7 +39,7 @@ RUN apk add --no-cache ca-certificates tzdata \
     && addgroup -S irflow && adduser -S irflow -G irflow
 
 COPY --from=builder /bin/irflow /usr/local/bin/irflow
-COPY migrations/ /etc/irflow/migrations/
+COPY irflow/migrations/ /etc/irflow/migrations/
 
 USER irflow
 EXPOSE 8083

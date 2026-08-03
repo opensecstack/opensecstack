@@ -325,10 +325,19 @@ jobs:
         run: |
           cosign sign --yes ghcr.io/${{ github.repository }}/${{ matrix.component }}@${{ steps.build.outputs.digest }}
 
+      # SBOM generation reads the image back from ghcr.io by tag, which only
+      # exists there when the build step above actually pushed (publish ==
+      # 'true'); the build step never loads the image into the local docker
+      # daemon either (no `load: true`), so a dry run has no image anywhere
+      # for syft to scan — it previously failed here with "manifest
+      # unknown" every dry run, which cascaded via matrix fail-fast into
+      # cancelling every other component's build too.
       - name: Install syft
+        if: ${{ needs.resolve-release-mode.outputs.publish == 'true' }}
         uses: anchore/sbom-action/download-syft@v0
 
       - name: Generate SBOM
+        if: ${{ needs.resolve-release-mode.outputs.publish == 'true' }}
         run: |
           IMAGE="ghcr.io/${{ github.repository }}/${{ matrix.component }}:${{ steps.meta.outputs.version }}"
           syft "${IMAGE}" -o spdx-json > sbom-${{ matrix.component }}.json
@@ -342,6 +351,7 @@ jobs:
             ghcr.io/${{ github.repository }}/${{ matrix.component }}@${{ steps.build.outputs.digest }}
 
       - name: Upload SBOM artifact
+        if: ${{ needs.resolve-release-mode.outputs.publish == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: sbom-${{ matrix.component }}
@@ -383,11 +393,16 @@ jobs:
         with:
           packages-dir: sdk/python/dist/
 
-      # -- Rust SDK -> crates.io --
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Publish Rust SDK
-        working-directory: sdk/rust
+      # -- vantage-hash -> crates.io --
+      # Must publish before the Rust SDK: sdk/rust/Cargo.toml depends on
+      # vantage-hash with a version requirement (crates.io disallows
+      # publishing a path-only dependency), so vantage-hash has to exist on
+      # crates.io first or the Rust SDK's own publish/dry-run can't resolve
+      # it.
+      - name: Publish vantage-hash
+        working-directory: sdk/vantage-hash
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
@@ -397,9 +412,9 @@ jobs:
             cargo publish
           fi
 
-      # -- vantage-hash -> crates.io --
-      - name: Publish vantage-hash
-        working-directory: sdk/vantage-hash
+      # -- Rust SDK -> crates.io --
+      - name: Publish Rust SDK
+        working-directory: sdk/rust
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |

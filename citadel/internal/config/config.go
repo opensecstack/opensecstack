@@ -147,4 +147,22 @@ func setDefaults() {
 	// Map nested config keys (e.g. db.url) to env vars (CITADEL_DB_URL).
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	viper.AutomaticEnv()
+
+	// AutomaticEnv derives the env var for key "citadel.foo" as
+	// CITADEL_ + "CITADEL_FOO" = CITADEL_CITADEL_FOO (SetEnvPrefix stacks
+	// with the "citadel." key namespace instead of replacing it) — it only
+	// matches "db.url"/"port"/"log_level" correctly because those keys don't
+	// start with "citadel". Bind these explicitly to the single-prefixed
+	// names documented on CitadelConfig's fields above, which is what every
+	// docker-compose file and deployment actually sets. viper falls back to
+	// these bound names when the (nonexistent) automatic-env name misses.
+	_ = viper.BindEnv("citadel.master_key", "CITADEL_MASTER_KEY")
+	_ = viper.BindEnv("citadel.anchor_interval", "CITADEL_ANCHOR_INTERVAL")
+	_ = viper.BindEnv("citadel.genesis_hash", "CITADEL_GENESIS_HASH")
+	_ = viper.BindEnv("citadel.enforce_identity", "CITADEL_ENFORCE_IDENTITY")
+	_ = viper.BindEnv("citadel.enforce_signatures", "CITADEL_ENFORCE_SIGNATURES")
+	_ = viper.BindEnv("citadel.sinauth_issuer_url", "CITADEL_SINAUTH_ISSUER_URL")
+	_ = viper.BindEnv("citadel.permify_url", "CITADEL_PERMIFY_URL")
+	_ = viper.BindEnv("citadel.enforce_permify_authz", "CITADEL_ENFORCE_PERMIFY_AUTHZ")
+	_ = viper.BindEnv("citadel.permify_sync_interval", "CITADEL_PERMIFY_SYNC_INTERVAL")
 }

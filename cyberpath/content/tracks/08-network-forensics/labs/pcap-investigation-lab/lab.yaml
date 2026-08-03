@@ -1,4 +1,4 @@
-﻿id: pcap-investigation-lab
+id: pcap-investigation-lab
 version: 1.0.0
 title: "PCAP Investigation: Corporate Network Intrusion"
 runtime: wasm

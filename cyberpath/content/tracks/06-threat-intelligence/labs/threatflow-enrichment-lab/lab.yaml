@@ -1,4 +1,4 @@
-﻿id: threatflow-enrichment-lab
+id: threatflow-enrichment-lab
 version: 1.0.0
 title: "ThreatFlow Enrichment and Correlation Exercise"
 runtime: wasm

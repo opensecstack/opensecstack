@@ -1,4 +1,4 @@
-﻿id: vuln-scan
+id: vuln-scan
 version: 1.0.0
 title: "Code Vulnerability Review Exercise"
 runtime: wasm

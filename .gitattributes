@@ -5,3 +5,13 @@
 # from a stray \r after `set -e`), which breaks every docker-compose service
 # that depends on that script via `condition: service_completed_successfully`.
 *.sh text eol=lf
+
+# Same reasoning for YAML: cyberpath/labs/labs.yaml and the per-track
+# lab.yaml files are parsed line-by-line with anchored grep patterns
+# (^id:, ^version:, ^image:) by .github/workflows/publish-track.yml. A
+# CRLF-and-BOM'd lab.yaml (e.g. saved via Windows PowerShell without
+# -Encoding utf8) broke that parsing outright - the BOM alone defeats the
+# ^id: anchor on line 1, which killed the step silently under this repo's
+# `set -e -o pipefail` shell before its own error handling ever ran.
+*.yaml text eol=lf
+*.yml text eol=lf

@@ -1,4 +1,4 @@
-﻿id: apiguard-scan-lab
+id: apiguard-scan-lab
 version: 1.0.0
 title: "APIGuard API Scanning and Remediation"
 runtime: wasm

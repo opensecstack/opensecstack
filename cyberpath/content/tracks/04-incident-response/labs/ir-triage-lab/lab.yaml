@@ -1,4 +1,4 @@
-﻿id: ir-triage-lab
+id: ir-triage-lab
 version: 1.0.0
 title: "IRFlow Incident Triage Exercise"
 runtime: wasm

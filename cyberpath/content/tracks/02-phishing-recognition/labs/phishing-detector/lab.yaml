@@ -1,4 +1,4 @@
-﻿id: phishing-detector
+id: phishing-detector
 version: 1.0.0
 title: "Phishing Email Classification Exercise"
 runtime: wasm

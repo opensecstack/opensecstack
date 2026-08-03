@@ -1,4 +1,4 @@
-﻿# Lab image digest registry.
+# Lab image digest registry.
 # SHA-256 digests are stamped by the publish-track workflow after each push.
 # Pinning by digest protects against tag mutation attacks.
 # See docs/security/image-signing.md for the full verification procedure.

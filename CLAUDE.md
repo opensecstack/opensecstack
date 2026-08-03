@@ -28,6 +28,15 @@ is a defect, regardless of whether tests pass.
 
 - Every Go service MUST pass `go test ./... -race` with **≥ 70 % total
   coverage** (CI enforces this; see [.github/workflows/ci.yml](.github/workflows/ci.yml)).
+  **Temporary exception:** the Python and Rust SDKs
+  ([sdk/python](sdk/python), [sdk/rust](sdk/rust)) gate CI at 55 % and
+  50 % respectively (see [.github/workflows/sdk.yml](.github/workflows/sdk.yml)) —
+  their test suites failed to even collect/build for the SDK's entire
+  history until 2026-07-31, so 70 % was never actually reachable or
+  measured. The floor is set just below current real coverage so it
+  blocks regressions while tests are added back up to 70 %. Do not
+  raise other platforms' floors down to match — this applies to the
+  SDK only, and should be removed once SDK coverage reaches 70 %.
 - Every Rust crate MUST pass `cargo test --workspace` and
   `cargo clippy --workspace -- -D warnings` (warnings are errors).
 - Every Python service MUST pass its `pytest` suite (`pytest.ini` /

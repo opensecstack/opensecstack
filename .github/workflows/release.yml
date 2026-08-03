@@ -93,9 +93,13 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: nis2compass/requirements.txt
+          cache-dependency-path: nis2compass/requirements*.txt
       - name: Install dependencies
-        run: pip install -r nis2compass/requirements.txt
+        # requirements.txt alone doesn't include pytest — it's a runtime-only
+        # dependency list. The "pytest: command not found" failure this
+        # produced is exactly why nightly.yml's equivalent step already
+        # installs both files; this job just never got the same fix.
+        run: pip install -r nis2compass/requirements.txt -r nis2compass/requirements-dev.txt
       - name: Run tests
         run: pytest nis2compass/
 
@@ -154,8 +158,13 @@ jobs:
       - name: Python SDK tests
         working-directory: sdk/python
         run: |
-          pip install -r requirements.txt
-          pip install pytest
+          # requirements.txt alone (runtime deps only, plus a bare pytest
+          # install) is missing the test-only deps the suite actually
+          # imports: responses, pytest_asyncio, respx (see
+          # requirements-dev.txt / pyproject.toml's [dev] extra). That
+          # produced 4 collection errors and exit code 2 with the old
+          # `pip install -r requirements.txt` + `pip install pytest`.
+          pip install -r requirements.txt -r requirements-dev.txt
           pytest tests/
 
   test-typescript-sdk:

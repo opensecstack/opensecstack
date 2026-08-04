@@ -430,15 +430,28 @@ export default function Navbar() {
               )}
             </div>
 
-            {otherLinks.map(l => (
-              <a key={l.href} href={l.href} style={{
+            {otherLinks.map(l => {
+              const linkStyle = {
                 color: 'var(--text-muted)',
                 textDecoration: 'none',
                 transition: 'color 0.2s, text-shadow 0.2s',
-              }}>
-                {l.label}
-              </a>
-            ))}
+              }
+              // Route paths (e.g. /docs) must go through react-router's <Link>
+              // so the href is resolved against the app's basename
+              // (/opensecstack/ in production) -- a plain <a href="/docs">
+              // ignores the basename entirely and 404s on GitHub Pages.
+              // In-page anchors (#citadel etc.) stay plain <a> tags, since
+              // browser-native same-page anchor jumps need no JS/routing.
+              return l.href.startsWith('/') ? (
+                <Link key={l.href} to={l.href} style={linkStyle}>
+                  {l.label}
+                </Link>
+              ) : (
+                <a key={l.href} href={l.href} style={linkStyle}>
+                  {l.label}
+                </a>
+              )
+            })}
           </div>
 
           {/* Search */}

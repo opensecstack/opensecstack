@@ -59,7 +59,7 @@ impl Tier {
         match self {
             Tier::SecondHand => "BLAKE3",
             Tier::MinuteHand => "SHA-256",
-            Tier::HourHand   => "SHA-512",
+            Tier::HourHand => "SHA-512",
         }
     }
 
@@ -70,7 +70,7 @@ impl Tier {
         match self {
             Tier::SecondHand => (0, 32),
             Tier::MinuteHand => (32, 64),
-            Tier::HourHand   => (64, 128),
+            Tier::HourHand => (64, 128),
         }
     }
 

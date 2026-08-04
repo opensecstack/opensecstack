@@ -1,9 +1,11 @@
 import hmac
 import uuid
-import jwt
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import wraps
-from flask import request, jsonify, g, current_app
+
+import jwt
+from flask import current_app, g, jsonify, request
+
 from .audit import write_audit
 
 
@@ -23,22 +25,18 @@ def validate_api_key(api_key: str) -> tuple[bool, str, str]:
     """
     import hashlib
 
-    key_hash = hashlib.sha256(api_key.encode('utf-8')).hexdigest()
+    key_hash = hashlib.sha256(api_key.encode("utf-8")).hexdigest()
 
     # Try database first (inside app context)
     try:
-        from .models import ApiKey
         from .extensions import db
+        from .models import ApiKey
 
-        record = (
-            db.session.query(ApiKey)
-            .filter(ApiKey.key_hash == key_hash, ApiKey.is_active == True)
-            .first()
-        )
+        record = db.session.query(ApiKey).filter(ApiKey.key_hash == key_hash, ApiKey.is_active == True).first()
         if record is not None:
             # Reject expired keys
             if record.expires_at is not None and record.expires_at <= datetime.now(timezone.utc):
-                return False, 'read_write', 'viewer'
+                return False, "read_write", "viewer"
             # Mark last_used_at dirty; the route's normal transaction commit
             # will persist this — no explicit commit here to avoid mid-request
             # transaction boundaries.
@@ -47,75 +45,76 @@ def validate_api_key(api_key: str) -> tuple[bool, str, str]:
             g.api_key_id = str(record.id)
             write_audit(
                 db.session,
-                action='api_key_used',
+                action="api_key_used",
                 actor=record.created_by or str(record.id),
-                resource_type='api_keys',
+                resource_type="api_keys",
                 resource_id=record.id,
-                risk_class='INFO',
-                metadata={'label': record.label, 'scope': record.scope, 'role': record.role},
+                risk_class="INFO",
+                metadata={"label": record.label, "scope": record.scope, "role": record.role},
             )
             return True, record.scope, record.role
 
         # No DB key matched — fall through to env-var bootstrap keys
-        current_app.logger.debug(
-            'API key not found in DB; checking bootstrap env-var keys'
-        )
+        current_app.logger.debug("API key not found in DB; checking bootstrap env-var keys")
     except Exception as exc:
         # DB unavailable — revocation state cannot be verified.
         current_app.logger.error(
-            'DB unavailable during API key validation — revocation state unverifiable, '
-            'falling back to bootstrap env-var keys: %s', exc
+            "DB unavailable during API key validation — revocation state unverifiable, "
+            "falling back to bootstrap env-var keys: %s",
+            exc,
         )
         # Roll back the failed transaction so the session is clean if the
         # caller later uses db.session in the same request.
         try:
             from .extensions import db as _db
+
             _db.session.rollback()
         except Exception:
             pass
         # In production, fail closed: do not allow access when we cannot
         # confirm that the key has not been revoked.
-        if current_app.config.get('ENV') == 'production':
+        if current_app.config.get("ENV") == "production":
             return False, None, None
 
     # Bootstrap fallback: env-var keys (constant-time comparison).
     # Only reached in non-production environments when the DB is unavailable,
     # or in any environment when no DB record matched (normal first-run path).
-    for valid_key in current_app.config.get('API_KEYS', []):
+    for valid_key in current_app.config.get("API_KEYS", []):
         if _constant_eq(api_key, valid_key):
-            return True, 'read_write', 'admin'
+            return True, "read_write", "admin"
 
-    return False, 'read_write', 'viewer'
+    return False, "read_write", "viewer"
 
 
-def issue_jwt(identity: str, scope: str = 'read_write', role: str = 'assessor',
-              api_key_id: str | None = None) -> tuple[str, datetime]:
+def issue_jwt(
+    identity: str, scope: str = "read_write", role: str = "assessor", api_key_id: str | None = None
+) -> tuple[str, datetime]:
     """Sign and return a JWT for the given identity plus its expiry datetime."""
-    secret = current_app.config['JWT_SECRET']
-    ttl = current_app.config['JWT_TTL']
+    secret = current_app.config["JWT_SECRET"]
+    ttl = current_app.config["JWT_TTL"]
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
     payload = {
-        'sub': identity,
-        'iat': datetime.now(timezone.utc),
-        'exp': expires_at,
-        'scope': scope,
-        'role': role,
+        "sub": identity,
+        "iat": datetime.now(timezone.utc),
+        "exp": expires_at,
+        "scope": scope,
+        "role": role,
     }
     if api_key_id:
-        payload['kid'] = api_key_id
-    token = jwt.encode(payload, secret, algorithm='HS256')
+        payload["kid"] = api_key_id
+    token = jwt.encode(payload, secret, algorithm="HS256")
     return token, expires_at
 
 
 def decode_jwt(token: str) -> dict | None:
     """Decode and validate a JWT. Returns payload dict or None on failure."""
-    secret = current_app.config['JWT_SECRET']
+    secret = current_app.config["JWT_SECRET"]
     try:
-        return jwt.decode(token, secret, algorithms=['HS256'])
+        return jwt.decode(token, secret, algorithms=["HS256"])
     except jwt.ExpiredSignatureError:
         return None
     except jwt.InvalidTokenError as e:
-        current_app.logger.warning('JWT validation failed: %s', type(e).__name__)
+        current_app.logger.warning("JWT validation failed: %s", type(e).__name__)
         return None
 
 
@@ -123,39 +122,40 @@ def decode_jwt(token: str) -> dict | None:
 # Access / refresh token pair
 # ---------------------------------------------------------------------------
 
+
 def create_access_token(subject: str, role: str) -> tuple[str, datetime]:
     """Sign and return a short-lived access JWT plus its expiry datetime."""
-    secret = current_app.config['JWT_SECRET']
-    ttl_minutes = current_app.config.get('JWT_ACCESS_TTL_MINUTES', 15)
+    secret = current_app.config["JWT_SECRET"]
+    ttl_minutes = current_app.config.get("JWT_ACCESS_TTL_MINUTES", 15)
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(minutes=ttl_minutes)
     payload = {
-        'sub': subject,
-        'role': role,
-        'type': 'access',
-        'jti': str(uuid.uuid4()),
-        'iat': now,
-        'exp': expires_at,
+        "sub": subject,
+        "role": role,
+        "type": "access",
+        "jti": str(uuid.uuid4()),
+        "iat": now,
+        "exp": expires_at,
     }
-    token = jwt.encode(payload, secret, algorithm='HS256')
+    token = jwt.encode(payload, secret, algorithm="HS256")
     return token, expires_at
 
 
 def create_refresh_token(subject: str, role: str) -> tuple[str, datetime]:
     """Sign and return a long-lived refresh JWT plus its expiry datetime."""
-    secret = current_app.config['JWT_SECRET']
-    ttl_days = current_app.config.get('JWT_REFRESH_TTL_DAYS', 7)
+    secret = current_app.config["JWT_SECRET"]
+    ttl_days = current_app.config.get("JWT_REFRESH_TTL_DAYS", 7)
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(days=ttl_days)
     payload = {
-        'sub': subject,
-        'role': role,
-        'type': 'refresh',
-        'jti': str(uuid.uuid4()),
-        'iat': now,
-        'exp': expires_at,
+        "sub": subject,
+        "role": role,
+        "type": "refresh",
+        "jti": str(uuid.uuid4()),
+        "iat": now,
+        "exp": expires_at,
     }
-    token = jwt.encode(payload, secret, algorithm='HS256')
+    token = jwt.encode(payload, secret, algorithm="HS256")
     return token, expires_at
 
 
@@ -168,37 +168,35 @@ def verify_token(token: str, expected_type: str) -> dict:
     """
     from .extensions import redis_client
 
-    secret = current_app.config['JWT_SECRET']
+    secret = current_app.config["JWT_SECRET"]
     try:
-        payload = jwt.decode(token, secret, algorithms=['HS256'])
+        payload = jwt.decode(token, secret, algorithms=["HS256"])
     except jwt.ExpiredSignatureError:
-        raise jwt.ExpiredSignatureError('Token has expired')
+        raise jwt.ExpiredSignatureError("Token has expired")
     except jwt.InvalidTokenError:
         raise
 
     # Enforce token type
-    if payload.get('type') != expected_type:
-        raise jwt.InvalidTokenError(
-            f'Expected token type {expected_type!r}, got {payload.get("type")!r}'
-        )
+    if payload.get("type") != expected_type:
+        raise jwt.InvalidTokenError(f'Expected token type {expected_type!r}, got {payload.get("type")!r}')
 
     # Check revocation via Redis (primary store)
-    jti = payload.get('jti')
+    jti = payload.get("jti")
     if jti:
         revoked = False
         if redis_client is not None:
             try:
-                revoked = redis_client.exists(f'revoked_jti:{jti}') > 0
+                revoked = redis_client.exists(f"revoked_jti:{jti}") > 0
             except Exception as exc:
                 current_app.logger.warning(
-                    'Redis unavailable during token revocation check — falling back to DB: %s', exc
+                    "Redis unavailable during token revocation check — falling back to DB: %s", exc
                 )
                 revoked = _db_is_revoked(jti)
         else:
             revoked = _db_is_revoked(jti)
 
         if revoked:
-            raise jwt.InvalidTokenError('Token has been revoked')
+            raise jwt.InvalidTokenError("Token has been revoked")
 
     return payload
 
@@ -206,8 +204,9 @@ def verify_token(token: str, expected_type: str) -> dict:
 def _db_is_revoked(jti: str) -> bool:
     """Fallback: check the DB revoked_tokens table when Redis is unavailable."""
     try:
-        from .models import RevokedToken
         from .extensions import db
+        from .models import RevokedToken
+
         record = db.session.get(RevokedToken, jti)
         if record is None:
             return False
@@ -221,6 +220,7 @@ def _db_is_revoked(jti: str) -> bool:
         # route handler that will run after require_auth returns.
         try:
             from .extensions import db as _db
+
             _db.session.rollback()
         except Exception:
             pass
@@ -247,18 +247,17 @@ def revoke_token(jti: str, exp: datetime) -> None:
     redis_ok = False
     if redis_client is not None:
         try:
-            redis_client.setex(f'revoked_jti:{jti}', ttl_seconds, '1')
+            redis_client.setex(f"revoked_jti:{jti}", ttl_seconds, "1")
             redis_ok = True
         except Exception as exc:
-            current_app.logger.warning(
-                'Redis unavailable during token revocation — falling back to DB: %s', exc
-            )
+            current_app.logger.warning("Redis unavailable during token revocation — falling back to DB: %s", exc)
 
     # DB fallback
     if not redis_ok:
         try:
-            from .models import RevokedToken
             from .extensions import db
+            from .models import RevokedToken
+
             record = RevokedToken(
                 jti=jti,
                 revoked_at=now,
@@ -268,8 +267,9 @@ def revoke_token(jti: str, exp: datetime) -> None:
             db.session.commit()
         except Exception as exc:
             current_app.logger.warning(
-                'DB fallback for token revocation also failed — token %s not revoked: %s',
-                jti, exc,
+                "DB fallback for token revocation also failed — token %s not revoked: %s",
+                jti,
+                exc,
             )
 
 
@@ -282,12 +282,13 @@ def require_auth(f):
     was issued.  This closes the window where a revoked key could continue to
     operate until the JWT's own ``exp`` elapsed.
     """
+
     @wraps(f)
     def decorated(*args, **kwargs):
-        auth_header = request.headers.get('Authorization', '')
-        if not auth_header.startswith('Bearer '):
-            return jsonify({'error': 'Missing or invalid Authorization header', 'code': 'UNAUTHORIZED'}), 401
-        token = auth_header[len('Bearer '):]
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return jsonify({"error": "Missing or invalid Authorization header", "code": "UNAUTHORIZED"}), 401
+        token = auth_header[len("Bearer ") :]
 
         # Stash the raw bearer token for the current request. Needed as
         # CITADEL Kerkese.ActorToken (see app/citadel_client.py) — CITADEL
@@ -296,61 +297,65 @@ def require_auth(f):
         g.raw_token = token
         g.actor_is_sinauth = False
 
-        sinauth_url = current_app.config.get('SINAUTH_URL', '')
-        sinauth_issuer = current_app.config.get('SINAUTH_ISSUER', sinauth_url)
+        sinauth_url = current_app.config.get("SINAUTH_URL", "")
+        sinauth_issuer = current_app.config.get("SINAUTH_ISSUER", sinauth_url)
 
         if sinauth_url:
             from .sinauth import is_rs256_token, verify_sinauth_token
+
             if is_rs256_token(token):
                 payload = verify_sinauth_token(token, sinauth_url, sinauth_issuer)
                 if payload is None:
-                    return jsonify({'error': 'Token is invalid or expired', 'code': 'UNAUTHORIZED'}), 401
-                g.actor = payload.get('sub', 'unknown')
-                g.token_scope = 'read_write'  # sinauth tokens get full scope
-                g.token_role = payload.get('role', 'assessor')
-                g.actor_email = payload.get('email')
+                    return jsonify({"error": "Token is invalid or expired", "code": "UNAUTHORIZED"}), 401
+                g.actor = payload.get("sub", "unknown")
+                g.token_scope = "read_write"  # sinauth tokens get full scope
+                g.token_role = payload.get("role", "assessor")
+                g.actor_email = payload.get("email")
                 # Real sinauth-issued identity — sub is a sinauth UUID and
                 # `token` is a live RS256 bearer CITADEL can verify directly.
                 g.actor_is_sinauth = True
                 return f(*args, **kwargs)
 
         try:
-            payload = verify_token(token, 'access')
+            payload = verify_token(token, "access")
         except jwt.ExpiredSignatureError:
-            return jsonify({'error': 'Token has expired', 'code': 'UNAUTHORIZED'}), 401
+            return jsonify({"error": "Token has expired", "code": "UNAUTHORIZED"}), 401
         except jwt.InvalidTokenError:
             # Legacy tokens (no type claim) issued before this change are
             # decoded the old way so existing integrations are not broken.
             payload = decode_jwt(token)
             if payload is None:
-                return jsonify({'error': 'Token is invalid or expired', 'code': 'UNAUTHORIZED'}), 401
+                return jsonify({"error": "Token is invalid or expired", "code": "UNAUTHORIZED"}), 401
 
         # Check that the originating API key is still active + not expired
-        kid = payload.get('kid')
+        kid = payload.get("kid")
         if kid:
             try:
-                from .models import ApiKey
                 from .extensions import db
+                from .models import ApiKey
+
                 record = db.session.get(ApiKey, kid)
                 if record is None or not record.is_active:
-                    return jsonify({'error': 'API key revoked', 'code': 'UNAUTHORIZED'}), 401
+                    return jsonify({"error": "API key revoked", "code": "UNAUTHORIZED"}), 401
                 if record.expires_at is not None and record.expires_at <= datetime.now(timezone.utc):
-                    return jsonify({'error': 'API key expired', 'code': 'UNAUTHORIZED'}), 401
+                    return jsonify({"error": "API key expired", "code": "UNAUTHORIZED"}), 401
             except Exception:
                 # DB unavailable — fall through (fail-open for non-prod).
                 # Roll back the failed transaction so the session is clean
                 # for the route handler that follows.
                 try:
                     from .extensions import db as _db
+
                     _db.session.rollback()
                 except Exception:
                     pass
 
-        g.actor = payload.get('sub', 'unknown')
-        g.token_scope = payload.get('scope', 'read_write')
-        g.token_role = payload.get('role', 'assessor')
-        g.actor_email = payload.get('email')
+        g.actor = payload.get("sub", "unknown")
+        g.token_scope = payload.get("scope", "read_write")
+        g.token_role = payload.get("role", "assessor")
+        g.actor_email = payload.get("email")
         return f(*args, **kwargs)
+
     return decorated
 
 
@@ -372,21 +377,28 @@ def require_scope(scope: str):
       'read'       – read-only operations
       'read_write' – full read/write access
     """
-    _SCOPE_RANK = {'read': 0, 'read_write': 1}
+    _SCOPE_RANK = {"read": 0, "read_write": 1}
 
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
-            token_scope = getattr(g, 'token_scope', 'read_write')
+            token_scope = getattr(g, "token_scope", "read_write")
             required_rank = _SCOPE_RANK.get(scope, 1)
             token_rank = _SCOPE_RANK.get(token_scope, -1)
             if token_rank < required_rank:
-                return jsonify({
-                    'error': 'Insufficient scope for this operation',
-                    'code': 'FORBIDDEN',
-                }), 403
+                return (
+                    jsonify(
+                        {
+                            "error": "Insufficient scope for this operation",
+                            "code": "FORBIDDEN",
+                        }
+                    ),
+                    403,
+                )
             return f(*args, **kwargs)
+
         return decorated
+
     return decorator
 
 
@@ -396,10 +408,10 @@ def require_scope(scope: str):
 
 # Ascending privilege: viewer < auditor < assessor < admin
 _ROLE_RANK = {
-    'viewer': 0,
-    'auditor': 1,
-    'assessor': 2,
-    'admin': 3,
+    "viewer": 0,
+    "auditor": 1,
+    "assessor": 2,
+    "admin": 3,
 }
 
 VALID_ROLES = frozenset(_ROLE_RANK.keys())
@@ -429,12 +441,19 @@ def require_role(*allowed_roles: str):
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
-            token_role = getattr(g, 'token_role', 'viewer')
+            token_role = getattr(g, "token_role", "viewer")
             if token_role not in allowed:
-                return jsonify({
-                    'error': f'Role \'{token_role}\' is not permitted for this operation',
-                    'code': 'FORBIDDEN',
-                }), 403
+                return (
+                    jsonify(
+                        {
+                            "error": f"Role '{token_role}' is not permitted for this operation",
+                            "code": "FORBIDDEN",
+                        }
+                    ),
+                    403,
+                )
             return f(*args, **kwargs)
+
         return decorated
+
     return decorator

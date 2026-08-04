@@ -1,4 +1,5 @@
 """SARIF v2.1.0 report generator for NIS2 Compass assessments."""
+
 from __future__ import annotations
 
 import json
@@ -10,38 +11,43 @@ from typing import Any
 _MAX_FIELD_LEN = 500
 
 # Strip ASCII control characters except TAB (0x09) and LF (0x0a) and CR (0x0d).
-_CTRL_CHAR_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+_CTRL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
 def _sanitise(s: object) -> str:
     """Remove control characters and truncate to _MAX_FIELD_LEN chars (H11)."""
     if s is None:
-        return ''
-    text = str(s.value if hasattr(s, 'value') else s)
-    text = _CTRL_CHAR_RE.sub('', text)
+        return ""
+    text = str(s.value if hasattr(s, "value") else s)
+    text = _CTRL_CHAR_RE.sub("", text)
     return text[:_MAX_FIELD_LEN]
+
 
 # Map NIS2 measure refs to SARIF rule IDs and metadata
 NIS2_RULES = {
-    "a": {"id": "NIS2-A21-a", "name": "RiskAnalysisAndSecurityPolicies",   "short": "Risk Analysis & Information Security Policies"},
-    "b": {"id": "NIS2-A21-b", "name": "IncidentHandling",                  "short": "Incident Handling"},
-    "c": {"id": "NIS2-A21-c", "name": "BusinessContinuityAndDR",           "short": "Business Continuity & Disaster Recovery"},
-    "d": {"id": "NIS2-A21-d", "name": "AccessControlsAndAuthentication",   "short": "Access Controls & Authentication"},
-    "e": {"id": "NIS2-A21-e", "name": "Cryptography",                      "short": "Cryptography"},
-    "f": {"id": "NIS2-A21-f", "name": "SupplyChainSecurity",               "short": "Supply Chain Security"},
-    "g": {"id": "NIS2-A21-g", "name": "LoggingAndMonitoring",              "short": "Logging & Monitoring"},
-    "h": {"id": "NIS2-A21-h", "name": "VulnerabilityManagement",           "short": "Vulnerability Management"},
-    "i": {"id": "NIS2-A21-i", "name": "SecurityTrainingAndAwareness",      "short": "Security Training & Awareness"},
-    "j": {"id": "NIS2-A21-j", "name": "TestingAndExercises",               "short": "Testing & Exercises"},
+    "a": {
+        "id": "NIS2-A21-a",
+        "name": "RiskAnalysisAndSecurityPolicies",
+        "short": "Risk Analysis & Information Security Policies",
+    },
+    "b": {"id": "NIS2-A21-b", "name": "IncidentHandling", "short": "Incident Handling"},
+    "c": {"id": "NIS2-A21-c", "name": "BusinessContinuityAndDR", "short": "Business Continuity & Disaster Recovery"},
+    "d": {"id": "NIS2-A21-d", "name": "AccessControlsAndAuthentication", "short": "Access Controls & Authentication"},
+    "e": {"id": "NIS2-A21-e", "name": "Cryptography", "short": "Cryptography"},
+    "f": {"id": "NIS2-A21-f", "name": "SupplyChainSecurity", "short": "Supply Chain Security"},
+    "g": {"id": "NIS2-A21-g", "name": "LoggingAndMonitoring", "short": "Logging & Monitoring"},
+    "h": {"id": "NIS2-A21-h", "name": "VulnerabilityManagement", "short": "Vulnerability Management"},
+    "i": {"id": "NIS2-A21-i", "name": "SecurityTrainingAndAwareness", "short": "Security Training & Awareness"},
+    "j": {"id": "NIS2-A21-j", "name": "TestingAndExercises", "short": "Testing & Exercises"},
 }
 
 # Map control status to SARIF level
 STATUS_TO_LEVEL = {
-    "non_compliant":       "error",
+    "non_compliant": "error",
     "partially_compliant": "warning",
-    "not_assessed":        "note",
-    "compliant":           "none",
-    "not_applicable":      "none",
+    "not_assessed": "note",
+    "compliant": "none",
+    "not_applicable": "none",
 }
 
 
@@ -56,6 +62,7 @@ def generate_sarif_report(assessment: Any, controls: list[Any], organisation: An
 
     Returns UTF-8 encoded JSON bytes.
     """
+
     def _str(val) -> str:
         """Convert enum/str to plain string; sanitise for injection safety (H11)."""
         if val is None:
@@ -64,18 +71,20 @@ def generate_sarif_report(assessment: Any, controls: list[Any], organisation: An
 
     rules = []
     for ref, meta in NIS2_RULES.items():
-        rules.append({
-            "id": meta["id"],
-            "name": meta["name"],
-            "shortDescription": {"text": meta["short"]},
-            "fullDescription": {"text": f"NIS2 Article 21(2)({ref}) — {meta['short']}"},
-            "helpUri": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32022L2555",
-            "properties": {
-                "measure_ref": ref,
-                "framework": "NIS2 Directive",
-                "article": "Article 21(2)",
-            },
-        })
+        rules.append(
+            {
+                "id": meta["id"],
+                "name": meta["name"],
+                "shortDescription": {"text": meta["short"]},
+                "fullDescription": {"text": f"NIS2 Article 21(2)({ref}) — {meta['short']}"},
+                "helpUri": "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32022L2555",
+                "properties": {
+                    "measure_ref": ref,
+                    "framework": "NIS2 Directive",
+                    "article": "Article 21(2)",
+                },
+            }
+        )
 
     results = []
     for control in controls:

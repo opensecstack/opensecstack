@@ -1,5 +1,5 @@
-use vantage_hash::{tds::Tier, Error, TripleHash};
 use std::time::Duration;
+use vantage_hash::{tds::Tier, Error, TripleHash};
 
 // ── compute + basic shape ─────────────────────────────────────────────────────
 
@@ -130,9 +130,9 @@ fn hex_layout_is_b3_s2_s5_concatenated() {
     let content = b"layout test";
     let h = TripleHash::compute(content);
     let full = h.hex();
-    assert_eq!(&full[0..64],   h.blake3_hex(),  "bytes 0–31:  BLAKE3");
-    assert_eq!(&full[64..128], h.sha256_hex(),  "bytes 32–63: SHA-256");
-    assert_eq!(&full[128..],   h.sha512_hex(),  "bytes 64–127: SHA-512");
+    assert_eq!(&full[0..64], h.blake3_hex(), "bytes 0–31:  BLAKE3");
+    assert_eq!(&full[64..128], h.sha256_hex(), "bytes 32–63: SHA-256");
+    assert_eq!(&full[128..], h.sha512_hex(), "bytes 64–127: SHA-512");
 }
 
 // ── from_hex ──────────────────────────────────────────────────────────────────
@@ -237,30 +237,51 @@ fn serde_deserialize_rejects_wrong_blake3_length() {
 
 #[test]
 fn tds_second_hand_boundaries() {
-    assert_eq!(Tier::for_duration(Duration::ZERO),                  Tier::SecondHand);
-    assert_eq!(Tier::for_duration(Duration::from_millis(100)),      Tier::SecondHand);
-    assert_eq!(Tier::for_duration(Duration::from_millis(299)),      Tier::SecondHand);
+    assert_eq!(Tier::for_duration(Duration::ZERO), Tier::SecondHand);
+    assert_eq!(
+        Tier::for_duration(Duration::from_millis(100)),
+        Tier::SecondHand
+    );
+    assert_eq!(
+        Tier::for_duration(Duration::from_millis(299)),
+        Tier::SecondHand
+    );
 }
 
 #[test]
 fn tds_minute_hand_boundaries() {
-    assert_eq!(Tier::for_duration(Duration::from_millis(300)),      Tier::MinuteHand);
-    assert_eq!(Tier::for_duration(Duration::from_secs(15)),         Tier::MinuteHand);
-    assert_eq!(Tier::for_duration(Duration::from_secs(30)),         Tier::MinuteHand);
+    assert_eq!(
+        Tier::for_duration(Duration::from_millis(300)),
+        Tier::MinuteHand
+    );
+    assert_eq!(
+        Tier::for_duration(Duration::from_secs(15)),
+        Tier::MinuteHand
+    );
+    assert_eq!(
+        Tier::for_duration(Duration::from_secs(30)),
+        Tier::MinuteHand
+    );
 }
 
 #[test]
 fn tds_hour_hand_boundaries() {
-    assert_eq!(Tier::for_duration(Duration::from_millis(30_001)),   Tier::HourHand);
-    assert_eq!(Tier::for_duration(Duration::from_secs(31)),         Tier::HourHand);
-    assert_eq!(Tier::for_duration(Duration::from_secs(3_600)),      Tier::HourHand);
+    assert_eq!(
+        Tier::for_duration(Duration::from_millis(30_001)),
+        Tier::HourHand
+    );
+    assert_eq!(Tier::for_duration(Duration::from_secs(31)), Tier::HourHand);
+    assert_eq!(
+        Tier::for_duration(Duration::from_secs(3_600)),
+        Tier::HourHand
+    );
 }
 
 #[test]
 fn tds_algorithm_names() {
     assert_eq!(Tier::SecondHand.algorithm_name(), "BLAKE3");
     assert_eq!(Tier::MinuteHand.algorithm_name(), "SHA-256");
-    assert_eq!(Tier::HourHand.algorithm_name(),   "SHA-512");
+    assert_eq!(Tier::HourHand.algorithm_name(), "SHA-512");
 }
 
 #[test]
@@ -268,7 +289,7 @@ fn tds_byte_ranges_cover_full_128_bytes() {
     let (s0, e0) = Tier::SecondHand.byte_range();
     let (s1, e1) = Tier::MinuteHand.byte_range();
     let (s2, e2) = Tier::HourHand.byte_range();
-    assert_eq!((s0, e0), (0,  32));
+    assert_eq!((s0, e0), (0, 32));
     assert_eq!((s1, e1), (32, 64));
     assert_eq!((s2, e2), (64, 128));
     // No gaps, no overlaps.
@@ -281,7 +302,7 @@ fn tds_byte_ranges_cover_full_128_bytes() {
 fn tds_digest_len() {
     assert_eq!(Tier::SecondHand.digest_len(), 32);
     assert_eq!(Tier::MinuteHand.digest_len(), 32);
-    assert_eq!(Tier::HourHand.digest_len(),   64);
+    assert_eq!(Tier::HourHand.digest_len(), 64);
 }
 
 #[test]

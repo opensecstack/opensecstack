@@ -67,8 +67,15 @@ impl std::fmt::Display for Error {
             Error::InvalidLength { got } => {
                 write!(f, "invalid length: expected 256 hex chars, got {got}")
             }
-            Error::InvalidComponentLength { component, expected, got } => {
-                write!(f, "invalid {component} length: expected {expected} bytes, got {got}")
+            Error::InvalidComponentLength {
+                component,
+                expected,
+                got,
+            } => {
+                write!(
+                    f,
+                    "invalid {component} length: expected {expected} bytes, got {got}"
+                )
             }
             Error::HexDecode { component, message } => {
                 write!(f, "hex decode error in {component}: {message}")
@@ -180,17 +187,23 @@ impl TripleHash {
 
     /// BLAKE3 raw bytes (32 bytes).
     pub fn blake3_bytes(&self) -> &[u8; 32] {
-        self.inner[0..32].try_into().expect("slice is exactly 32 bytes")
+        self.inner[0..32]
+            .try_into()
+            .expect("slice is exactly 32 bytes")
     }
 
     /// SHA-256 raw bytes (32 bytes).
     pub fn sha256_bytes(&self) -> &[u8; 32] {
-        self.inner[32..64].try_into().expect("slice is exactly 32 bytes")
+        self.inner[32..64]
+            .try_into()
+            .expect("slice is exactly 32 bytes")
     }
 
     /// SHA-512 raw bytes (64 bytes).
     pub fn sha512_bytes(&self) -> &[u8; 64] {
-        self.inner[64..128].try_into().expect("slice is exactly 64 bytes")
+        self.inner[64..128]
+            .try_into()
+            .expect("slice is exactly 64 bytes")
     }
 }
 
@@ -239,15 +252,12 @@ impl<'de> Deserialize<'de> for TripleHash {
         }
         let r = Repr::deserialize(d)?;
 
-        let b3 = hex::decode(&r.blake3).map_err(|e| {
-            serde::de::Error::custom(format!("blake3 hex: {e}"))
-        })?;
-        let s2 = hex::decode(&r.sha256).map_err(|e| {
-            serde::de::Error::custom(format!("sha256 hex: {e}"))
-        })?;
-        let s5 = hex::decode(&r.sha512).map_err(|e| {
-            serde::de::Error::custom(format!("sha512 hex: {e}"))
-        })?;
+        let b3 = hex::decode(&r.blake3)
+            .map_err(|e| serde::de::Error::custom(format!("blake3 hex: {e}")))?;
+        let s2 = hex::decode(&r.sha256)
+            .map_err(|e| serde::de::Error::custom(format!("sha256 hex: {e}")))?;
+        let s5 = hex::decode(&r.sha512)
+            .map_err(|e| serde::de::Error::custom(format!("sha512 hex: {e}")))?;
 
         if b3.len() != 32 {
             return Err(serde::de::Error::custom(format!(

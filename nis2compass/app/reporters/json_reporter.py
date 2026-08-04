@@ -1,4 +1,5 @@
 """JSON report generator for NIS2 Compass assessments."""
+
 from __future__ import annotations
 
 import json
@@ -11,15 +12,15 @@ _MAX_FIELD_LEN = 500
 
 # Strip ASCII control characters except TAB (0x09) and LF (0x0a) and CR (0x0d)
 # to prevent PDF/document injection via embedded control sequences (H11).
-_CTRL_CHAR_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+_CTRL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
 def _sanitise(s: object) -> str | None:
     """Remove control characters and truncate to _MAX_FIELD_LEN chars (H11)."""
     if s is None:
         return None
-    text = str(s.value if hasattr(s, 'value') else s)
-    text = _CTRL_CHAR_RE.sub('', text)
+    text = str(s.value if hasattr(s, "value") else s)
+    text = _CTRL_CHAR_RE.sub("", text)
     return text[:_MAX_FIELD_LEN]
 
 

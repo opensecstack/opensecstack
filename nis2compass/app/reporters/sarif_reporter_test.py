@@ -18,6 +18,7 @@ These tests focus on aspects NOT already covered by nis2compass/tests/test_repor
   - Control with no gap / no remediation plan produces clean message (no trailing " | ")
   - out-of-range measure_ref not in NIS2_RULES produces fallback rule id
 """
+
 from __future__ import annotations
 
 import json
@@ -28,12 +29,12 @@ from typing import Any
 
 import pytest
 
-from app.reporters.sarif_reporter import generate_sarif_report, NIS2_RULES, STATUS_TO_LEVEL
-
+from app.reporters.sarif_reporter import NIS2_RULES, STATUS_TO_LEVEL, generate_sarif_report
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 class _EnumLike:
     def __init__(self, value: str) -> None:
@@ -107,6 +108,7 @@ def _parse(assessment=None, controls=None, org=None) -> dict:
 # STATUS_TO_LEVEL constant coverage
 # ---------------------------------------------------------------------------
 
+
 class TestStatusToLevelMapping:
     def test_not_applicable_maps_to_none(self):
         ctrl = _control("e", "not_applicable")
@@ -144,6 +146,7 @@ class TestStatusToLevelMapping:
 # Enum-value branch
 # ---------------------------------------------------------------------------
 
+
 class TestEnumValueBranch:
     def test_status_enum_object_resolved_for_level(self):
         ctrl = _control("b", _EnumLike("non_compliant"))
@@ -166,6 +169,7 @@ class TestEnumValueBranch:
 # ---------------------------------------------------------------------------
 # Full rule shape (all 10 rules a–j)
 # ---------------------------------------------------------------------------
+
 
 class TestRuleShape:
     def _rules(self) -> list[dict]:
@@ -228,6 +232,7 @@ class TestRuleShape:
 # Result properties
 # ---------------------------------------------------------------------------
 
+
 class TestResultProperties:
     def test_risk_score_in_properties(self):
         ctrl = _control("a", "non_compliant", risk_score=7.5)
@@ -282,6 +287,7 @@ class TestResultProperties:
 # Result message text
 # ---------------------------------------------------------------------------
 
+
 class TestResultMessage:
     def test_message_contains_measure_ref(self):
         ctrl = _control("f", "non_compliant")
@@ -323,9 +329,7 @@ class TestResultMessage:
         assert msg.count(" | ") == 1
 
     def test_gap_and_remediation_have_two_pipes(self):
-        ctrl = _control("b", "non_compliant",
-                        gap_description="Gap exists",
-                        remediation_plan="Fix it")
+        ctrl = _control("b", "non_compliant", gap_description="Gap exists", remediation_plan="Fix it")
         parsed = _parse(controls=[ctrl])
         msg = parsed["runs"][0]["results"][0]["message"]["text"]
         assert msg.count(" | ") == 2
@@ -334,6 +338,7 @@ class TestResultMessage:
 # ---------------------------------------------------------------------------
 # Location shape
 # ---------------------------------------------------------------------------
+
 
 class TestLocationShape:
     def test_uri_base_id_is_NIS2COMPASS(self):
@@ -360,6 +365,7 @@ class TestLocationShape:
 # Out-of-range / unknown measure_ref
 # ---------------------------------------------------------------------------
 
+
 class TestUnknownMeasureRef:
     def test_unknown_ref_produces_fallback_rule_id(self):
         # NIS2_RULES only has a–j; ref "z" falls back to f"NIS2-A21-{ref}"
@@ -372,6 +378,7 @@ class TestUnknownMeasureRef:
 # ---------------------------------------------------------------------------
 # Invocations block
 # ---------------------------------------------------------------------------
+
 
 class TestInvocations:
     def test_invocations_has_one_entry(self):
@@ -409,6 +416,7 @@ class TestInvocations:
 # Driver metadata
 # ---------------------------------------------------------------------------
 
+
 class TestDriverMetadata:
     def test_driver_version(self):
         parsed = _parse()
@@ -427,6 +435,7 @@ class TestDriverMetadata:
 # ---------------------------------------------------------------------------
 # Output is bytes and valid JSON
 # ---------------------------------------------------------------------------
+
 
 class TestOutputFormat:
     def test_returns_bytes(self):

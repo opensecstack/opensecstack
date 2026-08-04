@@ -2,8 +2,10 @@ import logging
 import threading
 import time
 import uuid as _uuid_mod
-from flask import request, jsonify
+
+from flask import jsonify, request
 from flask_cors import CORS
+
 from . import extensions
 
 _log = logging.getLogger(__name__)
@@ -55,11 +57,11 @@ def _get_client_ip(trusted_proxies: set) -> str:
     a configured trusted proxy.  Without a proxy allowlist the header is
     trivially spoofable and must be ignored.
     """
-    remote = request.remote_addr or '0.0.0.0'
+    remote = request.remote_addr or "0.0.0.0"
     if trusted_proxies and remote in trusted_proxies:
-        xff = request.headers.get('X-Forwarded-For')
+        xff = request.headers.get("X-Forwarded-For")
         if xff:
-            return xff.split(',')[0].strip()
+            return xff.split(",")[0].strip()
     return remote
 
 
@@ -75,14 +77,14 @@ def _check_rate_limit(ip: str, limit: int, window: int = 60) -> tuple[bool, int]
     """
     rc = extensions.redis_client
     if rc is None:
-        _log.warning('rate_limit: Redis unavailable — rate limiting disabled')
+        _log.warning("rate_limit: Redis unavailable — rate limiting disabled")
         return True, 0
 
     # Use milliseconds as the score so the window arithmetic inside Lua is
     # consistent with the EXPIRE call (which takes seconds).
     now_ms = time.time() * 1000
     window_ms = window * 1000
-    key = f'rate:{ip}'
+    key = f"rate:{ip}"
     req_id = str(_uuid_mod.uuid4())
 
     try:
@@ -90,7 +92,7 @@ def _check_rate_limit(ip: str, limit: int, window: int = 60) -> tuple[bool, int]
         result = script(keys=[key], args=[now_ms, window_ms, limit, req_id])
         allowed = int(result[0]) == 1
     except Exception as exc:
-        _log.warning('rate_limit: Redis error, failing open: %s', exc)
+        _log.warning("rate_limit: Redis error, failing open: %s", exc)
         return True, 0
 
     if not allowed:
@@ -113,59 +115,58 @@ def apply_middleware(app) -> None:
     """Register before/after request hooks on the Flask app."""
 
     # CORS — restrict to configured origins in production
-    allowed_origins = app.config.get('CORS_ORIGINS', '*' if app.debug else [])
+    allowed_origins = app.config.get("CORS_ORIGINS", "*" if app.debug else [])
     if not allowed_origins and not app.debug:
         _log.warning(
-            'CORS_ORIGINS is empty — cross-origin requests from the web frontend '
-            'will be blocked. Set NIS2_CORS_ORIGINS to a comma-separated list of '
-            'allowed origins (e.g. https://nis2.example.com).'
+            "CORS_ORIGINS is empty — cross-origin requests from the web frontend "
+            "will be blocked. Set NIS2_CORS_ORIGINS to a comma-separated list of "
+            "allowed origins (e.g. https://nis2.example.com)."
         )
     CORS(app, origins=allowed_origins, supports_credentials=False)
 
     @app.before_request
     def rate_limit():
         # Skip rate limiting for health check
-        if request.path == '/health':
+        if request.path == "/health":
             return None
 
         # Bypass rate limiting for admin role (checked from JWT if present).
         # The JWT is verified later in @require_auth; here we do a lightweight
         # peek at the unverified claims.  A forged role would still fail auth.
-        auth_header = request.headers.get('Authorization', '')
-        if auth_header.startswith('Bearer '):
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
             try:
+                import base64
+                import json as _json
+
                 import jwt as _jwt
-                import base64, json as _json
-                token = auth_header[len('Bearer '):]
-                payload_b64 = token.split('.')[1]
-                payload_b64 += '=' * (4 - len(payload_b64) % 4)
+
+                token = auth_header[len("Bearer ") :]
+                payload_b64 = token.split(".")[1]
+                payload_b64 += "=" * (4 - len(payload_b64) % 4)
                 claims = _json.loads(base64.urlsafe_b64decode(payload_b64))
-                if claims.get('role') == 'admin':
+                if claims.get("role") == "admin":
                     return None
             except Exception:
                 pass  # malformed token — let rate-limit apply; auth will reject later
 
-        trusted = set(
-            p.strip()
-            for p in app.config.get('TRUSTED_PROXIES', '').split(',')
-            if p.strip()
-        )
+        trusted = set(p.strip() for p in app.config.get("TRUSTED_PROXIES", "").split(",") if p.strip())
         ip = _get_client_ip(trusted)
-        limit = app.config.get('RATE_LIMIT', 100)
+        limit = app.config.get("RATE_LIMIT", 100)
         allowed, retry_after = _check_rate_limit(ip, limit)
         if not allowed:
-            response = jsonify({'error': 'Rate limit exceeded', 'code': 'RATE_LIMITED'})
+            response = jsonify({"error": "Rate limit exceeded", "code": "RATE_LIMITED"})
             response.status_code = 429
-            response.headers['Retry-After'] = str(retry_after)
+            response.headers["Retry-After"] = str(retry_after)
             return response
         return None
 
     @app.after_request
     def security_headers(response):
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        response.headers['X-Frame-Options'] = 'DENY'
-        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
-        response.headers['Content-Security-Policy'] = "default-src 'none'"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = "default-src 'none'"
         if not app.debug:
-            response.headers['Strict-Transport-Security'] = 'max-age=63072000; includeSubDomains'
+            response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
         return response

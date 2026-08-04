@@ -4,6 +4,7 @@ Prometheus metrics for NIS2 Compass.
 Exposes HTTP request metrics (count, latency, in-flight) at GET /metrics.
 Uses prometheus_flask_exporter for automatic Flask integration.
 """
+
 from __future__ import annotations
 
 from prometheus_flask_exporter import PrometheusMetrics

@@ -22,6 +22,7 @@ strings) match the one other real producer wired up in this monorepo,
 apiguard (apiguard/internal/api/handlers/scans.go) — see that file for the
 precedent this module follows.
 """
+
 import logging
 import uuid as _uuid
 from datetime import datetime, timezone
@@ -32,13 +33,13 @@ _log = logging.getLogger(__name__)
 # Kerkese.KerkeseVersion ("1.0") — the "CITADEL Kerkese | JSON v2.0" row in
 # the ecosystem SDK-contract table (root CLAUDE.md) describes the *schema's*
 # version, not this per-request field's value.
-KERKESE_VERSION = '1.0'
+KERKESE_VERSION = "1.0"
 
 # Kerkese.ProjectID — a stable per-platform identifier, matching how
 # apiguard sets ProjectID to its own platform name (see
 # apiguard/internal/citadel/client_test.go / sdk/go/citadel/sign_test.go
 # fixtures using ProjectID: "apiguard").
-PROJECT_ID = 'nis2compass'
+PROJECT_ID = "nis2compass"
 
 # Placeholder Verifier identity used when NIS2 Compass has no real
 # second-approver for a governance action. Distinct from any real sinauth
@@ -48,8 +49,8 @@ PROJECT_ID = 'nis2compass'
 # identity does not correspond to a real approver — see
 # citadel/adrs/005-sinauth-identity-bridge.md's apiguard-system-verifier
 # precedent for the same pattern.
-SYSTEM_VERIFIER_USER_ID = 'nis2compass-system-verifier'
-SYSTEM_VERIFIER_ROLE = 'viewer'
+SYSTEM_VERIFIER_USER_ID = "nis2compass-system-verifier"
+SYSTEM_VERIFIER_ROLE = "viewer"
 
 
 class CitadelUnavailableError(Exception):
@@ -79,8 +80,8 @@ class CitadelGovernanceError(Exception):
 
     def __init__(self, decision: dict):
         self.decision = decision
-        self.outcome = decision.get('outcome')
-        self.reasons = decision.get('reasons') or []
+        self.outcome = decision.get("outcome")
+        self.reasons = decision.get("reasons") or []
         super().__init__(f"CITADEL {self.outcome}: {'; '.join(self.reasons) or 'no reason given'}")
 
 
@@ -91,8 +92,9 @@ def _citadel_config():
     callers so emit_worm can swallow it and evaluate can surface it).
     """
     from flask import current_app
-    url = current_app.config.get('CITADEL_API_URL')
-    api_key = current_app.config.get('CITADEL_API_KEY')
+
+    url = current_app.config.get("CITADEL_API_URL")
+    api_key = current_app.config.get("CITADEL_API_KEY")
     return url, api_key
 
 
@@ -112,16 +114,17 @@ def emit_worm(source: str, event_type: str, project_id: str, payload: dict | Non
 
     try:
         import requests  # lazy import — only used if CITADEL is configured
-        headers = {'Content-Type': 'application/json'}
+
+        headers = {"Content-Type": "application/json"}
         if api_key:
-            headers['Authorization'] = f'Bearer {api_key}'
+            headers["Authorization"] = f"Bearer {api_key}"
         requests.post(
             f'{url.rstrip("/")}/api/v1/worm/emit',
             json={
-                'source': source,
-                'event_type': event_type,
-                'project_id': project_id or '',
-                'payload': payload or {},
+                "source": source,
+                "event_type": event_type,
+                "project_id": project_id or "",
+                "payload": payload or {},
             },
             headers=headers,
             timeout=2.0,
@@ -129,7 +132,8 @@ def emit_worm(source: str, event_type: str, project_id: str, payload: dict | Non
     except Exception as exc:
         try:
             from flask import current_app
-            current_app.logger.warning('CITADEL worm/emit failed: %s', exc)
+
+            current_app.logger.warning("CITADEL worm/emit failed: %s", exc)
         except RuntimeError:
             pass
 
@@ -139,14 +143,14 @@ def build_kerkese(
     *,
     actor_user_id: str,
     actor_role: str,
-    actor_token: str = '',
+    actor_token: str = "",
     actor_email: str | None = None,
     verifier_user_id: str = SYSTEM_VERIFIER_USER_ID,
     verifier_role: str = SYSTEM_VERIFIER_ROLE,
-    verifier_token: str = '',
+    verifier_token: str = "",
     verifier_email: str | None = None,
-    description: str = '',
-    change_id: str = '',
+    description: str = "",
+    change_id: str = "",
 ) -> dict:
     """Build a Kerkese dict matching citadel/internal/marshal/types.go.
 
@@ -155,36 +159,36 @@ def build_kerkese(
     """
     now = datetime.now(timezone.utc)
     kerkese = {
-        'kerkese_version': KERKESE_VERSION,
-        'ts_utc': now.isoformat(),
-        'project_id': PROJECT_ID,
-        'execution_id': str(_uuid.uuid4()),
-        'action': {
-            'type': action_type,
-            'description': description,
-            'change_id': change_id,
+        "kerkese_version": KERKESE_VERSION,
+        "ts_utc": now.isoformat(),
+        "project_id": PROJECT_ID,
+        "execution_id": str(_uuid.uuid4()),
+        "action": {
+            "type": action_type,
+            "description": description,
+            "change_id": change_id,
         },
-        'actor': {
-            'user_id': actor_user_id,
-            'role': actor_role,
+        "actor": {
+            "user_id": actor_user_id,
+            "role": actor_role,
         },
-        'verifier': {
-            'user_id': verifier_user_id,
-            'role': verifier_role,
+        "verifier": {
+            "user_id": verifier_user_id,
+            "role": verifier_role,
         },
-        'evidence': {},
-        'sod': {
-            'operator_user_id': actor_user_id,
-            'verifier_user_id': verifier_user_id,
+        "evidence": {},
+        "sod": {
+            "operator_user_id": actor_user_id,
+            "verifier_user_id": verifier_user_id,
         },
-        'dry_run': False,
-        'actor_token': actor_token,
-        'verifier_token': verifier_token,
+        "dry_run": False,
+        "actor_token": actor_token,
+        "verifier_token": verifier_token,
     }
     if actor_email:
-        kerkese['actor']['email'] = actor_email
+        kerkese["actor"]["email"] = actor_email
     if verifier_email:
-        kerkese['verifier']['email'] = verifier_email
+        kerkese["verifier"]["email"] = verifier_email
     return kerkese
 
 
@@ -204,12 +208,13 @@ def evaluate(kerkese: dict, *, timeout: float = 5.0) -> dict:
     """
     url, api_key = _citadel_config()
     if not url:
-        raise CitadelNotConfiguredError('CITADEL_API_URL is not configured')
+        raise CitadelNotConfiguredError("CITADEL_API_URL is not configured")
 
     import requests
-    headers = {'Content-Type': 'application/json'}
+
+    headers = {"Content-Type": "application/json"}
     if api_key:
-        headers['Authorization'] = f'Bearer {api_key}'
+        headers["Authorization"] = f"Bearer {api_key}"
 
     try:
         resp = requests.post(
@@ -219,18 +224,16 @@ def evaluate(kerkese: dict, *, timeout: float = 5.0) -> dict:
             timeout=timeout,
         )
     except Exception as exc:
-        raise CitadelUnavailableError(f'CITADEL marshal/evaluate request failed: {exc}') from exc
+        raise CitadelUnavailableError(f"CITADEL marshal/evaluate request failed: {exc}") from exc
 
     try:
         decision = resp.json()
     except ValueError as exc:
-        raise CitadelUnavailableError(f'CITADEL returned a non-JSON response (HTTP {resp.status_code}): {exc}') from exc
+        raise CitadelUnavailableError(f"CITADEL returned a non-JSON response (HTTP {resp.status_code}): {exc}") from exc
 
     if resp.status_code not in (200, 403):
-        raise CitadelUnavailableError(
-            f'CITADEL returned unexpected HTTP {resp.status_code}: {decision}'
-        )
-    if 'outcome' not in decision:
+        raise CitadelUnavailableError(f"CITADEL returned unexpected HTTP {resp.status_code}: {decision}")
+    if "outcome" not in decision:
         raise CitadelUnavailableError(f'CITADEL response missing "outcome": {decision}')
 
     return decision
@@ -241,14 +244,14 @@ def evaluate_governance_action(
     *,
     actor_user_id: str,
     actor_role: str,
-    actor_token: str = '',
+    actor_token: str = "",
     actor_email: str | None = None,
     verifier_user_id: str = SYSTEM_VERIFIER_USER_ID,
     verifier_role: str = SYSTEM_VERIFIER_ROLE,
-    verifier_token: str = '',
+    verifier_token: str = "",
     verifier_email: str | None = None,
-    description: str = '',
-    change_id: str = '',
+    description: str = "",
+    change_id: str = "",
 ) -> dict:
     """Build + submit a Kerkese for a governance-candidate action and enforce the verdict.
 
@@ -284,12 +287,12 @@ def evaluate_governance_action(
         decision = evaluate(kerkese)
     except CitadelNotConfiguredError:
         return {
-            'outcome': 'EXECUTE',
-            'gates': [],
-            'reasons': ['CITADEL_NOT_CONFIGURED: governance skipped, no CITADEL_API_URL set'],
+            "outcome": "EXECUTE",
+            "gates": [],
+            "reasons": ["CITADEL_NOT_CONFIGURED: governance skipped, no CITADEL_API_URL set"],
         }
-    outcome = decision.get('outcome')
-    if outcome in ('REFUSE', 'HARD_STOP'):
+    outcome = decision.get("outcome")
+    if outcome in ("REFUSE", "HARD_STOP"):
         raise CitadelGovernanceError(decision)
     return decision
 
@@ -308,12 +311,13 @@ def current_actor_identity() -> dict:
     governance evaluation with no real actor identity would be meaningless.
     """
     from flask import g
-    actor_user_id = getattr(g, 'actor', None)
+
+    actor_user_id = getattr(g, "actor", None)
     if not actor_user_id:
-        raise RuntimeError('current_actor_identity() called outside an authenticated request')
+        raise RuntimeError("current_actor_identity() called outside an authenticated request")
     return {
-        'actor_user_id': actor_user_id,
-        'actor_role': getattr(g, 'token_role', 'viewer'),
-        'actor_token': getattr(g, 'raw_token', '') or '',
-        'actor_email': getattr(g, 'actor_email', None),
+        "actor_user_id": actor_user_id,
+        "actor_role": getattr(g, "token_role", "viewer"),
+        "actor_token": getattr(g, "raw_token", "") or "",
+        "actor_email": getattr(g, "actor_email", None),
     }

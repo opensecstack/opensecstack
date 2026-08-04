@@ -18,7 +18,7 @@ concurrency:
 # Shared defaults
 # ---------------------------------------------------------------------------
 env:
-  GO_VERSION: "1.22"
+  GO_VERSION: "1.25"
   PYTHON_VERSION: "3.12"
 
 jobs:
@@ -203,9 +203,9 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_DB: nis2_test
-          POSTGRES_USER: nis2
-          POSTGRES_PASSWORD: nis2
+          POSTGRES_DB: nis2compass_test
+          POSTGRES_USER: nis2compass
+          POSTGRES_PASSWORD: nis2compass
         ports:
           - 5432:5432
         options: >-
@@ -233,14 +233,29 @@ jobs:
         run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Run migrations
         env:
-          DATABASE_URL: postgresql://nis2:nis2@localhost:5432/nis2_test
+          # alembic (nis2compass/migrations/env.py) reads NIS2_DB_* components,
+          # not DATABASE_URL — it does not exist as a config knob for this app
+          # (same gotcha already documented in nightly.yml).
+          NIS2_DB_HOST: localhost
+          NIS2_DB_PORT: "5432"
+          NIS2_DB_USER: nis2compass
+          NIS2_DB_PASSWORD: nis2compass
+          NIS2_DB_NAME: nis2compass_test
         run: alembic upgrade head
       - name: pytest with coverage
         env:
-          DATABASE_URL: postgresql://nis2:nis2@localhost:5432/nis2_test
-          REDIS_URL: redis://localhost:6379/0
-          FLASK_ENV: testing
-          SECRET_KEY: ci-test-secret-key
+          # The Flask app (app/config.py) reads NIS2_DB_URL (and refuses to
+          # start without it or NIS2_DB_PASSWORD), while tests/conftest.py
+          # overrides the DB via NIS2_TEST_DB_URL and Redis via
+          # NIS2_TEST_REDIS_URL. DATABASE_URL and REDIS_URL are not read
+          # anywhere in this app.
+          NIS2_DB_URL: postgresql+psycopg2://nis2compass:nis2compass@localhost:5432/nis2compass_test
+          NIS2_TEST_DB_URL: postgresql+psycopg2://nis2compass:nis2compass@localhost:5432/nis2compass_test
+          NIS2_REDIS_URL: redis://localhost:6379/0
+          NIS2_TEST_REDIS_URL: redis://localhost:6379/0
+          NIS2_SECRET_KEY: ci-test-secret-key
+          NIS2_JWT_SECRET: ci-test-jwt-secret-at-least-32-chars-long
+          NIS2_ENV: testing
         run: |
           pytest tests/ -v \
             --cov=app --cov-report=xml --cov-report=term-missing \
@@ -528,7 +543,7 @@ jobs:
         working-directory: nis2compass/web
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
-      - uses: actions/setup-node@1a4442cacd436585916779262731d1f68fdf5c7e # v3
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
@@ -554,7 +569,7 @@ jobs:
         working-directory: sdk/typescript
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
-      - uses: actions/setup-node@1a4442cacd436585916779262731d1f68fdf5c7e # v3
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm

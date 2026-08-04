@@ -39,5 +39,11 @@ fn bench_from_hex(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_compute, bench_verify, bench_hex, bench_from_hex);
+criterion_group!(
+    benches,
+    bench_compute,
+    bench_verify,
+    bench_hex,
+    bench_from_hex
+);
 criterion_main!(benches);

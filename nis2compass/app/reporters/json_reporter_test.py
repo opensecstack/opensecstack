@@ -15,6 +15,7 @@ These tests focus on aspects NOT already covered by nis2compass/tests/test_repor
   - 'not_applicable' status tally
   - Multiple controls produce correct per-status counts
 """
+
 from __future__ import annotations
 
 import json
@@ -27,11 +28,11 @@ import pytest
 
 from app.reporters.json_reporter import generate_json_report
 
-
 # ---------------------------------------------------------------------------
 # Helpers — build plain SimpleNamespace objects that match what the reporter
 # accesses via getattr / hasattr, without touching any DB model.
 # ---------------------------------------------------------------------------
+
 
 class _EnumLike:
     """Minimal stand-in for a SQLAlchemy / Python enum whose .value is the key."""
@@ -128,6 +129,7 @@ def _control(
 # objects that carry a .value attribute.
 # ---------------------------------------------------------------------------
 
+
 class TestEnumValueBranch:
     def test_control_status_enum_object_is_resolved(self):
         ctrl = _control("a", _EnumLike("compliant"))
@@ -174,6 +176,7 @@ class TestEnumValueBranch:
 # Unknown / unmapped status falls back to 'not_assessed' bucket
 # ---------------------------------------------------------------------------
 
+
 class TestUnknownStatusFallback:
     def test_unknown_string_status_tallied_as_not_assessed(self):
         ctrl = _control("a", "some_future_status")
@@ -190,6 +193,7 @@ class TestUnknownStatusFallback:
 # ---------------------------------------------------------------------------
 # Date / datetime serialisation via _isoformat
 # ---------------------------------------------------------------------------
+
 
 class TestDatetimeSerialisation:
     def test_remediation_due_date_serialised_as_iso(self):
@@ -229,6 +233,7 @@ class TestDatetimeSerialisation:
 # Evidence serialisation
 # ---------------------------------------------------------------------------
 
+
 class TestEvidenceField:
     def test_evidence_dict_passed_through(self):
         ctrl = _control("a", "compliant", evidence={"file": "policy.pdf", "hash": "abc123"})
@@ -255,6 +260,7 @@ class TestEvidenceField:
 # ---------------------------------------------------------------------------
 # Compliance percentage edge cases
 # ---------------------------------------------------------------------------
+
 
 class TestCompliancePct:
     def test_all_compliant_gives_100(self):
@@ -296,6 +302,7 @@ class TestCompliancePct:
 # Organisation fields forwarded correctly
 # ---------------------------------------------------------------------------
 
+
 class TestOrganisationFields:
     def test_sector_forwarded(self):
         parsed = json.loads(generate_json_report(_assessment(), [], _org(sector="Healthcare")))
@@ -313,6 +320,7 @@ class TestOrganisationFields:
 # ---------------------------------------------------------------------------
 # Assessment metadata forwarded correctly
 # ---------------------------------------------------------------------------
+
 
 class TestAssessmentMetadata:
     def test_assessor_forwarded(self):
@@ -338,6 +346,7 @@ class TestAssessmentMetadata:
 # JSON round-trip
 # ---------------------------------------------------------------------------
 
+
 class TestJSONRoundTrip:
     def test_output_is_valid_utf8(self):
         raw = generate_json_report(_assessment(), [_control("a", "compliant")], _org())
@@ -354,13 +363,26 @@ class TestJSONRoundTrip:
 
     def test_all_top_level_keys_present(self):
         parsed = json.loads(generate_json_report(_assessment(), [], _org()))
-        for key in ("schema_version", "generated_at", "report_type",
-                    "organisation", "assessment", "summary", "controls"):
+        for key in (
+            "schema_version",
+            "generated_at",
+            "report_type",
+            "organisation",
+            "assessment",
+            "summary",
+            "controls",
+        ):
             assert key in parsed, f"Missing top-level key: {key}"
 
     def test_all_summary_keys_present(self):
         parsed = json.loads(generate_json_report(_assessment(), [], _org()))
-        for key in ("total_controls", "compliant", "partially_compliant",
-                    "non_compliant", "not_applicable", "not_assessed",
-                    "overall_compliance_pct"):
+        for key in (
+            "total_controls",
+            "compliant",
+            "partially_compliant",
+            "non_compliant",
+            "not_applicable",
+            "not_assessed",
+            "overall_compliance_pct",
+        ):
             assert key in parsed["summary"], f"Missing summary key: {key}"

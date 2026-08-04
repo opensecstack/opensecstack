@@ -3,6 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script type="text/javascript">
+    // Single Page Apps for GitHub Pages — https://github.com/rafgraph/spa-github-pages
+    // Counterpart to 404.html's redirect: decodes the real path back out of
+    // the query string and restores it via history.replaceState *before*
+    // React Router mounts, so a hard refresh / direct link / deep link on
+    // any client-side route (e.g. /opensecstack/docs/intro) lands on the
+    // right page instead of the GitHub Pages 404. Runs synchronously, ahead
+    // of the deferred module script below, so the URL is fixed before the
+    // app ever reads it.
+    (function (l) {
+      if (l.search[1] === '/') {
+        var decoded = l.search.slice(1).split('&').map(function (s) {
+          return s.replace(/~and~/g, '&')
+        }).join('?')
+        window.history.replaceState(null, null, l.pathname.slice(0, -1) + decoded + l.hash)
+      }
+    }(window.location))
+  </script>
   <meta name="description" content="SIN — Security Intelligence Network. Open-source cybersecurity and compliance platform for the EU Digital Decade. API security, NIS2 compliance, and immutable governance." />
   <title>SIN — Security Intelligence Network</title>
   <!-- Fallback canonical/og tags for the homepage and non-JS crawlers. Every

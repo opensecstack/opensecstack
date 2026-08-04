@@ -47,10 +47,12 @@ Expand coverage to network-layer attacks and human factor (NIS2 Art. 21(2)(g)).
 
 | Deliverable | Target | Status |
 |---|---|---|
-| OpenScrub v0.1.0 — XDP/eBPF kernel module, GoBGP integration, FastNetMon adapter | 2026 Q4 | ✅ Done |
+| OpenScrub v0.1.0 — XDP/eBPF kernel module, FastNetMon adapter | 2026 Q4 | ✅ Done |
+| OpenScrub — GoBGP blackhole-route integration | — | 📋 Not yet implemented (see [ADR-002](openscrub/adrs/002-gobgp-integration.md)) |
 | OpenScrub v1.0.0 — HA, kernel 5.15+, CITADEL integration, ThreatFlow IOC auto-block | 2027 Q2 | ✅ Done |
 | CyberPath v0.1.0 — Learning path engine, Docker labs, browser terminal | 2027 Q1 | ✅ Done |
-| CyberPath v1.0.0 — Wasm sandbox labs, NIS2 Art. 21(2)(g) completion records to CITADEL WORM | 2027 Q2 | ✅ Done |
+| CyberPath v1.0.0 — NIS2 Art. 21(2)(g) completion records to CITADEL WORM | 2027 Q2 | ✅ Done |
+| CyberPath — Wasm sandbox lab runtime (OCI pull, cosign verify, wasmtime instantiate) | — | 📋 Not yet wired (Docker-based labs unaffected) |
 
 ## Phase 3 — Simulation & CSIRT Operations (2027 Q3 – 2028 Q2)
 
@@ -103,7 +105,7 @@ ML expertise required. Funded by Phase 1 revenue + EU grants.
 |---|---|---|
 | **Module 5: Synthetic Identity Detection** | Python ML | GAN-generated profile detection |
 | Real-time video call analysis | Python + WebRTC | Live deepfake detection mid-call |
-| v1.0.0 stable — NIS3-ready, security audit checklist 100% complete | — | ✅ Done (2026-05-10) |
+| v1.0.0 stable — NIS3-ready, security audit checklist 100% complete | — | 🔨 Partial — Modules 3-4 live, Module 1 ML path and Modules 2/5 still pending; see [README Known Gaps](README.md#known-gaps) |
 
 **Ecosystem v1.1.0 — 11-platform stack — ✅ shipped 2026-05-10**
 
@@ -157,7 +159,7 @@ ML expertise required. Funded by Phase 1 revenue + EU grants.
 | CyberPath | ✅ v1.0.0 | — |
 | SecureLab | ✅ v1.0.0 | — |
 | OpenCSIRT | ✅ v1.0.0 | — |
-| VertGuard | ✅ v1.0.0 | — |
+| VertGuard | 🔨 Partial | 2 Phase 4.1 endpoints pending |
 | SIN Community | ✅ v1.0.0 | — |
 | vantage-hash | 📋 — | Phase 5 Tier A (2029) |
 | pyramid-registry | 📋 — | Phase 5 Tier A/B (2030+) |

@@ -30,8 +30,8 @@ available.
 **IN SCOPE:**
 
 - All opensecstack platform code: APIGuard, NIS2 Compass, IRFlow,
-  ThreatFlow, CITADEL, plus planned platforms (OpenScrub, CyberPath,
-  SecureLab, OpenCSIRT, VertGuard) once they enter the repository
+  ThreatFlow, CITADEL, OpenScrub, CyberPath, SecureLab, OpenCSIRT,
+  VertGuard, SIN Community, and sinauth
 - CITADEL governance layer — MARSHAL engine, WORM chain, anchor
   signing, all cryptographic paths
 - opensecstack/sdk (Go / Python / TypeScript / Rust)

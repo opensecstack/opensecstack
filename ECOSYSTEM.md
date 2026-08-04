@@ -2,7 +2,7 @@
 
 > 11 platforms. 1 governance layer. 1 SDK. All open source. All integrated.
 >
-> Current state: 6 platforms + sinauth + SDK at v1.0.0 production (APIGuard, NIS2 Compass, IRFlow, ThreatFlow, CITADEL, SIN Community). VertGuard is scaffolded (Phase 4.1); OpenScrub, CyberPath, SecureLab, and OpenCSIRT are planned (Phases 2-3). Long-term sovereignty stack (Phase 5) is aspirational — see [ROADMAP.md](ROADMAP.md).
+> Current state (2026-05-23, ecosystem v1.2.0): all 11 platforms, sinauth, and the SDK have shipped v1.0.0. VertGuard is partial (Phase 4.1: 3 of 5 modules scaffolded, 2 endpoints return `501`). OpenScrub (GoBGP not yet implemented) and CyberPath (Wasm sandbox labs not yet wired) each carry one specific, self-documented gap against their original scope — see README.md's [Known Gaps](README.md#known-gaps) section. Long-term sovereignty stack (Phase 5) is aspirational — see [ROADMAP.md](ROADMAP.md).
 
 ## Platform Overview
 
@@ -11,12 +11,12 @@
 | **APIGuard** | API security testing (OWASP API Top 10) | Go + Rust | Apache 2.0 | **v1.0.0** | ✅ Production |
 | **NIS2 Compass** | NIS2 Article 21 compliance assessment | Python + Go | AGPL-3.0 | **v1.0.0** | ✅ Production |
 | **IRFlow** | Incident response orchestration | Go + Python | AGPL-3.0 | **v1.0.0** | ✅ Production |
-| **ThreatFlow** | Threat intelligence aggregation & correlation | Rust + Go | Apache 2.0 | **v1.0.0** | ✅ Production |
-| **OpenScrub** | DDoS mitigation (XDP/eBPF) | Rust + C + Go | Apache 2.0 | **Phase 2** | 📋 Planned |
-| **CyberPath** | Security training & certification | Go + React + Rust | Apache 2.0 | **Phase 2** | 📋 Planned |
-| **SecureLab** | Attack simulation & detection validation | Python + Rust | Apache 2.0 | **Phase 3** | 📋 Planned |
-| **OpenCSIRT** | National/sector CSIRT operations | Go + Python | AGPL-3.0 | **Phase 3** | 📋 Planned |
-| **VertGuard** | AI-attack defence — prompt injection defence (OWASP LLM Top 10) and AI threat feed (MITRE ATLAS) scaffolded; C2PA media authenticity, deepfake video/voice detection, Python ML (HuggingFace), Zoom/Teams/WebEx plugins, and real-time WebSocket video stream planned | Go + Rust + Python | AGPL-3.0 | **Phase 4.1** | 🔨 Scaffold |
+| **ThreatFlow** | Threat intelligence aggregation & correlation | Go | Apache 2.0 | **v1.0.0** | ✅ Production |
+| **OpenScrub** | DDoS mitigation (XDP/eBPF; GoBGP not yet implemented) | Rust + C + Go | Apache 2.0 | **v1.0.0** | ✅ Production |
+| **CyberPath** | Security training & certification (Wasm sandbox labs not yet wired) | Go + React + Rust | Apache 2.0 | **v1.0.0** | ✅ Production |
+| **SecureLab** | Attack simulation & detection validation | Python + Rust | Apache 2.0 | **v1.0.0** | ✅ Production |
+| **OpenCSIRT** | National/sector CSIRT operations | Go + Python | AGPL-3.0 | **v1.0.0** | ✅ Production |
+| **VertGuard** | AI-attack defence — prompt injection defence (OWASP LLM Top 10) and AI threat feed (MITRE ATLAS) live, 2 endpoints pending Rust pattern-engine integration; C2PA media authenticity, deepfake video/voice detection, Python ML (HuggingFace), Zoom/Teams/WebEx plugins, and real-time WebSocket video stream planned | Go + Rust + Python | AGPL-3.0 | **Phase 4.1** | 🔨 Partial |
 | **SIN Community** | Developer knowledge hub — posts, comments, tags, full-text search, notifications, TOTP 2FA, API keys, series, spaces | Go + React + TypeScript + PostgreSQL + Meilisearch | Apache 2.0 | **v1.0.0** | ✅ Production |
 
 **Identity Layer:**
@@ -73,8 +73,8 @@
 │ API sec  │  │ NIS2 Art.21  │  │ Threat intel │  │ Incident   │  │ DDoS         │
 │ testing  │  │ assessment   │  │ aggregation  │  │ response   │  │ mitigation   │
 │          │  │              │  │              │  │            │  │              │
-│ Go+Rust  │  │ Python+Go    │  │ Rust+Go      │  │ Go+Python  │  │ Rust+C+Go    │
-│ v1.0.0 ✅│  │ v1.0.0 ✅    │  │ v1.0.0 ✅    │  │ v1.0.0 ✅  │  │ planned 📋   │
+│ Go+Rust  │  │ Python+Go    │  │ Go           │  │ Go+Python  │  │ Rust+C+Go    │
+│ v1.0.0 ✅│  │ v1.0.0 ✅    │  │ v1.0.0 ✅    │  │ v1.0.0 ✅  │  │ v1.0.0 ✅    │
 └────┬─────┘  └──────┬───────┘  └──────┬───────┘  └─────┬──────┘  └──────┬───────┘
      │               │                 │                │                │
      └───────────────┼─────────────────┼────────────────┼────────────────┘
@@ -83,7 +83,7 @@
          │           │                 │                │            │
   ┌──────┴───────┐  │  ┌──────────────┐│┌─────────────┐│ ┌──────────┴───┐
   │  CyberPath   │  │  │  SecureLab   │││  OpenCSIRT  ││ │  VertGuard   │
-  │  (planned)   │  │  │  (planned)   │││  (planned)  ││ │  (scaffold)  │
+  │  (v1.0.0)    │  │  │  (v1.0.0)    │││  (v1.0.0)   ││ │  (partial)   │
   │              │  │  │              │││             ││ │              │
   │ Security     │  │  │ Attack sim   │││ CSIRT       ││ │ AI-attack    │
   │ training     │  │  │ & detection  │││ operations  ││ │ defence      │
@@ -209,7 +209,7 @@ opensecstack/                       ← monorepo (current, 2026)
 ├── cyberpath/          ← Security training
 ├── securelab/          ← Attack simulation & detection
 ├── opencsirt/          ← CSIRT operations
-├── vertguard/          ← AI-attack defence (scaffold, Phase 4.1)
+├── vertguard/          ← AI-attack defence (partial, Phase 4.1)
 ├── community/          ← SIN developer knowledge hub (v1.0.0) + community resources
 ├── sinauth/            ← SIN identity provider (OAuth2 / OIDC SSO, v1.0.0)
 ├── citadel/            ← CITADEL governance layer

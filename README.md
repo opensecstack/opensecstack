@@ -8,10 +8,12 @@ intelligence, AI-attack defence, and security operations — all
 connected through typed SDK contracts, fronted by a single sign-on
 identity provider (sinauth), and governed by an immutable audit trail.
 
-> **Status (Q2 2026):** 6 platforms + sinauth + SDK at v1.0.0 production
-> (APIGuard, NIS2 Compass, IRFlow, ThreatFlow, CITADEL, SIN Community).
-> VertGuard is scaffolded (Phase 4.1); OpenScrub, CyberPath, SecureLab,
-> and OpenCSIRT are planned (Phases 2-3). See
+> **Status (2026-05-23, ecosystem v1.2.0):** all 11 platforms, sinauth,
+> and the 4-language SDK have shipped v1.0.0. VertGuard remains partial
+> (Phase 4.1: 3 of 5 modules scaffolded, 2 endpoints still return `501`).
+> A handful of shipped platforms carry specific, self-documented gaps —
+> see [Known Gaps](#known-gaps) below before depending on OpenScrub,
+> CyberPath, or CITADEL's cross-platform enforcement in production. See
 > [ROADMAP.md](ROADMAP.md) for the long-term roadmap.
 
 ---
@@ -20,6 +22,7 @@ identity provider (sinauth), and governed by an immutable audit trail.
 
 - [Why opensecstack](#why-opensecstack)
 - [The Ecosystem](#the-ecosystem)
+- [Known Gaps](#known-gaps)
 - [Architecture](#architecture)
 - [Production Platforms](#production-platforms)
   - [APIGuard](#apiguard)
@@ -68,13 +71,17 @@ zero vendor lock-in.
 | [**NIS2 Compass**](nis2compass/) | NIS2 Article 21(2) compliance assessment, evidence management, Article 23 notification | Python + Go + React | AGPL-3.0 | ✅ **v1.0.0** |
 | [**CITADEL**](citadel/) | Cryptographic governance engine — MARSHAL, WORM, NDS, AUGUR, chain anchors | Go | AGPL-3.0 | ✅ **v1.0.0** |
 | [**IRFlow**](irflow/) | Incident response orchestration — playbooks, governed actions, NIS2 72-hour notification | Go + Python | AGPL-3.0 | ✅ **v1.0.0** |
-| [**ThreatFlow**](threatflow/) | Threat intelligence aggregation — IOC ingestion, STIX 2.1, MITRE ATT&CK | Rust + Go | Apache 2.0 | ✅ **v1.0.0** |
-| [**VertGuard**](vertguard/) | AI-attack defence — prompt injection defence, AI threat intel feed (MITRE ATLAS); deepfake detection and other modules planned | Go + Rust + Python | AGPL-3.0 | 🔨 **Scaffold** (Phase 4.1) |
-| [**OpenScrub**](openscrub/) | DDoS mitigation at kernel level (XDP/eBPF, GoBGP) | Rust + C + Go | Apache 2.0 | 📋 **Planned** (Phase 2) |
-| [**CyberPath**](cyberpath/) | Security training — Docker/Wasm labs, NIS2 Art. 21(2)(g) evidence | Go + React + Python | Apache 2.0 | 📋 **Planned** (Phase 2) |
-| [**SecureLab**](securelab/) | Attack simulation — MITRE ATT&CK coverage, detection validation | Python + Rust + Go | Apache 2.0 | 📋 **Planned** (Phase 3) |
-| [**OpenCSIRT**](opencsirt/) | National/sector CSIRT operations — TAXII 2.1, STIX 2.1, CSAF 2.0 | Go + Python | AGPL-3.0 | 📋 **Planned** (Phase 3) |
+| [**ThreatFlow**](threatflow/) | Threat intelligence aggregation — IOC ingestion, STIX 2.1, MITRE ATT&CK | Go | Apache 2.0 | ✅ **v1.0.0** |
+| [**VertGuard**](vertguard/) | AI-attack defence — prompt injection defence, AI threat intel feed (MITRE ATLAS); deepfake detection and other modules planned | Go + Rust + Python | AGPL-3.0 | 🔨 **Partial** (Phase 4.1 — 2 endpoints pending) |
+| [**OpenScrub**](openscrub/) | DDoS mitigation at kernel level (XDP/eBPF; GoBGP blackhole routing not yet implemented) | Rust + C + Go | Apache 2.0 | ✅ **v1.0.0** |
+| [**CyberPath**](cyberpath/) | Security training — Docker labs, NIS2 Art. 21(2)(g) evidence (Wasm sandbox labs not yet wired) | Go + React + Python | Apache 2.0 | ✅ **v1.0.0**\* |
+| [**SecureLab**](securelab/) | Attack simulation — MITRE ATT&CK coverage, detection validation | Python + Rust + Go | Apache 2.0 | ✅ **v1.0.0** |
+| [**OpenCSIRT**](opencsirt/) | National/sector CSIRT operations — TAXII 2.1, STIX 2.1, CSAF 2.0 | Go + Python | AGPL-3.0 | ✅ **v1.0.0** |
 | [**SIN Community**](community/) | Developer knowledge hub — posts, tags, full-text search, notifications, TOTP, API keys, spaces | Go + React + TypeScript | Apache 2.0 | ✅ **v1.0.0** |
+
+\* CyberPath's core (tracks, quizzes, certification, Docker labs) is
+shipped; its Wasm sandbox lab runtime does not yet load lab content —
+see [Known Gaps](#known-gaps).
 
 **Identity layer:** [**sinauth**](sinauth/) — dedicated OAuth 2.0 /
 OpenID Connect authorization server. One account grants access to every
@@ -92,6 +99,46 @@ heuristics. VIGIL ecosystem health monitor is design-stage (v2.0).
 **SDK:** [opensecstack/sdk](sdk/) — typed clients in Go, Python,
 TypeScript, Rust. Shared Argon2id + pepper password hashing module
 (byte-compatible across languages).
+
+---
+
+## Known Gaps
+
+Every platform above is real, tested code, not a name with nothing
+behind it — but "v1.0.0" doesn't mean feature-parity with every line
+in this document. These are the specific, current gaps worth knowing
+before you depend on them:
+
+- **OpenScrub** — XDP/eBPF kernel-level mitigation is implemented and
+  tested. GoBGP blackhole-route announcement is **not yet
+  implemented** (see [ADR-002](openscrub/adrs/002-gobgp-integration.md));
+  an earlier version of this ADR was mistakenly marked "Accepted" —
+  that has been corrected.
+- **CyberPath** — learning tracks, quizzes, and certification are
+  shipped and tested. The Wasm sandbox lab runtime does not yet pull,
+  verify, or instantiate lab images — it's wired up to a placeholder,
+  not live labs. Docker-based labs are unaffected.
+- **VertGuard** — Modules 3 (prompt injection defence) and 4 (AI
+  threat-intel feed) are live; two Phase 4.1 endpoints (deepfake
+  media scan, threat-feed correlation) currently return `501 Not
+  Implemented` pending the Rust pattern-engine integration. The ML
+  backend defaults to a stub scorer rather than the bundled
+  HuggingFace models.
+- **CITADEL** — MARSHAL and WORM are implemented, tested, and used by
+  every governed platform. `enforce_identity` and `enforce_signatures`
+  both default to `false` (soft-enforcement), and the Gate 2 RBAC map
+  does not yet cover every action type across all producer platforms
+  — some real cross-platform calls currently fail closed (`REFUSE`)
+  rather than being evaluated. AUGUR is three heuristic rules, not a
+  general advisory engine. VIGIL does not exist yet (see below).
+- **Rust SDK / crates.io** — `sdk/vantage-hash` is a path+version
+  hybrid dependency of `sdk/rust`; the current release pipeline does
+  not reliably publish it to crates.io before the SDK build resolves
+  it. Treat the Rust SDK as source-install-only until this is fixed.
+
+None of this is hidden in the code — most of it is called out in each
+platform's own `known-limitations.md`, ADRs, or CHANGELOG. This
+section exists so it's not buried there either.
 
 ---
 
@@ -120,12 +167,12 @@ TypeScript, Rust. Shared Argon2id + pepper password hashing module
 │                                                                      │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
 │  │  VertGuard   │  │  OpenScrub   │  │  OpenCSIRT   │              │
-│  │  scaffold 🔨 │  │  planned 📋  │  │  planned 📋  │              │
+│  │  partial 🔨  │  │  v1.0.0 ✅   │  │  v1.0.0 ✅   │              │
 │  └──────────────┘  └──────────────┘  └──────────────┘              │
 │                                                                      │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │
 │  │  CyberPath   │  │  SecureLab   │  │     SIN Community        │  │
-│  │  planned 📋  │  │  planned 📋  │  │  v1.0.0 ✅               │  │
+│  │  v1.0.0 ✅*  │  │  v1.0.0 ✅   │  │  v1.0.0 ✅               │  │
 │  └──────────────┘  └──────────────┘  └──────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -247,9 +294,9 @@ See [citadel/README.md](citadel/README.md) and
 
 ---
 
-## Scaffolded & Planned
+## Additional Platforms
 
-### VertGuard (scaffolded — Phase 4.1)
+### VertGuard (partial — Phase 4.1)
 
 **AI-attack defence platform. 24 docs + Go/Rust skeleton + docker-compose
 in place. Phase 4.1 accepting contributors.**
@@ -272,28 +319,34 @@ See [vertguard/README.md](vertguard/README.md),
 [vertguard/.github/GOOD_FIRST_ISSUES.md](vertguard/.github/GOOD_FIRST_ISSUES.md)
 for how to contribute.
 
-### OpenScrub (planned — Phase 2)
+### OpenScrub (v1.0.0)
 
-DDoS mitigation at kernel level. XDP/eBPF programs, GoBGP blackhole
-announcements, FastNetMon detection integration.
+DDoS mitigation at kernel level. XDP/eBPF programs (real, tested kernel
+code) and FastNetMon detection integration are shipped. GoBGP
+blackhole-route announcement is not yet implemented — see
+[Known Gaps](#known-gaps).
 
-### CyberPath (planned — Phase 2)
+### CyberPath (v1.0.0)
 
-Security training with Docker and Wasm labs. Content authored as
-YAML + Markdown. NIS2 Article 21(2)(g) evidence records anchored in
-CITADEL.
+Security training with 6 learning tracks, quizzes, and certification,
+shipped and tested. Docker-based labs work today; the Wasm sandbox lab
+runtime does not yet load lab content — see [Known Gaps](#known-gaps).
+Content authored as YAML + Markdown. NIS2 Article 21(2)(g) evidence
+records anchored in CITADEL.
 
-### SecureLab (planned — Phase 3)
+### SecureLab (v1.0.0)
 
 Attack simulation and detection validation. Scenario library maps to
 MITRE ATT&CK. Validates OpenScrub rules, APIGuard detection, and
 VertGuard AI-attack patterns.
 
-### OpenCSIRT (planned — Phase 3)
+### OpenCSIRT (v1.0.0)
 
 National and sector CSIRT operations. TAXII 2.1 server + client, STIX
 2.1 object model, CSAF 2.0 advisory generation, NIS2 Article 23
-aggregate reporting. EU peer CSIRT federation.
+aggregate reporting. EU peer CSIRT federation. The MARSHAL
+second-approver ("verifier") role is currently a fixed system
+placeholder pending a real approval workflow.
 
 ---
 
@@ -512,10 +565,13 @@ See [docs/post-quantum-roadmap.md](docs/post-quantum-roadmap.md) and
 | Phase | Theme | Timeline | Status |
 |-------|-------|----------|--------|
 | **Phase 1** | Foundation — 5 platforms + SDK at v1.0.0 | 2026 Q1-Q2 | ✅ Complete |
-| **Phase 2** | Network defence & training — OpenScrub, CyberPath | 2026 Q3 – 2027 Q2 | 📋 Planned |
-| **Phase 3** | Simulation & CSIRT — SecureLab, OpenCSIRT, ecosystem v1.0 | 2027 Q3 – 2028 Q2 | 📋 Planned |
-| **Phase 4** | AI-attack defence — VertGuard (3 sub-phases) | 2026 Q3 – 2028 Q4 | 🔨 Scaffolded |
+| **Phase 2** | Network defence & training — OpenScrub, CyberPath | 2026 Q3 – 2027 Q2 | ✅ Complete\* |
+| **Phase 3** | Simulation & CSIRT — SecureLab, OpenCSIRT, ecosystem v1.0 | 2027 Q3 – 2028 Q2 | ✅ Complete |
+| **Phase 4** | AI-attack defence — VertGuard (3 sub-phases) | 2026 Q3 – 2028 Q4 | 🔨 Partial (2/5 modules pending) |
 | **Phase 5** | Long-term sovereignty stack (tiered aspirational) | 2028 – 2036 | 🔮 Aspirational |
+
+\* OpenScrub and CyberPath are shipped; each has one specific gap
+against its original Phase 2 scope — see [Known Gaps](#known-gaps).
 
 See [ROADMAP.md](ROADMAP.md) for quarterly milestones and honest
 caveats.

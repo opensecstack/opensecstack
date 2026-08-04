@@ -2,7 +2,7 @@ import PlatformDetailSection, { CapabilitiesCard, CardStack, GradientTitle, Text
 
 const capabilities = [
   'Interactive labs', 'Skill assessments', 'Certification tracking',
-  'ENISA framework alignment', 'Team progress dashboard', 'Custom curricula',
+  'NIS2 Art. 21(2)(g) evidence records', 'Team progress dashboard', 'Custom curricula',
 ]
 
 export default function CyberPathSection() {
@@ -10,7 +10,7 @@ export default function CyberPathSection() {
     <PlatformDetailSection
       id="cyberpath"
       title={<GradientTitle>CyberPath</GradientTitle>}
-      subtitle="Hands-on cybersecurity training platform with interactive labs, skill assessments, and certification tracking. Aligned with the cybersecurity skills framework from ENISA, the EU's cybersecurity agency."
+      subtitle="Hands-on cybersecurity training platform with interactive labs, skill assessments, and certification tracking. Completion records satisfy NIS2 Article 21(2)(g) cybersecurity-training evidence requirements."
       left={<CapabilitiesCard heading="Capabilities" items={capabilities} accentColor="#e040fb" />}
       right={
         <CardStack>

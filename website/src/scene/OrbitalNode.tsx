@@ -38,8 +38,13 @@ export default function OrbitalNode({ platform, angle, radius }: Props) {
     document.body.style.cursor = 'auto'
   }, [])
 
+  const onClick = useCallback(() => {
+    const el = document.getElementById(platform.sectionId)
+    if (el) el.scrollIntoView({ behavior: 'smooth' })
+  }, [platform.sectionId])
+
   return (
-    <mesh ref={ref} onPointerOver={onOver} onPointerOut={onOut}>
+    <mesh ref={ref} onPointerOver={onOver} onPointerOut={onOut} onClick={onClick}>
       <sphereGeometry args={[0.3, 32, 32]} />
       <meshStandardMaterial
         color={platform.color}
@@ -82,6 +87,8 @@ export default function OrbitalNode({ platform, angle, radius }: Props) {
           }}>
             {platform.status}
           </span>
+          <br />
+          <span style={{ fontSize: 10, color: '#5b6579' }}>Click to view →</span>
         </div>
       </Html>
     </mesh>

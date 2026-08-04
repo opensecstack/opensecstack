@@ -1,5 +1,6 @@
-import { motion } from 'framer-motion'
+import { cubicBezier, motion, useReducedMotion, useScroll, useTransform } from 'framer-motion'
 import type { ReactNode } from 'react'
+import { useRef } from 'react'
 
 interface Props {
   id?: string
@@ -22,14 +23,41 @@ export const motionConfig = {
 } as const
 
 export default function ScrollSection({ id, children, className = '' }: Props) {
+  const ref = useRef<HTMLElement>(null)
+  const prefersReducedMotion = useReducedMotion()
+
+  // Track scroll progress of this section relative to the viewport:
+  // 0 when the section's top edge is just entering at the bottom of the
+  // viewport, 1 by the time it has scrolled ~25% of the viewport height
+  // further up. This scrubs only the entrance reveal to scroll position —
+  // once progress hits 1 the section stays fully revealed for the rest of
+  // its time on screen (no re-hide, no continuous scroll-linked motion).
+  const { scrollYProgress } = useScroll({
+    target: ref,
+    offset: ['start end', 'start 75%'],
+  })
+
+  // Approximate the existing SECTION_EASE cubic-bezier feel for the
+  // scroll-scrubbed interpolation instead of a flat linear mapping.
+  const sectionEase = cubicBezier(...SECTION_EASE)
+  const opacity = useTransform(scrollYProgress, [0, 1], [0, 1], { ease: sectionEase })
+  const y = useTransform(scrollYProgress, [0, 1], [60, 0], { ease: sectionEase })
+
+  if (prefersReducedMotion) {
+    return (
+      <motion.section id={id} className={`section ${className}`}>
+        {children}
+        <div className="glow-divider" />
+      </motion.section>
+    )
+  }
+
   return (
     <motion.section
+      ref={ref}
       id={id}
       className={`section ${className}`}
-      initial={{ opacity: 0, y: 60 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      transition={{ duration: SECTION_DURATION, ease: SECTION_EASE }}
-      viewport={{ once: true, margin: SECTION_VIEWPORT_MARGIN }}
+      style={{ opacity, y }}
     >
       {children}
       <div className="glow-divider" />

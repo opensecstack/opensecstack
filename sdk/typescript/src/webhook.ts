@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual as nodeTimingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 // ─── Event Type Constants ────────────────────────────────────────────────────
@@ -75,9 +75,7 @@ export function verifySignature(
  */
 function timingSafeEqual(a: Buffer, b: Buffer): boolean {
   if (a.length !== b.length) return false;
-  // Node.js built-in constant-time comparison
-  const { timingSafeEqual: tse } = require("node:crypto");
-  return tse(a, b);
+  return nodeTimingSafeEqual(a, b);
 }
 
 // ─── Webhook Router ──────────────────────────────────────────────────────────

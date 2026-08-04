@@ -13,7 +13,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { parseJWTExp } from "../jwt.js";
 import { APIGuardClient } from "../apiguard.js";
 import { NIS2CompassClient } from "../nis2compass.js";
-import { OpenSecStackError } from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Mock fetch

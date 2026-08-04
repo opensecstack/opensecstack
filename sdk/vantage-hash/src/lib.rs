@@ -164,7 +164,7 @@ impl TripleHash {
     ///
     /// Layout: `blake3_hex (64) | sha256_hex (64) | sha512_hex (128)`
     pub fn hex(&self) -> String {
-        hex::encode(&self.inner)
+        hex::encode(self.inner)
     }
 
     /// BLAKE3 component — 64 hex characters (32 bytes).

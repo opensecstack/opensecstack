@@ -56,7 +56,7 @@ export default function HeroSection() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.6, duration: 0.8 }}
           style={{
-            marginTop: '1.8rem', fontSize: '1.15rem', color: '#8892a8',
+            marginTop: '1.8rem', fontSize: '1.15rem', color: 'var(--text-muted)',
             lineHeight: 1.7, maxWidth: 520,
           }}
         >

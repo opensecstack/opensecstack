@@ -1,5 +1,7 @@
 import { motion } from 'framer-motion'
-import ScrollSection from '../components/ScrollSection'
+import ScrollSection, { SECTION_EASE, SECTION_VIEWPORT_MARGIN } from '../components/ScrollSection'
+
+const MAX_STAGGER_INDEX = 6
 
 const phases = [
   { n: 1, title: 'Ecosystem v1.0.0',          status: 'done',  items: ['11 platforms + SDK', 'CITADEL governance layer', '4-language SDK (Go · Python · TypeScript · Rust)', 'All platforms Apache 2.0 / AGPL-3.0'] },
@@ -24,8 +26,8 @@ export default function RoadmapSection() {
               className="glass-card"
               initial={{ opacity: 0, x: -40 }}
               whileInView={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.1, duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
-              viewport={{ once: true }}
+              transition={{ delay: Math.min(i, MAX_STAGGER_INDEX) * 0.1, duration: 0.5, ease: SECTION_EASE }}
+              viewport={{ once: true, margin: SECTION_VIEWPORT_MARGIN }}
               style={{
                 borderLeft: `3px solid ${borderColor}`,
                 boxShadow: isNext ? '0 0 20px rgba(0,240,255,0.06)' : 'none',

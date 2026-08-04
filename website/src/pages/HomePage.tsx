@@ -96,24 +96,26 @@ export default function HomePage() {
       )}
       <div className="scroll-content">
         <Navbar />
-        <HeroSection />
-        <PlatformsSection />
-        <ShowcaseSection />
-        <APIGuardSection />
-        <NIS2CompassSection />
-        <CitadelSection />
-        <CitadelOSSection />
-        <ThreatFlowSection />
-        <IRFlowSection />
-        <OpenScrubSection />
-        <CyberPathSection />
-        <SecureLabSection />
-        <OpenCSIRTSection />
-        <VertGuardSection />
-        <SinauthSection />
-        <SINSection />
-        <SDKSection />
-        <RoadmapSection />
+        <main id="main">
+          <HeroSection />
+          <PlatformsSection />
+          <ShowcaseSection />
+          <APIGuardSection />
+          <NIS2CompassSection />
+          <CitadelSection />
+          <CitadelOSSection />
+          <ThreatFlowSection />
+          <IRFlowSection />
+          <OpenScrubSection />
+          <CyberPathSection />
+          <SecureLabSection />
+          <OpenCSIRTSection />
+          <VertGuardSection />
+          <SinauthSection />
+          <SINSection />
+          <SDKSection />
+          <RoadmapSection />
+        </main>
         <Footer />
       </div>
     </>

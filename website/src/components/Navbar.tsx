@@ -237,7 +237,33 @@ export default function Navbar() {
   const isDark = resolved === 'dark'
 
   return (
-    <nav style={{
+    <>
+      {/* Skip link: visually hidden until keyboard-focused, lets
+          keyboard/screen-reader users bypass the nav (search box, theme
+          menu, etc.) and jump straight to the page's main content. */}
+      <a
+        href="#main"
+        style={{
+          position: 'absolute', top: -9999, left: -9999,
+          zIndex: 1000,
+          padding: '10px 16px', borderRadius: 8,
+          background: 'var(--bg)', color: 'var(--text)',
+          border: '1px solid var(--border)',
+          fontSize: '0.9rem', fontWeight: 600,
+          textDecoration: 'none',
+        }}
+        onFocus={e => {
+          e.currentTarget.style.top = '8px'
+          e.currentTarget.style.left = '8px'
+        }}
+        onBlur={e => {
+          e.currentTarget.style.top = '-9999px'
+          e.currentTarget.style.left = '-9999px'
+        }}
+      >
+        Skip to content
+      </a>
+      <nav style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
       background: isDark ? 'rgba(3,3,8,0.7)' : 'rgba(248,250,252,0.75)',
       backdropFilter: 'blur(20px) saturate(150%)',
@@ -251,7 +277,7 @@ export default function Navbar() {
       {/* Logo */}
       <a href="#" style={{
         fontWeight: 800, fontSize: '1.1rem', letterSpacing: '0.04em',
-        background: 'linear-gradient(135deg, #00f0ff, #7c3aed)',
+        background: 'linear-gradient(135deg, var(--cyan), var(--violet))',
         WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
         textDecoration: 'none',
         marginRight: isMobile ? 'auto' : undefined,
@@ -270,7 +296,7 @@ export default function Navbar() {
                 aria-expanded={platformsOpen}
                 style={{
                   background: 'transparent', border: 'none', cursor: 'pointer',
-                  color: isDark ? '#8892a8' : '#64748b',
+                  color: 'var(--text-muted)',
                   fontSize: '0.85rem', fontFamily: 'inherit',
                   padding: 0, display: 'flex', alignItems: 'center', gap: 4,
                   transition: 'color 0.2s, text-shadow 0.2s',
@@ -297,7 +323,7 @@ export default function Navbar() {
                       onClick={() => setPlatformsOpen(false)}
                       style={{
                         display: 'block', width: '100%', padding: '8px 10px', borderRadius: 7,
-                        color: isDark ? '#c8d0e0' : '#334155',
+                        color: 'var(--text)',
                         fontSize: '0.85rem', fontFamily: 'inherit',
                         textDecoration: 'none',
                         transition: 'background 0.15s, color 0.15s',
@@ -312,7 +338,7 @@ export default function Navbar() {
 
             {otherLinks.map(l => (
               <a key={l.href} href={l.href} style={{
-                color: isDark ? '#8892a8' : '#64748b',
+                color: 'var(--text-muted)',
                 textDecoration: 'none',
                 transition: 'color 0.2s, text-shadow 0.2s',
               }}>
@@ -345,7 +371,7 @@ export default function Navbar() {
                 className="search-input"
                 style={{
                   background: 'transparent', border: 'none',
-                  color: isDark ? '#e2e8f0' : '#1e293b',
+                  color: 'var(--text)',
                   fontSize: '0.8rem', width: 150,
                   fontFamily: 'inherit',
                 }}
@@ -373,7 +399,7 @@ export default function Navbar() {
                     style={{
                       display: 'block', width: '100%', padding: '8px 14px',
                       background: 'transparent', border: 'none', cursor: 'pointer',
-                      color: isDark ? '#c8d0e0' : '#334155',
+                      color: 'var(--text)',
                       fontSize: '0.82rem', textAlign: 'left',
                       fontFamily: 'inherit',
                       transition: 'background 0.15s, color 0.15s',
@@ -381,12 +407,12 @@ export default function Navbar() {
                     onMouseEnter={e => {
                       const btn = e.currentTarget
                       btn.style.background = isDark ? 'rgba(0,240,255,0.08)' : 'rgba(124,58,237,0.06)'
-                      btn.style.color = isDark ? '#00f0ff' : '#7c3aed'
+                      btn.style.color = 'var(--accent)'
                     }}
                     onMouseLeave={e => {
                       const btn = e.currentTarget
                       btn.style.background = 'transparent'
-                      btn.style.color = isDark ? '#c8d0e0' : '#334155'
+                      btn.style.color = 'var(--text)'
                     }}
                   >
                     {item.label}
@@ -414,7 +440,7 @@ export default function Navbar() {
                 border: isDark
                   ? '1px solid rgba(0,240,255,0.2)'
                   : '1px solid rgba(124,58,237,0.2)',
-                color: isDark ? '#00f0ff' : '#7c3aed',
+                color: 'var(--accent)',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
               }}
@@ -446,7 +472,7 @@ export default function Navbar() {
                         display: 'flex', alignItems: 'center', gap: 10, width: '100%',
                         padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer',
                         background: active ? (isDark ? 'rgba(0,240,255,0.1)' : 'rgba(124,58,237,0.08)') : 'transparent',
-                        color: active ? (isDark ? '#00f0ff' : '#7c3aed') : (isDark ? '#c8d0e0' : '#334155'),
+                        color: active ? 'var(--accent)' : 'var(--text)',
                         fontSize: '0.85rem', fontWeight: active ? 600 : 500, fontFamily: 'inherit',
                         transition: 'background 0.15s',
                       }}
@@ -477,7 +503,7 @@ export default function Navbar() {
               padding: '7px 18px', borderRadius: 9, fontSize: '0.8rem', fontWeight: 600,
               background: 'rgba(0,240,255,0.06)',
               border: '1px solid rgba(0,240,255,0.2)',
-              color: '#00f0ff', textDecoration: 'none',
+              color: 'var(--cyan)', textDecoration: 'none',
               transition: 'all 0.2s',
               boxShadow: '0 0 12px rgba(0,240,255,0.08)',
             }}
@@ -503,7 +529,7 @@ export default function Navbar() {
               border: isDark
                 ? '1px solid rgba(0,240,255,0.2)'
                 : '1px solid rgba(124,58,237,0.2)',
-              color: isDark ? '#00f0ff' : '#7c3aed',
+              color: 'var(--accent)',
               cursor: 'pointer',
             }}
           >
@@ -522,7 +548,7 @@ export default function Navbar() {
               border: isDark
                 ? '1px solid rgba(0,240,255,0.2)'
                 : '1px solid rgba(0,0,0,0.12)',
-              color: isDark ? '#00f0ff' : '#1e293b',
+              color: isDark ? 'var(--cyan)' : 'var(--text)',
               cursor: 'pointer',
             }}
           >
@@ -557,7 +583,7 @@ export default function Navbar() {
                   onClick={e => { e.preventDefault(); handleNavClick(l.href) }}
                   style={{
                     padding: '0.75rem 0.25rem',
-                    color: isDark ? '#c8d0e0' : '#334155',
+                    color: 'var(--text)',
                     textDecoration: 'none',
                     fontSize: '1rem',
                     borderBottom: isDark
@@ -594,7 +620,7 @@ export default function Navbar() {
                     fontSize: '0.8rem', fontWeight: 600,
                     background: 'rgba(0,240,255,0.08)',
                     border: '1px solid rgba(0,240,255,0.3)',
-                    color: '#00f0ff', textDecoration: 'none',
+                    color: 'var(--cyan)', textDecoration: 'none',
                   }}
                 >
                   {t('nav.github')}
@@ -605,5 +631,6 @@ export default function Navbar() {
         </>
       )}
     </nav>
+    </>
   )
 }

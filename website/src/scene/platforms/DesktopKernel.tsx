@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback, useMemo, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Float, Html, Sparkles } from '@react-three/drei'
 import * as THREE from 'three'
@@ -140,7 +140,18 @@ function PyramidLayer({ layer, index }: { layer: LayerDef; index: number }) {
   const [hovered, setHovered] = useState(false)
   const bottomSize = getBottomSize(index)
   const topSize = getTopSize(index)
-  const geo = createFrustum(bottomSize, topSize, LAYER_HEIGHT)
+  // Memoized so hover toggles (onPointerOver/onPointerOut) don't rebuild the
+  // BufferGeometry every re-render — only recomputed when the layer's
+  // dimensions actually change.
+  const geo = useMemo(
+    () => createFrustum(bottomSize, topSize, LAYER_HEIGHT),
+    [bottomSize, topSize],
+  )
+
+  // Dispose the GPU buffers when the geometry is replaced or the layer unmounts.
+  useEffect(() => {
+    return () => geo.dispose()
+  }, [geo])
 
   const onOver = useCallback(() => setHovered(true), [])
   const onOut = useCallback(() => setHovered(false), [])

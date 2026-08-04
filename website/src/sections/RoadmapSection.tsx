@@ -12,7 +12,7 @@ export default function RoadmapSection() {
   return (
     <ScrollSection id="roadmap">
       <h2 className="section-title"><span className="gradient-text">Roadmap</span></h2>
-      <p className="section-subtitle">Where we are and where we're heading.</p>
+      <p className="section-subtitle">From the shipped v1.0 ecosystem to the post-quantum, sovereignty-focused v3.0 roadmap.</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         {phases.map((p, i) => {
           const isDone = p.status === 'done'

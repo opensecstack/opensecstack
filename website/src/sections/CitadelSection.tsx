@@ -6,7 +6,7 @@ export default function CitadelSection() {
     <PlatformDetailSection
       id="citadel"
       title={<><GradientTitle>CITADEL</GradientTitle> Governance</>}
-      subtitle="Immutable WORM audit chain, MARSHAL 5-gate evaluation, VIGIL health monitoring, and AUGUR advisory system."
+      subtitle="A fortified centre for the decisions and records that matter most — protecting audit truth, privileged actions, and institutional memory against tampering or loss."
       left={
         <div className="glass-card">
           <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem' }}>MARSHAL — 5-Gate Evaluation</h3>

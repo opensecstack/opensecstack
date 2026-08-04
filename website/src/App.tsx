@@ -1,37 +1,13 @@
 import { lazy, Suspense } from 'react'
 import { MotionConfig } from 'framer-motion'
-import { HelmetProvider, Helmet } from 'react-helmet-async'
+import { HelmetProvider } from 'react-helmet-async'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import ScrollToTop from './components/ScrollToTop'
-import ErrorBoundary from './components/ErrorBoundary'
-import { useWebGL } from './hooks/useWebGL'
-import { useThemeToggle } from './hooks/useThemeToggle'
-import Navbar from './components/Navbar'
-import Footer from './components/Footer'
-import HeroSection from './sections/HeroSection'
-import PlatformsSection from './sections/PlatformsSection'
-import ShowcaseSection from './sections/ShowcaseSection'
-import APIGuardSection from './sections/APIGuardSection'
-import NIS2CompassSection from './sections/NIS2CompassSection'
-import CitadelSection from './sections/CitadelSection'
-import SDKSection from './sections/SDKSection'
-import RoadmapSection from './sections/RoadmapSection'
-import CitadelOSSection from './sections/CitadelOSSection'
-import ThreatFlowSection from './sections/ThreatFlowSection'
-import IRFlowSection from './sections/IRFlowSection'
-import OpenScrubSection from './sections/OpenScrubSection'
-import CyberPathSection from './sections/CyberPathSection'
-import SecureLabSection from './sections/SecureLabSection'
-import OpenCSIRTSection from './sections/OpenCSIRTSection'
-import VertGuardSection from './sections/VertGuardSection'
-import SINSection from './sections/SINSection'
-import SinauthSection from './sections/SinauthSection'
 
-const EcosystemScene = lazy(() => import('./scene/EcosystemScene'))
+const HomePage = lazy(() => import('./pages/HomePage'))
 const CitadelOSPage = lazy(() => import('./pages/CitadelOSPage'))
 const CitadelOSMobilePage = lazy(() => import('./pages/CitadelOSMobilePage'))
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
-const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage'))
 
 const IntroPage = lazy(() => import('./pages/docs/IntroPage'))
 const QuickStartPage = lazy(() => import('./pages/docs/QuickStartPage'))
@@ -72,62 +48,6 @@ const SodPage = lazy(() => import('./pages/docs/citadel/SodPage'))
 const AugurVigilPage = lazy(() => import('./pages/docs/citadel/AugurVigilPage'))
 const EvidencePage = lazy(() => import('./pages/docs/citadel/EvidencePage'))
 
-function HomePage() {
-  const webgl = useWebGL()
-  useThemeToggle() // initialize theme (body class + localStorage) on mount
-
-  return (
-    <>
-      <Helmet>
-        <title>SIN — Security Intelligence Network</title>
-        <meta
-          name="description"
-          content="SIN — Security Intelligence Network. Open-source cybersecurity and compliance platform for the EU Digital Decade. API security, NIS2 compliance, and immutable governance."
-        />
-        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/" />
-        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/" />
-        <meta property="og:title" content="SIN — Security Intelligence Network" />
-        <meta
-          property="og:description"
-          content="APIGuard, NIS2 Compass, and CITADEL governance engine — open-source tools for EU Digital Decade compliance."
-        />
-      </Helmet>
-      {webgl && (
-        // Isolate WebGL / Three.js failures so a driver issue or runtime
-        // error in the 3D scene never takes down the whole page. Falling
-        // back to null leaves the static content intact.
-        <ErrorBoundary scope="ecosystem-scene">
-          <Suspense fallback={null}>
-            <EcosystemScene />
-          </Suspense>
-        </ErrorBoundary>
-      )}
-      <div className="scroll-content">
-        <Navbar />
-        <HeroSection />
-        <PlatformsSection />
-        <ShowcaseSection />
-        <APIGuardSection />
-        <NIS2CompassSection />
-        <CitadelSection />
-        <CitadelOSSection />
-        <ThreatFlowSection />
-        <IRFlowSection />
-        <OpenScrubSection />
-        <CyberPathSection />
-        <SecureLabSection />
-        <OpenCSIRTSection />
-        <VertGuardSection />
-        <SinauthSection />
-        <SINSection />
-        <SDKSection />
-        <RoadmapSection />
-        <Footer />
-      </div>
-    </>
-  )
-}
-
 export default function App() {
   return (
     <HelmetProvider>
@@ -135,7 +55,7 @@ export default function App() {
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <ScrollToTop />
       <Routes>
-        <Route path="/" element={<HomePage />} />
+        <Route path="/" element={<Suspense fallback={null}><HomePage /></Suspense>} />
         <Route path="/citadelos" element={
           <Suspense fallback={null}>
             <CitadelOSPage />
@@ -144,11 +64,6 @@ export default function App() {
         <Route path="/citadelos/mobile" element={
           <Suspense fallback={null}>
             <CitadelOSMobilePage />
-          </Suspense>
-        } />
-        <Route path="/auth/callback" element={
-          <Suspense fallback={null}>
-            <AuthCallbackPage />
           </Suspense>
         } />
         <Route path="/docs" element={<Navigate to="/docs/intro" replace />} />

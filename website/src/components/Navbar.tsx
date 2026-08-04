@@ -131,10 +131,14 @@ export default function Navbar() {
 
   // Flat list used by the mobile drawer, where a dropdown doesn't make
   // sense -- everything is already in a scrollable column.
+  // Includes the CitadelOS Mobile route so the drawer has full parity with
+  // desktop search (buildSearchItems indexes it separately from the
+  // CitadelOS desktop button below).
   const mobileLinks = [
     { label: t('nav.platforms'), href: '#platforms' },
     ...platformLinks,
     ...otherLinks,
+    { label: 'CitadelOS (Mobile)', href: '/citadelos/mobile' },
   ]
 
   // ---- Search state ----
@@ -459,8 +463,8 @@ export default function Navbar() {
 
           <Link to="/citadelos" style={{
             padding: '7px 14px', borderRadius: 9, fontSize: '0.8rem', fontWeight: 600,
-            background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)',
-            color: '#ef4444', textDecoration: 'none', transition: 'all 0.2s',
+            background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.25)',
+            color: 'var(--violet)', textDecoration: 'none', transition: 'all 0.2s',
           }}>
             {t('nav.citadelos')}
           </Link>
@@ -573,9 +577,9 @@ export default function Navbar() {
                     flex: 1, minWidth: 120, textAlign: 'center',
                     padding: '0.6rem 0.75rem', borderRadius: 9,
                     fontSize: '0.8rem', fontWeight: 600,
-                    background: 'rgba(239,68,68,0.08)',
-                    border: '1px solid rgba(239,68,68,0.3)',
-                    color: '#ef4444', textDecoration: 'none',
+                    background: 'rgba(124,58,237,0.1)',
+                    border: '1px solid rgba(124,58,237,0.35)',
+                    color: 'var(--violet)', textDecoration: 'none',
                   }}
                 >
                   {t('nav.citadelos')}

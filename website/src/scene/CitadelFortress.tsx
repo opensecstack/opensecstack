@@ -1,19 +1,22 @@
 import { useRef, useState, useCallback } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Float, Html } from '@react-three/drei'
-import * as THREE from 'three'
 import { marshalGates } from '../data/marshalGates'
+import { useHoverScale } from '../hooks/useHoverScale'
+import type { Mesh } from 'three'
 
 export default function CitadelFortress() {
-  const ref = useRef<THREE.Mesh>(null)
+  const ref = useRef<Mesh>(null)
   const [hovered, setHovered] = useState(false)
 
   useFrame(() => {
     if (!ref.current) return
     ref.current.rotation.y += hovered ? 0.008 : 0.002
-    const s = hovered ? 1.15 : 1
-    ref.current.scale.lerp(new THREE.Vector3(s, s, s), 0.08)
   })
+
+  // Delta-scaled damping so the hover-scale animation converges in
+  // consistent wall-clock time regardless of display refresh rate.
+  useHoverScale(ref, hovered, 1.15, 8)
 
   const onOver = useCallback(() => { setHovered(true); document.body.style.cursor = 'pointer' }, [])
   const onOut = useCallback(() => { setHovered(false); document.body.style.cursor = 'auto' }, [])

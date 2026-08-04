@@ -117,6 +117,12 @@ body.light-mode a:hover {
   text-shadow: none;
 }
 
+/* .badge-planned's default #94a3b8 fails WCAG AA (~2.6:1) against a white
+   light-mode background; darken it while keeping the same muted-slate hue. */
+body.light-mode .badge-planned {
+  color: #475569;
+}
+
 a { color: var(--cyan); text-decoration: none; transition: color 0.2s; }
 a:hover { color: #66f7ff; text-shadow: 0 0 8px rgba(0,240,255,0.4); text-decoration: none; }
 
@@ -221,6 +227,11 @@ a:hover { color: #66f7ff; text-shadow: 0 0 8px rgba(0,240,255,0.4); text-decorat
   color: #94a3b8;
   border: 1px solid rgba(148, 163, 184, 0.15);
 }
+
+/* Shared card sub-heading size/weight, available for section files to adopt
+   where h3 sizes currently vary (0.95rem/1.1rem/1.2rem) for the same role.
+   Not yet applied anywhere -- section .tsx files are owned by other engineers. */
+.card-title { font-size: 1.1rem; font-weight: 700; }
 
 /* ── Tech Tags ── */
 

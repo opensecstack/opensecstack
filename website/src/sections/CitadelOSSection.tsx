@@ -7,7 +7,7 @@ export default function CitadelOSSection() {
       <h2 className="section-title"><span className="gradient-text">CitadelOS</span></h2>
       <p className="section-subtitle">
         A microkernel-based operating system built for security from the ground up.
-        Governance is infrastructure, not application.
+        Every boot, driver load, and privileged syscall is gated by MARSHAL before it's allowed to run.
       </p>
       <div className="grid-2">
         {/* Desktop */}

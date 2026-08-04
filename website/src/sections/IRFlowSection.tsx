@@ -10,7 +10,7 @@ export default function IRFlowSection() {
     <PlatformDetailSection
       id="irflow"
       title={<GradientTitle>IRFlow</GradientTitle>}
-      subtitle="Structured incident response platform. Full lifecycle from detection to post-mortem with automated playbooks and evidence chain."
+      subtitle="Structured incident response platform for your own security team, covering the full lifecycle from detection to post-mortem with automated playbooks and an evidence chain — including the NIS2-mandated 24h/72h notification steps."
       left={<CapabilitiesCard heading="Capabilities" items={capabilities} accentColor="#f59e0b" />}
       right={
         <CardStack>

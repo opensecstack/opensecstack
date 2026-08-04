@@ -18,7 +18,7 @@ export interface PlatformSectionData {
 export const apiGuardData: PlatformSectionData = {
   id: 'apiguard',
   title: 'APIGuard',
-  subtitle: 'Automated OWASP API Top 10 detection. Rust-powered parsing. Go orchestration. Zero false positives by design.',
+  subtitle: 'Automated API security scanning that checks every endpoint against the OWASP API Top 10, so vulnerabilities are caught before attackers find them.',
   capabilitiesHeading: 'OWASP API Top 10 Coverage',
   capabilities: [
     'A1 BOLA', 'A2 Broken Auth', 'A3 Mass Assignment', 'A4 Rate Limiting',
@@ -27,6 +27,7 @@ export const apiGuardData: PlatformSectionData = {
   ],
   accentColor: '#10b981',
   archLines: [
+    { tag: 'L0', text: 'Rust-powered parsing, Go orchestration' },
     { tag: 'L1', text: 'Rust Parser (OpenAPI 3.x, Swagger 2.0)' },
     { tag: 'L2', text: 'Test Generation Engine' },
     { tag: 'L3', text: 'Rust Analysis Modules (OWASP)' },
@@ -40,7 +41,7 @@ export const apiGuardData: PlatformSectionData = {
 export const threatFlowData: PlatformSectionData = {
   id: 'threatflow',
   title: 'ThreatFlow',
-  subtitle: 'Real-time threat intelligence platform. IOC ingestion, correlation, and STIX/TAXII sharing for threat-informed defence.',
+  subtitle: 'Real-time threat intelligence platform. IOC ingestion, correlation, and STIX/TAXII sharing so every connected platform blocks the same threats automatically.',
   capabilitiesHeading: 'Capabilities',
   capabilities: [
     'IOC feed aggregation', 'TTP mapping (MITRE ATT&CK)', 'STIX 2.1 bundles',
@@ -80,7 +81,7 @@ export const secureLabData: PlatformSectionData = {
 export const openScrubData: PlatformSectionData = {
   id: 'openscrub',
   title: 'OpenScrub',
-  subtitle: 'Kernel-level DDoS mitigation. XDP/eBPF programs filter malicious traffic before it reaches the network stack, with GoBGP blackhole routing for volumetric attacks.',
+  subtitle: 'Stops DDoS floods before they reach your servers, using kernel-level XDP/eBPF packet filtering and GoBGP blackhole routing for volumetric attacks.',
   capabilitiesHeading: 'Capabilities',
   capabilities: [
     'XDP/eBPF kernel-level packet filtering', 'GoBGP blackhole routing',

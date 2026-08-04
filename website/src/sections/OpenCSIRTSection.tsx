@@ -10,7 +10,7 @@ export default function OpenCSIRTSection() {
     <PlatformDetailSection
       id="opencsirt"
       title={<GradientTitle>OpenCSIRT</GradientTitle>}
-      subtitle="Computer Security Incident Response Team operations platform for EU member states. Cross-border incident coordination aligned with NIS2 Directive reporting requirements."
+      subtitle="Operations platform for national and EU-level CSIRTs coordinating incidents across organizations and borders, aligned with NIS2 Directive reporting requirements."
       left={<CapabilitiesCard heading="Capabilities" items={capabilities} accentColor="#8b5cf6" />}
       right={
         <CardStack>

@@ -1,4 +1,4 @@
-import { Suspense, useRef } from 'react'
+import { Suspense, useEffect, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import CitadelFortress from './CitadelFortress'
@@ -12,10 +12,11 @@ const START_POS = new THREE.Vector3(0, 2, 12)
 const END_POS = new THREE.Vector3(0, 5, 16)
 const START_LOOK = new THREE.Vector3(0, 0, 0)
 const END_LOOK = new THREE.Vector3(0, -1, 0)
-const LERP_FACTOR = 0.03
+// Damping half-life-ish factor for THREE.MathUtils.damp — higher converges faster.
+const DAMP_FACTOR = 4
 
 /**
- * Reads window.scrollY each frame and smoothly lerps the camera
+ * Reads window.scrollY each frame and smoothly damps the camera
  * position and lookAt target so the fortress recedes on scroll.
  */
 function ScrollCamera() {
@@ -24,21 +25,50 @@ function ScrollCamera() {
   const targetLook = useRef(START_LOOK.clone())
   const currentLook = useRef(START_LOOK.clone())
 
-  useFrame(() => {
+  // scrollHeight/innerHeight only change on resize/content changes — cache
+  // them instead of reading layout-triggering DOM properties every frame.
+  const scrollMax = useRef(1)
+
+  useEffect(() => {
+    const updateScrollMax = () => {
+      scrollMax.current = Math.max(
+        1,
+        document.documentElement.scrollHeight - window.innerHeight,
+      )
+    }
+    updateScrollMax()
+
+    window.addEventListener('resize', updateScrollMax)
+
+    let resizeObserver: ResizeObserver | undefined
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(updateScrollMax)
+      resizeObserver.observe(document.documentElement)
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateScrollMax)
+      resizeObserver?.disconnect()
+    }
+  }, [])
+
+  useFrame((_, delta) => {
     // Scroll progress: 0 at top, 1 when the page is fully scrolled
-    const scrollMax = Math.max(
-      1,
-      document.documentElement.scrollHeight - window.innerHeight,
-    )
-    const progress = Math.min(window.scrollY / scrollMax, 1)
+    const progress = Math.min(window.scrollY / scrollMax.current, 1)
 
     // Compute desired position and lookAt based on scroll
     targetPos.current.lerpVectors(START_POS, END_POS, progress)
     targetLook.current.lerpVectors(START_LOOK, END_LOOK, progress)
 
-    // Smoothly lerp camera toward targets
-    camera.position.lerp(targetPos.current, LERP_FACTOR)
-    currentLook.current.lerp(targetLook.current, LERP_FACTOR)
+    // Delta-scaled damping so camera-follow speed is consistent regardless
+    // of frame rate (a fixed-factor lerp would converge faster at higher fps).
+    camera.position.x = THREE.MathUtils.damp(camera.position.x, targetPos.current.x, DAMP_FACTOR, delta)
+    camera.position.y = THREE.MathUtils.damp(camera.position.y, targetPos.current.y, DAMP_FACTOR, delta)
+    camera.position.z = THREE.MathUtils.damp(camera.position.z, targetPos.current.z, DAMP_FACTOR, delta)
+
+    currentLook.current.x = THREE.MathUtils.damp(currentLook.current.x, targetLook.current.x, DAMP_FACTOR, delta)
+    currentLook.current.y = THREE.MathUtils.damp(currentLook.current.y, targetLook.current.y, DAMP_FACTOR, delta)
+    currentLook.current.z = THREE.MathUtils.damp(currentLook.current.z, targetLook.current.z, DAMP_FACTOR, delta)
     camera.lookAt(currentLook.current)
   })
 

@@ -31,7 +31,7 @@ export default function SinauthSection() {
     <PlatformDetailSection
       id="sinauth"
       title={<GradientTitle>sinauth</GradientTitle>}
-      subtitle="Everything identity — OAuth2 / OIDC identity provider powering every platform in the ecosystem. Triple-Hash WORM audit, RS256 JWT, PKCE, and federation built-in."
+      subtitle="OAuth2 / OIDC identity provider powering every platform in the ecosystem. Triple-Hash WORM audit, RS256 JWT, PKCE, and federation built-in."
       left={
         // Login UI mockup
         <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2rem' }}>

@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { platforms } from '../data/platforms'
+import { getOrbitPosition } from './orbitalMath'
 
 const RADIUS = 4.5
 const step = (Math.PI * 2) / platforms.length
@@ -22,11 +23,10 @@ export default function WormChainEdges() {
       const line = linesRef.current.children[i] as THREE.Line
       if (!line) continue
 
-      // Same formula as OrbitalNode.tsx useFrame
-      const t = elapsed * 0.08 + step * i
-      const x = Math.cos(t) * RADIUS
-      const z = Math.sin(t) * RADIUS
-      const y = Math.sin(t * 2) * 0.3
+      // Shared formula — see orbitalMath.ts. Kept in sync with OrbitalNode.tsx
+      // (which also uses getOrbitPosition). DataFlowPackets.tsx still has its
+      // own inline copy that should eventually be migrated too.
+      const { x, y, z } = getOrbitPosition(elapsed, step * i, RADIUS)
 
       const positions = line.geometry.getAttribute('position')
       if (!positions) continue

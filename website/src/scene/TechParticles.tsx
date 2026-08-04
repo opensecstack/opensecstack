@@ -60,6 +60,18 @@ export default function TechParticles() {
   const groupRef = useRef<THREE.Group>(null)
   const { camera } = useThree()
 
+  // Reusable scratch objects — avoids allocating new THREE.Vector3 instances
+  // for every particle on every frame (30 particles * 60fps adds up fast).
+  const scratch = useRef({
+    ndcMouse: new THREE.Vector3(),
+    dir: new THREE.Vector3(),
+    mouseWorld: new THREE.Vector3(),
+    driftHome: new THREE.Vector3(),
+    toMouse: new THREE.Vector3(),
+    toHome: new THREE.Vector3(),
+    scaleTarget: new THREE.Vector3(),
+  }).current
+
   // Load all icon textures
   const textures = useLoader(
     THREE.TextureLoader,
@@ -95,16 +107,21 @@ export default function TechParticles() {
     return result
   }, [])
 
-  useFrame(({ clock, pointer }) => {
+  useFrame(({ clock, pointer }, delta) => {
     if (!groupRef.current) return
     const t = clock.getElapsedTime()
+    // Physics constants below were tuned assuming a 60fps frame step;
+    // scale per-frame velocity changes by (delta * 60) so the spring/drag
+    // feel stays consistent at other frame rates instead of looking
+    // stiffer/softer than intended.
+    const frameScale = delta * 60
 
     // Project mouse into 3D at cluster z-plane
-    const ndcMouse = new THREE.Vector3(pointer.x, pointer.y, 0.5)
-    ndcMouse.unproject(camera)
-    const dir = ndcMouse.sub(camera.position).normalize()
+    const { ndcMouse, dir, mouseWorld, driftHome, toMouse, toHome, scaleTarget } = scratch
+    ndcMouse.set(pointer.x, pointer.y, 0.5).unproject(camera)
+    dir.copy(ndcMouse).sub(camera.position).normalize()
     const planeDist = (CLUSTER_CENTER.z - camera.position.z) / dir.z
-    const mouseWorld = camera.position.clone().add(dir.multiplyScalar(planeDist))
+    mouseWorld.copy(camera.position).add(dir.multiplyScalar(planeDist))
 
     const children = groupRef.current.children
     for (let i = 0; i < TOTAL; i++) {
@@ -114,32 +131,32 @@ export default function TechParticles() {
 
       // Orbit drift: home position slowly orbits around cluster center
       const orbitAngle = t * p.orbitSpeed + p.phase
-      const driftHome = new THREE.Vector3(
+      driftHome.set(
         CLUSTER_CENTER.x + Math.cos(orbitAngle) * p.orbitRadius,
         CLUSTER_CENTER.y + p.yOffset + Math.sin(t * DRIFT_SPEED + p.phase) * 0.3,
         CLUSTER_CENTER.z + Math.sin(orbitAngle) * p.orbitRadius,
       )
 
       // Mouse interaction
-      const toMouse = mouseWorld.clone().sub(p.pos)
+      toMouse.copy(mouseWorld).sub(p.pos)
       const mouseDist = toMouse.length()
 
       if (mouseDist < MOUSE_REPEL_RADIUS) {
         // Too close — push away
         const force = (1 - mouseDist / MOUSE_REPEL_RADIUS) * REPEL_STRENGTH
-        p.vel.add(toMouse.normalize().multiplyScalar(-force))
+        p.vel.add(toMouse.normalize().multiplyScalar(-force * frameScale))
       } else if (mouseDist < MOUSE_ATTRACT_RADIUS) {
         // In attraction zone — gently pull toward mouse
         const factor = 1 - (mouseDist - MOUSE_REPEL_RADIUS) / (MOUSE_ATTRACT_RADIUS - MOUSE_REPEL_RADIUS)
-        p.vel.add(toMouse.normalize().multiplyScalar(factor * ATTRACT_STRENGTH))
+        p.vel.add(toMouse.normalize().multiplyScalar(factor * ATTRACT_STRENGTH * frameScale))
       }
 
       // Spring back toward drifting home
-      const toHome = driftHome.clone().sub(p.pos)
-      p.vel.add(toHome.multiplyScalar(RETURN_STRENGTH))
+      toHome.copy(driftHome).sub(p.pos)
+      p.vel.add(toHome.multiplyScalar(RETURN_STRENGTH * frameScale))
 
-      // Damping
-      p.vel.multiplyScalar(DAMPING)
+      // Damping — exponential so decay-per-second stays constant across frame rates
+      p.vel.multiplyScalar(Math.pow(DAMPING, frameScale))
 
       // Integrate
       p.pos.add(p.vel)
@@ -149,8 +166,9 @@ export default function TechParticles() {
 
       // Scale pulse on mouse proximity
       const proximity = Math.max(0, 1 - mouseDist / MOUSE_ATTRACT_RADIUS)
-      const scaleTarget = p.size * (1 + proximity * 0.5)
-      sprite.scale.lerp(new THREE.Vector3(scaleTarget, scaleTarget, 1), 0.08)
+      const target = p.size * (1 + proximity * 0.5)
+      scaleTarget.set(target, target, 1)
+      sprite.scale.lerp(scaleTarget, 0.08)
 
       // Opacity: brighter when near mouse
       const mat = sprite.material as THREE.SpriteMaterial

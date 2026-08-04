@@ -12,7 +12,7 @@ export default function SDKSection() {
     <ScrollSection id="sdks">
       <h2 className="section-title"><span className="gradient-text">Multi-Language</span> SDKs</h2>
       <p className="section-subtitle">
-        Type-safe clients for APIGuard, NIS2 Compass, and CITADEL. Consistent API across Go, Python, Rust, and TypeScript.
+        Type-safe APIGuard clients with a consistent API across Go, Python, Rust, and TypeScript.
       </p>
       <div className="grid-3">
         {sdks.map(s => (

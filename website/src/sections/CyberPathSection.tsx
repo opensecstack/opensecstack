@@ -10,7 +10,7 @@ export default function CyberPathSection() {
     <PlatformDetailSection
       id="cyberpath"
       title={<GradientTitle>CyberPath</GradientTitle>}
-      subtitle="Hands-on cybersecurity training platform with interactive labs, skill assessments, and certification tracking. Aligned with ENISA cybersecurity skills framework."
+      subtitle="Hands-on cybersecurity training platform with interactive labs, skill assessments, and certification tracking. Aligned with the cybersecurity skills framework from ENISA, the EU's cybersecurity agency."
       left={<CapabilitiesCard heading="Capabilities" items={capabilities} accentColor="#e040fb" />}
       right={
         <CardStack>

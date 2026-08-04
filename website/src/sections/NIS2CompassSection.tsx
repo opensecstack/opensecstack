@@ -6,7 +6,7 @@ export default function NIS2CompassSection() {
     <PlatformDetailSection
       id="nis2compass"
       title={<GradientTitle>NIS2 Compass</GradientTitle>}
-      subtitle="Full NIS2 Article 21(2) assessment lifecycle. 10 controls mapped to NIST CSF. Immutable audit trail."
+      subtitle="Assess and document your organization's NIS2 compliance, control by control, with an audit trail regulators can trust — covering the full Article 21(2) assessment lifecycle, with 10 controls mapped to NIST CSF."
       left={
         <div className="glass-card">
           <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem' }}>10 NIS2 Measures (Art. 21)</h3>

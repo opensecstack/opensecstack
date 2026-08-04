@@ -3,6 +3,7 @@ import type { MouseEvent } from 'react'
 import type { Platform } from '../data/platforms'
 import MediaVideo from './MediaVideo'
 import { platformMedia } from '../data/media'
+import { SECTION_EASE, SECTION_VIEWPORT_MARGIN } from './ScrollSection'
 
 interface Props {
   platform: Platform
@@ -25,8 +26,8 @@ export default function PlatformCard({ platform, index }: Props) {
       className="glass-card"
       initial={{ opacity: 0, y: 30 }}
       whileInView={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.08, duration: 0.5 }}
-      viewport={{ once: true }}
+      transition={{ delay: index * 0.08, duration: 0.5, ease: SECTION_EASE }}
+      viewport={{ once: true, margin: SECTION_VIEWPORT_MARGIN }}
       style={{
         borderColor: `${platform.color}18`,
         display: 'block',

@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback, useMemo, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Float, Html, Sparkles } from '@react-three/drei'
 import * as THREE from 'three'
@@ -51,6 +51,19 @@ const MVNO_SPEED = 0.15
 function getLayerY(i: number) { return i * (LAYER_HEIGHT + GAP) }
 function getBottomSize(i: number) { return BASE_BOTTOM - i * TAPER }
 function getTopSize(i: number) { return BASE_BOTTOM - (i + 1) * TAPER }
+
+/** Mirrors the prefers-reduced-motion pattern used in MediaVideo.tsx for background video. */
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const apply = () => setReduced(mq.matches)
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
+  return reduced
+}
 
 function createFrustum(bottom: number, top: number, h: number): THREE.BufferGeometry {
   const b = bottom / 2, t = top / 2
@@ -138,7 +151,18 @@ function PyramidLayer({ layer, index }: { layer: LayerDef; index: number }) {
   const [hovered, setHovered] = useState(false)
   const bottomSize = getBottomSize(index)
   const topSize = getTopSize(index)
-  const geo = createFrustum(bottomSize, topSize, LAYER_HEIGHT)
+  // Memoized so hover toggles (onPointerOver/onPointerOut) don't rebuild the
+  // BufferGeometry every re-render — only recomputed when the layer's
+  // dimensions actually change.
+  const geo = useMemo(
+    () => createFrustum(bottomSize, topSize, LAYER_HEIGHT),
+    [bottomSize, topSize],
+  )
+
+  // Dispose the GPU buffers when the geometry is replaced or the layer unmounts.
+  useEffect(() => {
+    return () => geo.dispose()
+  }, [geo])
 
   const onOver = useCallback(() => setHovered(true), [])
   const onOut = useCallback(() => setHovered(false), [])
@@ -205,12 +229,15 @@ function MVNOOrbitalNode({ node, index }: { node: MVNONodeDef; index: number }) 
   const ref = useRef<THREE.Mesh>(null)
   const [hovered, setHovered] = useState(false)
   const baseAngle = (index / MVNO_NODES.length) * Math.PI * 2
+  const reducedMotion = usePrefersReducedMotion()
 
   useFrame(({ clock }) => {
     if (!ref.current) return
-    const t = clock.getElapsedTime() * MVNO_SPEED + baseAngle
-    ref.current.position.x = Math.cos(t) * MVNO_RADIUS
-    ref.current.position.z = Math.sin(t) * MVNO_RADIUS
+    if (!reducedMotion) {
+      const t = clock.getElapsedTime() * MVNO_SPEED + baseAngle
+      ref.current.position.x = Math.cos(t) * MVNO_RADIUS
+      ref.current.position.z = Math.sin(t) * MVNO_RADIUS
+    }
     const s = hovered ? 1.5 : 1
     ref.current.scale.lerp(new THREE.Vector3(s, s, s), 0.1)
   })
@@ -257,6 +284,7 @@ function MVNOOrbitalNode({ node, index }: { node: MVNONodeDef; index: number }) 
 function MVNOFlowPacket() {
   const meshRef = useRef<THREE.Mesh>(null)
   const materialRef = useRef<THREE.MeshStandardMaterial>(null)
+  const reducedMotion = usePrefersReducedMotion()
   const TRIP_DURATION = 2 // seconds per node trip
   const NODE_COUNT = MVNO_NODES.length
   const TOTAL_CYCLE = TRIP_DURATION * NODE_COUNT
@@ -273,6 +301,7 @@ function MVNOFlowPacket() {
 
   useFrame(({ clock }) => {
     if (!meshRef.current || !materialRef.current) return
+    if (reducedMotion) return // freeze the packet in place
     const t = clock.getElapsedTime()
 
     // Which node trip are we on, and how far through it?
@@ -361,8 +390,10 @@ export default function MobileDevice() {
   const phoneRef = useRef<THREE.Group>(null)
   const pyramidRef = useRef<THREE.Group>(null)
   const layersRef = useRef<THREE.Group>(null)
+  const reducedMotion = usePrefersReducedMotion()
 
   useFrame(({ clock }) => {
+    if (reducedMotion) return // freeze phone sway, pyramid spin, and layer bob
     const t = clock.getElapsedTime()
     if (phoneRef.current) {
       phoneRef.current.rotation.y = Math.sin(t * 0.15) * 0.3

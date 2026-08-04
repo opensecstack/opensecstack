@@ -1,8 +1,10 @@
 import { useRef, useState, useCallback } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
-import * as THREE from 'three'
+import type { Mesh } from 'three'
 import type { Platform } from '../data/platforms'
+import { useHoverScale } from '../hooks/useHoverScale'
+import { getOrbitPosition } from './orbitalMath'
 
 interface Props {
   platform: Platform
@@ -11,20 +13,18 @@ interface Props {
 }
 
 export default function OrbitalNode({ platform, angle, radius }: Props) {
-  const ref = useRef<THREE.Mesh>(null)
+  const ref = useRef<Mesh>(null)
   const [hovered, setHovered] = useState(false)
 
   useFrame(({ clock }) => {
     if (!ref.current) return
-    const t = clock.getElapsedTime() * 0.08 + angle
-    ref.current.position.x = Math.cos(t) * radius
-    ref.current.position.z = Math.sin(t) * radius
-    ref.current.position.y = Math.sin(t * 2) * 0.3
-
-    // Smooth scale lerp
-    const target = hovered ? 1.4 : 1
-    ref.current.scale.lerp(new THREE.Vector3(target, target, target), 0.1)
+    const { x, y, z } = getOrbitPosition(clock.getElapsedTime(), angle, radius)
+    ref.current.position.set(x, y, z)
   })
+
+  // Delta-scaled damping so the hover-scale animation converges in
+  // consistent wall-clock time regardless of display refresh rate.
+  useHoverScale(ref, hovered, 1.4, 8)
 
   const isActive = platform.status === 'active'
 

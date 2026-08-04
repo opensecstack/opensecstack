@@ -11,7 +11,7 @@ export default function VertGuardSection() {
     <PlatformDetailSection
       id="vertguard"
       title={<GradientTitle>VertGuard</GradientTitle>}
-      subtitle="AI-attack defence platform. Detects prompt injection, deepfakes, and synthetic media at inference time — feeding high-confidence detections directly into IRFlow and CITADEL."
+      subtitle="AI-attack defence platform. Detects prompt injection, deepfakes, and synthetic media at inference time."
       left={<CapabilitiesCard heading="Capabilities" items={capabilities} accentColor="#f97316" />}
       right={
         <CardStack>

@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { Link } from 'react-router-dom'
 import ScrollSection, { SECTION_EASE, SECTION_VIEWPORT_MARGIN } from '../components/ScrollSection'
 
 const MAX_STAGGER_INDEX = 6
@@ -53,6 +54,37 @@ export default function RoadmapSection() {
           )
         })}
       </div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: SECTION_EASE }}
+        viewport={{ once: true, margin: SECTION_VIEWPORT_MARGIN }}
+        style={{
+          marginTop: '2.5rem', textAlign: 'center', display: 'flex',
+          flexDirection: 'column', alignItems: 'center', gap: '1.25rem',
+        }}
+      >
+        <h3 style={{ fontSize: '1.3rem', fontWeight: 700 }}>Follow the build</h3>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <a href="https://github.com/opensecstack/opensecstack" target="_blank" rel="noopener noreferrer" style={{
+            padding: '13px 30px', borderRadius: 11, fontWeight: 700, fontSize: '0.95rem',
+            background: 'linear-gradient(135deg, #00f0ff, #7c3aed)', color: '#030308',
+            textDecoration: 'none', boxShadow: '0 0 30px rgba(0,240,255,0.2)',
+            transition: 'box-shadow 0.3s',
+          }}>
+            Star on GitHub
+          </a>
+          <Link to="/docs/releases" style={{
+            padding: '13px 30px', borderRadius: 11, fontWeight: 600, fontSize: '0.95rem',
+            border: '1px solid rgba(0,240,255,0.25)', color: 'var(--accent)',
+            textDecoration: 'none', backdropFilter: 'blur(8px)',
+            transition: 'border-color 0.3s, box-shadow 0.3s',
+          }}>
+            Watch for Releases
+          </Link>
+        </div>
+      </motion.div>
     </ScrollSection>
   )
 }

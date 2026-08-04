@@ -1,6 +1,7 @@
 import ScrollSection from '../components/ScrollSection'
 import PlatformCard from '../components/PlatformCard'
 import { platforms, citadel } from '../data/platforms'
+import { platformMedia } from '../data/media'
 
 export default function PlatformsSection() {
   return (
@@ -11,7 +12,9 @@ export default function PlatformsSection() {
         &mdash; all connected through <strong style={{ color: '#00f0ff', textShadow: '0 0 8px rgba(0,240,255,0.3)' }}>{citadel.name}</strong> governance.
       </p>
       <div className="grid-2">
-        {platforms.map((p, i) => <PlatformCard key={p.id} platform={p} index={i} />)}
+        {platforms.map((p, i) => (
+          <PlatformCard key={p.id} platform={p} index={i} clip={platformMedia[p.id]} />
+        ))}
       </div>
     </ScrollSection>
   )

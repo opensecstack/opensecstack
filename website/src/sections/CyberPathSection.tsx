@@ -15,7 +15,7 @@ export default function CyberPathSection() {
       right={
         <CardStack>
           <div className="glass-card">
-            <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Training Tracks</h3>
+            <h3 className="card-title" style={{ marginBottom: '0.5rem' }}>Training Tracks</h3>
             <div style={{ fontFamily: 'var(--mono)', fontSize: '0.8rem', color: '#94a3b8', lineHeight: 2 }}>
               <div><span className="tech-tag">Track 1</span> API Security (APIGuard hands-on)</div>
               <div><span className="tech-tag">Track 2</span> NIS2 Compliance (NIS2 Compass)</div>

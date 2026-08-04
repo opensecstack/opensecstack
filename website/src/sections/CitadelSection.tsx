@@ -9,7 +9,7 @@ export default function CitadelSection() {
       subtitle="A fortified centre for the decisions and records that matter most — protecting audit truth, privileged actions, and institutional memory against tampering or loss."
       left={
         <div className="glass-card">
-          <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem' }}>MARSHAL — 5-Gate Evaluation</h3>
+          <h3 className="card-title" style={{ marginBottom: '1rem' }}>MARSHAL — 5-Gate Evaluation</h3>
           {marshalGates.map(g => (
             <div key={g.number} style={{ display: 'flex', gap: 12, padding: '10px 0', borderBottom: '1px solid rgba(0,240,255,0.06)' }}>
               <div style={{

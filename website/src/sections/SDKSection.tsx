@@ -19,7 +19,7 @@ export default function SDKSection() {
           <div key={s.lang} className="glass-card">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1rem' }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: s.color }} />
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 600 }}>{s.lang}</h3>
+              <h3 className="card-title">{s.lang}</h3>
             </div>
             <div className="stat-grid" style={{ marginBottom: '1rem' }}>
               <div className="stat-item">

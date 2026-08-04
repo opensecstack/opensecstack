@@ -16,7 +16,7 @@ export default function VertGuardSection() {
       right={
         <CardStack>
           <div className="glass-card">
-            <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>Five Modules</h3>
+            <h3 className="card-title" style={{ marginBottom: '0.5rem' }}>Five Modules</h3>
             <div style={{ fontFamily: 'var(--mono)', fontSize: '0.8rem', color: '#94a3b8', lineHeight: 2 }}>
               <div><span className="tech-tag">Module 1</span> Media Authenticity — C2PA + deepfake ML</div>
               <div><span className="tech-tag">Module 2</span> AI Phishing Detection</div>

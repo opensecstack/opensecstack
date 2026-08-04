@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import Navbar from '../../components/Navbar'
 import Footer from '../../components/Footer'
 
@@ -148,6 +148,7 @@ interface DocsLayoutProps {
 export default function DocsLayout({ children, breadcrumbs, toc = [], editPath, prev, next }: DocsLayoutProps) {
   const location = useLocation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [activeId, setActiveId] = useState<string>('')
   const [query, setQuery] = useState('')
@@ -159,10 +160,29 @@ export default function DocsLayout({ children, breadcrumbs, toc = [], editPath, 
     return SEARCH_ENTRIES.filter(e => terms.every(t => e.haystack.includes(t)))
   }, [query])
 
+  // Cross-link fallback from the homepage search (Navbar.tsx): when its
+  // platform index has no matches, it sends the user here with ?q=<term>
+  // so the docs search can pick up the same query instead of dead-ending.
   useEffect(() => {
+    const q = searchParams.get('q')
+    if (q) setQuery(q)
+    // Only read this once on mount -- the doc-search input owns `query`
+    // after that.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Reset the search/sidebar on navigation, but skip the very first run --
+  // that would immediately wipe out a `?q=` value just populated above by
+  // the cross-link fallback from the homepage search.
+  const didMountRef = useRef(false)
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true
+      return
+    }
     setSidebarOpen(false)
     setQuery('')
-  }, [location.pathname])
+  }, [location.pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!toc.length) return
@@ -225,7 +245,15 @@ export default function DocsLayout({ children, breadcrumbs, toc = [], editPath, 
           {query.trim() ? (
             <div className="docs-sidebar-section">
               {results.length === 0 ? (
-                <div style={{ color: '#64748b', fontSize: '0.82rem', padding: '4px 20px' }}>No results for "{query}"</div>
+                <div style={{ padding: '4px 20px' }}>
+                  <div style={{ color: '#64748b', fontSize: '0.82rem', marginBottom: 8 }}>No results for "{query}"</div>
+                  <Link
+                    to={`/?siteQuery=${encodeURIComponent(query.trim())}`}
+                    style={{ color: 'var(--accent)', fontSize: '0.82rem', textDecoration: 'none' }}
+                  >
+                    Search platforms/home for "{query.trim()}" →
+                  </Link>
+                </div>
               ) : (
                 results.map(r => (
                   <Link key={r.path} to={r.path} className="docs-sidebar-link">

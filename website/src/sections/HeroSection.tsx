@@ -90,21 +90,21 @@ export default function HeroSection() {
           transition={{ delay: 1.2, duration: 0.6 }}
           style={{ marginTop: '2.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}
         >
-          <a href="#platforms" style={{
+          <a href="https://github.com/opensecstack/opensecstack" target="_blank" rel="noopener noreferrer" style={{
             padding: '13px 30px', borderRadius: 11, fontWeight: 700, fontSize: '0.95rem',
             background: 'linear-gradient(135deg, #00f0ff, #7c3aed)', color: '#030308',
             textDecoration: 'none', boxShadow: '0 0 30px rgba(0,240,255,0.2)',
             transition: 'box-shadow 0.3s',
           }}>
-            {t('hero.cta.platforms')}
+            {t('hero.cta.github')}
           </a>
-          <a href="https://github.com/opensecstack/opensecstack" target="_blank" rel="noopener noreferrer" style={{
+          <a href="#platforms" style={{
             padding: '13px 30px', borderRadius: 11, fontWeight: 600, fontSize: '0.95rem',
             border: '1px solid rgba(0,240,255,0.25)', color: 'var(--accent)',
             textDecoration: 'none', backdropFilter: 'blur(8px)',
             transition: 'border-color 0.3s, box-shadow 0.3s',
           }}>
-            {t('hero.cta.github')}
+            {t('hero.cta.platforms')}
           </a>
         </motion.div>
       </motion.div>

@@ -2,17 +2,15 @@ import { motion } from 'framer-motion'
 import type { MouseEvent } from 'react'
 import type { Platform } from '../data/platforms'
 import MediaVideo from './MediaVideo'
-import { platformMedia } from '../data/media'
 import { SECTION_EASE, SECTION_VIEWPORT_MARGIN } from './ScrollSection'
 
 interface Props {
   platform: Platform
   index: number
+  clip?: string
 }
 
-export default function PlatformCard({ platform, index }: Props) {
-  const clip = platformMedia[platform.id]
-
+export default function PlatformCard({ platform, index, clip }: Props) {
   function handleClick(e: MouseEvent<HTMLAnchorElement>) {
     e.preventDefault()
     const el = document.getElementById(platform.sectionId)

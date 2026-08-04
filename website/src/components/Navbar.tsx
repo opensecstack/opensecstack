@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useThemeToggle } from '../hooks/useThemeToggle'
 import { platforms } from '../data/platforms'
 import { useI18n } from '../i18n/useI18n'
@@ -65,6 +65,14 @@ function MenuIcon({ open }: { open: boolean }) {
   )
 }
 
+// ---- Theme menu data (module-level so the array identity is stable and
+// keyboard handlers can index into it without re-deriving it every render).
+const THEME_OPTIONS = [
+  { key: 'light', label: 'Light' },
+  { key: 'dark', label: 'Dark' },
+  { key: 'system', label: 'System' },
+] as const
+
 // ---- Search data ----
 interface SearchItem {
   label: string
@@ -113,6 +121,7 @@ export default function Navbar() {
   const { t } = useI18n()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+  const [searchParams] = useSearchParams()
 
   // All platform sections (generated from data/platforms so every platform
   // stays reachable from the nav, not just a hand-picked subset).
@@ -150,10 +159,53 @@ export default function Navbar() {
 
   // ---- Mobile menu state ----
   const [menuOpen, setMenuOpen] = useState(false)
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
+  const drawerRef = useRef<HTMLDivElement>(null)
+  const firstDrawerLinkRef = useRef<HTMLAnchorElement>(null)
+  const wasMenuOpenRef = useRef(false)
+
+  // Focus management for the mobile drawer: move focus in when it opens,
+  // restore it to the hamburger toggle when it closes (via the X button,
+  // a nav-link click, or Escape) so keyboard/screen-reader users aren't
+  // dropped back at the top of the page.
+  useEffect(() => {
+    if (menuOpen) {
+      wasMenuOpenRef.current = true
+      firstDrawerLinkRef.current?.focus()
+    } else if (wasMenuOpenRef.current) {
+      wasMenuOpenRef.current = false
+      menuButtonRef.current?.focus()
+    }
+  }, [menuOpen])
+
+  // Basic focus trap while the drawer is open: Tab from the last focusable
+  // element wraps to the first, Shift+Tab from the first wraps to the last,
+  // so focus can't escape into the page content behind the open drawer.
+  function handleDrawerKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== 'Tab' || !drawerRef.current) return
+    const focusables = drawerRef.current.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled])'
+    )
+    if (focusables.length === 0) return
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault()
+      last.focus()
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault()
+      first.focus()
+    }
+  }
 
   // ---- Theme dropdown state ----
   const [themeOpen, setThemeOpen] = useState(false)
   const themeRef = useRef<HTMLDivElement>(null)
+  const themeButtonRef = useRef<HTMLButtonElement>(null)
+  const themeItemRefs = useRef<Array<HTMLButtonElement | null>>([])
+  // Roving-tabindex focus index for the theme menu, per the ARIA APG menu
+  // pattern -- arrow keys move this, Tab does not enter the menu items.
+  const [themeFocusIndex, setThemeFocusIndex] = useState(0)
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (themeRef.current && !themeRef.current.contains(e.target as Node)) {
@@ -163,6 +215,31 @@ export default function Navbar() {
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  // When the theme menu opens, move focus to the currently-active option
+  // (or the first one) and keep it in sync with roving tabindex -- this is
+  // what the announced role="menu"/role="menuitemradio" semantics promise.
+  useEffect(() => {
+    if (themeOpen) {
+      const activeIndex = THEME_OPTIONS.findIndex(o => o.key === theme)
+      const idx = activeIndex >= 0 ? activeIndex : 0
+      setThemeFocusIndex(idx)
+      themeItemRefs.current[idx]?.focus()
+    }
+  }, [themeOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleThemeMenuKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    const count = THEME_OPTIONS.length
+    let next = themeFocusIndex
+    if (e.key === 'ArrowDown') { next = (themeFocusIndex + 1) % count; e.preventDefault() }
+    else if (e.key === 'ArrowUp') { next = (themeFocusIndex - 1 + count) % count; e.preventDefault() }
+    else if (e.key === 'Home') { next = 0; e.preventDefault() }
+    else if (e.key === 'End') { next = count - 1; e.preventDefault() }
+    else if (e.key === 'Tab') { setThemeOpen(false); return }
+    else { return }
+    setThemeFocusIndex(next)
+    themeItemRefs.current[next]?.focus()
+  }
 
   // ---- Platforms dropdown state ----
   const [platformsOpen, setPlatformsOpen] = useState(false)
@@ -183,6 +260,22 @@ export default function Navbar() {
     return searchItems.filter(item => item.label.toLowerCase().includes(q))
   }, [query, searchItems])
 
+  // Reciprocal cross-link: if the docs search (DocsLayout.tsx) turned up
+  // nothing, it sends the user here with ?siteQuery=<term> so this search
+  // box can pick up where docs left off. Two disconnected search indexes
+  // (platforms here, docs pages there) would otherwise be a dead end in
+  // either direction.
+  useEffect(() => {
+    const q = searchParams.get('siteQuery')
+    if (q) {
+      setQuery(q)
+      setOpen(true)
+    }
+    // Only read this once on mount -- we don't want to fight the user's
+    // typing if the param happens to stick around in the URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Close on outside click.
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -200,6 +293,7 @@ export default function Navbar() {
       if (e.key === 'Escape') {
         setOpen(false)
         setMenuOpen(false)
+        if (themeOpen) themeButtonRef.current?.focus()
         setThemeOpen(false)
         setPlatformsOpen(false)
         inputRef.current?.blur()
@@ -207,7 +301,7 @@ export default function Navbar() {
     }
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
-  }, [])
+  }, [themeOpen])
 
   // Close the mobile drawer when the viewport grows back to desktop width,
   // otherwise the drawer stays visible as an orphan panel.
@@ -378,7 +472,7 @@ export default function Navbar() {
               />
             </div>
 
-            {open && filtered.length > 0 && (
+            {open && query.trim() && (
               <div style={{
                 position: 'absolute', top: 38, left: 0, minWidth: 220,
                 background: isDark ? 'rgba(10,10,20,0.92)' : 'rgba(255,255,255,0.95)',
@@ -392,7 +486,31 @@ export default function Navbar() {
                   : '0 8px 30px rgba(0,0,0,0.12)',
                 zIndex: 200,
               }}>
-                {filtered.map(item => (
+                {filtered.length === 0 ? (
+                  <button
+                    onClick={() => {
+                      const q = query.trim()
+                      setOpen(false)
+                      navigate(`/docs/intro?q=${encodeURIComponent(q)}`)
+                    }}
+                    style={{
+                      display: 'block', width: '100%', padding: '8px 14px',
+                      background: 'transparent', border: 'none', cursor: 'pointer',
+                      color: 'var(--accent)',
+                      fontSize: '0.82rem', textAlign: 'left',
+                      fontFamily: 'inherit',
+                      transition: 'background 0.15s',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = isDark ? 'rgba(0,240,255,0.08)' : 'rgba(124,58,237,0.06)'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'transparent'
+                    }}
+                  >
+                    No platform results. Search docs for "{query.trim()}" →
+                  </button>
+                ) : filtered.map(item => (
                   <button
                     key={item.label}
                     onClick={() => handleSelect(item)}
@@ -429,6 +547,7 @@ export default function Navbar() {
 
           <div ref={themeRef} style={{ position: 'relative' }}>
             <button
+              ref={themeButtonRef}
               onClick={() => setThemeOpen(o => !o)}
               aria-label="Theme"
               aria-haspopup="menu"
@@ -448,26 +567,30 @@ export default function Navbar() {
               {theme === 'light' ? <SunIcon /> : theme === 'dark' ? <MoonIcon /> : <MonitorIcon />}
             </button>
             {themeOpen && (
-              <div role="menu" style={{
-                position: 'absolute', top: 42, right: 0, minWidth: 150,
-                background: isDark ? 'rgba(10,10,20,0.97)' : 'rgba(255,255,255,0.98)',
-                border: isDark ? '1px solid rgba(0,240,255,0.18)' : '1px solid rgba(0,0,0,0.1)',
-                borderRadius: 10, padding: 6,
-                boxShadow: isDark ? '0 8px 30px rgba(0,0,0,0.5)' : '0 8px 30px rgba(0,0,0,0.12)',
-                backdropFilter: 'blur(12px)', zIndex: 200,
-              }}>
-                {([
-                  { key: 'light', label: 'Light', icon: <SunIcon /> },
-                  { key: 'dark', label: 'Dark', icon: <MoonIcon /> },
-                  { key: 'system', label: 'System', icon: <MonitorIcon /> },
-                ] as const).map(opt => {
+              <div
+                role="menu"
+                aria-label="Theme"
+                onKeyDown={handleThemeMenuKeyDown}
+                style={{
+                  position: 'absolute', top: 42, right: 0, minWidth: 150,
+                  background: isDark ? 'rgba(10,10,20,0.97)' : 'rgba(255,255,255,0.98)',
+                  border: isDark ? '1px solid rgba(0,240,255,0.18)' : '1px solid rgba(0,0,0,0.1)',
+                  borderRadius: 10, padding: 6,
+                  boxShadow: isDark ? '0 8px 30px rgba(0,0,0,0.5)' : '0 8px 30px rgba(0,0,0,0.12)',
+                  backdropFilter: 'blur(12px)', zIndex: 200,
+                }}>
+                {THEME_OPTIONS.map((opt, i) => {
                   const active = theme === opt.key
+                  const icon = opt.key === 'light' ? <SunIcon /> : opt.key === 'dark' ? <MoonIcon /> : <MonitorIcon />
                   return (
                     <button
                       key={opt.key}
+                      ref={el => { themeItemRefs.current[i] = el }}
                       role="menuitemradio"
                       aria-checked={active}
-                      onClick={() => { setTheme(opt.key); setThemeOpen(false) }}
+                      tabIndex={themeFocusIndex === i ? 0 : -1}
+                      onFocus={() => setThemeFocusIndex(i)}
+                      onClick={() => { setTheme(opt.key); setThemeOpen(false); themeButtonRef.current?.focus() }}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 10, width: '100%',
                         padding: '8px 10px', borderRadius: 7, border: 'none', cursor: 'pointer',
@@ -477,7 +600,7 @@ export default function Navbar() {
                         transition: 'background 0.15s',
                       }}
                     >
-                      <span style={{ display: 'flex', width: 16 }}>{opt.icon}</span>
+                      <span style={{ display: 'flex', width: 16 }}>{icon}</span>
                       <span style={{ flex: 1, textAlign: 'left' }}>{opt.label}</span>
                       {active && <span style={{ fontSize: '0.9rem' }}>✓</span>}
                     </button>
@@ -537,6 +660,7 @@ export default function Navbar() {
           </button>
 
           <button
+            ref={menuButtonRef}
             onClick={() => setMenuOpen(v => !v)}
             aria-label={menuOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={menuOpen}
@@ -561,6 +685,8 @@ export default function Navbar() {
             <div
               id="mobile-menu"
               role="menu"
+              ref={drawerRef}
+              onKeyDown={handleDrawerKeyDown}
               style={{
                 position: 'fixed', top: 56, left: 0, right: 0,
                 maxHeight: 'calc(100vh - 56px)',
@@ -575,9 +701,10 @@ export default function Navbar() {
                 zIndex: 99,
               }}
             >
-              {mobileLinks.map(l => (
+              {mobileLinks.map((l, i) => (
                 <a
                   key={l.href}
+                  ref={i === 0 ? firstDrawerLinkRef : undefined}
                   href={l.href}
                   role="menuitem"
                   onClick={e => { e.preventDefault(); handleNavClick(l.href) }}

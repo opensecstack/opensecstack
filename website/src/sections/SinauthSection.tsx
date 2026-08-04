@@ -104,7 +104,7 @@ export default function SinauthSection() {
       right={
         // Features
         <div className="glass-card">
-          <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem' }}>Capabilities</h3>
+          <h3 className="card-title" style={{ marginBottom: '1rem' }}>Capabilities</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
             {features.map(f => (
               <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem' }}>

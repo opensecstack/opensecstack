@@ -55,7 +55,7 @@ export function CapabilitiesCard({
 }) {
   return (
     <div className="glass-card">
-      <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem' }}>{heading}</h3>
+      <h3 className="card-title" style={{ marginBottom: '1rem' }}>{heading}</h3>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
         {items.map(c => (
           <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem' }}>
@@ -84,7 +84,7 @@ export function ArchitectureCard({
 }) {
   return (
     <div className="glass-card">
-      <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem' }}>{heading}</h3>
+      <h3 className="card-title" style={{ marginBottom: '1rem' }}>{heading}</h3>
       <div style={{ fontFamily: 'var(--mono)', fontSize: '0.8rem', color: '#94a3b8', lineHeight: 2 }}>
         {lines.map((l, i) => (
           <div key={i}><span className="tech-tag">{l.tag}</span> {l.text}</div>
@@ -99,7 +99,7 @@ export function ArchitectureCard({
 export function TextCard({ heading, children }: { heading: string; children: ReactNode }) {
   return (
     <div className="glass-card">
-      <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>{heading}</h3>
+      <h3 className="card-title" style={{ marginBottom: '0.5rem' }}>{heading}</h3>
       <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.6 }}>{children}</p>
     </div>
   )
@@ -117,7 +117,7 @@ export function FlowStepsCard({
 }) {
   return (
     <div className="glass-card">
-      <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>{heading}</h3>
+      <h3 className="card-title" style={{ marginBottom: '0.5rem' }}>{heading}</h3>
       <div style={{ fontFamily: 'var(--mono)', fontSize: '0.85rem', color: '#94a3b8' }}>
         {steps.map((s, i, arr) => (
           <span key={s}>

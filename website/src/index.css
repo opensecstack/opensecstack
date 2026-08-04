@@ -134,6 +134,20 @@ a:hover { color: #66f7ff; text-shadow: 0 0 8px rgba(0,240,255,0.4); text-decorat
   z-index: 0;
 }
 
+/* Narrow viewports: the 3D canvas sits behind .scroll-content and must never
+   intercept touch gestures or contribute to horizontal overflow. Disabling
+   the WebGL render itself (to save battery/perf on mobile) is a JS-level
+   mount decision outside this CSS-only pass -- see HomePage.tsx / the scene
+   mount logic, owned by other engineers this round. */
+@media (max-width: 480px) {
+  .scene-container {
+    pointer-events: none;
+    touch-action: pan-y;
+    overflow: hidden;
+    max-width: 100vw;
+  }
+}
+
 .scroll-content {
   position: relative;
   z-index: 1;
@@ -179,6 +193,38 @@ a:hover { color: #66f7ff; text-shadow: 0 0 8px rgba(0,240,255,0.4); text-decorat
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+/* ── Buttons ──
+   Reusable REM-based button utility, meant to replace the ad hoc px-based
+   inline padding currently duplicated across Navbar.tsx, HeroSection.tsx,
+   RoadmapSection.tsx and NotFoundPage.tsx (e.g. "10px 20px", "13px 30px",
+   "7px 14px") in a future pass, so button sizing scales with the user's
+   base font size the same way .section/.glass-card spacing already does. */
+.btn {
+  display: inline-block;
+  padding: 0.625rem 1.25rem;
+  border-radius: 11px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: box-shadow 0.3s, border-color 0.3s;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--cyan), var(--violet));
+  color: #030308;
+  box-shadow: 0 0 30px rgba(0, 240, 255, 0.2);
+  font-weight: 700;
+  border: none;
+}
+
+.btn-secondary {
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  color: var(--accent);
+  background: transparent;
+  backdrop-filter: blur(8px);
 }
 
 /* ── Glass Cards ── */

@@ -104,8 +104,8 @@ export default function HomePage() {
           <NIS2CompassSection />
           <CitadelSection />
           <CitadelOSSection />
-          <ThreatFlowSection />
           <IRFlowSection />
+          <ThreatFlowSection />
           <OpenScrubSection />
           <CyberPathSection />
           <SecureLabSection />

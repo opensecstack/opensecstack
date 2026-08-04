@@ -14,7 +14,7 @@ export default function CitadelOSSection() {
         <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Desktop</h3>
+              <h3 className="card-title">Desktop</h3>
               <span className="badge badge-planned">Phase 5</span>
             </div>
             <p style={{ color: '#8892a8', fontSize: '0.88rem', lineHeight: 1.7 }}>
@@ -46,7 +46,7 @@ export default function CitadelOSSection() {
         <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Mobile + MVNO</h3>
+              <h3 className="card-title">Mobile + MVNO</h3>
               <span className="badge badge-planned">Phase 5</span>
             </div>
             <p style={{ color: '#8892a8', fontSize: '0.88rem', lineHeight: 1.7 }}>

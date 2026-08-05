@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
-import { Html } from '@react-three/drei'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Float, Html } from '@react-three/drei'
 import * as THREE from 'three'
+import { useHoverScale } from '../hooks/useHoverScale'
+import { getOrbitPosition } from './orbitalMath'
 
 /**
  * Mirrors the prefers-reduced-motion pattern used in MediaVideo.tsx /
  * WormChainVisual.tsx: continuous decorative animation is frozen (not just
- * slowed) when the user has requested reduced motion, while the static
- * lanes and labels remain fully visible.
+ * slowed) when the user has requested reduced motion, while the hub, the
+ * 3 orbiting nodes and their labels remain fully, statically visible.
  */
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false)
@@ -21,217 +23,303 @@ function usePrefersReducedMotion(): boolean {
   return reduced
 }
 
+// Same established brand palette used elsewhere in the codebase
+// (see index.css --cyan/--violet/--magenta and data/platforms.ts).
 const CYAN = '#00f0ff'
 const VIOLET = '#7c3aed'
 const MAGENTA = '#e040fb'
+// Distinct accent for the hub so it reads apart from the 3 algorithm nodes,
+// while still drawn from the existing palette (data/platforms.ts amber).
+const HUB_COLOR = '#f59e0b'
 
-const INPUT_X = -3.4
-const OUTPUT_X = 3.4
-const LANE_LENGTH = OUTPUT_X - INPUT_X
-
-interface LaneData {
-  name: string
-  color: string
-  y: number
-  /** Seconds for one packet to travel the full lane — deliberately distinct
-   * per lane so the three algorithms visibly don't lock-step, illustrating
-   * "independent" processing rather than a shared clock. */
-  duration: number
-  /** Phase offset (0..1 of duration) so packets don't all launch at once. */
-  phase: number
-}
-
-const LANES: LaneData[] = [
-  { name: 'SHA-256', color: CYAN, y: 0.9, duration: 1.6, phase: 0 },
-  { name: 'SHA-512', color: VIOLET, y: 0, duration: 1.9, phase: 0.33 },
-  { name: 'BLAKE3', color: MAGENTA, y: -0.9, duration: 1.1, phase: 0.66 },
-]
+const RADIUS = 2.3
 
 // Illustrative/fake composite digest only — purely decorative, not a real
 // live-computed hash of anything.
 const FAKE_COMPOSITE_HASH = 'a3f2c9…9c1e'
 
-interface LaneProps {
-  lane: LaneData
+// Periodic convergence cycle: every CYCLE_DURATION seconds, the last
+// (1 - CONVERGE_START) fraction of the cycle is the "convergence window"
+// where the 3 node pulses travel inward and the hub flashes.
+const CYCLE_DURATION = 3.6
+const CONVERGE_START = 0.82
+
+/** 0..1 position within the current animation cycle. */
+function cyclePhase(elapsed: number): number {
+  return (elapsed % CYCLE_DURATION) / CYCLE_DURATION
+}
+
+/** 0..1 linear progress through the convergence window, 0 outside of it. */
+function convergenceRaw(phase: number): number {
+  if (phase < CONVERGE_START) return 0
+  return (phase - CONVERGE_START) / (1 - CONVERGE_START)
+}
+
+/** Triangular 0→1→0 envelope over the convergence window, for fades/flashes. */
+function convergenceEnvelope(raw: number): number {
+  return Math.sin(Math.min(raw, 1) * Math.PI)
+}
+
+interface AlgoConfig {
+  name: string
+  description: string
+  color: string
+  angle: number
+  /** Distinct pulse frequency/phase per node so the three visibly desync,
+   * illustrating independent concurrent processing rather than a shared clock. */
+  freq: number
+  phase: number
+}
+
+const ALGOS: AlgoConfig[] = [
+  { name: 'SHA-256', description: 'NIST digest', color: CYAN, angle: 0, freq: 2.1, phase: 0 },
+  { name: 'SHA-512', description: 'NIST digest (wide)', color: VIOLET, angle: (Math.PI * 2) / 3, freq: 1.4, phase: 1.1 },
+  { name: 'BLAKE3', description: 'Tree-hash digest', color: MAGENTA, angle: (Math.PI * 4) / 3, freq: 2.8, phase: 2.4 },
+]
+
+interface AlgoNodeProps {
+  algo: AlgoConfig
   reducedMotion: boolean
 }
 
-/** A single static lane (line + endpoints) connecting input to output. */
-function Lane({ lane }: { lane: LaneData }) {
-  const positions = useMemo(
-    () => new Float32Array([INPUT_X, lane.y, 0, OUTPUT_X, lane.y, 0]),
-    [lane.y],
-  )
+/** One orbiting sphere representing a single hash algorithm, independently
+ * pulsing while it orbits the central hub. */
+function AlgoNode({ algo, reducedMotion }: AlgoNodeProps) {
+  const ref = useRef<THREE.Mesh>(null)
+  const [hovered, setHovered] = useState(false)
+
+  useFrame(({ clock }) => {
+    const mesh = ref.current
+    if (!mesh) return
+
+    const elapsed = clock.getElapsedTime()
+    const { x, y, z } = getOrbitPosition(reducedMotion ? 0 : elapsed, algo.angle, RADIUS)
+    mesh.position.set(x, y, z)
+
+    const pulse = reducedMotion
+      ? 0.4
+      : 0.4 + 0.4 * (0.5 + 0.5 * Math.sin(elapsed * algo.freq + algo.phase))
+    const mat = mesh.material as THREE.MeshStandardMaterial
+    mat.emissiveIntensity = hovered ? 1.0 : pulse
+  })
+
+  // Delta-scaled damping so the hover-scale animation converges in
+  // consistent wall-clock time regardless of display refresh rate.
+  useHoverScale(ref, hovered, 1.4, 8)
+
+  const onOver = useCallback(() => { setHovered(true); document.body.style.cursor = 'pointer' }, [])
+  const onOut = useCallback(() => { setHovered(false); document.body.style.cursor = 'auto' }, [])
 
   return (
-    <group>
-      <line>
-        <bufferGeometry>
-          <bufferAttribute
-            attach="attributes-position"
-            count={2}
-            array={positions}
-            itemSize={3}
-          />
-        </bufferGeometry>
-        <lineBasicMaterial color={lane.color} transparent opacity={0.45} toneMapped={false} />
-      </line>
+    <mesh ref={ref} onPointerOver={onOver} onPointerOut={onOut}>
+      <sphereGeometry args={[0.28, 32, 32]} />
+      <meshStandardMaterial
+        color={algo.color}
+        emissive={algo.color}
+        emissiveIntensity={0.4}
+        toneMapped={false}
+      />
 
       <Html
         center
-        distanceFactor={7}
-        position={[INPUT_X + LANE_LENGTH * 0.5, lane.y + 0.32, 0]}
-        style={{ pointerEvents: 'none' }}
+        distanceFactor={8}
+        style={{
+          pointerEvents: 'none',
+          transition: 'opacity 0.2s ease',
+          opacity: hovered ? 1 : 0,
+        }}
       >
-        <div
-          style={{
-            fontFamily: 'JetBrains Mono, monospace',
-            fontSize: 11,
-            fontWeight: 700,
-            color: lane.color,
-            whiteSpace: 'nowrap',
-            letterSpacing: '0.04em',
-          }}
-        >
-          {lane.name}
+        <div style={{
+          background: 'rgba(5,5,16,0.95)',
+          border: `1px solid ${algo.color}`,
+          borderRadius: 10,
+          padding: '8px 14px',
+          whiteSpace: 'nowrap',
+          fontFamily: 'Inter, sans-serif',
+          color: '#e2e8f0',
+          boxShadow: `0 0 20px ${algo.color}44`,
+          transform: 'translateY(-20px)',
+          textAlign: 'center',
+        }}>
+          <strong style={{ color: algo.color }}>{algo.name}</strong>
+          <br />
+          <span style={{ fontSize: 11, color: '#94a3b8' }}>{algo.description}</span>
         </div>
       </Html>
-    </group>
+    </mesh>
   )
 }
 
-/** Small animated sphere traveling along one lane, looping continuously. */
-function LanePacket({ lane, reducedMotion }: LaneProps) {
-  const meshRef = useRef<THREE.Mesh>(null)
+interface ConvergencePulseProps {
+  algo: AlgoConfig
+  reducedMotion: boolean
+}
+
+/** A small particle that travels from one algorithm node inward to the hub
+ * during the periodic convergence window, representing that node's digest
+ * arriving to be combined into the composite hash. */
+function ConvergencePulse({ algo, reducedMotion }: ConvergencePulseProps) {
+  const ref = useRef<THREE.Mesh>(null)
 
   useFrame(({ clock }) => {
-    const mesh = meshRef.current
+    const mesh = ref.current
     if (!mesh) return
 
     if (reducedMotion) {
       mesh.visible = false
       return
     }
+
+    const elapsed = clock.getElapsedTime()
+    const raw = convergenceRaw(cyclePhase(elapsed))
+    if (raw <= 0) {
+      mesh.visible = false
+      return
+    }
     mesh.visible = true
 
-    const t = ((clock.getElapsedTime() / lane.duration + lane.phase) % 1)
-    mesh.position.x = THREE.MathUtils.lerp(INPUT_X, OUTPUT_X, t)
-    mesh.position.y = lane.y
-    mesh.position.z = 0
+    const { x, y, z } = getOrbitPosition(elapsed, algo.angle, RADIUS)
+    const remaining = 1 - raw
+    mesh.position.set(x * remaining, y * remaining, z * remaining)
 
-    // Fade in/out near the endpoints so packets don't visually "pop".
-    const fade = Math.sin(t * Math.PI)
     const mat = mesh.material as THREE.MeshStandardMaterial
-    mat.opacity = 0.4 + fade * 0.6
+    mat.opacity = convergenceEnvelope(raw)
   })
 
   return (
-    <mesh ref={meshRef}>
-      <sphereGeometry args={[0.09, 12, 12]} />
+    <mesh ref={ref} visible={false}>
+      <sphereGeometry args={[0.11, 12, 12]} />
       <meshStandardMaterial
-        color={lane.color}
-        emissive={lane.color}
-        emissiveIntensity={1.8}
+        color={algo.color}
+        emissive={algo.color}
+        emissiveIntensity={2}
         transparent
-        opacity={0.9}
+        opacity={0}
         toneMapped={false}
       />
     </mesh>
   )
 }
 
-/** The single input block on the left, representing the raw audit-log entry. */
-function InputNode() {
+interface HubProps {
+  reducedMotion: boolean
+}
+
+/** The central hub: represents both the raw entry data going in and, on each
+ * convergence flash, the composite TripleHash digest coming out. Mirrors
+ * CitadelFortress's wireframe-icosahedron-with-emissive-glow language. */
+function Hub({ reducedMotion }: HubProps) {
+  const meshRef = useRef<THREE.Mesh>(null)
+  const labelRef = useRef<HTMLDivElement>(null)
+  const [hovered, setHovered] = useState(false)
+
+  useFrame(({ clock }) => {
+    const mesh = meshRef.current
+    if (!mesh) return
+
+    if (!reducedMotion) {
+      mesh.rotation.y += hovered ? 0.006 : 0.002
+    }
+
+    const elapsed = clock.getElapsedTime()
+    const raw = reducedMotion ? 0 : convergenceRaw(cyclePhase(elapsed))
+    const envelope = reducedMotion ? 0 : convergenceEnvelope(raw)
+
+    const mat = mesh.material as THREE.MeshStandardMaterial
+    mat.emissiveIntensity = (hovered ? 0.9 : 0.35) + envelope * 0.9
+
+    if (labelRef.current) {
+      labelRef.current.style.opacity = reducedMotion ? '1' : envelope > 0.05 ? String(envelope) : '0'
+    }
+  })
+
+  // Delta-scaled damping so the hover-scale animation converges in
+  // consistent wall-clock time regardless of display refresh rate.
+  useHoverScale(meshRef, hovered, 1.15, 8)
+
+  const onOver = useCallback(() => { setHovered(true); document.body.style.cursor = 'pointer' }, [])
+  const onOut = useCallback(() => { setHovered(false); document.body.style.cursor = 'auto' }, [])
+
   return (
-    <group position={[INPUT_X, 0, 0]}>
-      <mesh>
-        <boxGeometry args={[0.6, 2.2, 0.5]} />
+    <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.3}>
+      <mesh ref={meshRef} onPointerOver={onOver} onPointerOut={onOut}>
+        <icosahedronGeometry args={[1, 1]} />
         <meshStandardMaterial
-          color="#94a3b8"
-          emissive="#94a3b8"
-          emissiveIntensity={0.25}
+          wireframe
+          color={HUB_COLOR}
+          emissive={HUB_COLOR}
+          emissiveIntensity={0.35}
           transparent
-          opacity={0.75}
+          opacity={hovered ? 1 : 0.85}
           toneMapped={false}
         />
       </mesh>
-      <Html center distanceFactor={7} position={[0, -1.5, 0]} style={{ pointerEvents: 'none' }}>
+
+      {/* Periodic "digests converged" readout — statically visible under
+          reduced motion instead of cycling. */}
+      <Html center distanceFactor={7} position={[0, 1.55, 0]} style={{ pointerEvents: 'none' }}>
         <div
+          ref={labelRef}
           style={{
-            fontFamily: 'Inter, sans-serif',
+            fontFamily: 'JetBrains Mono, monospace',
             fontSize: 11,
-            fontWeight: 600,
-            color: '#e2e8f0',
+            fontWeight: 700,
+            color: HUB_COLOR,
             whiteSpace: 'nowrap',
+            opacity: reducedMotion ? 1 : 0,
+            transition: reducedMotion ? undefined : 'opacity 0.15s linear',
           }}
         >
-          Entry data
-        </div>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 9, color: '#64748b', marginTop: 2 }}>
-          Input
+          TripleHash: {FAKE_COMPOSITE_HASH}
         </div>
       </Html>
-    </group>
+
+      {/* Hover tooltip, matching CitadelFortress's tooltip visual style. */}
+      <Html
+        center
+        distanceFactor={6}
+        position={[0, -1.55, 0]}
+        style={{
+          pointerEvents: 'none',
+          transition: 'opacity 0.25s ease, transform 0.25s ease',
+          opacity: hovered ? 1 : 0,
+          transform: hovered ? 'translateY(0)' : 'translateY(8px)',
+        }}
+      >
+        <div style={{
+          background: 'rgba(5,5,16,0.95)',
+          border: `1px solid ${HUB_COLOR}`,
+          borderRadius: 12,
+          padding: '10px 18px',
+          whiteSpace: 'nowrap',
+          fontFamily: 'Inter, sans-serif',
+          color: '#e2e8f0',
+          boxShadow: `0 0 30px ${HUB_COLOR}44`,
+          textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: HUB_COLOR, letterSpacing: '0.06em' }}>
+            TripleHash
+          </div>
+          <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+            Entry data in &middot; composite digest out
+          </div>
+          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 9, color: '#64748b', marginTop: 6 }}>
+            reference: ~1.5&nbsp;µs / 100B payload
+          </div>
+        </div>
+      </Html>
+    </Float>
   )
 }
 
-/** The single combined output block on the right, representing the composite digest. */
-function OutputNode() {
-  return (
-    <group position={[OUTPUT_X, 0, 0]}>
-      <mesh>
-        <boxGeometry args={[0.6, 2.2, 0.5]} />
-        <meshStandardMaterial
-          color={CYAN}
-          emissive={CYAN}
-          emissiveIntensity={0.5}
-          transparent
-          opacity={0.85}
-          toneMapped={false}
-        />
-      </mesh>
-      <Html center distanceFactor={7} position={[0, -1.5, 0]} style={{ pointerEvents: 'none' }}>
-        <div
-          style={{
-            fontFamily: 'Inter, sans-serif',
-            fontSize: 11,
-            fontWeight: 700,
-            color: CYAN,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          TripleHash
-        </div>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 9, color: '#94a3b8', marginTop: 2 }}>
-          Composite digest
-        </div>
-        <div
-          style={{
-            fontFamily: 'JetBrains Mono, monospace',
-            fontSize: 10,
-            color: '#5b6579',
-            marginTop: 4,
-          }}
-        >
-          {FAKE_COMPOSITE_HASH}
-        </div>
-      </Html>
-
-      {/* Illustrative-only reference figure, explicitly not a live measurement. */}
-      <Html center distanceFactor={7} position={[0, 1.75, 0]} style={{ pointerEvents: 'none' }}>
-        <div
-          style={{
-            fontFamily: 'JetBrains Mono, monospace',
-            fontSize: 9,
-            color: '#64748b',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          reference: ~1.5&nbsp;µs / 100B payload
-        </div>
-      </Html>
-    </group>
-  )
+/** Positions the fixed camera for a compact 3/4 elevated view of the hub
+ * and its orbiting nodes — set once, since the camera never moves. */
+function CameraRig() {
+  const { camera } = useThree()
+  useEffect(() => {
+    camera.lookAt(0, 0, 0)
+  }, [camera])
+  return null
 }
 
 interface SceneProps {
@@ -241,18 +329,18 @@ interface SceneProps {
 function Scene({ reducedMotion }: SceneProps) {
   return (
     <>
-      <ambientLight intensity={0.2} />
-      <pointLight position={[6, 6, 6]} intensity={0.35} color={CYAN} />
-      <pointLight position={[-6, -3, -4]} intensity={0.2} color={VIOLET} />
+      <CameraRig />
+      <ambientLight intensity={0.25} />
+      <pointLight position={[4, 4, 4]} intensity={0.4} color={HUB_COLOR} />
+      <pointLight position={[-4, -2, -3]} intensity={0.2} color={CYAN} />
 
-      <InputNode />
-      {LANES.map((lane) => (
-        <Lane key={lane.name} lane={lane} />
+      <Hub reducedMotion={reducedMotion} />
+      {ALGOS.map((algo) => (
+        <AlgoNode key={algo.name} algo={algo} reducedMotion={reducedMotion} />
       ))}
-      {LANES.map((lane) => (
-        <LanePacket key={lane.name} lane={lane} reducedMotion={reducedMotion} />
+      {ALGOS.map((algo) => (
+        <ConvergencePulse key={algo.name} algo={algo} reducedMotion={reducedMotion} />
       ))}
-      <OutputNode />
     </>
   )
 }
@@ -262,15 +350,19 @@ export interface TripleHashVisualProps {
 }
 
 /**
- * Self-contained 3D illustration of CITADEL's TripleHash mechanism: a single
- * "Entry data" input flows into three parallel, independently-timed lanes —
- * SHA-256, SHA-512 and BLAKE3 — which converge into one "TripleHash"
- * composite-digest output.
+ * Self-contained 3D illustration of CITADEL's TripleHash mechanism, using the
+ * same hub-and-orbit visual language as CitadelFortress/OrbitalRing: a
+ * central hub (the entry data going in, and — on each periodic convergence
+ * flash — the composite digest coming out) orbited by 3 nodes, one per hash
+ * algorithm (SHA-256, SHA-512, BLAKE3), each pulsing independently and out of
+ * phase to illustrate concurrent, independent processing. Periodically the
+ * three send a pulse inward to the hub, which flashes and briefly shows an
+ * illustrative composite-hash readout.
  *
- * The composite hash string and the "reference: ~1.5µs/100B" note shown near
- * the output are illustrative placeholders, not a live computation — real
- * benchmark figures live in project docs. Drop this anywhere — it renders its
- * own <Canvas> and needs no props to be meaningful.
+ * The composite hash string and the "reference: ~1.5µs/100B" note are
+ * illustrative placeholders, not a live computation — real benchmark figures
+ * live in project docs. Drop this anywhere — it renders its own <Canvas> and
+ * needs no props to be meaningful.
  */
 export default function TripleHashVisual({ className }: TripleHashVisualProps) {
   const reducedMotion = usePrefersReducedMotion()
@@ -278,7 +370,7 @@ export default function TripleHashVisual({ className }: TripleHashVisualProps) {
   return (
     <div className={className} style={{ width: '100%', height: '100%', minHeight: 240 }}>
       <Canvas
-        camera={{ position: [0, 0, 7], fov: 45 }}
+        camera={{ position: [3, 2.6, 4.2], fov: 42 }}
         dpr={[1, 1.5]}
         gl={{ antialias: true, alpha: true }}
       >

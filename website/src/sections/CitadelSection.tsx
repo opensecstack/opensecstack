@@ -1,5 +1,8 @@
 import PlatformDetailSection, { CardStack, GradientTitle, TextCard } from '../components/PlatformDetailSection'
 import { marshalGates } from '../data/marshalGates'
+import WormChainVisual from '../scene/WormChainVisual'
+import MarshalGatesPipeline from '../scene/MarshalGatesPipeline'
+import TripleHashVisual from '../scene/TripleHashVisual'
 
 export default function CitadelSection() {
   return (
@@ -38,15 +41,51 @@ export default function CitadelSection() {
             Every governance decision is permanently recorded and tamper-detectable.
           </TextCard>
           <TextCard heading="VIGIL">
-            Real-time health monitor. Background polling with mirror freshness tracking.
-            Triggers alerts on degraded state across any connected platform.
+            Ecosystem health monitor — design-stage for v2.0. Not yet
+            implemented; MARSHAL, WORM, NDS, and AUGUR above are live today.
           </TextCard>
           <TextCard heading="AUGUR">
-            Advisory system with ERP mirror reader. Real-time project state polling
-            with staleness detection and rules engine.
+            Behavioural heuristics evaluated at Gate 4: off-hours activity,
+            high-frequency actions, and DATA_EXPORT requests without an
+            associated incident. A focused rule set, not a general advisory engine.
           </TextCard>
         </CardStack>
       }
-    />
+    >
+      <div style={{ marginTop: '3rem' }}>
+        <h3 className="card-title" style={{ marginBottom: '0.5rem' }}>Live Governance Mechanics</h3>
+        <p style={{ fontSize: '0.85rem', color: '#94a3b8', lineHeight: 1.6, marginBottom: '1.5rem', maxWidth: '60ch' }}>
+          Illustrative visualizations of how MARSHAL, WORM, and TripleHash
+          actually work — not live data, but built on the real mechanics
+          described above.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+          <div className="glass-card" style={{ padding: '1rem' }}>
+            <h4 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem', color: '#e2e8f0' }}>
+              MARSHAL — 5-Gate Pipeline
+            </h4>
+            <div style={{ height: 260, borderRadius: 8, overflow: 'hidden' }}>
+              <MarshalGatesPipeline />
+            </div>
+          </div>
+          <div className="glass-card" style={{ padding: '1rem' }}>
+            <h4 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem', color: '#e2e8f0' }}>
+              WORM — Audit Chain
+            </h4>
+            <div style={{ height: 260, borderRadius: 8, overflow: 'hidden' }}>
+              <WormChainVisual />
+            </div>
+          </div>
+          <div className="glass-card" style={{ padding: '1rem' }}>
+            <h4 style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.5rem', color: '#e2e8f0' }}>
+              TripleHash — Composite Digest
+            </h4>
+            <div style={{ height: 260, borderRadius: 8, overflow: 'hidden' }}>
+              <TripleHashVisual />
+            </div>
+          </div>
+        </div>
+      </div>
+    </PlatformDetailSection>
   )
 }

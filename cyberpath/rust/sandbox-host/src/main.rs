@@ -7,7 +7,7 @@
 // Socket path: $SANDBOX_SOCK  (default: /run/cyberpath/sandbox.sock)
 
 use cyberpath_sandbox_host::capability;
-use cyberpath_sandbox_host::engine::SandboxEngine;
+use cyberpath_sandbox_host::engine::{SandboxEngine, SessionState};
 use cyberpath_sandbox_host::ipc::{Request, Response, StartResponse, StopResponse};
 
 use anyhow::{Context, Result};
@@ -104,6 +104,7 @@ async fn dispatch(req: Request, engine: &Arc<Mutex<SandboxEngine>>) -> Response 
             );
 
             let capabilities = capability::from_lab_manifest(&start.lab_id);
+            let lab_image = start.lab_image.clone();
 
             let mut guard = engine.lock().await;
             match guard.start_session(
@@ -112,14 +113,34 @@ async fn dispatch(req: Request, engine: &Arc<Mutex<SandboxEngine>>) -> Response 
                 &start.lab_image,
                 capabilities,
             ) {
-                Ok(session) => {
-                    let status = session.state.to_string();
-                    Response::Start(StartResponse {
-                        session_id: start.session_id,
-                        status,
-                        // TODO(v1.0.0): allocate a real WebSocket relay port.
-                        ws_relay_port: 0,
-                    })
+                Ok(_session) => {
+                    // Session bookkeeping succeeded; now pull the OCI image,
+                    // verify its cosign signature, and instantiate it. This
+                    // is network-bound, so it happens as a separate awaited
+                    // step rather than inside start_session (see
+                    // SandboxEngine::load_lab_module's doc comment). Any
+                    // failure here means the session never runs unverified
+                    // guest code: the half-started session is torn down and
+                    // an error is reported to the Go API instead.
+                    match guard.load_lab_module(&start.session_id, &lab_image).await {
+                        Ok(()) => Response::Start(StartResponse {
+                            session_id: start.session_id.clone(),
+                            status: SessionState::Running.to_string(),
+                            // TODO(v1.0.0): allocate a real WebSocket relay port.
+                            ws_relay_port: 0,
+                        }),
+                        Err(e) => {
+                            error!(?e, session_id = %start.session_id, "load_lab_module failed; tearing down session");
+                            if let Err(stop_err) = guard.stop_session(&start.session_id) {
+                                error!(?stop_err, session_id = %start.session_id, "failed to tear down session after load_lab_module error");
+                            }
+                            Response::Start(StartResponse {
+                                session_id: start.session_id,
+                                status: format!("error: {e}"),
+                                ws_relay_port: 0,
+                            })
+                        }
+                    }
                 }
                 Err(e) => {
                     error!(?e, session_id = %start.session_id, "start_session failed");

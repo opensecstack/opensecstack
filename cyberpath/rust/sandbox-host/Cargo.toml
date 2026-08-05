@@ -36,6 +36,25 @@ anyhow = "1"
 # UUID generation for session IDs
 uuid = { version = "1", features = ["v4"] }
 
+# OCI registry client — pulls the lab.wasm artifact from ghcr.io
+# (see .github/workflows/publish-track.yml for the publishing side).
+# Same version sigstore 0.14's own `registry`/`cosign` features pull in,
+# so the dependency graph resolves to a single copy of oci-client.
+oci-client = { version = "0.17", default-features = false, features = ["rustls-tls"] }
+
+# Cosign / Sigstore signature verification for pulled lab images.
+# `cosign` brings in the registry (oci-client) + certificate + Rekor
+# verification plumbing; `sigstore-trust-root` lets us fetch the public
+# Sigstore Fulcio/Rekor trust root over TUF instead of pinning keys by hand,
+# matching the keyless OIDC signing publish-track.yml performs with
+# `cosign sign --yes` from a GitHub Actions runner.
+sigstore = { version = "0.14", default-features = false, features = ["cosign", "sigstore-trust-root", "rustls-tls"] }
+
+# Lab images are minimal `FROM scratch` OCI images whose single layer is a
+# (possibly gzip-compressed) tar containing /lab.wasm + /lab.yaml.
+tar = "0.4"
+flate2 = "1"
+
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 # wasmtime (already a dependency) natively parses WAT text when its built-in

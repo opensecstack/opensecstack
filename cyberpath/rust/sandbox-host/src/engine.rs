@@ -13,13 +13,35 @@ use anyhow::{bail, Context, Result};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use uuid::Uuid;
+use wasmtime::component::{Component, Instance, Linker};
 use wasmtime::{Config, Engine, Store};
-use wasmtime_wasi::{WasiCtxBuilder, WasiCtx};
+use wasmtime_wasi::{DirPerms, FilePerms, ResourceTable, WasiCtx, WasiCtxBuilder, WasiView};
 
 use crate::capability::CapabilityBag;
+use crate::cosign_verify;
+use crate::host_func::network_deny::is_egress_allowed;
+use crate::oci_pull;
 
 /// Number of pre-warmed stores kept in the pool.
 const PREWARM_POOL_SIZE: usize = 10;
+
+/// Per-session store data: the WASI Preview 2 context (capability-scoped
+/// filesystem/network access, per `build_capability_scoped_store` below)
+/// plus the resource table wasmtime-wasi needs to hand out `wasi:io`
+/// resources to the guest. This is the `T` in `Store<T>` / `Linker<T>`.
+pub struct HostState {
+    wasi_ctx: WasiCtx,
+    table: ResourceTable,
+}
+
+impl WasiView for HostState {
+    fn table(&mut self) -> &mut ResourceTable {
+        &mut self.table
+    }
+    fn ctx(&mut self) -> &mut WasiCtx {
+        &mut self.wasi_ctx
+    }
+}
 
 /// Lifecycle state of a lab session.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,13 +67,17 @@ pub struct Session {
     pub lab_id: String,
     pub state: SessionState,
     pub capabilities: CapabilityBag,
-    /// The wasmtime store for this session.
+    /// The wasmtime store for this session, scoped to this session's
+    /// `CapabilityBag` (see `build_capability_scoped_store`).
     /// Option so we can take ownership when the session stops.
+    store: Option<Store<HostState>>,
+    /// The instantiated lab Wasm component, once `load_lab_module` has
+    /// pulled, verified, and instantiated it. `None` until then (a session
+    /// exists — and is bookkept — before its module is loaded).
     ///
-    /// TODO(v1.0.0): replace `()` with the real WasiCtx data type once
-    /// the WASI context is plumbed through.  The Store type parameter
-    /// must match the linker's type.
-    store: Option<Store<WasiCtx>>,
+    /// TODO(v1.0.0): wire stdio (this component's `wasi:cli/stdin` etc.)
+    /// to the IPC relay WebSocket once that transport exists.
+    instance: Option<Instance>,
 }
 
 impl std::fmt::Debug for Session {
@@ -70,7 +96,7 @@ impl std::fmt::Debug for Session {
 pub struct SandboxEngine {
     engine: Engine,
     /// Pre-warmed stores ready to be assigned to new sessions.
-    prewarm_pool: Vec<Store<WasiCtx>>,
+    prewarm_pool: Vec<Store<HostState>>,
     /// Active sessions, keyed by session_id.
     sessions: Vec<Session>,
 }
@@ -100,13 +126,17 @@ impl SandboxEngine {
 
     /// Start a new session for the given lab.
     ///
-    /// Pops a pre-warmed store from the pool (or allocates a fresh one
-    /// if the pool is empty), attaches the capability bag, and registers
-    /// the session.
-    ///
-    /// TODO(v1.0.0): pull the .wasm module from the OCI image, verify
-    /// with cosign, instantiate via the wasmtime Component Model API,
-    /// and wire stdio to the IPC relay WebSocket.
+    /// This performs session bookkeeping and allocates a store whose WASI
+    /// context is scoped to `capabilities` (filesystem allowlist + network
+    /// egress policy — see `build_capability_scoped_store`). It does
+    /// *not* touch the network: pulling the lab's OCI image and verifying
+    /// its cosign signature is a separate, async step (`load_lab_module`)
+    /// that the caller must run — and must not proceed past a failure of —
+    /// before any guest code from `lab_image` can be considered part of
+    /// this session. Keeping the two steps separate lets session lifecycle
+    /// (this method, `stop_session`, `get_session`) be exercised without
+    /// requiring a live OCI registry, which is what the tests in this
+    /// module and in `tests/escape_attempts.rs` do.
     pub fn start_session(
         &mut self,
         session_id: String,
@@ -118,13 +148,18 @@ impl SandboxEngine {
             bail!("session {} already exists", session_id);
         }
 
-        let store = if let Some(s) = self.prewarm_pool.pop() {
-            tracing::debug!(session_id, "using pre-warmed store");
-            s
+        // Consume a pre-warmed slot to preserve the "no allocation cost on
+        // the critical path" property of the pool (see build_prewarm_store);
+        // note the placeholder store itself is discarded below rather than
+        // reused, because a wasmtime WasiCtx is immutable once built and
+        // cannot be retargeted at this session's own CapabilityBag. See the
+        // TODO on build_prewarm_store for the follow-up that would let a
+        // pre-warmed *Component instance* actually be claimed in O(1).
+        if let Some(_placeholder) = self.prewarm_pool.pop() {
+            tracing::debug!(session_id, "consumed a pre-warm pool slot");
         } else {
-            tracing::warn!(session_id, "pre-warm pool exhausted; allocating fresh store");
-            build_prewarm_store(&self.engine)?
-        };
+            tracing::warn!(session_id, "pre-warm pool exhausted");
+        }
 
         // Refill the pool asynchronously if it ran low.
         // TODO(v1.0.0): spawn a background task to refill.
@@ -135,12 +170,16 @@ impl SandboxEngine {
             );
         }
 
+        let store = build_capability_scoped_store(&self.engine, &capabilities)
+            .context("failed to build capability-scoped store for session")?;
+
         let session = Session {
             session_id: session_id.clone(),
             lab_id,
             state: SessionState::Starting,
             capabilities,
             store: Some(store),
+            instance: None,
         };
 
         self.sessions.push(session);
@@ -151,6 +190,73 @@ impl SandboxEngine {
 
         tracing::info!(session_id, "session started");
         Ok(&self.sessions[idx])
+    }
+
+    /// Pull the lab's OCI image, verify its cosign signature, and
+    /// instantiate the resulting Wasm component inside `session_id`'s
+    /// existing (capability-scoped) store.
+    ///
+    /// This is deliberately split out from `start_session` (see the
+    /// doc-comment there) so callers — namely the IPC dispatch loop in
+    /// `main.rs` — can run session bookkeeping synchronously and then await
+    /// the network-dependent pull+verify+instantiate step, stopping the
+    /// session on any failure rather than leaving a half-started session
+    /// with unverified guest code sitting around.
+    ///
+    /// Returns an error, and instantiates nothing, if:
+    ///   * the image cannot be pulled from its OCI registry,
+    ///   * the image does not contain a `/lab.wasm` layer entry,
+    ///   * the image's cosign signature is missing, invalid, or was not
+    ///     produced by the expected publisher (see `cosign_verify`), or
+    ///   * the pulled bytes are not a valid Wasm component.
+    pub async fn load_lab_module(&mut self, session_id: &str, lab_image: &str) -> Result<()> {
+        let pulled = oci_pull::pull_lab_wasm(lab_image)
+            .await
+            .with_context(|| format!("failed to pull lab image {lab_image}"))?;
+
+        // Verify against the exact digest we just pulled, not whatever a
+        // floating tag currently resolves to (avoids a TOCTOU window
+        // between "what got verified" and "what gets instantiated").
+        let digest_pinned = oci_pull::digest_pinned_reference(lab_image, &pulled.digest)?;
+        cosign_verify::verify_lab_image(&digest_pinned)
+            .await
+            .with_context(|| {
+                format!(
+                    "cosign verification failed for {digest_pinned}; refusing to instantiate"
+                )
+            })?;
+
+        let session = self
+            .sessions
+            .iter_mut()
+            .find(|s| s.session_id == session_id)
+            .with_context(|| format!("session {session_id} not found"))?;
+
+        let store = session
+            .store
+            .as_mut()
+            .with_context(|| format!("session {session_id} has no store (already stopped?)"))?;
+
+        let component = Component::new(&self.engine, &pulled.wasm_bytes).with_context(|| {
+            format!(
+                "pulled artifact for {lab_image} is not a valid Wasm component \
+                 (this sandbox host is configured with wasm_component_model(true) \
+                 and expects a WASI Preview 2 component, not a bare core module)"
+            )
+        })?;
+
+        let mut linker: Linker<HostState> = Linker::new(&self.engine);
+        wasmtime_wasi::add_to_linker_sync(&mut linker)
+            .context("failed to link WASI host functions into the component linker")?;
+
+        let instance = linker
+            .instantiate(&mut *store, &component)
+            .with_context(|| format!("failed to instantiate lab component for {lab_image}"))?;
+
+        session.instance = Some(instance);
+
+        tracing::info!(session_id, lab_image, "lab wasm module pulled, verified, and instantiated");
+        Ok(())
     }
 
     /// Stop and remove a session.
@@ -205,13 +311,17 @@ fn build_engine() -> Result<Engine> {
 
 /// Build a minimal pre-warmed Store with a bare WASI context.
 ///
-/// The store created here has no filesystem mounts and no network.
-/// When a real session claims it, the WASI context is reconfigured
-/// with the session's capability bag.
+/// The store created here has no filesystem mounts and no network — it
+/// exists purely to keep `SandboxEngine::new()`'s pool at
+/// `PREWARM_POOL_SIZE` and to smoke-test that the Engine can produce
+/// stores at startup. `start_session` does *not* hand this store to a
+/// session (see the comment there): a real session's store is always
+/// built fresh by `build_capability_scoped_store`, because a wasmtime
+/// `WasiCtx` cannot be reconfigured after `WasiCtxBuilder::build()`.
 ///
 /// TODO(v1.0.0): the pre-warm store should be a true wasmtime Component
 /// instance with the WASI host functions already linked, so claim is O(1).
-fn build_prewarm_store(engine: &Engine) -> Result<Store<WasiCtx>> {
+fn build_prewarm_store(engine: &Engine) -> Result<Store<HostState>> {
     let wasi_ctx = WasiCtxBuilder::new()
         // No ambient filesystem — only explicit mounts allowed.
         // No network by default.
@@ -219,12 +329,103 @@ fn build_prewarm_store(engine: &Engine) -> Result<Store<WasiCtx>> {
         // TODO(v1.0.0): pipe stdin/stdout to the WebSocket relay.
         .build();
 
-    let mut store = Store::new(engine, wasi_ctx);
+    let mut store = Store::new(
+        engine,
+        HostState {
+            wasi_ctx,
+            table: ResourceTable::new(),
+        },
+    );
 
     // Set initial fuel budget.  This will be reset per-command at runtime.
     store
         .set_fuel(1_000_000_000)
         .context("failed to set initial fuel on pre-warmed store")?;
+
+    Ok(store)
+}
+
+/// Build a `Store<HostState>` whose WASI context enforces `capabilities`:
+///   * filesystem access is limited to `capabilities.fs_allowlist`, mounted
+///     read-write at the same path inside the guest as on the host,
+///   * outbound network connections are routed through
+///     `host_func::network_deny::is_egress_allowed`, which — regardless of
+///     `capabilities.network_allow` — always denies loopback/wildcard
+///     addresses (see that module's `BLOCKED_HOSTS`),
+///   * the fuel budget is `capabilities.fuel_limit` instead of a fixed
+///     constant.
+///
+/// Preopening a directory that doesn't exist on the *host* filesystem
+/// (expected on non-Linux dev machines, and in CI, where `/lab` and
+/// `/scratch` are production-only mount points) is logged and skipped
+/// rather than treated as a fatal error: the allowlist enforcement itself
+/// (`host_func::fs_sandbox::allow_path`) is the security boundary this
+/// crate's test suite exercises directly; this preopen step is the
+/// production wiring of that same policy into wasmtime-wasi's own
+/// capability-based filesystem API, and its absence on a given host simply
+/// means that particular mount isn't available to the guest (a fail-closed
+/// outcome, not fail-open).
+fn build_capability_scoped_store(
+    engine: &Engine,
+    capabilities: &CapabilityBag,
+) -> Result<Store<HostState>> {
+    let mut builder = WasiCtxBuilder::new();
+
+    for host_path in &capabilities.fs_allowlist {
+        // Only directories can be preopened via wasmtime-wasi's API; file
+        // entries in the allowlist (e.g. /etc/lab.json) are enforced at the
+        // `allow_path()` layer instead, not preopened here.
+        if !host_path.is_dir() {
+            tracing::debug!(
+                path = %host_path.display(),
+                "fs_sandbox: allowlist entry is not a directory on this host; not preopening"
+            );
+            continue;
+        }
+
+        let guest_path = host_path.to_string_lossy().to_string();
+        match builder.preopened_dir(host_path, &guest_path, DirPerms::all(), FilePerms::all()) {
+            Ok(_) => {
+                tracing::debug!(path = %guest_path, "fs_sandbox: preopened capability path");
+            }
+            Err(err) => {
+                tracing::warn!(
+                    path = %guest_path,
+                    error = %err,
+                    "fs_sandbox: could not preopen capability path"
+                );
+            }
+        }
+    }
+
+    let network_allow = capabilities.network_allow;
+    builder.socket_addr_check(move |addr, _use| {
+        let host = addr.ip().to_string();
+        let port = addr.port();
+        let allowed = is_egress_allowed(&host, port, network_allow);
+        Box::pin(async move { allowed })
+    });
+    if !network_allow {
+        // Deny-by-default also covers DNS resolution: without outbound
+        // sockets there is nothing to resolve a name for, and leaving
+        // lookups enabled would let a guest probe internal DNS as a side
+        // channel even though it can never open the resulting connection.
+        builder.allow_ip_name_lookup(false);
+    }
+
+    let wasi_ctx = builder.build();
+    let mut store = Store::new(
+        engine,
+        HostState {
+            wasi_ctx,
+            table: ResourceTable::new(),
+        },
+    );
+
+    let fuel = capabilities.fuel_limit.max(1);
+    store
+        .set_fuel(fuel)
+        .context("failed to set fuel budget on session store")?;
 
     Ok(store)
 }

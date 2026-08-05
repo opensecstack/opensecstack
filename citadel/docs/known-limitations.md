@@ -58,13 +58,61 @@ prod), fast key rotation (quarterly), monitored secret-manager access.
 ### `rbacMap`/`roleGroupMap` coverage gap (Gate 2)
 
 **Status:** `rbacMap`/`roleGroupMap` (`internal/marshal/types.go`)
-currently define 5 roles (`admin`, `operator`, `analyst`, `viewer`,
-`auditor`) and an action-type vocabulary drawn only from
-apiguard/irflow/threatflow — this is disclosed in the IEEE paper's
-limitations section ("Gate 2/Gate 3 policy-map coverage"). Action
-types and roles introduced by the ecosystem's other platforms are not
-yet represented, even though 9 producer platforms now submit real
-Kerkese requests to MARSHAL.
+currently define exactly 5 roles (`admin`, `operator`, `analyst`,
+`viewer`, `auditor`) and exactly 10 action types (`API_SCAN_INITIATE`,
+`API_SCAN_DELETE`, `INCIDENT_CREATE`, `INCIDENT_CLOSE`, `DATA_EXPORT`,
+`CONFIG_CHANGE`, `USER_CREATE`, `USER_DELETE`, `PLAYBOOK_EXECUTE`,
+`IOC_INGEST`). This is disclosed in the IEEE paper's limitations
+section ("Gate 2/Gate 3 policy-map coverage"). 9 producer platforms
+(apiguard, nis2compass, irflow, threatflow, openscrub, cyberpath,
+securelab, opencsirt, vertguard) are wired with CITADEL clients today;
+their actual `action.type`/`actor.role` strings were audited against
+the map above (2026-08) and the result is **not** "some new platforms
+aren't onboarded yet" — it is that most of the action-type strings
+*already flowing in production* do not match the map's uppercase,
+snake-free vocabulary at all, for several independent reasons (case
+mismatch, an undocumented `group_sig_operator`/`group_sig_verifier`
+role convention several platforms share, and action types the map
+simply has no entry for). Exact findings, per platform:
+
+| Platform | Real `action.type` sent | Real `actor.role` sent | In `rbacMap`? | Outcome at Gate 2 today |
+|---|---|---|---|---|
+| **apiguard** | `deploy_change` (scan initiation, `internal/api/handlers/scans.go`) | `group_sig_operator` | Neither the type nor the role exists in the map | **REFUSE**, unconditionally |
+| **openscrub** | `deploy_change` (manual mitigation-rule creation, `internal/api/handlers/handlers.go`) | `group_sig_operator` | Neither the type nor the role exists in the map | **REFUSE**, unconditionally |
+| **irflow** | Operator-supplied free text (e.g. `CONTAIN`/`contain`, `create_incident` — see [../../irflow/docs/governance-integration.md](../../irflow/docs/governance-integration.md)); no fixed enum | `admin`, `operator`, `verifier`, `viewer`, `service` (IRFlow's own 5-role model) | `verifier` and `service` are not keys in `rbacMap` or `roleGroupMap` at all; even `operator` + `CONTAIN` fails because `CONTAIN` isn't in `operator`'s allow-list, and lowercase `create_incident` doesn't string-match `INCIDENT_CREATE` | **REFUSE** for effectively every real IRFlow governed action; `verifier`/`service` additionally fall back to Gate 3's `roleGroup() == "unknown"` path (see below) |
+| **threatflow** | `IOC_INGEST` (ingest), `STIX_BUNDLE_IMPORT`, `FEED_CREATE`, `FEED_TOGGLE`, `FEED_DELETE` (see [../../threatflow/docs/citadel-integration.md](../../threatflow/docs/citadel-integration.md)); `IOC_REVOKE` reserved but unwired | actor's real role | Only `IOC_INGEST` is in the map | `IOC_INGEST` **PASSes** (if actor role is `admin`/`operator`/`analyst`); the other 4 live, gated mutations **REFUSE** unconditionally |
+| **opencsirt** | `ADVISORY_PUBLISH`, `INCIDENT_CLOSE` (self-documented gap in [../../opencsirt/docs/citadel-integration.md](../../opencsirt/docs/citadel-integration.md)) | `csirt_lead`, `operator` (its real roles); rbacMap only permits `admin` for `INCIDENT_CLOSE` | `ADVISORY_PUBLISH` not in the map at all; `INCIDENT_CLOSE` is in the map but only for `admin` | **REFUSE** for both, for any actor role OpenCSIRT actually uses |
+| **cyberpath** | `CONFIG_CHANGE` (certification revocation only — issuance is not MARSHAL-gated) | `admin` | Yes — both the type and role match | **PASS** — this is the one governed call in the ecosystem today that is genuinely, correctly evaluated, not just refused-by-default |
+| **nis2compass** | `ASSESSMENT_LOCK`, `ASSESSMENT_UNLOCK`, `ARTIFACT_SIGN` | actor's real role | None of the three types exist in the map | **REFUSE**, unconditionally, for all three |
+| **securelab** | *(none — no `marshal/evaluate` call exists in the codebase; `securelab.run_completed` is a WORM-only audit append)* | — | N/A | Not gated at all — Gate 2 is never invoked for SecureLab |
+| **vertguard** | *(none — no MARSHAL client, no Kerkese construction anywhere; see [../../vertguard/docs/citadel-integration.md](../../vertguard/docs/citadel-integration.md))* | — | N/A | Not gated at all — VertGuard's only CITADEL touchpoint is best-effort WORM evidence emission |
+
+**Bottom line:** of the 9 wired platforms, only **cyberpath's
+certification-revocation call** currently receives genuine,
+intended Gate 2 evaluation. Two platforms (securelab, vertguard) never
+call `evaluate()` at all — their CITADEL integration is WORM-only, so
+Gate 2 coverage is not applicable to them. The remaining six
+(apiguard, openscrub, irflow, threatflow, opencsirt, nis2compass) do
+call `evaluate()` with real actor identities, but nearly all of their
+real action types and/or roles are absent from `rbacMap`/
+`roleGroupMap`, so those calls `REFUSE` at Gate 2 today — not because
+the underlying action is unauthorized, but because CITADEL's policy
+vocabulary was never extended to recognize the caller's action type or
+role in the first place. Do not read "Gate 2 REFUSE" in these
+platforms' logs as evidence of an attempted unauthorized action.
+
+A second, independent gap the table surfaces: at least three platforms
+(apiguard, openscrub, and community's GDPR-deletion flow) send
+`group_sig_operator`/`group_sig_verifier` as `actor.role`/
+`verifier.role` — a role-naming convention `rbacMap` and
+`roleGroupMap` have no entries for at all, distinct from IRFlow's
+separate `verifier`/`service` role gap above. Extending the map is not
+a matter of adding one or two platforms' vocabularies; at least three
+incompatible role-naming conventions are in live use simultaneously
+(`admin`/`operator`/`analyst`/`viewer`/`auditor` the map itself uses,
+IRFlow's `admin`/`operator`/`verifier`/`viewer`/`service`, and the
+`group_sig_operator`/`group_sig_verifier` pair several platforms
+share).
 
 **Impact:** most real `evaluate()` calls whose `action.type` or
 `actor.role` isn't in these maps currently `REFUSE` at Gate 2 (AuthZ),
@@ -83,6 +131,65 @@ permanent, unconditionally-enforced safety net either way. See
 **Roadmap:** extend the policy maps (and/or the Permify schema), or
 move to a project-scoped, database-backed policy table, as each
 additional platform's action vocabulary is onboarded to Gate 2/Gate 3.
+This requires cross-platform coordination on the actual action-type
+strings and role names each platform will send — deciding those
+values here, without that coordination, risks either an
+overly-permissive rule (a real security hole) or a rule that still
+doesn't match what platforms actually send (still broken). Out of
+scope for this documentation pass.
+
+### `enforce_identity` / `enforce_signatures` default to `false` ("soft enforcement")
+
+**Status:** both `CITADEL_CITADEL_ENFORCE_IDENTITY` and
+`CITADEL_CITADEL_ENFORCE_SIGNATURES` default to `false`. In this
+default configuration:
+
+- Gate 1 (AuthN, on the Actor) and Gate 3 (NDS, on the Verifier) still
+  **run** the sinauth bearer-token check and the Ed25519
+  operator/verifier signature check on every Kerkese, and the outcome
+  of each check (pass/fail/absent) is **recorded** in the Decision's
+  `gates[]` array and persisted to the WORM chain — this part is
+  unconditional and not affected by the flags.
+- What the flags control is whether a *failing* identity/signature
+  check actually blocks the decision. With both flags `false` (the
+  shipped default), a missing, invalid, or mismatched `actor_token`/
+  `verifier_token`/`sig_operator`/`sig_verifier` produces a `WARN` in
+  `gates[]`, not a `REFUSE`/`HARD_STOP` — the request proceeds to the
+  remaining gates as if identity/signature had passed.
+- The gates that are genuinely hard, unconditional stops regardless of
+  these flags are: Gate 2's `rbacMap` check (see above), Gate 3's
+  operator≠verifier / different-role-group check (`NDS_SAME_IDENTITY`
+  is a `HARD_STOP` even in soft mode), and Gate 4's three AUGUR rules.
+
+**In practice, today:** because 6 of the 9 wired platforms mostly
+`REFUSE` at Gate 2 before identity/signature enforcement would even
+matter (see the table above), and the 2 platforms that never call
+`evaluate()` (securelab, vertguard) never reach Gate 1/Gate 3 either,
+the soft-enforcement behavior described here is currently most visible
+in cyberpath's certification-revocation flow — the one call that
+clears Gate 2 — where a missing `verifier_token`/`sig_verifier`
+(cyberpath uses a fixed placeholder Verifier with no real second
+approver, same pattern apiguard/openscrub use for their own REFUSEd
+calls — see `cyberpath/docs/citadel-integration.md`) is logged as a
+`WARN` and does not block the revocation.
+
+**Why this matters for a production deployment decision:** a
+deployer evaluating CITADEL by reading only the marketing/architecture
+description ("every action flows through 5 gates") would reasonably
+assume identity and signature checks are enforced. They are not, by
+default, and turning them on today (`enforce_identity=true` and/or
+`enforce_signatures=true`) would immediately `REFUSE` cyberpath's
+certification-revocation flow too — the one governed call that
+currently works — because none of the 9 platforms send a real,
+independently-authenticated second-approver signature yet. See
+[ADR-006](../adrs/006-split-enforce-identity-and-signatures.md) for
+what has to be true (a genuine two-person-rule UI/flow on the producer
+side) before either flag can be safely flipped.
+
+**Roadmap:** flip each flag per-deployment once producer platforms
+implement genuine second-approver flows; no CITADEL-side code change
+required to turn them on, only operational readiness on the caller
+side.
 
 ### AUGUR rule set is small
 

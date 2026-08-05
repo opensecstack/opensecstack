@@ -401,14 +401,44 @@ jobs:
       # publishing a path-only dependency), so vantage-hash has to exist on
       # crates.io first or the Rust SDK's own publish/dry-run can't resolve
       # it.
+      #
+      # BUGFIX: this used to mirror the "dry-run ? --dry-run : real" branch
+      # below verbatim, which looked symmetric but wasn't safe: a `cargo
+      # publish --dry-run` for vantage-hash never actually uploads anything,
+      # so on a run where vantage-hash had never been *really* published
+      # before, the very next step's `cargo publish --dry-run` for sdk/rust
+      # tried to resolve `vantage-hash = "1.0.0"` against the real crates.io
+      # registry and failed with "no matching package named `vantage-hash`
+      # found" — the dry-run pipeline could never get past its own first
+      # real release.
+      #
+      # Fix: check crates.io directly for this exact version first.
+      #   - Already published for real -> nothing to do, dry-run or not;
+      #     sdk/rust can resolve it from the registry as-is.
+      #   - Not published yet -> publish it for real regardless of the
+      #     overall pipeline's dry-run flag. vantage-hash is a stable,
+      #     already-versioned leaf dependency with no meaningful "dry run"
+      #     state that unblocks anything downstream, and crates.io publishes
+      #     are permanent/immutable per-version anyway, so there's nothing
+      #     to "undo" later. This is the one deliberate exception to "dry
+      #     run never publishes" in this workflow.
       - name: Publish vantage-hash
         working-directory: sdk/vantage-hash
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          if [ "${{ needs.resolve-release-mode.outputs.publish }}" != "true" ]; then
-            cargo publish --dry-run
+          VERSION="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
+          echo "vantage-hash local version: ${VERSION}"
+
+          HTTP_STATUS="$(curl -s -o /dev/null -w '%{http_code}' \
+            "https://crates.io/api/v1/crates/vantage-hash/${VERSION}")"
+
+          if [ "${HTTP_STATUS}" = "200" ]; then
+            echo "vantage-hash ${VERSION} is already published on crates.io -- skipping (dry-run or real), sdk/rust will resolve it from the registry."
+          elif [ "${{ needs.resolve-release-mode.outputs.publish }}" = "true" ]; then
+            cargo publish
           else
+            echo "vantage-hash ${VERSION} is not yet on crates.io. Publishing it for real even though this run is otherwise a dry run -- see comment above this step for why that's safe here."
             cargo publish
           fi
 

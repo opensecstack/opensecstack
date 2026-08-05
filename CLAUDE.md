@@ -157,17 +157,22 @@ SDK contracts and governed by CITADEL.
 
 All cross-platform data flows through versioned schemas in the SDK:
 
-| Contract | Format | Producers → Consumers |
-|----------|--------|-----------------------|
-| Scan Result | JSON v1 | APIGuard → IRFlow, ThreatFlow, NIS2 Compass |
-| IOC Bundle | STIX 2.1 v1 | ThreatFlow → OpenScrub, IRFlow, OpenCSIRT |
-| Incident Record | JSON v1 | IRFlow → NIS2 Compass, OpenCSIRT, CITADEL |
-| Compliance Evidence | JSON v1 | NIS2 Compass → CITADEL |
-| CITADEL Kerkese | JSON v2.0 | Any platform → CITADEL (MARSHAL input) |
-| Advisory | CSAF 2.0 v1 | OpenCSIRT → ThreatFlow |
-| Simulation Result | JSON v1 | SecureLab → IRFlow, OpenScrub, ThreatFlow, VertGuard |
-| AI-Attack Detection | JSON v1 | VertGuard → CITADEL, IRFlow, ThreatFlow |
-| Content Provenance | C2PA + JSON v1.3 | VertGuard → CITADEL (WORM evidence) |
+| Contract | Format | Producers → Consumers | Status |
+|----------|--------|-----------------------|--------|
+| CITADEL Kerkese | JSON v2.0 | Any platform → CITADEL (MARSHAL input) | ✅ Implemented, wired live by 6+ platforms |
+| Scan Result | JSON v1 | APIGuard → IRFlow, ThreatFlow, NIS2 Compass | 📋 Target design — `sdk/go` has `Scan`/`Finding` types, but no platform outside the SDK's own examples/tests imports them |
+| IOC Bundle | STIX 2.1 v1 | ThreatFlow → OpenScrub, IRFlow, OpenCSIRT | 📋 Target design — the real, working IOC pipeline between these platforms bypasses the SDK and exchanges STIX 2.1 directly (see `threatflow/internal/stix`); no `IOCBundle` SDK type exists |
+| Incident Record | JSON v1 | IRFlow → NIS2 Compass, OpenCSIRT, CITADEL | 📋 Target design — no `IncidentRecord` type exists under `sdk/` |
+| Compliance Evidence | JSON v1 | NIS2 Compass → CITADEL | 📋 Target design — evidence generation exists (`nis2compass/app/reporters/json_reporter.py`) but is pull-API only; no push and no CITADEL-side ingestion |
+| Advisory | CSAF 2.0 v1 | OpenCSIRT → ThreatFlow | 📋 Target design — `sdk/go` has an `Advisory` type but no consumer imports it |
+| Simulation Result | JSON v1 | SecureLab → IRFlow, OpenScrub, ThreatFlow, VertGuard | 📋 Target design — no `SimulationResult` type exists under `sdk/` |
+| AI-Attack Detection | JSON v1 | VertGuard → CITADEL, IRFlow, ThreatFlow | 📋 Target design — no `AIAttackDetection` type exists under `sdk/` |
+| Content Provenance | C2PA + JSON v1.3 | VertGuard → CITADEL (WORM evidence) | 📋 Target design — no `ContentProvenance` type exists under `sdk/` |
+
+See [docs/v1.0.0-readiness-roadmap.md](docs/v1.0.0-readiness-roadmap.md) for
+the remediation plan — either wire each 📋 contract for real or keep it
+explicitly marked as target design; don't let this table imply more than
+CITADEL Kerkese is actually load-bearing today.
 
 CyberPath's WORM audit events to CITADEL (lesson/quiz completions,
 certification issuance/revocation) already flow through the CITADEL

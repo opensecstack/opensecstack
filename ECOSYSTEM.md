@@ -96,12 +96,19 @@
 
 ## Data Flow Between Platforms
 
+> This diagram shows the intended/target architecture. Not every arrow is
+> wired yet — see [docs/v1.0.0-readiness-roadmap.md](docs/v1.0.0-readiness-roadmap.md)
+> for verified status. Two arrows confirmed to have zero backing code as
+> of the last audit were removed below rather than left to imply they're
+> live: `APIGuard → VertGuard` (no VertGuard reference exists anywhere in
+> apiguard/) and `VertGuard → OpenCSIRT` cross-border coordination (design-stage
+> only — referenced in roadmap/ADR docs, no integration client exists).
+
 ```
 APIGuard scan findings ──────────► IRFlow (auto-create incident on CRITICAL)
                        ──────────► ThreatFlow (IOC extraction from scan targets)
                        ──────────► NIS2 Compass (Art.21 Measure 8 evidence)
                        ──────────► CITADEL (citadel.evidence + citadel.log)
-                       ──────────► VertGuard (AI-detection of synthetic payloads)
 
 ThreatFlow IOCs ─────────────────► OpenScrub (auto-block malicious IPs)
                 ─────────────────► IRFlow (enrich incidents with threat context)
@@ -130,7 +137,6 @@ OpenCSIRT advisories ────────────► ThreatFlow (advisor
 VertGuard AI-threat detection ───► IRFlow (auto-incident on HIGH-confidence detection)
                                ───► ThreatFlow (AI-specific IOC feed)
                                ───► CITADEL (evidence for AI-initiated actions)
-                               ───► OpenCSIRT (cross-border AI attack coordination)
 ```
 
 ## Integration Contracts
@@ -143,19 +149,23 @@ minting their own user credentials. See
 [sinauth/docs/integration/](sinauth/docs/integration/) for the
 per-platform OIDC client setup.
 
-| Contract | Format | Version | Description |
-|----------|--------|---------|-------------|
-| Scan Result | JSON | v1 | APIGuard → IRFlow, ThreatFlow, NIS2 Compass |
-| IOC Bundle | STIX 2.1 | v1 | ThreatFlow → OpenScrub, IRFlow, OpenCSIRT |
-| Incident Record | JSON | v1 | IRFlow → NIS2 Compass, OpenCSIRT, CITADEL |
-| Compliance Evidence | JSON | v1 | NIS2 Compass → CITADEL |
-| CITADEL Kerkese | JSON | v1 | Any platform → CITADEL MARSHAL |
-| Training Record | JSON | v1 | CyberPath → NIS2 Compass, CITADEL |
-| Advisory | CSAF 2.0 | v1 | OpenCSIRT → ThreatFlow |
-| Simulation Result | JSON | v1 | SecureLab → IRFlow, OpenScrub, ThreatFlow |
-| AI-Attack Detection | JSON | v1 | VertGuard → IRFlow, ThreatFlow, OpenCSIRT |
-| Content Provenance | C2PA | 2.0 | VertGuard → CITADEL (as WORM evidence) |
-| Identity (SSO) | OpenID Connect 1.0 | RS256 | sinauth → every platform (ID/access tokens, JWKS) |
+| Contract | Format | Version | Description | Status |
+|----------|--------|---------|-------------|--------|
+| CITADEL Kerkese | JSON | v1 | Any platform → CITADEL MARSHAL | ✅ Implemented, wired live by 6+ platforms |
+| Identity (SSO) | OpenID Connect 1.0 | RS256 | sinauth → every platform (ID/access tokens, JWKS) | ✅ Implemented |
+| Scan Result | JSON | v1 | APIGuard → IRFlow, ThreatFlow, NIS2 Compass | 📋 Target design, not yet wired — see [CLAUDE.md](CLAUDE.md#sdk-contracts-the-only-sanctioned-integration-path) |
+| IOC Bundle | STIX 2.1 | v1 | ThreatFlow → OpenScrub, IRFlow, OpenCSIRT | 📋 Target design — the real IOC pipeline exchanges STIX 2.1 directly, bypassing this SDK contract entirely |
+| Incident Record | JSON | v1 | IRFlow → NIS2 Compass, OpenCSIRT, CITADEL | 📋 Target design, not yet wired |
+| Compliance Evidence | JSON | v1 | NIS2 Compass → CITADEL | 📋 Target design — evidence generation exists but is pull-only, no push/ingestion |
+| Advisory | CSAF 2.0 | v1 | OpenCSIRT → ThreatFlow | 📋 Target design, not yet wired |
+| Simulation Result | JSON | v1 | SecureLab → IRFlow, OpenScrub, ThreatFlow | 📋 Target design, not yet wired |
+| AI-Attack Detection | JSON | v1 | VertGuard → IRFlow, ThreatFlow, OpenCSIRT | 📋 Target design, not yet wired |
+| Content Provenance | C2PA | 2.0 | VertGuard → CITADEL (as WORM evidence) | 📋 Target design, not yet wired |
+
+There is no separate "Training Record" contract — CyberPath's WORM audit
+events already flow through CITADEL Kerkese above (see CLAUDE.md for why
+an earlier version of this table's `Training Record` row was removed
+rather than implemented).
 
 All cross-platform webhooks are HMAC-SHA256 signed with a ±5-minute replay window and per-source secrets. See [IRFlow webhook spec](irflow/docs/webhook-spec.md) for the canonical wire format.
 

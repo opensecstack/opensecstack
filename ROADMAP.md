@@ -16,12 +16,12 @@
 | **IRFlow** | Graph-based playbook executor, HMAC-signed webhooks (APIGuard/CITADEL/ThreatFlow), JWT + RBAC with 5 roles, CITADEL MARSHAL + WORM integration, NIS2 Article 23 async notification, Prometheus metrics, real-DB integration tests |
 | **ThreatFlow** | IOC aggregation (MISP, AlienVault OTX, VirusTotal), MITRE ATT&CK mapping (19 techniques + 16 auto-rules), TAXII feed, STIX integration, CITADEL + IRFlow webhooks |
 | **opensecstack/sdk** | Go + Python + TypeScript + Rust typed clients, event schemas, OpenAPI contracts, Argon2id + pepper password hashing module |
-| **OpenScrub** | XDP/eBPF DDoS mitigation (XDP blocklist, GoBGP blackhole, ThreatFlow IOC auto-block, CITADEL evidence emitter), Rust + Aya + Go, v1.0.0 |
+| **OpenScrub** | XDP/eBPF DDoS mitigation (XDP blocklist, rate-limiting, SYN-cookie mitigation, ThreatFlow IOC auto-block, CITADEL evidence emitter), Rust + Aya + Go, v1.0.0 — GoBGP blackhole routing not yet implemented, see Phase 2 below |
 | **CyberPath** | Security training platform, Docker/Wasm labs, NIS2 Art.21(2)(g) completion records to CITADEL WORM, Go + React + Rust, v1.0.0 |
 | **OpenCSIRT** | CSIRT operations — constituency lifecycle, CSAF 2.0 advisory authoring, incident coordination with IRFlow, CITADEL WORM emission, peer-CSIRT federation, Go + Python, v1.0.0 |
-| **VertGuard** | AI-attack defence — prompt injection (OWASP LLM Top 10), C2PA media authenticity (Rust c2pa-rs), AI threat feed (MITRE ATLAS), deepfake video/voice detection, Python ML (HuggingFace sklearn), Zoom/Teams/WebEx plugin scaffolding, 28 API endpoints, NIS3-ready security audit, Go + Rust + Python, v1.0.0 |
+| **VertGuard** | AI-attack defence — prompt injection (OWASP LLM Top 10), C2PA media authenticity (Rust c2pa-rs), AI threat feed (MITRE ATLAS), Zoom/Teams/WebEx meeting integrations, 28 API endpoints, NIS3-ready security audit, Go + Rust + Python, v1.0.0 — deepfake video/voice detection is a heuristic sub-check today, not a real detector; real-time video call analysis is not implemented |
 | **SecureLab** | Attack simulation, MITRE ATT&CK coverage mapping, detection validation against APIGuard/OpenScrub/ThreatFlow/VertGuard, Python + Rust + Go, v1.0.0 |
-| **SIN Community** | Developer knowledge hub — posts, comments, tags, full-text search (Meilisearch), notifications, TOTP 2FA, API keys, series, spaces, Go + React + TypeScript + PostgreSQL, v1.0.0 |
+| **SIN Community** | Developer knowledge hub — posts, comments, tags, full-text search (Meilisearch, with a PostgreSQL tsvector fallback), notifications, API keys, series, spaces, Go + React + TypeScript + PostgreSQL, v1.0.0 — TOTP 2FA has a DB schema but no implementation yet |
 
 ---
 

@@ -1,5 +1,9 @@
 # Forge Integration
 
+> **Not yet implemented.** No forge-related code (PR comment posting,
+> commit status checks, spec auto-discovery, forge config keys) exists
+> anywhere in `apiguard/`. This document describes target design.
+
 Forge is the APIGuard integration layer for source code forges — GitHub, GitLab, Bitbucket, and Azure DevOps. It enables automatic API security scanning on pull requests and branch deployments.
 
 ---

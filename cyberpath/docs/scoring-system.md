@@ -60,11 +60,17 @@ Key functions:
 - `GenerateDynamicFlags(ctx, sessionID, userID, flags)`: Called at session start for dynamic flags. Writes expected values to `flag_submissions` with `captured_at = NULL`.
 - `GetSessionScore(ctx, sessionID)`: Returns current score, max possible score, and per-objective completion state.
 
-## Leaderboard Integration
+## Leaderboard Integration — not yet implemented
+
+This section describes a planned design, not shipped functionality: there
+is no `leaderboard` table, no service subscribing to `lab.score_updated`,
+and no `internal/labs/scoring.go`. Session scores are computed and stored
+(see above), but nothing yet aggregates or ranks them. The intended
+design, once built:
 
 The leaderboard service subscribes to `lab.score_updated` events. It maintains a `leaderboard` table indexed by path and module. Points from practical assessments (via `internal/assessment/`) are also included. The leaderboard is read-only from the scoring engine's perspective.
 
-Leaderboard rankings are computed as:
+Leaderboard rankings would be computed as:
 
 ```
 total_score = sum(lab session scores) + sum(assessment scores)

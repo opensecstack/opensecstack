@@ -103,6 +103,10 @@ Note that even with `require_approval` enabled, `SigOperator`/`SigVerifier` (Ed2
 
 ## NIS2 Compass Integration
 
+> **Not yet implemented.** No `nis2compass` client, config key, or
+> outbound call exists anywhere in `apiguard/`. Everything below is
+> target design.
+
 APIGuard scan results become compliance evidence for NIS2 Article 21(2)(e) — vulnerability handling and disclosure.
 
 ### Configuration
@@ -149,6 +153,9 @@ NIS2 Compass stores this as an evidence artifact linked to the configured `org_i
 
 ## IRFlow Integration
 
+> **Not yet implemented.** No `irflow` client or auto-incident code exists
+> anywhere in `apiguard/`. Everything below is target design.
+
 CRITICAL findings trigger automatic incident creation in IRFlow.
 
 ### Configuration
@@ -187,6 +194,9 @@ integrations:
 ---
 
 ## ThreatFlow Integration
+
+> **Not yet implemented.** No `threatflow` client exists anywhere in
+> `apiguard/`. Everything below is target design.
 
 APIGuard findings contribute context to ThreatFlow's threat intelligence feeds. HIGH and CRITICAL findings on publicly exposed APIs are submitted as structured indicators.
 
@@ -252,6 +262,10 @@ findings = client.list_findings(scan_id=scan["id"])
 ---
 
 ## Webhook Event Reference
+
+> **Not yet implemented.** apiguard's webhook handling today is
+> inbound-only (receiving CITADEL webhooks) — no outbound event emitter
+> exists for any of the events below.
 
 All webhooks include an `X-APIGuard-Signature` header containing `hmac-sha256=<hex>`. Compute the HMAC using the `api_key` as the secret and the raw request body as the message.
 

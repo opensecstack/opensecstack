@@ -7,7 +7,7 @@
 | OpenAPI | 3.0.x | *.yaml, *.yml, *.json | Full support. Reference resolution ($ref) included. |
 | OpenAPI | 3.1.x | *.yaml, *.yml, *.json | Full support. JSON Schema alignment handled. |
 | Swagger | 2.0 | *.yaml, *.yml, *.json | Supported. Auto-converted to OpenAPI 3.x IR internally. |
-| GraphQL | Any | *.graphql, *.gql | Schema introspection supported. Query/mutation extraction. |
+| GraphQL | Any | *.graphql, *.gql | **Planned, not implemented** — no `graphql.rs` parser exists yet (matches README.md's own "GraphQL planned" note). |
 | Postman Collection | 2.1 | *.json | Experimental. Converted to OpenAPI IR. Some features unsupported. |
 | URL | — | https:// | Fetch from URL with configurable timeout and auth. |
 

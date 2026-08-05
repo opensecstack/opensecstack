@@ -2,6 +2,16 @@
 
 The SDK defines typed contracts for data exchanged between opensecstack platforms. These contracts ensure that data produced by one platform (e.g. APIGuard) can be consumed by another (e.g. NIS2Compass) without custom transformation code.
 
+> **Current status:** the types below (`Scan`/`Finding`, `Advisory`,
+> `Assessment`, `NIS2AuditEntry`, `AuditEntry` — some named slightly
+> differently here than in `sdk/go`) do exist in `sdk/go/opensecstack`.
+> What doesn't exist yet is the *contract* itself: as of the last audit,
+> no platform outside the SDK's own examples/tests actually imports and
+> uses these types for real cross-platform data exchange. Treat this
+> document as the target design, not a description of live traffic. The
+> one exception is **CITADEL Kerkese**, which is genuinely wired live —
+> see [CLAUDE.md](../../CLAUDE.md#sdk-contracts-the-only-sanctioned-integration-path).
+
 ---
 
 ## Contract Overview

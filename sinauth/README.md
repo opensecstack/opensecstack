@@ -10,8 +10,11 @@ sinauth is what [Porta](https://porta.gjirafa.tech) is for Gjirafa and [Auth0](h
 - Issues RS256-signed ID tokens and access tokens
 - Standards: OAuth 2.0 + OpenID Connect Core 1.0
 - Social login: Google, GitHub
-- MFA: TOTP (authenticator apps)
 - Admin dashboard for managing OAuth clients (platforms)
+
+> **Not yet implemented:** TOTP MFA has a database migration
+> (`007_totp.sql`) but no verify endpoint or enrollment flow — don't rely
+> on it as a real second factor yet.
 
 ## Quick start
 

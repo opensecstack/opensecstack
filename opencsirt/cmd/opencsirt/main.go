@@ -106,6 +106,16 @@ func main() {
 	var marshalClient *sdkcitadel.Client
 	if cfg.CitadelAPIURL != "" {
 		marshalClient = sdkcitadel.NewClient(cfg.CitadelAPIURL, nil)
+	} else {
+		// This was previously a silent gap: incident closure and advisory
+		// publication skip MARSHAL evaluation entirely whenever
+		// marshalClient is nil, with no indication anywhere that
+		// governance is off. Standalone deployments without CITADEL are a
+		// legitimate configuration, but the gap needs to be loud, not
+		// silent — CLAUDE.md treats a silently-skipped audit path as a
+		// defect regardless of whether it was configured that way on
+		// purpose.
+		logger.Warn().Msg("CITADEL_API_URL not set — incident closure and advisory publication will NOT be MARSHAL-evaluated (governance disabled)")
 	}
 
 	if outboxStore != nil {

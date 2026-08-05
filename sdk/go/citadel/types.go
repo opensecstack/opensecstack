@@ -124,3 +124,10 @@ const (
 	OutcomeRefuse   = "REFUSE"
 	OutcomeHardStop = "HARD_STOP"
 )
+
+// Allowed reports whether d permits the requested action to proceed. Only
+// OutcomeExecute does; a nil Decision (should not happen — Evaluate always
+// returns one) is treated as not allowed.
+func (d *Decision) Allowed() bool {
+	return d != nil && d.Outcome == OutcomeExecute
+}

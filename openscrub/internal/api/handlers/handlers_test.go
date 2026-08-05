@@ -252,10 +252,12 @@ func TestRulesCreateBlockedOnHardStop(t *testing.T) {
 	}
 }
 
-// TestRulesCreateFailsOpenOnCitadelUnreachable: a CITADEL outage must
-// not take down mitigation rule creation — matches the documented
-// fail-open posture (mirrors apiguard's scans.go pattern).
-func TestRulesCreateFailsOpenOnCitadelUnreachable(t *testing.T) {
+// TestRulesCreateFailsClosedOnCitadelUnreachable: a CITADEL outage must
+// block mitigation rule creation by default — sdk/go/citadel.Client now
+// synthesizes a HARD_STOP Decision (FailMode = FailClosed, the zero
+// value) when it can't be reached, rather than the caller silently
+// treating "couldn't evaluate" as "allowed."
+func TestRulesCreateFailsClosedOnCitadelUnreachable(t *testing.T) {
 	gov := &fakeGovernor{err: errors.New("dial tcp: connection refused")}
 	h, svc := newRulesHandlerForGovernanceTest(gov)
 
@@ -265,12 +267,12 @@ func TestRulesCreateFailsOpenOnCitadelUnreachable(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	h.Create(rec, req)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("expected fail-open 201, got %d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected fail-closed 403, got %d body=%s", rec.Code, rec.Body.String())
 	}
 	list, _ := svc.List(context.Background(), "", 10, 0)
-	if len(list) != 1 {
-		t.Fatalf("expected rule installed on CITADEL-unreachable fail-open, got %d", len(list))
+	if len(list) != 0 {
+		t.Fatalf("expected no rule installed when CITADEL is unreachable (fail-closed), got %d", len(list))
 	}
 }
 

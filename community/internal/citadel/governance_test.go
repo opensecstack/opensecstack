@@ -164,19 +164,23 @@ func TestEvaluateDeletion_MissingReasonsGetsDefaultMessage(t *testing.T) {
 	}
 }
 
-// TestEvaluateDeletion_TransportErrorFailsOpen mirrors apiguard's existing
-// CITADEL governance check behavior (scans.go: "proceeding with scan" on
-// evalErr != nil) — an unreachable CITADEL must not itself become a
-// GDPR-deadline-missing outage. The caller is expected to log err.
-func TestEvaluateDeletion_TransportErrorFailsOpen(t *testing.T) {
+// TestEvaluateDeletion_TransportErrorFailsClosed: an unreachable CITADEL
+// must block a GDPR deletion by default, not let it proceed ungoverned.
+// sdk/go/citadel.Client synthesizes a HARD_STOP Decision (FailMode =
+// FailClosed, the zero value) when it can't be reached. err is still
+// returned so the caller can log it even though proceed is false.
+func TestEvaluateDeletion_TransportErrorFailsClosed(t *testing.T) {
 	gov := NewGovernanceClient("http://127.0.0.1:0") // nothing listening
 	k := DeletionKerkese("community-0", uuid.New(), "actor", "verifier")
 
-	proceed, _, err := gov.EvaluateDeletion(context.Background(), k)
+	proceed, reasons, err := gov.EvaluateDeletion(context.Background(), k)
 	if err == nil {
 		t.Fatal("expected a transport error")
 	}
-	if !proceed {
-		t.Error("expected fail-open (proceed=true) on a transport error, got proceed=false")
+	if proceed {
+		t.Error("expected fail-closed (proceed=false) on a transport error, got proceed=true")
+	}
+	if len(reasons) == 0 {
+		t.Error("expected a human-readable reason even for a fail-closed synthetic decision")
 	}
 }

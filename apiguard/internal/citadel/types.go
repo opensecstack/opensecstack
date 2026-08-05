@@ -103,6 +103,12 @@ const (
 	OutcomeHardStop = "HARD_STOP"
 )
 
+// Allowed reports whether d permits the requested action to proceed. Only
+// OutcomeExecute does; a nil Decision is treated as not allowed.
+func (d *Decision) Allowed() bool {
+	return d != nil && d.Outcome == OutcomeExecute
+}
+
 // VerifyResult is the response from CITADEL's chain verification endpoint.
 type VerifyResult struct {
 	Valid           bool   `json:"valid"`

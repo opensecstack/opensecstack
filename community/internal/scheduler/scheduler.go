@@ -112,7 +112,7 @@ func processDeletions(ctx context.Context, pool *pgxpool.Pool, cit *citadel.Clie
 		k := citadel.DeletionKerkese(cfg.Node, reqUUID, actorID, verifierID)
 		proceed, reasons, evalErr := gov.EvaluateDeletion(ctx, k)
 		if evalErr != nil {
-			slog.Warn("scheduler: CITADEL marshal evaluate failed for GDPR deletion — proceeding (fail-open)",
+			slog.Warn("scheduler: CITADEL marshal evaluate failed for GDPR deletion — applying configured fail-mode",
 				"user_id", d.userID, "request_id", d.reqID, "err", evalErr)
 		}
 		if !proceed {

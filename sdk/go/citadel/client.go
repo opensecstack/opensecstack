@@ -11,15 +11,46 @@ import (
 	"time"
 )
 
+// FailMode controls what Decision Evaluate synthesizes when CITADEL itself
+// cannot be reached or returns an unparseable response — i.e. when
+// governance cannot be evaluated at all, as distinct from CITADEL
+// evaluating the request and returning REFUSE/HARD_STOP.
+//
+// Every producer platform's own citadel client independently defaulted to
+// treating "MARSHAL unreachable" as "proceed anyway" (an implicit,
+// unexamined fail-open), which CLAUDE.md's governance standard calls a
+// defect ("code that... silently fails the audit path is a defect,
+// regardless of whether tests pass"). FailClosed is the zero value so any
+// caller that doesn't set this explicitly gets the safe behavior.
+type FailMode int
+
+const (
+	// FailClosed treats an unreachable CITADEL as HARD_STOP — the
+	// privileged action is blocked. Safe default; the zero value.
+	FailClosed FailMode = iota
+	// FailOpen treats an unreachable CITADEL as EXECUTE — the privileged
+	// action proceeds without governance. Only set this deliberately, for
+	// actions where availability outweighs governance, and record why at
+	// the call site.
+	FailOpen
+)
+
 // Client submits Kerkese governance requests to a CITADEL instance's MARSHAL
 // engine and registers Ed25519 signing keys.
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
+
+	// FailMode governs Evaluate's behavior when CITADEL is unreachable.
+	// Defaults to FailClosed (the zero value) — set explicitly to FailOpen
+	// only with a documented reason.
+	FailMode FailMode
 }
 
 // NewClient creates a Client for the CITADEL instance at baseURL (no
 // trailing slash required). A nil httpClient defaults to a 30s timeout.
+// FailMode defaults to FailClosed; set the returned Client's FailMode
+// field to override.
 func NewClient(baseURL string, httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 30 * time.Second}
@@ -40,7 +71,24 @@ func (c *Client) url(path string) string {
 // well-formed Decision, not a transport error, and callers need
 // Decision.Reasons to surface why an action was blocked. Only a response
 // body that fails to parse as a Decision at all is treated as an error.
+//
+// Evaluate ALWAYS returns a non-nil Decision, even on error: when CITADEL
+// itself is unreachable (network failure, malformed response), the
+// returned Decision is synthesized per c.FailMode (HARD_STOP by default)
+// rather than left nil, so a caller that checks decision.Allowed() without
+// also branching on err still gets the safe behavior. err is still
+// returned for logging/observability — callers that want to alert on
+// "governance couldn't be evaluated" separately from "governance refused
+// it" should check err, not just Allowed().
 func (c *Client) Evaluate(ctx context.Context, k Kerkese) (*Decision, error) {
+	decision, err := c.evaluate(ctx, k)
+	if err != nil {
+		return c.failModeDecision(k, err), err
+	}
+	return decision, nil
+}
+
+func (c *Client) evaluate(ctx context.Context, k Kerkese) (*Decision, error) {
 	body, err := json.Marshal(k)
 	if err != nil {
 		return nil, fmt.Errorf("citadel: Evaluate: marshalling Kerkese: %w", err)
@@ -76,6 +124,23 @@ func (c *Client) Evaluate(ctx context.Context, k Kerkese) (*Decision, error) {
 		return nil, fmt.Errorf("citadel: Evaluate: HTTP %d: %s", resp.StatusCode, string(raw))
 	}
 	return &decision, nil
+}
+
+// failModeDecision synthesizes the Decision Evaluate returns alongside a
+// non-nil error, per c.FailMode.
+func (c *Client) failModeDecision(k Kerkese, cause error) *Decision {
+	outcome := OutcomeHardStop
+	reason := fmt.Sprintf("citadel: MARSHAL unreachable, failing closed (HARD_STOP): %v", cause)
+	if c.FailMode == FailOpen {
+		outcome = OutcomeExecute
+		reason = fmt.Sprintf("citadel: MARSHAL unreachable, failing open (EXECUTE) per configured FailMode: %v", cause)
+	}
+	return &Decision{
+		Outcome:     outcome,
+		ExecutionID: k.ExecutionID,
+		Reasons:     []string{reason},
+		TsUTC:       time.Now().UTC(),
+	}
 }
 
 // KeyRegistration is the body sent to POST /api/v1/keys/register.

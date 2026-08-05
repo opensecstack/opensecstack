@@ -73,6 +73,62 @@ func TestEvaluate_ServerErrorWithoutDecisionBodyIsAnError(t *testing.T) {
 	}
 }
 
+func TestEvaluate_UnreachableDefaultsToFailClosed(t *testing.T) {
+	// Port 1 is reserved and nothing listens there — a reliable, fast way
+	// to force a transport failure without a flaky timeout-based test.
+	c := NewClient("http://127.0.0.1:1", nil)
+	decision, err := c.Evaluate(context.Background(), Kerkese{})
+	if err == nil {
+		t.Fatal("expected a transport error for an unreachable CITADEL")
+	}
+	if decision == nil {
+		t.Fatal("Evaluate must return a non-nil Decision even on transport failure")
+	}
+	if decision.Outcome != OutcomeHardStop {
+		t.Errorf("Outcome = %q, want %q (FailClosed is the zero-value default)", decision.Outcome, OutcomeHardStop)
+	}
+	if decision.Allowed() {
+		t.Error("a fail-closed synthetic Decision must not be Allowed()")
+	}
+}
+
+func TestEvaluate_FailOpenReturnsExecuteOnUnreachable(t *testing.T) {
+	c := NewClient("http://127.0.0.1:1", nil)
+	c.FailMode = FailOpen
+	decision, err := c.Evaluate(context.Background(), Kerkese{})
+	if err == nil {
+		t.Fatal("expected a transport error for an unreachable CITADEL")
+	}
+	if decision == nil || decision.Outcome != OutcomeExecute {
+		t.Errorf("Outcome = %v, want %q with FailMode = FailOpen", decision, OutcomeExecute)
+	}
+	if !decision.Allowed() {
+		t.Error("a fail-open synthetic Decision must be Allowed()")
+	}
+}
+
+func TestDecision_Allowed(t *testing.T) {
+	cases := []struct {
+		outcome string
+		want    bool
+	}{
+		{OutcomeExecute, true},
+		{OutcomeRefuse, false},
+		{OutcomeHardStop, false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		d := &Decision{Outcome: tc.outcome}
+		if got := d.Allowed(); got != tc.want {
+			t.Errorf("Decision{Outcome: %q}.Allowed() = %v, want %v", tc.outcome, got, tc.want)
+		}
+	}
+	var nilDecision *Decision
+	if nilDecision.Allowed() {
+		t.Error("a nil Decision must not be Allowed()")
+	}
+}
+
 func TestEvaluate_ExecuteReturnsDecision(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

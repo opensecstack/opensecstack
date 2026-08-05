@@ -271,13 +271,22 @@ func (h *Rules) Create(w http.ResponseWriter, r *http.Request) {
 
 		decision, evalErr := h.Citadel.Evaluate(r.Context(), k)
 		if evalErr != nil {
-			// Fail open, matching apiguard's documented pattern: a
-			// CITADEL outage must not take down mitigation rule
-			// creation. Logged loudly so ops can see MARSHAL is
-			// unreachable.
-			h.Logger.Warn().Err(evalErr).Msg("CITADEL marshal evaluate failed — proceeding with rule insertion")
-		} else if decision != nil && (decision.Outcome == sdkcitadel.OutcomeRefuse || decision.Outcome == sdkcitadel.OutcomeHardStop) {
-			reasons := decision.Reasons
+			// Evaluate always returns a non-nil Decision even on
+			// transport failure, synthesized per h.Citadel's FailMode
+			// (fail-closed / HARD_STOP by default — see
+			// sdk/go/citadel.FailMode). Logged loudly so ops can see
+			// MARSHAL is unreachable; decision.Allowed() below still
+			// governs whether the rule insertion proceeds.
+			h.Logger.Warn().Err(evalErr).Msg("CITADEL marshal evaluate failed — applying configured fail-mode")
+		}
+		if !decision.Allowed() {
+			// decision is only nil if a Citadel implementation violates
+			// its contract (the real sdk/go/citadel.Client never returns
+			// a nil Decision) — guard it anyway.
+			var reasons []string
+			if decision != nil {
+				reasons = decision.Reasons
+			}
 			if len(reasons) == 0 {
 				reasons = []string{"CITADEL governance check rejected this rule insertion"}
 			}

@@ -291,7 +291,7 @@ WHERE dr.id=$1`, id,
 			k := citadel.DeletionKerkese(d.Cfg.Node, reqUUID, actorID, verifierID)
 			proceed, reasons, evalErr := d.Marshal.EvaluateDeletion(r.Context(), k)
 			if evalErr != nil {
-				slog.Warn("admin process deletion: CITADEL marshal evaluate failed — proceeding (fail-open)",
+				slog.Warn("admin process deletion: CITADEL marshal evaluate failed — applying configured fail-mode",
 					"user_id", userID, "request_id", id, "err", evalErr)
 			}
 			if !proceed {

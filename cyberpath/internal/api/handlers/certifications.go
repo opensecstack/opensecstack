@@ -383,12 +383,23 @@ func (h *CertificationsHandler) checkRevokeGovernance(r *http.Request, certID uu
 
 	decision, err := h.Marshal.Evaluate(r.Context(), k)
 	if err != nil {
+		// Evaluate always returns a non-nil Decision even on transport
+		// failure, synthesized per h.Marshal's FailMode (fail-closed /
+		// HARD_STOP by default — see sdk/go/citadel.FailMode). Logged
+		// loudly so ops can see MARSHAL is unreachable; the
+		// decision.Allowed() check below still governs the outcome.
 		h.log().Warn().Err(err).Str("cert_id", certID.String()).
-			Msg("certifications.revoke: CITADEL marshal evaluate failed — proceeding (fail-open, matches apiguard's scan-initiation pattern)")
-		return false, ""
+			Msg("certifications.revoke: CITADEL marshal evaluate failed — applying configured fail-mode")
 	}
-	if decision != nil && (decision.Outcome == sdkcitadel.OutcomeRefuse || decision.Outcome == sdkcitadel.OutcomeHardStop) {
-		reasons := decision.Reasons
+	if !decision.Allowed() {
+		// decision is only nil if a MarshalEvaluator implementation
+		// violates its contract (the real sdk/go/citadel.Client never
+		// returns a nil Decision) — guard it anyway rather than trust
+		// every implementation.
+		var reasons []string
+		if decision != nil {
+			reasons = decision.Reasons
+		}
 		if len(reasons) == 0 {
 			reasons = []string{"CITADEL governance check rejected this certification revocation"}
 		}

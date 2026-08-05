@@ -3,9 +3,6 @@ package citadel
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -100,67 +97,29 @@ func DeletionKerkese(projectID string, deletionRequestID uuid.UUID, actorUserID,
 // human-readable reasons) — this is the one outcome callers must never
 // paper over, since it gates an irreversible destructive action.
 //
-// A transport/availability error fails OPEN (proceed=true, err set) —
-// mirroring apiguard's existing CITADEL governance check (apiguard/
-// internal/api/handlers/scans.go's "CITADEL governance check": "proceeding
-// with scan" on evalErr != nil) so an unreachable CITADEL does not itself
-// become a GDPR-deadline-missing outage. Callers must log err even though
-// they proceed.
+// A transport/availability error fails CLOSED (proceed=false) by default:
+// sdk/go/citadel.Client.Evaluate always returns a non-nil Decision, even
+// on transport failure, synthesized per the client's FailMode (HARD_STOP
+// unless the client is explicitly configured FailOpen — see
+// sdk/go/citadel.FailMode). err is still returned for logging even when
+// proceed ends up true, so callers can tell "CITADEL refused" apart from
+// "CITADEL couldn't be reached" in their logs.
+//
+// Earlier versions of this method worked around a since-fixed bug in the
+// shared SDK client (Evaluate used to discard the parsed Decision for any
+// HTTP >= 400 response, including well-formed REFUSE/HARD_STOP decisions,
+// which both use HTTP 403 — see sdk/go/citadel's
+// TestEvaluate_RefuseReturnsDecisionNotError regression test). That
+// recovery workaround is gone; Evaluate returns the real Decision for
+// those outcomes directly now.
 func (g *GovernanceClient) EvaluateDeletion(ctx context.Context, k sdkcitadel.Kerkese) (proceed bool, reasons []string, err error) {
 	decision, evalErr := g.sdk.Evaluate(ctx, k)
-	if evalErr != nil {
-		// sdk/go/citadel.Client.Evaluate treats any CITADEL response with
-		// HTTP status >= 400 as a transport error and discards the parsed
-		// Decision — but MARSHAL returns HTTP 403 for BOTH REFUSE and
-		// HARD_STOP outcomes (see citadel/internal/api/handlers/marshal.go),
-		// not just for genuine failures. Blindly failing open on every
-		// evalErr != nil would therefore silently let a REFUSE/HARD_STOP
-		// through — exactly the GDPR violation risk this gate exists to
-		// prevent. So a 403 carrying a real decision is recovered here by
-		// parsing it back out of the SDK error's embedded response body
-		// (client.go: `fmt.Errorf("citadel: Evaluate: HTTP %d: %s", ...)`)
-		// before falling through to fail-open for genuine transport errors.
-		// This is a workaround for a gap in the shared SDK client — sdk/
-		// go/citadel is off-limits for this task, so it cannot be fixed at
-		// the source — not a design choice made freely.
-		if dec, ok := decisionFromEvaluateError(evalErr); ok {
-			if dec.Outcome == sdkcitadel.OutcomeRefuse || dec.Outcome == sdkcitadel.OutcomeHardStop {
-				blockReasons := dec.Reasons
-				if len(blockReasons) == 0 {
-					blockReasons = []string{"CITADEL governance check rejected this deletion"}
-				}
-				return false, blockReasons, nil
-			}
-			return true, nil, nil
-		}
-		return true, nil, fmt.Errorf("citadel marshal evaluate: %w", evalErr)
-	}
-	if decision.Outcome == sdkcitadel.OutcomeRefuse || decision.Outcome == sdkcitadel.OutcomeHardStop {
+	if !decision.Allowed() {
 		blockReasons := decision.Reasons
 		if len(blockReasons) == 0 {
 			blockReasons = []string{"CITADEL governance check rejected this deletion"}
 		}
-		return false, blockReasons, nil
+		return false, blockReasons, evalErr
 	}
-	return true, nil, nil
-}
-
-// decisionFromEvaluateError attempts to recover the Decision JSON embedded
-// in an error returned by sdk/go/citadel.Client.Evaluate for an HTTP >= 400
-// response. Returns ok=false if err does not match that shape (e.g. a
-// genuine connection failure, which never reaches HTTP status parsing).
-func decisionFromEvaluateError(err error) (dec sdkcitadel.Decision, ok bool) {
-	msg := err.Error()
-	_, afterStatus, found := strings.Cut(msg, ": HTTP ")
-	if !found {
-		return sdkcitadel.Decision{}, false
-	}
-	_, body, found := strings.Cut(afterStatus, ": ")
-	if !found {
-		return sdkcitadel.Decision{}, false
-	}
-	if jsonErr := json.Unmarshal([]byte(body), &dec); jsonErr != nil || dec.Outcome == "" {
-		return sdkcitadel.Decision{}, false
-	}
-	return dec, true
+	return true, nil, evalErr
 }

@@ -45,8 +45,11 @@ type DatabaseConfig struct {
 
 // CitadelConfig holds CITADEL governance integration settings. FailClosed
 // toggles whether a MARSHAL check refuses the mutation when CITADEL is
-// unreachable (true) or allows it (false). Defaults to fail-open so dev
-// environments keep working without the governance service running.
+// unreachable (true) or allows it (false). Defaults to fail-closed (safe)
+// — set citadel.fail_closed=false explicitly to opt into the permissive
+// behavior (e.g. a dev environment without the governance service
+// running). This only matters when citadel.api_url is set at all; with
+// no CITADEL configured, the client is a no-op regardless.
 type CitadelConfig struct {
 	APIURL     string
 	KeyID      string
@@ -98,7 +101,7 @@ func setDefaults() {
 	viper.SetDefault("db.max_idle_conns", 5)
 	viper.SetDefault("citadel.api_url", "")
 	viper.SetDefault("citadel.project_id", "threatflow")
-	viper.SetDefault("citadel.fail_closed", false)
+	viper.SetDefault("citadel.fail_closed", true)
 	viper.SetDefault("auth.jwt_secret", "")
 	viper.SetDefault("auth.ttl_minutes", 60)
 	viper.SetDefault("auth.bootstrap_keys", []string{})

@@ -18,6 +18,23 @@ import (
 	"time"
 )
 
+// FailMode decides what EvaluateScan returns when CITADEL itself cannot be
+// reached or returns an unparseable response — i.e. when governance can't
+// be evaluated at all, as distinct from CITADEL evaluating the request and
+// returning REFUSE/HARD_STOP. FailClosed (the zero value) is the safe
+// default: an unreachable CITADEL blocks the scan rather than letting it
+// proceed ungoverned.
+type FailMode int
+
+const (
+	// FailClosed treats an unreachable CITADEL as HARD_STOP. Safe
+	// default; the zero value.
+	FailClosed FailMode = iota
+	// FailOpen treats an unreachable CITADEL as EXECUTE. Only set this
+	// deliberately, and document why at the call site.
+	FailOpen
+)
+
 // Client connects to CITADEL using HMAC-SHA256 connector auth.
 // When baseURL is empty every method is a no-op so apiguard runs
 // normally when CITADEL is not configured.
@@ -30,6 +47,10 @@ type Client struct {
 	sem           chan struct{} // bounded concurrency for LogEvent goroutines
 	maxRetries    int           // maximum retry attempts on 5xx / network errors (default 3)
 	retryWaitBase time.Duration // base wait for exponential backoff (default 500ms)
+
+	// FailMode governs EvaluateScan's behavior when CITADEL is
+	// unreachable. Defaults to FailClosed (the zero value).
+	FailMode FailMode
 
 	// Chain anchor verification state
 	mu            sync.Mutex // protects lastChainHash
@@ -66,12 +87,32 @@ func New(baseURL, keyID, secret string) *Client {
 }
 
 // EvaluateScan calls POST /api/v1/marshal/evaluate and returns CITADEL's
-// governance Decision. The caller must block on REFUSE or HARD_STOP outcomes.
-// Returns (nil, nil) when the client is disabled (empty baseURL).
+// governance Decision. The caller must block on REFUSE or HARD_STOP
+// outcomes — decision.Allowed() is the correct way to check this.
+// Returns (nil, nil) when the client is disabled (empty baseURL) — callers
+// must treat that as "no governance configured", not as an error.
+//
+// CITADEL returns HTTP 403 for REFUSE and HARD_STOP outcomes — that is a
+// well-formed Decision, not a transport error; only a response body that
+// fails to parse as a Decision at all is treated as an error. This always
+// returns a non-nil Decision alongside a non-nil error too (except when
+// the client is disabled): on transport failure, the returned Decision is
+// synthesized per c.FailMode (HARD_STOP by default), so a caller checking
+// decision.Allowed() without also branching on err still gets the safe
+// behavior. Check err separately to log/alert on "couldn't evaluate" vs.
+// "evaluated and refused."
 func (c *Client) EvaluateScan(ctx context.Context, k *Kerkese) (*Decision, error) {
 	if c == nil || c.baseURL == "" {
 		return nil, nil
 	}
+	decision, err := c.evaluateScan(ctx, k)
+	if err != nil {
+		return c.failModeDecision(k, err), err
+	}
+	return decision, nil
+}
+
+func (c *Client) evaluateScan(ctx context.Context, k *Kerkese) (*Decision, error) {
 	body, err := json.Marshal(k)
 	if err != nil {
 		return nil, fmt.Errorf("citadel: marshal kerkese: %w", err)
@@ -83,14 +124,43 @@ func (c *Client) EvaluateScan(ctx context.Context, k *Kerkese) (*Decision, error
 	defer resp.Body.Close()
 	defer func() { _, _ = io.Copy(io.Discard, resp.Body) }()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("citadel: POST /api/v1/marshal/evaluate returned status %d", resp.StatusCode)
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("citadel: read decision response: %w", err)
 	}
+
 	var d Decision
-	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
-		return nil, fmt.Errorf("citadel: decode decision: %w", err)
+	if err := json.Unmarshal(raw, &d); err != nil {
+		// Not a parseable Decision — a genuine transport/server failure
+		// (5xx with a plain-text body, proxy error page, etc.), not a
+		// REFUSE/HARD_STOP business outcome.
+		return nil, fmt.Errorf("citadel: POST /api/v1/marshal/evaluate: HTTP %d: %s", resp.StatusCode, string(raw))
+	}
+	if d.Outcome == "" {
+		// Parsed as valid JSON but not actually a Decision.
+		return nil, fmt.Errorf("citadel: POST /api/v1/marshal/evaluate: HTTP %d: %s", resp.StatusCode, string(raw))
 	}
 	return &d, nil
+}
+
+// failModeDecision synthesizes the Decision EvaluateScan returns alongside
+// a non-nil error, per c.FailMode.
+func (c *Client) failModeDecision(k *Kerkese, cause error) *Decision {
+	outcome := OutcomeHardStop
+	reason := fmt.Sprintf("citadel: MARSHAL unreachable, failing closed (HARD_STOP): %v", cause)
+	if c.FailMode == FailOpen {
+		outcome = OutcomeExecute
+		reason = fmt.Sprintf("citadel: MARSHAL unreachable, failing open (EXECUTE) per configured FailMode: %v", cause)
+	}
+	d := &Decision{
+		Outcome: outcome,
+		Reasons: []string{reason},
+		TsUTC:   time.Now().UTC(),
+	}
+	if k != nil {
+		d.ExecutionID = k.ExecutionID
+	}
+	return d
 }
 
 // EmitWORM posts an immutable event to POST /api/v1/worm/emit.

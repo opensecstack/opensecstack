@@ -373,8 +373,14 @@ func (s *Scans) Create(w http.ResponseWriter, r *http.Request) {
 		}
 		decision, evalErr := s.citadel.EvaluateScan(r.Context(), k)
 		if evalErr != nil {
-			s.logger.Warn().Err(evalErr).Str("scan_id", scanID.String()).Msg("CITADEL marshal evaluate failed — proceeding with scan")
-		} else if decision != nil && (decision.Outcome == citadel.OutcomeRefuse || decision.Outcome == citadel.OutcomeHardStop) {
+			// EvaluateScan always returns a non-nil Decision alongside a
+			// non-nil error (except when the client is disabled, in
+			// which case both are nil and there's nothing to check
+			// below), synthesized per s.citadel's FailMode (fail-closed
+			// / HARD_STOP by default — see internal/citadel.FailMode).
+			s.logger.Warn().Err(evalErr).Str("scan_id", scanID.String()).Msg("CITADEL marshal evaluate failed — applying configured fail-mode")
+		}
+		if decision != nil && !decision.Allowed() {
 			reasons := decision.Reasons
 			if len(reasons) == 0 {
 				reasons = []string{"CITADEL governance check rejected this scan"}

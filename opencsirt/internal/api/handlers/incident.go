@@ -202,8 +202,14 @@ func (h *Incident) Close(w http.ResponseWriter, r *http.Request) {
 		}
 		decision, evalErr := h.Citadel.Evaluate(r.Context(), k)
 		if evalErr != nil {
-			h.Logger.Warn().Err(evalErr).Str("incident_id", id.String()).Msg("CITADEL marshal evaluate failed — proceeding with close")
-		} else if decision != nil && (decision.Outcome == sdkcitadel.OutcomeRefuse || decision.Outcome == sdkcitadel.OutcomeHardStop) {
+			// Evaluate always returns a non-nil Decision even on
+			// transport failure, synthesized per h.Citadel's FailMode
+			// (fail-closed / HARD_STOP by default — see
+			// sdk/go/citadel.FailMode). Logged so ops can see MARSHAL is
+			// unreachable; decision.Allowed() below still governs.
+			h.Logger.Warn().Err(evalErr).Str("incident_id", id.String()).Msg("CITADEL marshal evaluate failed — applying configured fail-mode")
+		}
+		if !decision.Allowed() {
 			reasons := decision.Reasons
 			if len(reasons) == 0 {
 				reasons = []string{"CITADEL governance check rejected this incident closure"}

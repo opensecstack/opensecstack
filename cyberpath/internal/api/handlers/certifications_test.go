@@ -660,12 +660,14 @@ func TestCertificationsRevoke_HardStopBlocks(t *testing.T) {
 	}
 }
 
-// TestCertificationsRevoke_EvaluateErrorFailsOpen verifies that a
-// transport/evaluation error (CITADEL unreachable) does not itself block
-// revocation — only an explicit REFUSE/HARD_STOP decision blocks. This
-// matches apiguard's scan-initiation pattern (scans.go: "proceeding with
-// scan" on evalErr).
-func TestCertificationsRevoke_EvaluateErrorFailsOpen(t *testing.T) {
+// TestCertificationsRevoke_EvaluateErrorFailsClosed verifies that a
+// transport/evaluation error (CITADEL unreachable) blocks revocation by
+// default — MarshalEvaluator implementations returning a nil Decision on
+// error (like fakeMarshalEvaluator) must not be treated as an implicit
+// EXECUTE. The real sdk/go/citadel.Client itself now also defaults to
+// fail-closed (see sdk/go/citadel.FailMode); this test additionally
+// guards the handler against a MarshalEvaluator that returns nil.
+func TestCertificationsRevoke_EvaluateErrorFailsClosed(t *testing.T) {
 	adminID := uuid.New()
 	certID := uuid.New()
 	store := newFakeCertStore()
@@ -683,11 +685,11 @@ func TestCertificationsRevoke_EvaluateErrorFailsOpen(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200 (fail-open on evaluate error); body: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 (fail-closed on evaluate error); body: %s", w.Code, w.Body.String())
 	}
-	if !store.revoked[certID] {
-		t.Error("certification was not revoked despite fail-open evaluate error")
+	if store.revoked[certID] {
+		t.Error("certification was revoked despite a CITADEL evaluate error — must fail closed")
 	}
 }
 

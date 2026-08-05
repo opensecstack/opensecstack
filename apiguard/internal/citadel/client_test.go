@@ -307,6 +307,99 @@ func TestClient_EvaluateScan_ServerError_ReturnsError(t *testing.T) {
 	<-ch // consume
 }
 
+// TestClient_EvaluateScan_RefuseOutcome_HTTP403 is a regression test: real
+// CITADEL returns HTTP 403 for REFUSE/HARD_STOP outcomes (see
+// citadel/internal/api/handlers/marshal.go), not 200 — a client that
+// treats any non-200 as a transport error (as this one used to) silently
+// converts every real REFUSE/HARD_STOP into "CITADEL unreachable", which
+// the caller in scans.go used to then fail open on. This must come back
+// as a parsed *Decision with Allowed() == false, not an error.
+func TestClient_EvaluateScan_RefuseOutcome_HTTP403(t *testing.T) {
+	decisionResp, _ := json.Marshal(Decision{
+		Outcome:     OutcomeRefuse,
+		ExecutionID: uuid.New(),
+		Reasons:     []string{"gate 3 failed: project is frozen"},
+	})
+
+	ch := make(chan capturedRequest, 1)
+	ts := newCaptureServer(t, http.StatusForbidden, string(decisionResp), ch)
+	defer ts.Close()
+
+	c := New(ts.URL, "k", "s")
+	k := &Kerkese{KerkeseVersion: "1.0", TsUTC: time.Now(), ProjectID: "p", ExecutionID: uuid.New()}
+
+	decision, err := c.EvaluateScan(context.Background(), k)
+	if err != nil {
+		t.Fatalf("EvaluateScan returned an error for a well-formed 403 REFUSE decision: %v", err)
+	}
+	if decision.Outcome != OutcomeRefuse {
+		t.Errorf("outcome = %q, want REFUSE", decision.Outcome)
+	}
+	if decision.Allowed() {
+		t.Error("a REFUSE decision must not be Allowed()")
+	}
+	<-ch
+}
+
+func TestClient_EvaluateScan_HardStopOutcome_HTTP403(t *testing.T) {
+	decisionResp, _ := json.Marshal(Decision{
+		Outcome:     OutcomeHardStop,
+		ExecutionID: uuid.New(),
+		Reasons:     []string{"NDS_SAME_IDENTITY: operator and verifier are the same user"},
+	})
+
+	ch := make(chan capturedRequest, 1)
+	ts := newCaptureServer(t, http.StatusForbidden, string(decisionResp), ch)
+	defer ts.Close()
+
+	c := New(ts.URL, "k", "s")
+	k := &Kerkese{KerkeseVersion: "1.0", TsUTC: time.Now(), ProjectID: "p", ExecutionID: uuid.New()}
+
+	decision, err := c.EvaluateScan(context.Background(), k)
+	if err != nil {
+		t.Fatalf("EvaluateScan returned an error for a well-formed 403 HARD_STOP decision: %v", err)
+	}
+	if decision.Outcome != OutcomeHardStop || decision.Allowed() {
+		t.Errorf("outcome = %q, Allowed() = %v — want HARD_STOP, not allowed", decision.Outcome, decision.Allowed())
+	}
+	<-ch
+}
+
+// TestClient_EvaluateScan_UnreachableDefaultsToFailClosed verifies the
+// scans.go regression this whole fix addresses: an unreachable CITADEL
+// must block scan initiation by default, not silently let it proceed.
+func TestClient_EvaluateScan_UnreachableDefaultsToFailClosed(t *testing.T) {
+	c := New("http://127.0.0.1:1", "k", "s") // nothing listening
+	c.maxRetries = 0
+	k := &Kerkese{KerkeseVersion: "1.0", TsUTC: time.Now(), ProjectID: "p", ExecutionID: uuid.New()}
+
+	decision, err := c.EvaluateScan(context.Background(), k)
+	if err == nil {
+		t.Fatal("expected a transport error for an unreachable CITADEL")
+	}
+	if decision == nil {
+		t.Fatal("EvaluateScan must return a non-nil Decision even on transport failure")
+	}
+	if decision.Outcome != OutcomeHardStop || decision.Allowed() {
+		t.Errorf("outcome = %q, Allowed() = %v — want HARD_STOP/not-allowed (FailClosed is the zero-value default)", decision.Outcome, decision.Allowed())
+	}
+}
+
+func TestClient_EvaluateScan_FailOpenReturnsExecuteOnUnreachable(t *testing.T) {
+	c := New("http://127.0.0.1:1", "k", "s")
+	c.maxRetries = 0
+	c.FailMode = FailOpen
+	k := &Kerkese{KerkeseVersion: "1.0", TsUTC: time.Now(), ProjectID: "p", ExecutionID: uuid.New()}
+
+	decision, err := c.EvaluateScan(context.Background(), k)
+	if err == nil {
+		t.Fatal("expected a transport error for an unreachable CITADEL")
+	}
+	if decision == nil || !decision.Allowed() {
+		t.Errorf("decision = %v — want an Allowed() EXECUTE decision with FailMode = FailOpen", decision)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // LogEvent (fire-and-forget → WORM emit)
 // ---------------------------------------------------------------------------

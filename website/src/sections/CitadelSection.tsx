@@ -3,9 +3,15 @@ import { marshalGates } from '../data/marshalGates'
 import WormChainVisual from '../scene/WormChainVisual'
 import MarshalGatesPipeline from '../scene/MarshalGatesPipeline'
 import TripleHashVisual from '../scene/TripleHashVisual'
+import WormChainBackground from '../scene/WormChainBackground'
 
 export default function CitadelSection() {
   return (
+    <div style={{ position: 'relative' }}>
+      <div style={{ position: 'absolute', inset: 0, zIndex: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+        <WormChainBackground opacity={0.5} />
+      </div>
+      <div style={{ position: 'relative', zIndex: 1 }}>
     <PlatformDetailSection
       id="citadel"
       title={<><GradientTitle>CITADEL</GradientTitle> Governance</>}
@@ -87,5 +93,7 @@ export default function CitadelSection() {
         </div>
       </div>
     </PlatformDetailSection>
+      </div>
+    </div>
   )
 }

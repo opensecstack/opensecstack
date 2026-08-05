@@ -36,37 +36,35 @@ type MeetingEvent struct {
 	Payload map[string]any
 }
 
-// ValidateSignature reports whether the inbound webhook payload was signed
-// with secret by the named platform. Returns false on any validation
-// error (wrong signature, missing headers, unsupported platform).
+// ValidateSignature reports whether the inbound webhook request was
+// authenticated by the named platform. Returns false on any validation
+// error (wrong signature, missing/invalid token, missing headers,
+// unsupported platform).
 //
-// Zoom — HMAC-SHA256(secret, "v0:<x-zm-request-timestamp>:<body>"),
-// compared against the x-zm-signature header (format "v0=<hex>").
+// Zoom — credential is the webhook shared secret. HMAC-SHA256(secret,
+// "v0:<x-zm-request-timestamp>:<body>"), compared against the
+// x-zm-signature header (format "v0=<hex>").
 // See https://developers.zoom.us/docs/api/rest/webhook-reference/#verify-webhook-events
 //
-// Teams — Activity payloads from the Azure Bot Framework carry a Bearer
-// JWT in the Authorization header. Full validation requires fetching the
-// OpenID Connect metadata from login.microsoftonline.com, which requires
-// network access and an Azure app registration.
-// Phase 4.3: implement Azure Bot Framework JWT validation once Azure app
-// credentials are provisioned. For now this stub returns true so the
-// webhook plumbing can be tested end-to-end.
+// Teams — credential is this bot's Azure AD application (client) ID, used
+// as the expected JWT audience; body is unused. Every Activity POST from
+// the Bot Framework connector carries a Bearer JWT in the Authorization
+// header, RS256-signed against Microsoft's published JWKS
+// (login.botframework.com), issuer pinned to api.botframework.com. See
+// validateTeamsToken (teams_jwt.go).
 //
-// WebEx — HMAC-SHA256(secret, body), compared against the
-// X-Spark-Signature header (raw hex, no prefix).
+// WebEx — credential is the webhook shared secret. HMAC-SHA256(secret,
+// body), compared against the X-Spark-Signature header (raw hex, no
+// prefix).
 // See https://developer.webex.com/docs/webhooks#handling-requests-from-webex
-func ValidateSignature(platform MeetingPlatform, secret string, body []byte, headers http.Header) bool {
+func ValidateSignature(platform MeetingPlatform, credential string, body []byte, headers http.Header) bool {
 	switch platform {
 	case PlatformZoom:
-		return validateZoomSignature(secret, body, headers)
+		return validateZoomSignature(credential, body, headers)
 	case PlatformTeams:
-		// Phase 4.3: implement Azure Bot Framework JWT validation once
-		// Azure app credentials are provisioned; validate the Bearer token
-		// in the Authorization header against Microsoft's OpenID metadata.
-		// TODO: replace this stub with real JWT validation.
-		return true
+		return validateTeamsToken(credential, headers)
 	case PlatformWebEx:
-		return validateWebExSignature(secret, body, headers)
+		return validateWebExSignature(credential, body, headers)
 	default:
 		return false
 	}

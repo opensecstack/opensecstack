@@ -3,10 +3,8 @@
 // /api/v1/admin/content/reload — POST. Re-scans the configured content
 // directory and re-publishes every track whose content_hash changed.
 //
-// TODO(v1.0.0): real admin role check. Today the route is gated only
-// by the rbacStub middleware in server.go (which currently passes
-// through). The first proper RBAC pass will enforce the "admin" role
-// claim before reaching this handler.
+// Gated by auth.RequireRole(auth.RoleAdmin) on the /admin sub-router in
+// server.go — only callers with the "admin" role claim reach this handler.
 package handlers
 
 import (

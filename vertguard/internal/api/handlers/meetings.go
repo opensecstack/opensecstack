@@ -209,21 +209,28 @@ func (h *MeetingsHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate HMAC signature — skip only when no webhook secret is configured
-	// (dev/test convenience; log a warning).
-	if cfg.WebhookSecret != "" {
-		if !meetings.ValidateSignature(platform, cfg.WebhookSecret, body, r.Header) {
+	// Validate the request's authenticity. Teams authenticates via a Bearer
+	// JWT (credential = this bot's Azure app/client ID, used as the
+	// expected audience); Zoom/WebEx authenticate via an HMAC shared
+	// secret. Skip only when the relevant credential isn't configured
+	// (dev/test convenience; log a warning) — never skip silently.
+	credential := cfg.WebhookSecret
+	if platform == meetings.PlatformTeams {
+		credential = cfg.ClientID
+	}
+	if credential != "" {
+		if !meetings.ValidateSignature(platform, credential, body, r.Header) {
 			h.Logger.Warn().
 				Str("platform", platformStr).
-				Msg("meeting webhook: HMAC signature validation failed")
+				Msg("meeting webhook: signature/token validation failed")
 			writeJSONError(w, http.StatusUnauthorized, "invalid_signature",
-				"HMAC signature mismatch — check the platform webhook secret configuration")
+				"signature or token validation failed — check the platform webhook configuration")
 			return
 		}
 	} else {
 		h.Logger.Warn().
 			Str("platform", platformStr).
-			Msg("meeting webhook: no webhook secret configured — signature check skipped (dev mode)")
+			Msg("meeting webhook: no webhook credential configured — auth check skipped (dev mode)")
 	}
 
 	// Parse event into normalised envelope.

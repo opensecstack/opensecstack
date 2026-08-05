@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef } from 'react'
+import { Suspense, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import CitadelFortress from './CitadelFortress'
@@ -6,7 +6,9 @@ import OrbitalRing from './OrbitalRing'
 import WormChainEdges from './WormChainEdges'
 import DataFlowPackets from './DataFlowPackets'
 import ParticleGrid from './ParticleGrid'
+import WormChainBackground from './WormChainBackground'
 import Effects from './postprocessing/Effects'
+import { useScrollMax } from '../hooks/useScrollMax'
 
 const START_POS = new THREE.Vector3(0, 2, 12)
 const END_POS = new THREE.Vector3(0, 5, 16)
@@ -27,30 +29,7 @@ function ScrollCamera() {
 
   // scrollHeight/innerHeight only change on resize/content changes — cache
   // them instead of reading layout-triggering DOM properties every frame.
-  const scrollMax = useRef(1)
-
-  useEffect(() => {
-    const updateScrollMax = () => {
-      scrollMax.current = Math.max(
-        1,
-        document.documentElement.scrollHeight - window.innerHeight,
-      )
-    }
-    updateScrollMax()
-
-    window.addEventListener('resize', updateScrollMax)
-
-    let resizeObserver: ResizeObserver | undefined
-    if (typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver(updateScrollMax)
-      resizeObserver.observe(document.documentElement)
-    }
-
-    return () => {
-      window.removeEventListener('resize', updateScrollMax)
-      resizeObserver?.disconnect()
-    }
-  }, [])
+  const scrollMax = useScrollMax()
 
   useFrame((_, delta) => {
     // Scroll progress: 0 at top, 1 when the page is fully scrolled
@@ -95,6 +74,7 @@ export default function EcosystemScene() {
           <OrbitalRing />
           <WormChainEdges />
           <DataFlowPackets />
+          <WormChainBackground opacity={0.7} />
           <Effects />
         </Suspense>
       </Canvas>

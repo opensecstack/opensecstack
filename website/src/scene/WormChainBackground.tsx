@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
+import { useScrollMax } from '../hooks/useScrollMax'
 
 /**
  * Mirrors the prefers-reduced-motion pattern used in MediaVideo.tsx /
@@ -21,41 +22,41 @@ function usePrefersReducedMotion(): boolean {
   return reduced
 }
 
-// Shared accent palette (see src/data/platforms.ts / WormChainVisual.tsx) plus
-// a muted silver/gray for the wireframe chain itself, since this is a
-// background texture and shouldn't compete with the foreground accent hues.
-const SILVER = '#9aa5b8'
-const SILVER_GLOW = '#e2e8f0'
-const CYAN = '#00f0ff'
-const VIOLET = '#7c3aed'
-const MAGENTA = '#e040fb'
+// Deep-blue "digital chain" palette, matching the reference image: a solid,
+// chunky, dark blue chain with a glowing cyan-blue plexus (dots + connecting
+// lines) traced over its surface, rather than the earlier thin silver
+// wireframe treatment.
+const CHAIN_BLUE = '#13245e'
+const CHAIN_BLUE_EMISSIVE = '#1e3a8a'
+const PLEXUS_GLOW = '#4fd1ff'
+const PLEXUS_GLOW_BRIGHT = '#bfe9ff'
 
-const LINK_COUNT = 12
-const TORUS_RADIUS = 0.55
-const TORUS_TUBE = 0.14
-// Deliberately low segment counts for a faceted/angular low-poly look
-// rather than a smooth ring.
-const RADIAL_SEGMENTS = 6
-const TUBULAR_SEGMENTS = 9
-
-type LinkTint = 'silver' | 'cyan' | 'violet'
+const LINK_COUNT = 6
+const TORUS_RADIUS = 0.85
+const TORUS_TUBE = 0.32
+// Smooth-ish solid geometry (this reference is a solid chunky chain, not a
+// faceted wireframe) while staying cheap: moderate, not high-poly, segments.
+const RADIAL_SEGMENTS = 10
+const TUBULAR_SEGMENTS = 20
+// How many points trace the glowing plexus ring around each link's core loop.
+const PLEXUS_POINTS_PER_LINK = 14
 
 interface LinkData {
   position: THREE.Vector3
   quaternion: THREE.Quaternion
-  tint: LinkTint
 }
 
 /**
- * A loose diagonal curve the chain follows, running from upper area down to
- * lower area while receding slightly in depth — matches the reference
- * image's diagonal composition. Kept as a pure function of t so tangents can
- * be derived by sampling nearby points.
+ * A tight, twisting serpentine curve the chain follows — links turn through
+ * alternating perpendicular planes as they progress, echoing the reference
+ * image's chain snaking through 3D space rather than sitting on a flat
+ * diagonal line. Kept as a pure function of t so tangents can be derived by
+ * sampling nearby points.
  */
 function pathPoint(t: number): THREE.Vector3 {
-  const x = -1.2 + t * 2.4
-  const y = 2.6 - t * 5.2
-  const z = -1.5 - Math.sin(t * Math.PI) * 1.2
+  const x = -1.6 + t * 3.2
+  const y = Math.sin(t * Math.PI * 1.6) * 1.4
+  const z = -1.2 + Math.cos(t * Math.PI * 1.6) * 1.1
   return new THREE.Vector3(x, y, z)
 }
 
@@ -88,65 +89,75 @@ function buildLinks(count: number): LinkData[] {
       dummy.rotateX(Math.PI / 2)
     }
 
-    const tintRoll = i % 5
-    const tint: LinkTint = tintRoll === 2 ? 'cyan' : tintRoll === 4 ? 'violet' : 'silver'
-
     links.push({
       position: pos,
       quaternion: dummy.quaternion.clone(),
-      tint,
     })
   }
 
   return links
 }
 
-const SAMPLE_ANGLES: Array<[number, number]> = [
-  [0.2, 0.6],
-  [1.4, -0.5],
-  [2.6, 0.4],
-  [3.8, -0.6],
-  [5.0, 0.5],
-]
-
-const PARTICLE_PALETTE = [CYAN, VIOLET, MAGENTA, CYAN, SILVER_GLOW]
+/** The two ring traces per link (outer surface, top surface) that the glowing plexus follows. */
+const PLEXUS_RING_V_OFFSETS = [0, Math.PI / 2]
 
 /**
- * Scatters glowing "star" points at a subset of the chain's approximate
- * wireframe vertex positions (every other link, a handful of surface points
- * each) by evaluating the torus parametric surface directly — cheaper than
- * reading back real geometry vertices and keeps the point count modest
- * (~30) since this is decorative background, not a focal effect.
+ * Traces a glowing "plexus" (dots + connecting lines) over each link's
+ * surface: for each of a couple of ring positions around the tube, sample
+ * `PLEXUS_POINTS_PER_LINK` points around the main torus angle by evaluating
+ * the parametric surface directly (cheaper than reading back real geometry
+ * vertices), and connect consecutive points into a closed ring so it reads
+ * as a network traced over the solid chain rather than isolated stars.
+ * Returns both the point positions (for glow dots) and a flat line-segment
+ * buffer (point-pairs, one draw call for every ring on every link) so the
+ * connecting lines match the reference image's "digital chain" look.
  */
-function buildParticleAttributes(links: LinkData[]): { positions: Float32Array; colors: Float32Array } {
-  const selected = links.filter((_, i) => i % 2 === 0)
-  const positions = new Float32Array(selected.length * SAMPLE_ANGLES.length * 3)
-  const colors = new Float32Array(selected.length * SAMPLE_ANGLES.length * 3)
+function buildPlexusData(links: LinkData[]): {
+  pointPositions: Float32Array
+  linePositions: Float32Array
+} {
+  const ringsPerLink = PLEXUS_RING_V_OFFSETS.length
+  const pointCount = links.length * ringsPerLink * PLEXUS_POINTS_PER_LINK
+  const pointPositions = new Float32Array(pointCount * 3)
+  // Each ring of N points has N connecting segments (closed loop), each segment = 2 points.
+  const linePositions = new Float32Array(links.length * ringsPerLink * PLEXUS_POINTS_PER_LINK * 2 * 3)
+
   const local = new THREE.Vector3()
-  const tint = new THREE.Color()
-  let vi = 0
-  let ci = 0
-  let paletteIndex = 0
+  const ringPoints: THREE.Vector3[] = Array.from({ length: PLEXUS_POINTS_PER_LINK }, () => new THREE.Vector3())
+  let pi = 0
+  let li = 0
 
-  for (const link of selected) {
-    for (const [u, v] of SAMPLE_ANGLES) {
+  for (const link of links) {
+    for (const v of PLEXUS_RING_V_OFFSETS) {
       const r = TORUS_RADIUS + TORUS_TUBE * Math.cos(v)
-      local.set(r * Math.cos(u), r * Math.sin(u), TORUS_TUBE * Math.sin(v))
-      local.applyQuaternion(link.quaternion)
-      local.add(link.position)
-      positions[vi++] = local.x
-      positions[vi++] = local.y
-      positions[vi++] = local.z
+      const depth = TORUS_TUBE * Math.sin(v)
 
-      tint.set(PARTICLE_PALETTE[paletteIndex % PARTICLE_PALETTE.length])
-      paletteIndex++
-      colors[ci++] = tint.r
-      colors[ci++] = tint.g
-      colors[ci++] = tint.b
+      for (let k = 0; k < PLEXUS_POINTS_PER_LINK; k++) {
+        const u = (k / PLEXUS_POINTS_PER_LINK) * Math.PI * 2
+        local.set(r * Math.cos(u), r * Math.sin(u), depth)
+        local.applyQuaternion(link.quaternion)
+        local.add(link.position)
+        ringPoints[k].copy(local)
+
+        pointPositions[pi++] = local.x
+        pointPositions[pi++] = local.y
+        pointPositions[pi++] = local.z
+      }
+
+      for (let k = 0; k < PLEXUS_POINTS_PER_LINK; k++) {
+        const a = ringPoints[k]
+        const b = ringPoints[(k + 1) % PLEXUS_POINTS_PER_LINK]
+        linePositions[li++] = a.x
+        linePositions[li++] = a.y
+        linePositions[li++] = a.z
+        linePositions[li++] = b.x
+        linePositions[li++] = b.y
+        linePositions[li++] = b.z
+      }
     }
   }
 
-  return { positions, colors }
+  return { pointPositions, linePositions }
 }
 
 /**
@@ -181,102 +192,111 @@ interface ChainLinksProps {
   opacity: number
 }
 
-/** The faceted wireframe chain links themselves — one shared geometry, three shared tint materials. */
+/** The solid, chunky chain links themselves — one shared geometry + material, deep blue with a subtle metallic sheen and emissive glow, matching the reference image's solid (not wireframe) chain body. */
 function ChainLinks({ links, opacity }: ChainLinksProps) {
   const geometry = useMemo(
     () => new THREE.TorusGeometry(TORUS_RADIUS, TORUS_TUBE, RADIAL_SEGMENTS, TUBULAR_SEGMENTS),
     [],
   )
-  const materials = useMemo(
-    () => ({
-      silver: new THREE.MeshBasicMaterial({
-        color: SILVER,
-        wireframe: true,
+  const material = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: CHAIN_BLUE,
+        emissive: CHAIN_BLUE_EMISSIVE,
+        emissiveIntensity: 0.5,
+        metalness: 0.6,
+        roughness: 0.35,
         transparent: true,
-        opacity: 0.28 * opacity,
-        toneMapped: false,
+        opacity: 0.85 * opacity,
       }),
-      cyan: new THREE.MeshBasicMaterial({
-        color: CYAN,
-        wireframe: true,
-        transparent: true,
-        opacity: 0.32 * opacity,
-        toneMapped: false,
-      }),
-      violet: new THREE.MeshBasicMaterial({
-        color: VIOLET,
-        wireframe: true,
-        transparent: true,
-        opacity: 0.32 * opacity,
-        toneMapped: false,
-      }),
-    }),
     [opacity],
   )
 
-  // Dispose geometry only on unmount (it's stable across opacity changes)
-  // and dispose each material set only when a new set replaces it.
+  // Dispose geometry/material only on unmount (geometry is stable across
+  // opacity changes) or when a new material instance replaces the old one.
   useEffect(() => () => geometry.dispose(), [geometry])
-  useEffect(() => () => {
-    materials.silver.dispose()
-    materials.cyan.dispose()
-    materials.violet.dispose()
-  }, [materials])
+  useEffect(() => () => material.dispose(), [material])
 
   return (
     <>
       {links.map((link, i) => (
-        <mesh key={i} position={link.position} quaternion={link.quaternion} geometry={geometry} material={materials[link.tint]} />
+        <mesh key={i} position={link.position} quaternion={link.quaternion} geometry={geometry} material={material} />
       ))}
     </>
   )
 }
 
-interface ChainParticlesProps {
+interface ChainPlexusProps {
   links: LinkData[]
   reducedMotion: boolean
   opacity: number
 }
 
-/** Small glowing "star" points scattered across the wireframe, pulsing very subtly. */
-function ChainParticles({ links, reducedMotion, opacity }: ChainParticlesProps) {
-  const { positions, colors } = useMemo(() => buildParticleAttributes(links), [links])
-  const materialRef = useRef<THREE.PointsMaterial>(null)
+/**
+ * The glowing cyan-blue "plexus" traced over the solid chain's surface —
+ * dots at sampled surface points connected by thin lines into rings that
+ * follow each link's contour, pulsing very subtly. This is what gives the
+ * reference image's "digital network over a physical chain" look, layered
+ * on top of ChainLinks' solid mesh.
+ */
+function ChainPlexus({ links, reducedMotion, opacity }: ChainPlexusProps) {
+  const { pointPositions, linePositions } = useMemo(() => buildPlexusData(links), [links])
+  const pointsMaterialRef = useRef<THREE.PointsMaterial>(null)
+  const lineMaterialRef = useRef<THREE.LineBasicMaterial>(null)
   const phaseRef = useRef(0)
-  const baseOpacity = 0.85 * opacity
+  const basePointOpacity = 0.9 * opacity
+  const baseLineOpacity = 0.35 * opacity
 
   useFrame((_state, delta) => {
-    const mat = materialRef.current
-    if (!mat) return
+    const pointsMat = pointsMaterialRef.current
+    const lineMat = lineMaterialRef.current
+    if (!pointsMat || !lineMat) return
     if (reducedMotion) {
-      mat.opacity = baseOpacity
-      mat.size = 0.07
+      pointsMat.opacity = basePointOpacity
+      pointsMat.size = 0.05
+      lineMat.opacity = baseLineOpacity
       return
     }
-    phaseRef.current += delta * 0.6
+    phaseRef.current += delta * 0.5
     const pulse = 0.5 + 0.5 * Math.sin(phaseRef.current)
-    mat.opacity = baseOpacity * (0.65 + 0.35 * pulse)
-    mat.size = 0.05 + 0.03 * pulse
+    pointsMat.opacity = basePointOpacity * (0.6 + 0.4 * pulse)
+    pointsMat.size = 0.04 + 0.025 * pulse
+    lineMat.opacity = baseLineOpacity * (0.7 + 0.3 * pulse)
   })
 
   return (
-    <points>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" count={positions.length / 3} array={positions} itemSize={3} />
-        <bufferAttribute attach="attributes-color" count={colors.length / 3} array={colors} itemSize={3} />
-      </bufferGeometry>
-      <pointsMaterial
-        ref={materialRef}
-        vertexColors
-        size={0.06}
-        sizeAttenuation
-        transparent
-        opacity={baseOpacity}
-        blending={THREE.AdditiveBlending}
-        depthWrite={false}
-        toneMapped={false}
-      />
-    </points>
+    <>
+      <points>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" count={pointPositions.length / 3} array={pointPositions} itemSize={3} />
+        </bufferGeometry>
+        <pointsMaterial
+          ref={pointsMaterialRef}
+          color={PLEXUS_GLOW_BRIGHT}
+          size={0.05}
+          sizeAttenuation
+          transparent
+          opacity={basePointOpacity}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </points>
+      <lineSegments>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" count={linePositions.length / 3} array={linePositions} itemSize={3} />
+        </bufferGeometry>
+        <lineBasicMaterial
+          ref={lineMaterialRef}
+          color={PLEXUS_GLOW}
+          transparent
+          opacity={baseLineOpacity}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </lineSegments>
+    </>
   )
 }
 
@@ -291,53 +311,62 @@ function NetworkLines({ opacity }: NetworkLinesProps) {
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" count={positions.length / 3} array={positions} itemSize={3} />
       </bufferGeometry>
-      <lineBasicMaterial color={SILVER} transparent opacity={0.12 * opacity} />
+      <lineBasicMaterial color={PLEXUS_GLOW} transparent opacity={0.1 * opacity} />
     </lineSegments>
   )
 }
 
-interface BounceSpinGroupProps {
+interface ScrollBounceSpinGroupProps {
   reducedMotion: boolean
   children: ReactNode
 }
 
-/** Continuous rotation speed around the Y axis, in radians/second. */
-const SPIN_SPEED = 0.6
-/** Horizontal sweep speed, in world units/second. */
-const MOVE_SPEED = 1.8
+/** Continuous self-spin speed around the Y axis, in radians/second — always
+ * active (like CitadelFortress's own idle rotation), independent of scroll. */
+const SPIN_SPEED = 0.5
 /** Half-extent margins (world units) so the chain's own visual bulk stays
  * on-screen at the bounds rather than its center touching the literal edge. */
-const BOUNCE_MARGIN_X = 1.6
-const BOUNCE_MARGIN_Y = 2.2
-/** Vertical step applied at each left/right collision, randomized within
- * this pixel range (converted to world units) per the requested "50-100px" motion. */
+const BOUNCE_MARGIN_X = 2.2
+const BOUNCE_MARGIN_Y = 2.6
+/** How many full left-right traversals happen across one full page scroll
+ * (top to bottom). */
+const LEGS_PER_PAGE = 14
+/** Vertical step applied at each left/right collision (a completed leg),
+ * randomized-looking within this pixel range via a deterministic per-leg
+ * hash (not Math.random()) so the position stays a pure, stable function of
+ * scroll progress — scrolling back up must retrace the same path exactly,
+ * not jitter. */
 const MIN_STEP_PX = 50
 const MAX_STEP_PX = 100
 
-interface BounceState {
-  x: number
-  y: number
-  dirX: 1 | -1
-  /** -1 while stepping toward the bottom on each bounce, +1 while stepping back toward the top. */
-  dirY: 1 | -1
-  initialized: boolean
+/** Deterministic pseudo-random-looking step size for leg index `i`, in the
+ * 50-100px range — a simple integer hash, not Math.random(), so it's stable
+ * across re-renders and re-computable from scroll position alone. */
+function stepPxForLeg(i: number): number {
+  const range = MAX_STEP_PX - MIN_STEP_PX + 1
+  const hash = (i * 7919 + 104729) % range
+  return MIN_STEP_PX + hash
 }
 
 /**
- * Continuously spins the chain (Y-axis rotation, never stops) while bouncing
- * it around the visible panel like a boustrophedon sweep: start at the
- * top-left corner, sweep right, collide with the right edge, step downward
- * by a randomized 50-100px, sweep left, collide with the left edge, step
- * down again — repeating until the bottom edge is reached, at which point
- * the vertical stepping direction reverses and the same left-right sweep
- * climbs back to the top, forever. Frame-rate independent (delta-scaled),
- * and frozen entirely (holding a static top-left pose, no rotation) when
- * reduced motion is requested.
+ * Continuously self-spins the chain (Y-axis rotation, matching
+ * CitadelFortress's own idle rotation — never stops, independent of scroll)
+ * while its position sweeps left-right across the visible scene bounds tied
+ * directly to page scroll progress: at scrollY=0 it sits at the left edge,
+ * and as the user scrolls it sweeps to the right edge, bounces back left,
+ * and so on for LEGS_PER_PAGE traversals across the full page height. Each
+ * completed traversal ("collision" with an edge) steps the chain's vertical
+ * position by a deterministic 50-100px (converted to world units) — when
+ * the cumulative descent would exceed the visible vertical range, the fold
+ * reverses (climbing back toward the top), continuing indefinitely as a
+ * pure function of scroll position (so scrolling up retraces the same
+ * path). Frozen entirely (static top-left pose, no rotation) under
+ * prefers-reduced-motion.
  */
-function BounceSpinGroup({ reducedMotion, children }: BounceSpinGroupProps) {
+function ScrollBounceSpinGroup({ reducedMotion, children }: ScrollBounceSpinGroupProps) {
   const groupRef = useRef<THREE.Group>(null)
   const { viewport, size } = useThree()
-  const stateRef = useRef<BounceState>({ x: 0, y: 0, dirX: 1, dirY: -1, initialized: false })
+  const scrollMax = useScrollMax()
 
   useFrame((_state, delta) => {
     const group = groupRef.current
@@ -347,18 +376,8 @@ function BounceSpinGroup({ reducedMotion, children }: BounceSpinGroupProps) {
     const leftBound = -rightBound
     const topBound = Math.max(0.5, viewport.height / 2 - BOUNCE_MARGIN_Y)
     const bottomBound = -topBound
-    const s = stateRef.current
-
-    if (!s.initialized) {
-      s.x = leftBound
-      s.y = topBound
-      s.dirX = 1
-      s.dirY = -1
-      s.initialized = true
-    }
 
     if (reducedMotion) {
-      // Hold a static, still-legible top-left pose — no spin, no sweep.
       group.rotation.y = 0
       group.position.x = leftBound
       group.position.y = topBound
@@ -367,31 +386,25 @@ function BounceSpinGroup({ reducedMotion, children }: BounceSpinGroupProps) {
 
     group.rotation.y += delta * SPIN_SPEED
 
-    s.x += s.dirX * MOVE_SPEED * delta
+    const progress = Math.min(Math.max(window.scrollY / scrollMax.current, 0), 1)
+    const raw = progress * LEGS_PER_PAGE
+    const leg = Math.floor(raw)
+    const frac = raw - leg
+    const goingRight = leg % 2 === 0
+    group.position.x = goingRight
+      ? THREE.MathUtils.lerp(leftBound, rightBound, frac)
+      : THREE.MathUtils.lerp(rightBound, leftBound, frac)
+
+    // Cumulative descent (in px) across all fully-completed legs so far.
+    let cumulativePx = 0
+    for (let i = 0; i < leg; i++) cumulativePx += stepPxForLeg(i)
 
     const worldPerPixel = size.height > 0 ? viewport.height / size.height : 0.01
-    if (s.x >= rightBound) {
-      s.x = rightBound
-      s.dirX = -1
-      const stepWorld = (MIN_STEP_PX + Math.random() * (MAX_STEP_PX - MIN_STEP_PX)) * worldPerPixel
-      s.y += s.dirY * stepWorld
-    } else if (s.x <= leftBound) {
-      s.x = leftBound
-      s.dirX = 1
-      const stepWorld = (MIN_STEP_PX + Math.random() * (MAX_STEP_PX - MIN_STEP_PX)) * worldPerPixel
-      s.y += s.dirY * stepWorld
-    }
-
-    if (s.y <= bottomBound) {
-      s.y = bottomBound
-      s.dirY = 1
-    } else if (s.y >= topBound) {
-      s.y = topBound
-      s.dirY = -1
-    }
-
-    group.position.x = s.x
-    group.position.y = s.y
+    const travelWorld = topBound - bottomBound
+    const period = 2 * travelWorld
+    const posInPeriod = travelWorld > 0 ? (cumulativePx * worldPerPixel) % period : 0
+    const foldedDelta = posInPeriod <= travelWorld ? posInPeriod : period - posInPeriod
+    group.position.y = topBound - foldedDelta
   })
 
   return (
@@ -401,68 +414,37 @@ function BounceSpinGroup({ reducedMotion, children }: BounceSpinGroupProps) {
   )
 }
 
-interface SceneProps {
-  reducedMotion: boolean
-  opacity: number
-}
-
-function Scene({ reducedMotion, opacity }: SceneProps) {
-  const links = useMemo(() => buildLinks(LINK_COUNT), [])
-
-  return (
-    <>
-      <ambientLight intensity={0.35} />
-      <pointLight position={[-3, 2, 4]} intensity={0.35} color={CYAN} />
-
-      <NetworkLines opacity={opacity} />
-
-      <BounceSpinGroup reducedMotion={reducedMotion}>
-        <ChainLinks links={links} opacity={opacity} />
-        <ChainParticles links={links} reducedMotion={reducedMotion} opacity={opacity} />
-      </BounceSpinGroup>
-    </>
-  )
-}
-
 export interface WormChainBackgroundProps {
-  className?: string
-  /** Overall intensity multiplier (0–1) for whoever embeds this behind page content. Defaults to a subtle 1 (base opacities are already low). */
+  /** Overall intensity multiplier (0–1) for whoever embeds this. Defaults to 1 (base opacities are already low). */
   opacity?: number
 }
 
 /**
- * Passive, non-interactive background layer: a low-poly, wireframe,
- * faceted chain (12 interlocking torus links, alternating perpendicular
+ * Passive (non-interactive), scroll-linked background element for the main
+ * ecosystem scene: a solid, chunky, deep-blue chain (6 interlocking torus
+ * links snaking through a serpentine curve, alternating perpendicular
  * orientation so they read as genuinely hooked together, unbroken and
- * continuous — no breaking/fragmenting) that spins continuously while
- * bouncing corner-to-corner across the panel (top-left → right edge →
- * left edge → ... stepping 50-100px down each bounce → bottom edge →
- * reverses to climb back to the top the same way, forever), with small
- * glowing "star" particles scattered across a subset of its links and
- * sparse static diagonal lines suggesting a network behind it.
+ * continuous — no breaking/fragmenting) with a glowing cyan-blue "plexus"
+ * of dots and connecting lines traced over each link's surface, plus sparse
+ * static diagonal lines suggesting a network behind it — matching the
+ * reference "digital chain" look rather than a thin wireframe treatment.
  *
- * Designed to sit behind DOM content (own transparent <Canvas>, absolute
- * inset positioning, pointer-events disabled) at low cost: no
- * postprocessing, no Html tooltips, shared geometry/materials across links,
- * and no per-frame object allocation.
+ * Lives alongside CitadelFortress/OrbitalRing inside EcosystemScene's
+ * shared <Canvas> (not its own isolated canvas) — renders raw scene content
+ * meant to be placed directly inside another Canvas.
  */
-export default function WormChainBackground({ className, opacity = 1 }: WormChainBackgroundProps) {
+export default function WormChainBackground({ opacity = 1 }: WormChainBackgroundProps) {
   const reducedMotion = usePrefersReducedMotion()
   const clampedOpacity = THREE.MathUtils.clamp(opacity, 0, 1)
+  const links = useMemo(() => buildLinks(LINK_COUNT), [])
 
   return (
-    <div
-      className={className}
-      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
-    >
-      <Canvas
-        camera={{ position: [0, 0, 9], fov: 55 }}
-        dpr={[1, 1.5]}
-        gl={{ antialias: true, alpha: true }}
-        style={{ background: 'transparent' }}
-      >
-        <Scene reducedMotion={reducedMotion} opacity={clampedOpacity} />
-      </Canvas>
-    </div>
+    <>
+      <NetworkLines opacity={clampedOpacity} />
+      <ScrollBounceSpinGroup reducedMotion={reducedMotion}>
+        <ChainLinks links={links} opacity={clampedOpacity} />
+        <ChainPlexus links={links} reducedMotion={reducedMotion} opacity={clampedOpacity} />
+      </ScrollBounceSpinGroup>
+    </>
   )
 }

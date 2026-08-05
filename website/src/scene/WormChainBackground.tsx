@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 
 /**
@@ -296,35 +296,106 @@ function NetworkLines({ opacity }: NetworkLinesProps) {
   )
 }
 
-interface DriftGroupProps {
+interface BounceSpinGroupProps {
   reducedMotion: boolean
-  basePosition: [number, number, number]
   children: ReactNode
 }
 
+/** Continuous rotation speed around the Y axis, in radians/second. */
+const SPIN_SPEED = 0.6
+/** Horizontal sweep speed, in world units/second. */
+const MOVE_SPEED = 1.8
+/** Half-extent margins (world units) so the chain's own visual bulk stays
+ * on-screen at the bounds rather than its center touching the literal edge. */
+const BOUNCE_MARGIN_X = 1.6
+const BOUNCE_MARGIN_Y = 2.2
+/** Vertical step applied at each left/right collision, randomized within
+ * this pixel range (converted to world units) per the requested "50-100px" motion. */
+const MIN_STEP_PX = 50
+const MAX_STEP_PX = 100
+
+interface BounceState {
+  x: number
+  y: number
+  dirX: 1 | -1
+  /** -1 while stepping toward the bottom on each bounce, +1 while stepping back toward the top. */
+  dirY: 1 | -1
+  initialized: boolean
+}
+
 /**
- * Wraps the chain in a very subtle, bounded sway (not a full continuous
- * spin) — barely perceptible ambient motion rather than an
- * attention-grabbing animation. Uses delta-scaled accumulation so the sway
- * speed is frame-rate independent, and is skipped entirely (leaving the
- * group fully static at its base transform) when reduced motion is
- * requested.
+ * Continuously spins the chain (Y-axis rotation, never stops) while bouncing
+ * it around the visible panel like a boustrophedon sweep: start at the
+ * top-left corner, sweep right, collide with the right edge, step downward
+ * by a randomized 50-100px, sweep left, collide with the left edge, step
+ * down again — repeating until the bottom edge is reached, at which point
+ * the vertical stepping direction reverses and the same left-right sweep
+ * climbs back to the top, forever. Frame-rate independent (delta-scaled),
+ * and frozen entirely (holding a static top-left pose, no rotation) when
+ * reduced motion is requested.
  */
-function DriftGroup({ reducedMotion, basePosition, children }: DriftGroupProps) {
+function BounceSpinGroup({ reducedMotion, children }: BounceSpinGroupProps) {
   const groupRef = useRef<THREE.Group>(null)
-  const phaseRef = useRef(0)
+  const { viewport, size } = useThree()
+  const stateRef = useRef<BounceState>({ x: 0, y: 0, dirX: 1, dirY: -1, initialized: false })
 
   useFrame((_state, delta) => {
-    if (reducedMotion) return
     const group = groupRef.current
     if (!group) return
-    phaseRef.current += delta * 0.15
-    group.rotation.y = Math.sin(phaseRef.current) * 0.06
-    group.position.y = basePosition[1] + Math.sin(phaseRef.current * 0.6) * 0.08
+
+    const rightBound = Math.max(0.5, viewport.width / 2 - BOUNCE_MARGIN_X)
+    const leftBound = -rightBound
+    const topBound = Math.max(0.5, viewport.height / 2 - BOUNCE_MARGIN_Y)
+    const bottomBound = -topBound
+    const s = stateRef.current
+
+    if (!s.initialized) {
+      s.x = leftBound
+      s.y = topBound
+      s.dirX = 1
+      s.dirY = -1
+      s.initialized = true
+    }
+
+    if (reducedMotion) {
+      // Hold a static, still-legible top-left pose — no spin, no sweep.
+      group.rotation.y = 0
+      group.position.x = leftBound
+      group.position.y = topBound
+      return
+    }
+
+    group.rotation.y += delta * SPIN_SPEED
+
+    s.x += s.dirX * MOVE_SPEED * delta
+
+    const worldPerPixel = size.height > 0 ? viewport.height / size.height : 0.01
+    if (s.x >= rightBound) {
+      s.x = rightBound
+      s.dirX = -1
+      const stepWorld = (MIN_STEP_PX + Math.random() * (MAX_STEP_PX - MIN_STEP_PX)) * worldPerPixel
+      s.y += s.dirY * stepWorld
+    } else if (s.x <= leftBound) {
+      s.x = leftBound
+      s.dirX = 1
+      const stepWorld = (MIN_STEP_PX + Math.random() * (MAX_STEP_PX - MIN_STEP_PX)) * worldPerPixel
+      s.y += s.dirY * stepWorld
+    }
+
+    if (s.y <= bottomBound) {
+      s.y = bottomBound
+      s.dirY = 1
+    } else if (s.y >= topBound) {
+      s.y = topBound
+      s.dirY = -1
+    }
+
+    group.position.x = s.x
+    group.position.y = s.y
   })
 
   return (
-    <group ref={groupRef} position={basePosition}>
+    <group ref={groupRef}>
       {children}
     </group>
   )
@@ -345,10 +416,10 @@ function Scene({ reducedMotion, opacity }: SceneProps) {
 
       <NetworkLines opacity={opacity} />
 
-      <DriftGroup reducedMotion={reducedMotion} basePosition={[-2.2, 0, 0]}>
+      <BounceSpinGroup reducedMotion={reducedMotion}>
         <ChainLinks links={links} opacity={opacity} />
         <ChainParticles links={links} reducedMotion={reducedMotion} opacity={opacity} />
-      </DriftGroup>
+      </BounceSpinGroup>
     </>
   )
 }
@@ -363,9 +434,12 @@ export interface WormChainBackgroundProps {
  * Passive, non-interactive background layer: a low-poly, wireframe,
  * faceted chain (12 interlocking torus links, alternating perpendicular
  * orientation so they read as genuinely hooked together, unbroken and
- * continuous — no breaking/fragmenting) drifting almost imperceptibly,
- * with small glowing "star" particles scattered across a subset of its
- * links and sparse static diagonal lines suggesting a network behind it.
+ * continuous — no breaking/fragmenting) that spins continuously while
+ * bouncing corner-to-corner across the panel (top-left → right edge →
+ * left edge → ... stepping 50-100px down each bounce → bottom edge →
+ * reverses to climb back to the top the same way, forever), with small
+ * glowing "star" particles scattered across a subset of its links and
+ * sparse static diagonal lines suggesting a network behind it.
  *
  * Designed to sit behind DOM content (own transparent <Canvas>, absolute
  * inset positioning, pointer-events disabled) at low cost: no

@@ -1,4 +1,4 @@
-﻿// Authentication endpoints: login, refresh, logout, me.
+// Authentication endpoints: login, refresh, logout, me.
 //
 // Wired via api.Options.Auth. The endpoints use the standard JSON
 // error envelope and emit audit events for token issuance and logout.

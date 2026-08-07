@@ -1,4 +1,4 @@
-﻿// Lesson read + completion handlers.
+// Lesson read + completion handlers.
 //
 // v0.0.1 returned a hand-coded body. v1.0.0 wired LessonStore +
 // ProgressStore via LessonsHandler. v0.7.0 adds Module 6 (CITADEL

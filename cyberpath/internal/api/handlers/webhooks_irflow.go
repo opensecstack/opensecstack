@@ -1,4 +1,4 @@
-﻿// IRFlow incoming webhook handler.
+// IRFlow incoming webhook handler.
 //
 // Verifies an HMAC-SHA256 signature in the Stripe-style scheme
 // (signed input = timestamp + "." + raw_body), looks up the

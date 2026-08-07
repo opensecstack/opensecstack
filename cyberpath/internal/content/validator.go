@@ -1,4 +1,4 @@
-﻿// Package content — validator.go enforces content-quality rules.
+// Package content — validator.go enforces content-quality rules.
 //
 // The linter returns a list of ValidationError rather than failing
 // fast so `cyberpath-cli content lint` can show every issue in a track

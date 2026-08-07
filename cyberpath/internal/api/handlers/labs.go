@@ -1,4 +1,4 @@
-﻿// Lab session handlers.
+// Lab session handlers.
 //
 // v0.0.1 stub funcs (StartLab, StopLab, LabStatus) are retained at the
 // bottom as nil-safe fallbacks. v1.0.0 adds LabsHandler which is wired

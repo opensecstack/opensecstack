@@ -1,4 +1,4 @@
-﻿// User progress + certifications handlers.
+// User progress + certifications handlers.
 //
 // v1.0.0 wires UsersHandler backed by ProgressStore + CertificationStore.
 // The standalone UserProgress / UserCertifications HandlerFuncs are retained

@@ -1,4 +1,4 @@
-﻿package content
+package content
 
 import (
 	"encoding/json"

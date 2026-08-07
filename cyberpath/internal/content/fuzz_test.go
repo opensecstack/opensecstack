@@ -1,4 +1,4 @@
-﻿package content_test
+package content_test
 
 import (
 	"os"

@@ -1,4 +1,4 @@
-﻿// Quiz submission handler. v1.0.0 scores answers against the stored answer
+// Quiz submission handler. v1.0.0 scores answers against the stored answer
 // key; v0.0.1 stub (SubmitQuiz) is retained at the bottom as a fallback.
 package handlers
 

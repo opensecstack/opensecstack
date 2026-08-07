@@ -1,4 +1,4 @@
-﻿// Admin-facing content endpoint(s).
+// Admin-facing content endpoint(s).
 //
 // /api/v1/admin/content/reload — POST. Re-scans the configured content
 // directory and re-publishes every track whose content_hash changed.

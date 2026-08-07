@@ -1,4 +1,4 @@
-﻿// Package api wires the CyberPath HTTP server: chi router, middleware,
+// Package api wires the CyberPath HTTP server: chi router, middleware,
 // handler registration. Mirrors the VertGuard pattern.
 package api
 

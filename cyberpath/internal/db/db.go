@@ -1,4 +1,4 @@
-﻿// Package db provides the PostgreSQL connection pool + ping helper.
+// Package db provides the PostgreSQL connection pool + ping helper.
 //
 // Mirrors VertGuard's pgxpool wrapper; query helpers will be added
 // alongside the respective handlers in v1.0.0.

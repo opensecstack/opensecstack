@@ -1,4 +1,4 @@
-﻿// Command cyberpath-server — CyberPath API server entrypoint.
+// Command cyberpath-server — CyberPath API server entrypoint.
 //
 // v1.0.0 wire-up: when a DB connection is available the server wires
 // the live auth handlers (UserStore + Issuer + sessions), the IRFlow

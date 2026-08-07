@@ -1,4 +1,4 @@
-﻿// Package db — certification_store manages the `certifications` table.
+// Package db — certification_store manages the `certifications` table.
 package db
 
 import (

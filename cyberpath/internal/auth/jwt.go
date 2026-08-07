@@ -1,4 +1,4 @@
-﻿// Package auth provides JWT verification + middleware for CyberPath.
+// Package auth provides JWT verification + middleware for CyberPath.
 //
 // Mirrors VertGuard's 3-slot rotation pattern (primary/next/previous).
 // In v0.0.1 verification is a stub: in dev mode the middleware accepts

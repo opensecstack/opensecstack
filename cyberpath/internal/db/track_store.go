@@ -1,4 +1,4 @@
-﻿// Package db — track_store manages the `tracks` table.
+// Package db — track_store manages the `tracks` table.
 // Read-only API for the v1.0.0 handlers; writes flow through
 // internal/content/publisher.go via raw SQL.
 package db

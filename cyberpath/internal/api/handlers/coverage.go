@@ -1,4 +1,4 @@
-﻿// NIS2 coverage + recommendation handlers.
+// NIS2 coverage + recommendation handlers.
 //
 // Per ADR-014, CyberPath is the PULL side of the CyberPath ↔ NIS2
 // Compass integration: NIS2 Compass calls these GET endpoints, it does

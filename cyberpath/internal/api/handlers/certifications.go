@@ -1,4 +1,4 @@
-﻿// Certification issuance, listing, and revocation handlers.
+// Certification issuance, listing, and revocation handlers.
 //
 // v1.0.0: Ed25519-signed certification issuance backed by CertificationStore.
 // v0.8.0: Eligibility check (all lessons completed), TryAutoIssue for

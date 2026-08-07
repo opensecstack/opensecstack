@@ -1,4 +1,4 @@
-﻿// Package citadel submits cyberpath.completion events to CITADEL's
+// Package citadel submits cyberpath.completion events to CITADEL's
 // WORM audit log.
 //
 // v0.0.1 stub: when DryRun (or no BaseURL) the client logs the event

@@ -1,4 +1,4 @@
-﻿// Command cyberpath-cli — operator + content authoring helper CLI.
+// Command cyberpath-cli — operator + content authoring helper CLI.
 //
 // v1.0.0: secrets generate, content lint, track import are real.
 // v1.0.0: lab run is still a stub.

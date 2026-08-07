@@ -1,4 +1,4 @@
-﻿// Track + module listing handlers.
+// Track + module listing handlers.
 //
 // v0.0.1 returned a single hand-coded "phishing-recognition" example so
 // the client + smoke tests had something concrete to consume. v1.0.0

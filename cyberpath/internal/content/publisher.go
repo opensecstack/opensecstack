@@ -1,4 +1,4 @@
-﻿// Package content — publisher.go materialises a validated, hashed
+// Package content — publisher.go materialises a validated, hashed
 // TrackYAML into the runtime tables (tracks, modules, lessons,
 // quizzes, quiz_questions, lab_definitions) plus the append-only
 // content_versions table, all inside a single transaction.

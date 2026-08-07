@@ -3,23 +3,7 @@ import { Canvas } from '@react-three/fiber'
 import { Stars } from '@react-three/drei'
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing'
 import MobileDevice from './platforms/MobileDevice'
-
-/**
- * Heuristic device-tier detection: a coarse pointer (touch) combined with a
- * narrow viewport, or a low logical core count, is treated as a low-powered
- * device and gets a cheaper render path (no postprocessing, capped dpr,
- * fewer stars).
- */
-function useLowPowerDevice(): boolean {
-  const [lowPower, setLowPower] = useState(false)
-  useEffect(() => {
-    const coarsePointer = window.matchMedia('(pointer: coarse)').matches
-    const narrowViewport = window.innerWidth <= 820
-    const lowCores = (navigator.hardwareConcurrency ?? 8) <= 4
-    setLowPower((coarsePointer && narrowViewport) || lowCores)
-  }, [])
-  return lowPower
-}
+import { useLowPowerDevice } from '../hooks/useLowPowerDevice'
 
 /** Mirrors the prefers-reduced-motion pattern used in MediaVideo.tsx for background video. */
 function usePrefersReducedMotion(): boolean {

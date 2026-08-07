@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (C) 2024 opensecstack contributors.
 
 // Package exfil contains data exfiltration and covert-channel attack simulations.

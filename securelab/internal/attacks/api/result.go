@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (C) 2024 opensecstack contributors.
 
 // Package api contains OWASP API Security Top 10 attack simulations.

@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0
 // Copyright (C) 2024 opensecstack contributors.
 
 // Package citadel provides a CITADEL event emitter for SecureLab.

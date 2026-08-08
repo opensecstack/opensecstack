@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "analyser"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "clap",
  "regex",
@@ -171,7 +171,7 @@ dependencies = [
 
 [[package]]
 name = "cvss"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "clap",
  "serde",
@@ -448,7 +448,14 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "modules"
-version = "0.1.0"
+version = "1.0.0"
+dependencies = [
+ "clap",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "once_cell"
@@ -464,7 +471,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "parser"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -525,9 +532,9 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "regex"
-version = "1.12.3"
+version = "1.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e10754a14b9137dd7b1e3e5b0493cc9171fdd105e0ab477f51b72e7f3ac0e276"
+checksum = "f1292b7759ae1cb9ec195452d1390a074f0cd8541ab7a5a8c31cd6db45d4a6ba"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -548,9 +555,9 @@ dependencies = [
 
 [[package]]
 name = "regex-syntax"
-version = "0.8.10"
+version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
+checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "rustversion"
@@ -681,7 +688,7 @@ dependencies = [
 
 [[package]]
 name = "testgen"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "clap",
  "parser",

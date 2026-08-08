@@ -7,5 +7,5 @@ types-requests>=2.31.0
 black>=24.0.0
 isort>=5.13.0
 flake8>=7.0.0
-bandit[toml]>=1.7.7
+bandit[toml]>=1.9.4
 pip-audit>=2.7.0

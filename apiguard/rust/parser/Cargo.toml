@@ -8,7 +8,7 @@ description = "L1 OpenAPI Schema Parser for APIGuard"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-serde_yml = "0.0.12"
+serde_yml = "0.0.13"
 url = "2"
 sha2 = "0.10"
 thiserror = "2"

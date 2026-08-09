@@ -30,17 +30,26 @@ function buildEdgeParticlePositions(radius: number, detail: number, perEdge: num
   const points: number[] = []
   const a = new THREE.Vector3()
   const b = new THREE.Vector3()
+  const mid = new THREE.Vector3()
+
+  // Push each point outward along its own radial direction so the cloud
+  // reads as a halo standing proud of the wireframe rather than dots
+  // painted directly on top of the existing edge lines (indistinguishable
+  // at a glance from the mesh itself).
+  const OUTWARD_OFFSET = radius * 0.18
 
   for (let i = 0; i < posAttr.count; i += 2) {
     a.fromBufferAttribute(posAttr, i)
     b.fromBufferAttribute(posAttr, i + 1)
     for (let k = 0; k < perEdge; k++) {
       const t = perEdge > 1 ? k / (perEdge - 1) : 0
-      const jitter = () => (Math.random() - 0.5) * 0.025
+      mid.lerpVectors(a, b, t)
+      const outward = mid.clone().normalize().multiplyScalar(OUTWARD_OFFSET)
+      const jitter = () => (Math.random() - 0.5) * 0.05
       points.push(
-        THREE.MathUtils.lerp(a.x, b.x, t) + jitter(),
-        THREE.MathUtils.lerp(a.y, b.y, t) + jitter(),
-        THREE.MathUtils.lerp(a.z, b.z, t) + jitter(),
+        mid.x + outward.x + jitter(),
+        mid.y + outward.y + jitter(),
+        mid.z + outward.z + jitter(),
       )
     }
   }
@@ -65,7 +74,7 @@ function EdgeParticles({ hovered }: EdgeParticlesProps) {
   useFrame((_state, delta) => {
     const mat = materialRef.current
     if (!mat) return
-    const targetOpacity = hovered ? 1 : 0.75
+    const targetOpacity = hovered ? 1 : 0.9
     mat.opacity = THREE.MathUtils.damp(mat.opacity, targetOpacity, 8, delta)
   })
 
@@ -76,11 +85,11 @@ function EdgeParticles({ hovered }: EdgeParticlesProps) {
       </bufferGeometry>
       <pointsMaterial
         ref={materialRef}
-        color="#8be9ff"
-        size={0.028}
-        sizeAttenuation
+        color="#e0feff"
+        size={5}
+        sizeAttenuation={false}
         transparent
-        opacity={0.75}
+        opacity={0.9}
         blending={THREE.AdditiveBlending}
         depthWrite={false}
         toneMapped={false}

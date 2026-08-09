@@ -13,7 +13,7 @@ import NIS2CompassSection from '../sections/NIS2CompassSection'
 import CitadelSection from '../sections/CitadelSection'
 import SDKSection from '../sections/SDKSection'
 import RoadmapSection from '../sections/RoadmapSection'
-import CitadelOSSection from '../sections/CitadelOSSection'
+import RunixSection from '../sections/RunixSection'
 import ThreatFlowSection from '../sections/ThreatFlowSection'
 import IRFlowSection from '../sections/IRFlowSection'
 import OpenScrubSection from '../sections/OpenScrubSection'
@@ -103,7 +103,7 @@ export default function HomePage() {
           <APIGuardSection />
           <NIS2CompassSection />
           <CitadelSection />
-          <CitadelOSSection />
+          <RunixSection />
           <IRFlowSection />
           <ThreatFlowSection />
           <OpenScrubSection />

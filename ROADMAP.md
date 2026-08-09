@@ -129,17 +129,17 @@ ML expertise required. Funded by Phase 1 revenue + EU grants.
 | Deliverable | Dependency | Feasibility |
 |---|---|---|
 | pyramid-registry v1.0 — Cross-organisational federation, production-ready | Tier A maturity | ~ Medium |
-| pyramid-os alpha — Rust microkernel (Nexus), Wasm layer 1-3 | 50+ full-time engineers, foundation backing | ~ Medium (25% probability) |
+| Runix alpha — Rust microkernel, Wasm layer 1-3 | 50+ full-time engineers, foundation backing | ~ Medium (25% probability) |
 | Ecosystem release v2.0 — NIS3-ready bundle | NIS3 adoption (2030-2032) | ✓ High if NIS3 on schedule |
 
 ### Tier C — Aspirational (2033-2036)
 
 | Deliverable | Dependency | Feasibility |
 |---|---|---|
-| pyramid-os v1.0 — Full desktop OS (layers 1-6) | Sustained €10M+/year funding | ⚠️ Low (15% probability) |
-| symphy-os alpha — Mobile OS with ARM64 + TrustZone + EM defence | Mil-grade expertise, classification handling | ⚠️ Low (15% probability) |
+| Runix v1.0 — Full desktop OS (layers 1-6) | Sustained €10M+/year funding | ⚠️ Low (15% probability) |
+| Runix Mobile alpha — Mobile OS with ARM64 + TrustZone + EM defence | Mil-grade expertise, classification handling | ⚠️ Low (15% probability) |
 | pyramid-mvno pilot — Sovereign 5G core + dSIM | Spectrum licensing, regulatory clearance in 1+ EU state | ⚠️ Low (20% probability) |
-| symphy-os v1.0 — Production mobile OS | pyramid-os + pyramid-mvno matured | ⚠️ Very low (8% probability) |
+| Runix Mobile v1.0 — Production mobile OS | Runix + pyramid-mvno matured | ⚠️ Very low (8% probability) |
 
 **Tier C is only achievable with Linux Foundation / EU consortium backing.** Without that, ecosystem stabilises at Tier A + B (~12-14 active components) by 2036 — still a remarkable outcome.
 
@@ -163,8 +163,8 @@ ML expertise required. Funded by Phase 1 revenue + EU grants.
 | SIN Community | ✅ v1.0.0 | — |
 | vantage-hash | 📋 — | Phase 5 Tier A (2029) |
 | pyramid-registry | 📋 — | Phase 5 Tier A/B (2030+) |
-| pyramid-os | 📋 — | Phase 5 Tier C (2033+) |
-| symphy-os | 📋 — | Phase 5 Tier C (2034+) |
+| Runix | 📋 — | Phase 5 Tier C (2033+) |
+| Runix Mobile | 📋 — | Phase 5 Tier C (2034+) |
 | pyramid-mvno | 📋 — | Phase 5 Tier C (2033+) |
 
 ## Ecosystem release milestones
@@ -176,7 +176,7 @@ ML expertise required. Funded by Phase 1 revenue + EU grants.
 | **ecosystem/v2.0.0** | 11-platform stack + PQC migration (Ed25519 → ML-DSA hybrid) | 2028 Q4 |
 | **ecosystem/v2.5.0** | +vantage-hash + pyramid-registry v1.0 | 2030 |
 | **ecosystem/v3.0.0** | NIS3-ready bundle | 2032 |
-| **ecosystem/v4.0.0** | +pyramid-os (if Tier C funded) | 2034-2036 |
+| **ecosystem/v4.0.0** | +Runix (if Tier C funded) | 2034-2036 |
 
 ## Platform-specific roadmaps
 
@@ -212,7 +212,7 @@ ML expertise required. Funded by Phase 1 revenue + EU grants.
 ## Honest caveats
 
 - **Phase 5 Tier C is aspirational.** If funding and foundation backing
-  do not materialise by 2028, the pyramid-os / symphy-os / pyramid-mvno
+  do not materialise by 2028, the Runix / Runix Mobile / pyramid-mvno
   components remain designs, not code. The core 11-platform security
   stack continues without them.
 - **VertGuard ML model weights** are not bundled — operators must supply trained weights for the video/voice/identity models or run with the stub backend. The model training pipeline and configs are included.

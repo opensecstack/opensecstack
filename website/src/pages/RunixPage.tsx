@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
 import { motion } from 'framer-motion'
-import { desktopLayers, sandboxTiers, osPhases } from '../data/citadelOS'
+import { desktopLayers, sandboxTiers, osPhases } from '../data/runix'
 
 const DesktopScene = lazy(() => import('../scene/DesktopScene'))
 
@@ -13,18 +13,18 @@ const fadeUp = {
   viewport: { once: true as const, margin: '-80px' },
 }
 
-export default function CitadelOSPage() {
+export default function RunixPage() {
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
       <Helmet>
-        <title>CitadelOS — Rust Microkernel Security OS | opensecstack</title>
+        <title>Runix — Rust Microkernel Security OS | opensecstack</title>
         <meta
           name="description"
-          content="CitadelOS is a Rust microkernel and WebAssembly operating system with CITADEL governance built in natively — isolated drivers, cryptographic grid sandboxes, and a WORM-verified boot chain."
+          content="Runix is a Rust microkernel and WebAssembly operating system with CITADEL governance built in natively — isolated drivers, cryptographic grid sandboxes, and a WORM-verified boot chain."
         />
-        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/citadelos" />
-        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/citadelos" />
-        <meta property="og:title" content="CitadelOS — Rust Microkernel Security OS | opensecstack" />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/runix" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/runix" />
+        <meta property="og:title" content="Runix — Rust Microkernel Security OS | opensecstack" />
         <meta
           property="og:description"
           content="A Rust microkernel + WebAssembly OS built for security from the ground up, with CITADEL governance running natively at the kernel level."
@@ -50,7 +50,7 @@ export default function CitadelOSPage() {
           SIN
         </Link>
         <span style={{ color: '#334155' }}>/</span>
-        <span style={{ color: '#00f0ff', fontWeight: 600, fontSize: '0.95rem' }}>CitadelOS</span>
+        <span style={{ color: '#00f0ff', fontWeight: 600, fontSize: '0.95rem' }}>Runix</span>
         <Link to="/" style={{
           marginLeft: 'auto', color: '#8892a8', textDecoration: 'none', fontSize: '0.85rem',
         }}>
@@ -74,7 +74,7 @@ export default function CitadelOSPage() {
               fontSize: 'clamp(2.8rem, 7vw, 5rem)', fontWeight: 800,
               letterSpacing: '-0.04em', lineHeight: 1.05,
             }}>
-              <span className="gradient-text">CitadelOS</span>
+              <span className="gradient-text">Runix</span>
             </h1>
             <p style={{ fontSize: '1.5rem', color: '#e2e8f0', marginTop: '0.5rem', fontWeight: 500 }}>
               The Secure Operating System
@@ -114,7 +114,7 @@ export default function CitadelOSPage() {
               </p>
             </div>
             <div className="glass-card">
-              <h3 style={{ color: '#10b981', fontSize: '1.1rem', marginBottom: '0.75rem' }}>CitadelOS Approach</h3>
+              <h3 style={{ color: '#10b981', fontSize: '1.1rem', marginBottom: '0.75rem' }}>Runix Approach</h3>
               <p style={{ color: '#8892a8', fontSize: '0.9rem', lineHeight: 1.7 }}>
                 Rust microkernel: only IPC, memory management, and thread scheduling in kernel space (~50K LOC).
                 <strong style={{ color: '#e2e8f0' }}> Everything else</strong> &mdash; drivers, filesystems,
@@ -250,7 +250,7 @@ export default function CitadelOSPage() {
         <motion.section {...fadeUp} style={{ paddingBottom: '5rem' }}>
           <div className="glass-card" style={{ borderColor: 'rgba(16,185,129,0.25)', textAlign: 'center', padding: '3rem 2rem' }}>
             <h2 style={{ fontSize: '1.8rem', fontWeight: 800, marginBottom: '0.75rem' }}>
-              <span className="gradient-text">CitadelOS Mobile</span>
+              <span className="gradient-text">Runix Mobile</span>
             </h2>
             <p style={{ color: '#8892a8', fontSize: '1rem', lineHeight: 1.7, maxWidth: 520, margin: '0 auto 1.5rem' }}>
               ARM TrustZone, SIM governance, MVNO-native operations.
@@ -263,7 +263,7 @@ export default function CitadelOSPage() {
               <span className="tech-tag">VoIP</span>
               <span className="tech-tag">SIM Governance</span>
             </div>
-            <Link to="/citadelos/mobile" style={{
+            <Link to="/runix/mobile" style={{
               display: 'inline-block', padding: '12px 28px', borderRadius: 10, fontWeight: 600,
               fontSize: '0.95rem', background: 'rgba(16,185,129,0.1)',
               border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', textDecoration: 'none',
@@ -299,7 +299,7 @@ export default function CitadelOSPage() {
             <strong style={{
               background: 'linear-gradient(135deg, #00f0ff, #7c3aed)',
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 800,
-            }}>CitadelOS</strong>{' '}
+            }}>Runix</strong>{' '}
             &mdash; Part of the <Link to="/" style={{ color: '#00f0ff' }}>SIN</Link> ecosystem.
             &middot; Desktop Edition
           </p>

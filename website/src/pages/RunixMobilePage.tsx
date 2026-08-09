@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
 import { motion } from 'framer-motion'
-import { mobileLayers, mvnoEvents, mvnoFeatures, mobilePhases } from '../data/citadelOSMobile'
+import { mobileLayers, mvnoEvents, mvnoFeatures, mobilePhases } from '../data/runixMobile'
 
 const MobileScene = lazy(() => import('../scene/MobileScene'))
 
@@ -13,21 +13,21 @@ const fadeUp = {
   viewport: { once: true as const, margin: '-80px' },
 }
 
-export default function CitadelOSMobilePage() {
+export default function RunixMobilePage() {
   return (
     <div style={{ background: 'var(--bg)', minHeight: '100vh' }}>
       <Helmet>
-        <title>CitadelOS Mobile — ARM TrustZone MVNO OS | opensecstack</title>
+        <title>Runix Mobile — ARM TrustZone MVNO OS | opensecstack</title>
         <meta
           name="description"
-          content="CitadelOS Mobile is a Rust + WebAssembly mobile OS running MVNO operations natively on the microkernel stack, with every SIM activation and roaming event governed as a CITADEL audit event."
+          content="Runix Mobile is a Rust + WebAssembly mobile OS running MVNO operations natively on the microkernel stack, with every SIM activation and roaming event governed as a CITADEL audit event."
         />
-        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/citadelos/mobile" />
-        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/citadelos/mobile" />
-        <meta property="og:title" content="CitadelOS Mobile — ARM TrustZone MVNO OS | opensecstack" />
+        <link rel="canonical" href="https://opensecstack.github.io/opensecstack/runix/mobile" />
+        <meta property="og:url" content="https://opensecstack.github.io/opensecstack/runix/mobile" />
+        <meta property="og:title" content="Runix Mobile — ARM TrustZone MVNO OS | opensecstack" />
         <meta
           property="og:description"
-          content="ARM TrustZone, SIM governance, and MVNO-native operations on the same Rust microkernel security stack as CitadelOS Desktop."
+          content="ARM TrustZone, SIM governance, and MVNO-native operations on the same Rust microkernel security stack as Runix Desktop."
         />
       </Helmet>
       <Suspense fallback={null}>
@@ -50,7 +50,7 @@ export default function CitadelOSMobilePage() {
           SIN
         </Link>
         <span style={{ color: '#334155' }}>/</span>
-        <Link to="/citadelos" style={{ color: '#8892a8', textDecoration: 'none', fontSize: '0.9rem' }}>CitadelOS</Link>
+        <Link to="/runix" style={{ color: '#8892a8', textDecoration: 'none', fontSize: '0.9rem' }}>Runix</Link>
         <span style={{ color: '#334155' }}>/</span>
         <span style={{ color: '#10b981', fontWeight: 600, fontSize: '0.95rem' }}>Mobile + MVNO</span>
         <Link to="/" style={{ marginLeft: 'auto', color: '#8892a8', textDecoration: 'none', fontSize: '0.85rem' }}>
@@ -74,7 +74,7 @@ export default function CitadelOSMobilePage() {
               fontSize: 'clamp(2.5rem, 6vw, 4.5rem)', fontWeight: 800,
               letterSpacing: '-0.04em', lineHeight: 1.05,
             }}>
-              <span className="gradient-text">CitadelOS Mobile</span>
+              <span className="gradient-text">Runix Mobile</span>
             </h1>
             <p style={{ fontSize: '1.4rem', color: '#e2e8f0', marginTop: '0.5rem', fontWeight: 500 }}>
               ARM TrustZone &middot; SIM Governance &middot; MVNO-Native
@@ -100,11 +100,11 @@ export default function CitadelOSMobilePage() {
             </div>
 
             <div style={{ marginTop: '2.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-              <Link to="/citadelos" style={{
+              <Link to="/runix" style={{
                 padding: '12px 26px', borderRadius: 10, fontWeight: 600, fontSize: '0.9rem',
                 border: '1px solid rgba(0,240,255,0.25)', color: '#00f0ff', textDecoration: 'none',
               }}>
-                CitadelOS Desktop
+                Runix Desktop
               </Link>
             </div>
           </motion.div>
@@ -294,7 +294,7 @@ export default function CitadelOSMobilePage() {
             <strong style={{
               background: 'linear-gradient(135deg, #10b981, #00f0ff)',
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', fontWeight: 800,
-            }}>CitadelOS Mobile</strong>{' '}
+            }}>Runix Mobile</strong>{' '}
             &mdash; Part of the <Link to="/" style={{ color: '#00f0ff' }}>SIN</Link> ecosystem.
             &middot; Mobile Edition
           </p>

@@ -5,8 +5,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import ScrollToTop from './components/ScrollToTop'
 
 const HomePage = lazy(() => import('./pages/HomePage'))
-const CitadelOSPage = lazy(() => import('./pages/CitadelOSPage'))
-const CitadelOSMobilePage = lazy(() => import('./pages/CitadelOSMobilePage'))
+const RunixPage = lazy(() => import('./pages/RunixPage'))
+const RunixMobilePage = lazy(() => import('./pages/RunixMobilePage'))
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
 const IntroPage = lazy(() => import('./pages/docs/IntroPage'))
@@ -56,14 +56,14 @@ export default function App() {
       <ScrollToTop />
       <Routes>
         <Route path="/" element={<Suspense fallback={null}><HomePage /></Suspense>} />
-        <Route path="/citadelos" element={
+        <Route path="/runix" element={
           <Suspense fallback={null}>
-            <CitadelOSPage />
+            <RunixPage />
           </Suspense>
         } />
-        <Route path="/citadelos/mobile" element={
+        <Route path="/runix/mobile" element={
           <Suspense fallback={null}>
-            <CitadelOSMobilePage />
+            <RunixMobilePage />
           </Suspense>
         } />
         <Route path="/docs" element={<Navigate to="/docs/intro" replace />} />

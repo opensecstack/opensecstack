@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom'
 import ScrollSection from '../components/ScrollSection'
 
-export default function CitadelOSSection() {
+export default function RunixSection() {
   return (
-    <ScrollSection id="citadelos">
-      <h2 className="section-title"><span className="gradient-text">CitadelOS</span></h2>
+    <ScrollSection id="runix">
+      <h2 className="section-title"><span className="gradient-text">Runix</span></h2>
       <p className="section-subtitle">
         A microkernel-based operating system built for security from the ground up.
         Every boot, driver load, and privileged syscall is gated by MARSHAL before it's allowed to run.
@@ -32,7 +32,7 @@ export default function CitadelOSSection() {
               <span className="tech-tag">WORM Chain</span>
             </div>
           </div>
-          <Link to="/citadelos" style={{
+          <Link to="/runix" style={{
             display: 'inline-block', marginTop: '1.5rem',
             padding: '10px 24px', borderRadius: 10, fontWeight: 600, fontSize: '0.9rem',
             background: 'rgba(0,240,255,0.08)', border: '1px solid rgba(0,240,255,0.25)',
@@ -64,7 +64,7 @@ export default function CitadelOSSection() {
               <span className="tech-tag">WASM</span>
             </div>
           </div>
-          <Link to="/citadelos/mobile" style={{
+          <Link to="/runix/mobile" style={{
             display: 'inline-block', marginTop: '1.5rem',
             padding: '10px 24px', borderRadius: 10, fontWeight: 600, fontSize: '0.9rem',
             background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)',

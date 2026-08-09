@@ -231,7 +231,7 @@ opensecstack/                       ← monorepo (current, 2026)
 └── adrs/               ← Architecture Decision Records
 ```
 
-**Future repositories** (Phase 5, 2028-2036): `vantage-hash`, `pyramid-registry`, `pyramid-mvno`, `pyramid-os`, `symphy-os` — extracted from the monorepo when their independent lifecycle justifies the split. See [docs/release-process.md](docs/release-process.md) for the split criteria.
+**Future repositories** (Phase 5, 2028-2036): `vantage-hash`, `pyramid-registry`, `pyramid-mvno`, `runix` (single repo, desktop + mobile editions) — extracted from the monorepo when their independent lifecycle justifies the split. See [docs/release-process.md](docs/release-process.md) for the split criteria.
 
 ## Deployment Topology
 

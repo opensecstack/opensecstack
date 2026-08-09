@@ -531,8 +531,8 @@ def render_ecosystem(prs, lang="EN"):
     row2_en = [
         ("ThreatFlow",    "Threat Intelligence\nIOC feeds · TTP map\n[Phase 4]",   DGREY),
         ("MVNO Stack",    "Mobile Network Ops\nSIM · eSIM · VoIP\nCITADEL-gated",  NAVY),
-        ("CitadelOS\nDesktop", "Microkernel OS\nGrid sandboxes\nHardware-backed",  NAVY),
-        ("CitadelOS\nMobile",  "ARM TrustZone\nSIM governance\nMVNO-native",       NAVY),
+        ("Runix\nDesktop", "Microkernel OS\nGrid sandboxes\nHardware-backed",  NAVY),
+        ("Runix\nMobile",  "ARM TrustZone\nSIM governance\nMVNO-native",       NAVY),
     ]
     row1_al = [
         ("APIGuard",      "Siguria API\nOWASP A1–A10\nCVSS 3.1 · SARIF",          NAVY),
@@ -543,8 +543,8 @@ def render_ecosystem(prs, lang="EN"):
     row2_al = [
         ("ThreatFlow",    "Inteligjencë Kërcënimesh\nFurnizues IOC · TTP\n[Faza 4]", DGREY),
         ("MVNO Stack",    "Operacione Rrjeti Celular\nSIM · eSIM · VoIP\nE kontrolluar CITADEL", NAVY),
-        ("CitadelOS\nDesktop", "OS Mikrobërthame\nQeliza sandbox\nMbështetje HW", NAVY),
-        ("CitadelOS\nMobile",  "ARM TrustZone\nQeverisja SIM\nMVNO-nativ",        NAVY),
+        ("Runix\nDesktop", "OS Mikrobërthame\nQeliza sandbox\nMbështetje HW", NAVY),
+        ("Runix\nMobile",  "ARM TrustZone\nQeverisja SIM\nMVNO-nativ",        NAVY),
     ]
 
     row1 = row1_en if lang == "EN" else row1_al

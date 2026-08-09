@@ -87,8 +87,8 @@ function buildSearchItems(): SearchItem[] {
   }))
   items.push(
     { label: 'CITADEL', href: '#citadel' },
-    { label: 'CitadelOS Desktop', href: '#citadelos', route: '/citadelos' },
-    { label: 'CitadelOS Mobile', href: '#citadelos', route: '/citadelos/mobile' },
+    { label: 'Runix Desktop', href: '#runix', route: '/runix' },
+    { label: 'Runix Mobile', href: '#runix', route: '/runix/mobile' },
   )
   return items
 }
@@ -140,14 +140,14 @@ export default function Navbar() {
 
   // Flat list used by the mobile drawer, where a dropdown doesn't make
   // sense -- everything is already in a scrollable column.
-  // Includes the CitadelOS Mobile route so the drawer has full parity with
+  // Includes the Runix Mobile route so the drawer has full parity with
   // desktop search (buildSearchItems indexes it separately from the
-  // CitadelOS desktop button below).
+  // Runix desktop button below).
   const mobileLinks = [
     { label: t('nav.platforms'), href: '#platforms' },
     ...platformLinks,
     ...otherLinks,
-    { label: 'CitadelOS (Mobile)', href: '/citadelos/mobile' },
+    { label: 'Runix (Mobile)', href: '/runix/mobile' },
   ]
 
   // ---- Search state ----
@@ -623,12 +623,12 @@ export default function Navbar() {
             )}
           </div>
 
-          <Link to="/citadelos" style={{
+          <Link to="/runix" style={{
             padding: '7px 14px', borderRadius: 9, fontSize: '0.8rem', fontWeight: 600,
             background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.25)',
             color: 'var(--violet)', textDecoration: 'none', transition: 'all 0.2s',
           }}>
-            {t('nav.citadelos')}
+            {t('nav.runix')}
           </Link>
 
           <a
@@ -737,7 +737,7 @@ export default function Navbar() {
 
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
                 <Link
-                  to="/citadelos"
+                  to="/runix"
                   onClick={() => setMenuOpen(false)}
                   style={{
                     flex: 1, minWidth: 120, textAlign: 'center',
@@ -748,7 +748,7 @@ export default function Navbar() {
                     color: 'var(--violet)', textDecoration: 'none',
                   }}
                 >
-                  {t('nav.citadelos')}
+                  {t('nav.runix')}
                 </Link>
                 <a
                   href="https://github.com/opensecstack/opensecstack"

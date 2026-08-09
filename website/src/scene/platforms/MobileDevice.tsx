@@ -4,7 +4,7 @@ import { Float, Html, Sparkles } from '@react-three/drei'
 import * as THREE from 'three'
 
 /**
- * CitadelOS Mobile — Giza pyramid split into 6 layers with gaps.
+ * Runix Mobile — Giza pyramid split into 6 layers with gaps.
  * Same structure as Desktop but with mobile layers, plus MVNO orbital ring
  * around L3. Each sandbox cell is hoverable.
  */

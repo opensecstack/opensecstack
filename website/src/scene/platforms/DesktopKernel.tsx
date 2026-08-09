@@ -4,7 +4,7 @@ import { Float, Html, Sparkles } from '@react-three/drei'
 import * as THREE from 'three'
 
 /**
- * CitadelOS Desktop — Giza pyramid split into 6 layers with gaps.
+ * Runix Desktop — Giza pyramid split into 6 layers with gaps.
  * Each layer is a truncated pyramid (frustum) with a grid of sandbox
  * cells on top. Hover on any cell shows its service name.
  * The whole structure rotates slowly. Orbital nodes orbit around it.

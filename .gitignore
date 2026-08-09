@@ -73,6 +73,15 @@ coverage.html
 *.coverprofile
 tarpaulin-report.html
 lcov.info
+# go test -coverprofile=coverage_<name>.out / cov.out (per-track scratch
+# profiles from local/agent coverage runs — coverage.out alone above
+# doesn't catch these prefixed/suffixed variants)
+coverage_*.out
+cov.out
+coverage*.xml
+
+# Crash artifacts (e.g. a shell crashing mid-command)
+*.stackdump
 
 # Reports (generated)
 **/reports/*.html

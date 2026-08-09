@@ -173,6 +173,123 @@ func TestScan_LeakedPassword(t *testing.T) {
 	}
 }
 
+func TestScanner_ReplayCount(t *testing.T) {
+	s := NewScanner(DefaultLibrary, 0.30, 0.70, 64*1024, 1*time.Hour, 5)
+	if got := s.ReplayCount("nope"); got != 0 {
+		t.Fatalf("ReplayCount for unseen id = %d, want 0", got)
+	}
+	claim := ClaimRequest{
+		ClaimType: ClaimPassport,
+		Context:   ContextKYC,
+		Fields:    map[string]string{"id_number": "COUNTME1"},
+	}
+	for i := 0; i < 3; i++ {
+		_, _ = s.Scan(context.Background(), claim)
+	}
+	if got := s.ReplayCount("COUNTME1"); got != 3 {
+		t.Fatalf("ReplayCount = %d, want 3", got)
+	}
+}
+
+func TestScanner_SetPatterns(t *testing.T) {
+	s := newTestScanner(t)
+	if len(s.Patterns()) != len(DefaultLibrary) {
+		t.Fatalf("initial patterns = %d, want %d", len(s.Patterns()), len(DefaultLibrary))
+	}
+	custom := []Pattern{DefaultLibrary[0]}
+	s.SetPatterns(custom)
+	if len(s.Patterns()) != 1 {
+		t.Fatalf("after SetPatterns len = %d, want 1", len(s.Patterns()))
+	}
+	if s.Patterns()[0].ID != DefaultLibrary[0].ID {
+		t.Fatalf("SetPatterns did not swap library content: got %s", s.Patterns()[0].ID)
+	}
+}
+
+func TestScanner_EvictStale(t *testing.T) {
+	s := NewScanner(DefaultLibrary, 0.30, 0.70, 64*1024, 10*time.Minute, 5)
+	now := time.Now()
+	claim := ClaimRequest{
+		ClaimType: ClaimPassport,
+		Context:   ContextKYC,
+		Fields:    map[string]string{"id_number": "STALEID1"},
+	}
+	_, _ = s.Scan(context.Background(), claim)
+	if s.ReplayCount("STALEID1") != 1 {
+		t.Fatalf("expected replay entry to exist before eviction")
+	}
+	// Cutoff is now-2*window; eviction fires when lastSeen is before cutoff.
+	// Evict as of far in the future -> entry (lastSeen=~now) is stale.
+	s.evictStale(now.Add(1 * time.Hour))
+	if s.ReplayCount("STALEID1") != 0 {
+		t.Fatalf("expected stale entry evicted, still have count=%d", s.ReplayCount("STALEID1"))
+	}
+}
+
+func TestScanner_EvictStale_KeepsFreshEntries(t *testing.T) {
+	s := NewScanner(DefaultLibrary, 0.30, 0.70, 64*1024, 10*time.Minute, 5)
+	claim := ClaimRequest{
+		ClaimType: ClaimPassport,
+		Context:   ContextKYC,
+		Fields:    map[string]string{"id_number": "FRESHID1"},
+	}
+	_, _ = s.Scan(context.Background(), claim)
+	// Evict "now" — the entry was just seen, so it must survive.
+	s.evictStale(time.Now())
+	if s.ReplayCount("FRESHID1") != 1 {
+		t.Fatalf("fresh entry should survive eviction, got count=%d", s.ReplayCount("FRESHID1"))
+	}
+}
+
+func TestScanner_StartJanitorAndStop(t *testing.T) {
+	// Use a tiny replay window so the janitor tick period is short.
+	s := NewScanner(DefaultLibrary, 0.30, 0.70, 64*1024, 20*time.Millisecond, 5)
+	claim := ClaimRequest{
+		ClaimType: ClaimPassport,
+		Context:   ContextKYC,
+		Fields:    map[string]string{"id_number": "JANITORID1"},
+	}
+	_, _ = s.Scan(context.Background(), claim)
+	s.StartJanitor()
+	defer s.Stop()
+
+	// The janitor should eventually evict this entry once its lastSeen
+	// falls before now-2*window (i.e. after roughly 2 ticks).
+	deadline := time.Now().Add(2 * time.Second)
+	for s.ReplayCount("JANITORID1") != 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if s.ReplayCount("JANITORID1") != 0 {
+		t.Fatalf("janitor did not evict stale entry in time")
+	}
+
+	// Stop must be safe to call multiple times.
+	s.Stop()
+}
+
+func TestInputTooLargeError_Error(t *testing.T) {
+	err := &InputTooLargeError{Max: 100, Seen: 200}
+	if err.Error() != "input exceeds maximum size" {
+		t.Fatalf("Error() = %q", err.Error())
+	}
+}
+
+func TestClaimSize(t *testing.T) {
+	c := ClaimRequest{
+		ClaimType: ClaimPassport,
+		Context:   ContextKYC,
+		Fields:    map[string]string{"id_number": "ABC123"},
+	}
+	got := claimSize(c)
+	want := len(canonicalise(c))
+	if got != want {
+		t.Fatalf("claimSize() = %d, want %d (len of canonicalise output)", got, want)
+	}
+	if got == 0 {
+		t.Fatal("claimSize() should not be 0 for a non-empty claim")
+	}
+}
+
 func TestScan_ClaimHashIsStable(t *testing.T) {
 	s := newTestScanner(t)
 	c := ClaimRequest{

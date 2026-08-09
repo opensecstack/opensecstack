@@ -204,6 +204,47 @@ func TestEvict_RemovesStaleEntries(t *testing.T) {
 	}
 }
 
+func TestStartAndStop_JanitorEvictsInBackground(t *testing.T) {
+	window := 10 * time.Millisecond
+	c := New(Config{
+		Window:         window,
+		Threshold:      100,
+		GraphWindow:    window,
+		GraphThreshold: 100,
+		JanitorPeriod:  10 * time.Millisecond,
+	})
+
+	fp := Fingerprint("passport", "bgjanitor", "tenant-bg")
+	gk := graphKey{issuerCountry: "AL", emailDisposable: false, claimType: "passport"}
+	c.RecordAndCheck(context.Background(), fp, gk)
+	if c.Count(fp) != 1 {
+		t.Fatalf("Count before Start = %d, want 1", c.Count(fp))
+	}
+
+	c.Start()
+	defer c.Stop()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for c.Count(fp) != 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if c.Count(fp) != 0 {
+		t.Fatalf("background janitor did not evict stale fingerprint in time")
+	}
+
+	// Stop must be idempotent (no panic on double-close).
+	c.Stop()
+}
+
+func TestStart_IsIdempotent(t *testing.T) {
+	// Calling Start twice must not launch two janitor goroutines (which
+	// would panic on the second close in Stop, or otherwise misbehave).
+	c := New(Config{JanitorPeriod: time.Hour})
+	c.Start()
+	c.Start()
+	c.Stop()
+}
+
 func TestFingerprint_Deterministic(t *testing.T) {
 	tests := []struct {
 		name      string

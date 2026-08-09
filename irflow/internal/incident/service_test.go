@@ -8,6 +8,12 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/opensecstack/opensecstack/irflow/internal/metrics"
 )
 
 // ---------------------------------------------------------------------------
@@ -919,5 +925,170 @@ func TestProposeAndApproveAction_WithEvidence(t *testing.T) {
 	}
 	if !strings.Contains(string(action.Evidence), "screenshot1.png") {
 		t.Error("evidence content not preserved correctly")
+	}
+}
+
+func TestListPendingActions_ReturnsAllRegardlessOfStatus(t *testing.T) {
+	svc, _ := newTestService()
+	ctx := context.Background()
+
+	inc, _ := svc.Create(ctx, &CreateIncidentRequest{Title: "PA list test", Severity: SeverityP2})
+
+	pa1, err := svc.ProposeAction(ctx, inc.ID, "user-alice", "operator", &ProposeActionRequest{
+		ActionType: "isolate", Description: "Isolate host A",
+	})
+	if err != nil {
+		t.Fatalf("ProposeAction 1: %v", err)
+	}
+	if _, err := svc.ApproveAction(ctx, inc.ID, pa1.ID, "user-bob", "verifier", "tok"); err != nil {
+		t.Fatalf("ApproveAction: %v", err)
+	}
+	if _, err := svc.ProposeAction(ctx, inc.ID, "user-alice", "operator", &ProposeActionRequest{
+		ActionType: "block", Description: "Block IP",
+	}); err != nil {
+		t.Fatalf("ProposeAction 2: %v", err)
+	}
+
+	pending, err := svc.ListPendingActions(ctx, inc.ID)
+	if err != nil {
+		t.Fatalf("ListPendingActions returned error: %v", err)
+	}
+	if len(pending) != 2 {
+		t.Fatalf("got %d pending actions, want 2 (one approved, one still open)", len(pending))
+	}
+
+	statuses := map[string]bool{}
+	for _, pa := range pending {
+		statuses[string(pa.Status)] = true
+	}
+	if !statuses[string(PendingActionStatusApproved)] {
+		t.Error("expected an approved entry in the list")
+	}
+	if !statuses[string(PendingActionStatusPending)] {
+		t.Error("expected a still-pending entry in the list")
+	}
+}
+
+func TestListPendingActions_EmptyForUnknownIncident(t *testing.T) {
+	svc, _ := newTestService()
+	pending, err := svc.ListPendingActions(context.Background(), "does-not-exist")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pending) != 0 {
+		t.Errorf("got %d pending actions, want 0", len(pending))
+	}
+}
+
+func TestStats_AggregatesAcrossIncidents(t *testing.T) {
+	svc, _ := newTestService()
+	ctx := context.Background()
+
+	if _, err := svc.Create(ctx, &CreateIncidentRequest{Title: "A", Severity: SeverityP1}); err != nil {
+		t.Fatalf("create A: %v", err)
+	}
+	if _, err := svc.Create(ctx, &CreateIncidentRequest{Title: "B", Severity: SeverityP1}); err != nil {
+		t.Fatalf("create B: %v", err)
+	}
+	if _, err := svc.Create(ctx, &CreateIncidentRequest{Title: "C", Severity: SeverityP3}); err != nil {
+		t.Fatalf("create C: %v", err)
+	}
+
+	stats, err := svc.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats returned error: %v", err)
+	}
+	if stats.Total != 3 {
+		t.Errorf("Total = %d, want 3", stats.Total)
+	}
+	if stats.BySeverity[string(SeverityP1)] != 2 {
+		t.Errorf("BySeverity[P1] = %d, want 2", stats.BySeverity[string(SeverityP1)])
+	}
+	if stats.BySeverity[string(SeverityP3)] != 1 {
+		t.Errorf("BySeverity[P3] = %d, want 1", stats.BySeverity[string(SeverityP3)])
+	}
+	if stats.ByStatus[string(StatusOpen)] != 3 {
+		t.Errorf("ByStatus[open] = %d, want 3", stats.ByStatus[string(StatusOpen)])
+	}
+}
+
+// failingWORM always errors, forcing Create's synchronous
+// "worm emit failed for incident.created" warning path.
+type failingWORM struct{}
+
+func (failingWORM) Emit(_ context.Context, _ WORMEvent) (*WORMReceipt, error) {
+	return nil, errors.New("worm unavailable")
+}
+
+func TestWithLogger_ReplacesDefaultNopLogger(t *testing.T) {
+	core, logs := observer.New(zapcore.InfoLevel)
+	logger := zap.New(core)
+
+	store := newMockStore()
+	svc := NewService(store, WithLogger(logger), WithWORM(failingWORM{}))
+
+	// A failed WORM emit logs a warning synchronously inside Create -- an
+	// observable side effect that proves the custom logger (not the default
+	// zap.NewNop()) is actually wired in.
+	ctx := context.Background()
+	if _, err := svc.Create(ctx, &CreateIncidentRequest{Title: "worm failure test", Severity: SeverityP3}); err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	entries := logs.All()
+	if len(entries) != 1 {
+		t.Fatalf("got %d log entries, want 1", len(entries))
+	}
+	if entries[0].Message != "worm emit failed for incident.created" {
+		t.Errorf("log message = %q, want %q", entries[0].Message, "worm emit failed for incident.created")
+	}
+}
+
+func TestWithMetrics_AcceptsNilSafely(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("WithMetrics(nil) usage panicked: %v", r)
+		}
+	}()
+	store := newMockStore()
+	svc := NewService(store, WithMetrics(nil))
+	if _, err := svc.Create(context.Background(), &CreateIncidentRequest{Title: "x", Severity: SeverityP3}); err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+}
+
+func TestWithMetrics_RecordsIncidentCreated(t *testing.T) {
+	m := metrics.New(nil)
+	store := newMockStore()
+	svc := NewService(store, WithMetrics(m))
+
+	if _, err := svc.Create(context.Background(), &CreateIncidentRequest{
+		Title: "metrics test", Severity: SeverityP2, Source: SourceManual,
+	}); err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	families, err := m.Registry().Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	var found bool
+	for _, f := range families {
+		if f.GetName() != "irflow_incidents_created_total" {
+			continue
+		}
+		for _, metric := range f.GetMetric() {
+			for _, lbl := range metric.GetLabel() {
+				if lbl.GetName() == "severity" && lbl.GetValue() == string(SeverityP2) {
+					found = true
+					if got := metric.GetCounter().GetValue(); got != 1 {
+						t.Errorf("irflow_incidents_created_total{severity=P2} = %v, want 1", got)
+					}
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected irflow_incidents_created_total{severity=P2} to be recorded via WithMetrics")
 	}
 }

@@ -290,6 +290,62 @@ func TestHealthDetail_ReturnsVersion(t *testing.T) {
 	if body["version"] == nil || body["version"] == "" {
 		t.Error("expected non-empty version field")
 	}
+	if body["db"] != "unknown" {
+		t.Errorf("db = %v, want 'unknown' (no pinger configured)", body["db"])
+	}
+}
+
+// fakePinger is a Pinger stub whose Ping outcome is controlled by the test.
+type fakePinger struct {
+	err error
+}
+
+func (f fakePinger) Ping(_ context.Context) error { return f.err }
+
+func TestHealthDetail_OKWhenPingerHealthy(t *testing.T) {
+	store := newAPIMockStore()
+	svc := incident.NewService(store)
+	logger, _ := zap.NewDevelopment()
+	srv := NewServer(Options{Logger: logger, Incidents: svc, Pinger: fakePinger{}})
+
+	req := httptest.NewRequest(http.MethodGet, "/health/detail", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	var body map[string]interface{}
+	decodeJSON(t, rec, &body)
+	if body["status"] != "ok" {
+		t.Errorf("status field = %v, want ok", body["status"])
+	}
+	if body["db"] != "ok" {
+		t.Errorf("db = %v, want ok", body["db"])
+	}
+}
+
+func TestHealthDetail_DegradedWhenPingerFails(t *testing.T) {
+	store := newAPIMockStore()
+	svc := incident.NewService(store)
+	logger, _ := zap.NewDevelopment()
+	srv := NewServer(Options{Logger: logger, Incidents: svc, Pinger: fakePinger{err: errors.New("connection refused")}})
+
+	req := httptest.NewRequest(http.MethodGet, "/health/detail", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+	var body map[string]interface{}
+	decodeJSON(t, rec, &body)
+	if body["status"] != "degraded" {
+		t.Errorf("status field = %v, want degraded", body["status"])
+	}
+	if body["db"] != "unreachable" {
+		t.Errorf("db = %v, want unreachable", body["db"])
+	}
 }
 
 // ---------------------------------------------------------------------------

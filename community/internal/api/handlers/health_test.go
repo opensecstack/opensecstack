@@ -112,3 +112,30 @@ func TestHealthCheck_ResponseShape(t *testing.T) {
 		t.Error("timestamp field must not be empty")
 	}
 }
+
+func TestReadinessCheck_UnreachableDB_Returns503(t *testing.T) {
+	d := newDepsWithBadDB(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/ready", nil)
+	w := httptest.NewRecorder()
+
+	handlers.ReadinessCheck(d)(w, req)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 when DB unreachable, got %d", resp.StatusCode)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	resp.Body.Close()
+
+	if ready, _ := body["ready"].(bool); ready {
+		t.Error("expected ready=false when DB is unreachable")
+	}
+	if body["reason"] != "db unreachable" {
+		t.Errorf("expected reason='db unreachable', got %v", body["reason"])
+	}
+}

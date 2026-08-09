@@ -9,6 +9,16 @@ from flask import current_app, g, jsonify, request
 from .audit import write_audit
 
 
+class TokenRevokedError(jwt.InvalidTokenError):
+    """Raised by verify_token() specifically for a revoked jti.
+
+    Kept distinct from the generic jwt.InvalidTokenError so require_auth()
+    can refuse a revoked token outright instead of falling through to its
+    legacy (no-type-claim, no-revocation-check) decode path -- which would
+    otherwise re-authenticate a token that was just revoked.
+    """
+
+
 def _constant_eq(a: str, b: str) -> bool:
     """Constant-time string comparison to prevent timing attacks."""
     return hmac.compare_digest(a.encode(), b.encode())
@@ -196,7 +206,7 @@ def verify_token(token: str, expected_type: str) -> dict:
             revoked = _db_is_revoked(jti)
 
         if revoked:
-            raise jwt.InvalidTokenError("Token has been revoked")
+            raise TokenRevokedError("Token has been revoked")
 
     return payload
 
@@ -320,6 +330,11 @@ def require_auth(f):
             payload = verify_token(token, "access")
         except jwt.ExpiredSignatureError:
             return jsonify({"error": "Token has expired", "code": "UNAUTHORIZED"}), 401
+        except TokenRevokedError:
+            # Do NOT fall through to the legacy decode path below -- that
+            # path only checks signature + expiry, not revocation, and would
+            # silently re-authenticate a token that was just revoked.
+            return jsonify({"error": "Token has been revoked", "code": "UNAUTHORIZED"}), 401
         except jwt.InvalidTokenError:
             # Legacy tokens (no type claim) issued before this change are
             # decoded the old way so existing integrations are not broken.

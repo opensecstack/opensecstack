@@ -109,6 +109,70 @@ func TestMiddleware_DisabledInjectsSyntheticAdminClaims(t *testing.T) {
 	}
 }
 
+func TestBearerToken(t *testing.T) {
+	cases := []struct {
+		name   string
+		header string
+		want   string
+	}{
+		{"valid bearer", "Bearer abc.def.ghi", "abc.def.ghi"},
+		{"missing header", "", ""},
+		{"wrong scheme", "Basic abc123", ""},
+		{"extra whitespace trimmed", "Bearer   spaced-token  ", "spaced-token"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/x", nil)
+			if c.header != "" {
+				req.Header.Set("Authorization", c.header)
+			}
+			if got := BearerToken(req); got != c.want {
+				t.Errorf("BearerToken() = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestRequireApprove_RoleGuardsEnforced(t *testing.T) {
+	r := chi.NewRouter()
+	r.Use(Middleware(Config{Secret: mwSecret}))
+	r.With(RequireApprove()).Post("/approve", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	cases := []struct {
+		role string
+		want int
+	}{
+		{RoleAdmin, http.StatusOK},
+		{RoleOperator, http.StatusOK},
+		{RoleVerifier, http.StatusOK},
+		{RoleService, http.StatusOK},
+		{RoleViewer, http.StatusForbidden},
+	}
+	for _, c := range cases {
+		t.Run(c.role, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/approve", nil)
+			req.Header.Set("Authorization", "Bearer "+tokenFor(t, c.role))
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, req)
+			if rec.Code != c.want {
+				t.Errorf("role %s: status = %d, want %d", c.role, rec.Code, c.want)
+			}
+		})
+	}
+}
+
+func TestRequireApprove_RejectsUnauthenticated(t *testing.T) {
+	h := RequireApprove()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/approve", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
 // End-to-end test through chi router exercising RequireWrite/RequireDelete.
 func TestRBAC_RoleGuardsEnforced(t *testing.T) {
 	r := chi.NewRouter()

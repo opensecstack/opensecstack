@@ -270,7 +270,7 @@ func (s *Service) ProposeAction(ctx context.Context, incidentID, operatorUserID,
 	}
 
 	pa := &PendingAction{
-		ID:             fmt.Sprintf("pact-%d", time.Now().UnixNano()),
+		ID:             fmt.Sprintf("pact-%d-%d", time.Now().UnixNano(), idCounter.Add(1)),
 		IncidentID:     incidentID,
 		ActionType:     req.ActionType,
 		Description:    req.Description,
@@ -319,7 +319,7 @@ func (s *Service) ApproveAction(ctx context.Context, incidentID, pendingActionID
 	pa.VerifierRole = verifierRole
 
 	action := &IncidentAction{
-		ID:          fmt.Sprintf("act-%d", now.UnixNano()),
+		ID:          fmt.Sprintf("act-%d-%d", now.UnixNano(), idCounter.Add(1)),
 		IncidentID:  incidentID,
 		ActionType:  pa.ActionType,
 		OperatorID:  pa.OperatorUserID,
@@ -466,7 +466,7 @@ func (s *Service) GetPendingAction(ctx context.Context, incidentID, pendingActio
 
 // AddIOC attaches an indicator of compromise to an incident.
 func (s *Service) AddIOC(ctx context.Context, incidentID string, ioc *IOCEnrichment) (*IOCEnrichment, error) {
-	ioc.ID = fmt.Sprintf("ioc-%d", time.Now().UnixNano())
+	ioc.ID = fmt.Sprintf("ioc-%d-%d", time.Now().UnixNano(), idCounter.Add(1))
 	ioc.IncidentID = incidentID
 	if ioc.CreatedAt.IsZero() {
 		ioc.CreatedAt = time.Now().UTC()
@@ -486,7 +486,7 @@ func (s *Service) ListIOCs(ctx context.Context, incidentID string) ([]IOCEnrichm
 // The incident must already exist; callers that only have an incident ID
 // from an inbound webhook should Get() it first to confirm a match.
 func (s *Service) AddTimelineEntry(ctx context.Context, incidentID string, entry *TimelineEntry) (*TimelineEntry, error) {
-	entry.ID = fmt.Sprintf("tl-%d", time.Now().UnixNano())
+	entry.ID = fmt.Sprintf("tl-%d-%d", time.Now().UnixNano(), idCounter.Add(1))
 	entry.IncidentID = incidentID
 	if entry.CreatedAt.IsZero() {
 		entry.CreatedAt = time.Now().UTC()

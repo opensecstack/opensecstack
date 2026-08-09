@@ -31,6 +31,27 @@ type fakeServer struct {
 	delay     time.Duration
 }
 
+func (f *fakeServer) ScoreMedia(ctx context.Context, req *mlpb.MediaScoreRequest) (*mlpb.ScoreResponse, error) {
+	if f.scoreErr != nil {
+		return nil, f.scoreErr
+	}
+	return f.scoreResp, nil
+}
+
+func (f *fakeServer) ScoreIdentity(ctx context.Context, req *mlpb.IdentityScoreRequest) (*mlpb.ScoreResponse, error) {
+	if f.scoreErr != nil {
+		return nil, f.scoreErr
+	}
+	return f.scoreResp, nil
+}
+
+func (f *fakeServer) ScoreAudio(ctx context.Context, req *mlpb.AudioScoreRequest) (*mlpb.ScoreResponse, error) {
+	if f.scoreErr != nil {
+		return nil, f.scoreErr
+	}
+	return f.scoreResp, nil
+}
+
 func (f *fakeServer) ScorePrompt(ctx context.Context, req *mlpb.PromptScoreRequest) (*mlpb.ScoreResponse, error) {
 	if f.delay > 0 {
 		select {
@@ -154,6 +175,116 @@ func TestScorePrompt_Timeout(t *testing.T) {
 	c := newClientForTest(t, addr, 10*time.Millisecond)
 	if _, err := c.ScorePrompt(context.Background(), "x", "", "", ""); err == nil {
 		t.Fatalf("expected timeout error")
+	}
+}
+
+func TestScoreMedia_Success(t *testing.T) {
+	fake := &fakeServer{
+		scoreResp: &mlpb.ScoreResponse{Confidence: 0.75, Verdict: "SUSPICIOUS", ModelVersion: "media-v1"},
+	}
+	addr, cleanup := newTestServer(t, fake)
+	defer cleanup()
+
+	c := newClientForTest(t, addr, 1*time.Second)
+	res, err := c.ScoreMedia(context.Background(), "hash123", "image/png", 1024, true, true, "corr", "tenant")
+	if err != nil {
+		t.Fatalf("ScoreMedia err: %v", err)
+	}
+	if res.Verdict != "SUSPICIOUS" || res.ModelVersion != "media-v1" {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+}
+
+func TestScoreIdentity_Success(t *testing.T) {
+	fake := &fakeServer{
+		scoreResp: &mlpb.ScoreResponse{Confidence: 0.4, Verdict: "CLEAN", ModelVersion: "identity-v1"},
+	}
+	addr, cleanup := newTestServer(t, fake)
+	defer cleanup()
+
+	c := newClientForTest(t, addr, 1*time.Second)
+	res, err := c.ScoreIdentity(context.Background(), "passport", "kyc", 2, false, true, "AL", true, 0, "corr", "tenant")
+	if err != nil {
+		t.Fatalf("ScoreIdentity err: %v", err)
+	}
+	if res.Verdict != "CLEAN" || res.Confidence != 0.4 {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+}
+
+func TestScoreAudio_Success(t *testing.T) {
+	fake := &fakeServer{
+		scoreResp: &mlpb.ScoreResponse{Confidence: 0.6, Verdict: "SUSPICIOUS", ModelVersion: "audio-v1"},
+	}
+	addr, cleanup := newTestServer(t, fake)
+	defer cleanup()
+
+	c := newClientForTest(t, addr, 1*time.Second)
+	res, err := c.ScoreAudio(context.Background(), "sess-1", []byte("mfcc"), []byte("spectral"), 1500.0, true, "corr", "tenant")
+	if err != nil {
+		t.Fatalf("ScoreAudio err: %v", err)
+	}
+	if res.Verdict != "SUSPICIOUS" || res.ModelVersion != "audio-v1" {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+}
+
+func TestScoreMedia_ErrorPropagates(t *testing.T) {
+	fake := &fakeServer{scoreErr: status.Error(codes.Internal, "boom")}
+	addr, cleanup := newTestServer(t, fake)
+	defer cleanup()
+
+	c := newClientForTest(t, addr, 1*time.Second)
+	if _, err := c.ScoreMedia(context.Background(), "h", "m", 1, false, false, "", ""); err == nil {
+		t.Fatal("expected error from failing ScoreMedia")
+	}
+}
+
+func TestNew_EmptyGRPCURL_Errors(t *testing.T) {
+	_, err := New(Config{}, zerolog.Nop(), nil)
+	if err == nil {
+		t.Fatal("expected error for empty GRPCURL")
+	}
+}
+
+func TestNew_DefaultsTimeoutAndMetrics(t *testing.T) {
+	c, err := New(Config{GRPCURL: "127.0.0.1:0"}, zerolog.Nop(), nil)
+	if err != nil {
+		t.Fatalf("New err: %v", err)
+	}
+	defer func() { _ = c.Close() }()
+	if c.cfg.Timeout != 1*time.Second {
+		t.Fatalf("default timeout = %v, want 1s", c.cfg.Timeout)
+	}
+	if c.metrics == nil {
+		t.Fatal("metrics should default to noopMetrics, not nil")
+	}
+}
+
+func TestClient_Close_NilSafe(t *testing.T) {
+	var c *Client
+	if err := c.Close(); err != nil {
+		t.Fatalf("nil client Close() = %v, want nil", err)
+	}
+}
+
+func TestClient_AlwaysScore_NilSafe(t *testing.T) {
+	var c *Client
+	if c.AlwaysScore() {
+		t.Fatal("nil client AlwaysScore() should be false")
+	}
+}
+
+func TestClient_AlwaysScore_ReflectsConfig(t *testing.T) {
+	addr, cleanup := newTestServer(t, &fakeServer{})
+	defer cleanup()
+	c := newClientForTest(t, addr, time.Second)
+	if c.AlwaysScore() {
+		t.Fatal("AlwaysScore should be false by default in newClientForTest")
+	}
+	c.cfg.AlwaysScore = true
+	if !c.AlwaysScore() {
+		t.Fatal("AlwaysScore should reflect cfg.AlwaysScore=true")
 	}
 }
 

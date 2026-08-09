@@ -86,6 +86,47 @@ func TestChainHash_ChangePayloadBreaksChain(t *testing.T) {
 	}
 }
 
+func TestChainHash_InvalidHexPrevHashFallsBackToRawBytes(t *testing.T) {
+	// "not-valid-hex" cannot be hex-decoded — chainHash must fall back to
+	// treating it as raw bytes rather than erroring, and that fallback must
+	// still be deterministic.
+	payload := []byte(`{"event":"test"}`)
+	h1 := chainHash("not-valid-hex", payload)
+	h2 := chainHash("not-valid-hex", payload)
+	if h1 != h2 {
+		t.Error("chainHash fallback for invalid hex prevHash is not deterministic")
+	}
+	if len(h1) != 64 {
+		t.Errorf("expected 64 hex chars, got %d", len(h1))
+	}
+	// Must differ from the result of hashing a validly-hex-decoded prevHash
+	// of different content, confirming the raw-bytes fallback actually
+	// participates in the hash (not silently ignored/zeroed).
+	hValidHex := chainHash(genesisHash(), payload)
+	if h1 == hValidHex {
+		t.Error("invalid-hex fallback produced the same hash as a genuinely different prevHash")
+	}
+}
+
+// ── nullIfEmpty unit tests ────────────────────────────────────────────────────
+
+func TestNullIfEmpty_EmptyStringReturnsNil(t *testing.T) {
+	if got := nullIfEmpty(""); got != nil {
+		t.Errorf("nullIfEmpty(\"\") = %v, want nil", got)
+	}
+}
+
+func TestNullIfEmpty_NonEmptyStringReturnsItself(t *testing.T) {
+	got := nullIfEmpty("abc123")
+	s, ok := got.(string)
+	if !ok {
+		t.Fatalf("nullIfEmpty(\"abc123\") returned %T, want string", got)
+	}
+	if s != "abc123" {
+		t.Errorf("nullIfEmpty(\"abc123\") = %q, want %q", s, "abc123")
+	}
+}
+
 // ── Benchmark (no DB) ─────────────────────────────────────────────────────────
 
 func BenchmarkTripleHash_1KB(b *testing.B) {

@@ -4,6 +4,7 @@ import (
 	"expvar"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -14,6 +15,31 @@ import (
 // same test binary is safe.
 func newTestCollector() *MetricsCollector {
 	return NewMetricsCollector()
+}
+
+// TestMetricsCollector_Handler verifies that Handler() serves the expvar
+// registry as JSON, including the metrics this collector itself registers.
+func TestMetricsCollector_Handler(t *testing.T) {
+	mc := newTestCollector()
+	// Exercise the middleware once so http_requests_total has an entry.
+	mc.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/x", nil))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	mc.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	if ct := rr.Header().Get("Content-Type"); ct != "application/json; charset=utf-8" {
+		t.Errorf("Content-Type = %q, want application/json; charset=utf-8", ct)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "http_requests_total") {
+		t.Errorf("body does not contain http_requests_total: %s", body)
+	}
 }
 
 // getExpvarInt retrieves the current value of a named expvar.Int. Returns 0

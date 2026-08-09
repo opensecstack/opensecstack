@@ -137,6 +137,61 @@ func TestHTTPMiddleware_RecordsStatus(t *testing.T) {
 	}
 }
 
+func TestInFlightMiddleware_TracksGaugeAcrossRequest(t *testing.T) {
+	m := New(prometheus.NewRegistry())
+	started := make(chan struct{})
+	release := make(chan struct{})
+
+	r := chi.NewRouter()
+	r.Use(m.InFlightMiddleware())
+	r.Get("/slow", func(w http.ResponseWriter, _ *http.Request) {
+		close(started)
+		<-release
+		w.WriteHeader(http.StatusOK)
+	})
+
+	done := make(chan struct{})
+	go func() {
+		req := httptest.NewRequest(http.MethodGet, "/slow", nil)
+		r.ServeHTTP(httptest.NewRecorder(), req)
+		close(done)
+	}()
+
+	<-started
+	if got := testutil.ToFloat64(m.httpInFlight.WithLabelValues("all")); got != 1 {
+		t.Errorf("in-flight during request = %v, want 1", got)
+	}
+	close(release)
+	<-done
+
+	if got := testutil.ToFloat64(m.httpInFlight.WithLabelValues("all")); got != 0 {
+		t.Errorf("in-flight after request = %v, want 0", got)
+	}
+}
+
+func TestNilInFlightMiddleware_IsPassthrough(t *testing.T) {
+	var m *Metrics
+	h := m.InFlightMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	}))
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/x", nil)
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTeapot {
+		t.Errorf("status = %d, want 418", rec.Code)
+	}
+}
+
+func TestRegistry_ReturnsBoundRegistry(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	m := New(reg)
+	if m.Registry() != reg {
+		t.Error("Registry() did not return the registry passed to New")
+	}
+}
+
 func TestNilMiddleware_IsPassthrough(t *testing.T) {
 	// A nil *Metrics must return passthrough middleware so tests can pass
 	// zero values without crashing.

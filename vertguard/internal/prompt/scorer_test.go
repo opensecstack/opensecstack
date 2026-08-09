@@ -2,6 +2,27 @@ package prompt
 
 import "testing"
 
+func TestIsValidContext(t *testing.T) {
+	cases := []struct {
+		ctx  string
+		want bool
+	}{
+		{"user_chat_input", true},
+		{"authenticated_operator", true},
+		{"internal_dev_tool", true},
+		{"untrusted_third_party", true},
+		{"untrusted_document_content", true},
+		{"", false},
+		{"bogus_context", false},
+		{"USER_CHAT_INPUT", false}, // case-sensitive
+	}
+	for _, c := range cases {
+		if got := IsValidContext(c.ctx); got != c.want {
+			t.Errorf("IsValidContext(%q) = %v, want %v", c.ctx, got, c.want)
+		}
+	}
+}
+
 func TestScore_NoMatches_IsClean(t *testing.T) {
 	s := Score(nil, "user_chat_input", 0.3, 0.7)
 	if s.Classification != ClassificationClean {

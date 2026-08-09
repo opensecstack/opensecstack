@@ -215,6 +215,95 @@ func TestExecutor_CancelledContext(t *testing.T) {
 	}
 }
 
+func TestExecutor_EnrichStep(t *testing.T) {
+	e := newTestExecutor()
+	pb := &Playbook{
+		ID: "pb1",
+		Steps: []Step{
+			{ID: "a", Name: "Enrich", Type: StepTypeEnrich, Config: map[string]interface{}{
+				"sources": []interface{}{"threatflow", "virustotal"},
+			}},
+		},
+	}
+	result := e.Run(context.Background(), pb, &Execution{ID: "e1", IncidentID: "inc-42"})
+
+	if result.Status != ExecStatusCompleted {
+		t.Fatalf("status = %s, want %s (error: %s)", result.Status, ExecStatusCompleted, result.Error)
+	}
+	if len(result.StepResults) != 1 {
+		t.Fatalf("got %d step results, want 1", len(result.StepResults))
+	}
+	sr := result.StepResults[0]
+	if sr.Status != "success" {
+		t.Fatalf("step status = %s, want success (error: %s)", sr.Status, sr.Error)
+	}
+	want := "enrichment requested from 2 source(s) for incident inc-42 (dry-run)"
+	if sr.Output != want {
+		t.Errorf("output = %q, want %q", sr.Output, want)
+	}
+}
+
+func TestExecutor_EnrichStep_NoSources(t *testing.T) {
+	e := newTestExecutor()
+	pb := &Playbook{
+		ID:    "pb1",
+		Steps: []Step{{ID: "a", Name: "Enrich", Type: StepTypeEnrich}},
+	}
+	result := e.Run(context.Background(), pb, &Execution{ID: "e1", IncidentID: "inc-1"})
+
+	want := "enrichment requested from 0 source(s) for incident inc-1 (dry-run)"
+	if got := result.StepResults[0].Output; got != want {
+		t.Errorf("output = %q, want %q", got, want)
+	}
+}
+
+func TestExecutor_ScanStep(t *testing.T) {
+	e := newTestExecutor()
+	pb := &Playbook{
+		ID: "pb1",
+		Steps: []Step{
+			{ID: "a", Name: "Scan", Type: StepTypeScan, Config: map[string]interface{}{
+				"target": "https://api.example.com",
+			}},
+		},
+	}
+	result := e.Run(context.Background(), pb, &Execution{ID: "e1", IncidentID: "inc-7"})
+
+	if result.Status != ExecStatusCompleted {
+		t.Fatalf("status = %s, want %s (error: %s)", result.Status, ExecStatusCompleted, result.Error)
+	}
+	sr := result.StepResults[0]
+	if sr.Status != "success" {
+		t.Fatalf("step status = %s, want success (error: %s)", sr.Status, sr.Error)
+	}
+	want := `scan triggered against "https://api.example.com" for incident inc-7 (dry-run)`
+	if sr.Output != want {
+		t.Errorf("output = %q, want %q", sr.Output, want)
+	}
+}
+
+func TestExecutor_ConditionalStep(t *testing.T) {
+	e := newTestExecutor()
+	pb := &Playbook{
+		ID: "pb1",
+		Steps: []Step{
+			{ID: "a", Name: "Cond", Type: StepTypeConditional, Config: map[string]interface{}{
+				"expression": "severity == 'P1'",
+			}},
+		},
+	}
+	result := e.Run(context.Background(), pb, &Execution{ID: "e1", IncidentID: "inc-9"})
+
+	if result.Status != ExecStatusCompleted {
+		t.Fatalf("status = %s, want %s (error: %s)", result.Status, ExecStatusCompleted, result.Error)
+	}
+	sr := result.StepResults[0]
+	want := `conditional "severity == 'P1'" evaluated (dry-run)`
+	if sr.Output != want {
+		t.Errorf("output = %q, want %q", sr.Output, want)
+	}
+}
+
 func stepIDs(results []StepResult) []string {
 	ids := make([]string, len(results))
 	for i, r := range results {

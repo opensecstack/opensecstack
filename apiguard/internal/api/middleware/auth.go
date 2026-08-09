@@ -111,7 +111,7 @@ func JWTAuthWithRotation(secret, previousSecret string, trustedProxies []*net.IP
 				if err == errInvalidTokenType {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusUnauthorized)
-					_ = json.NewEncoder(w).Encode(map[string]string{
+					_ = json.NewEncoder(w).Encode(map[string]string{ //nolint:errcheck
 						"error": "invalid token type",
 						"code":  "INVALID_TOKEN",
 					})
@@ -196,7 +196,7 @@ func JWTAuthWithProviderAndDenylist(sp *SecretProvider, denylist *TokenDenylist,
 				if err == errInvalidTokenType {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusUnauthorized)
-					_ = json.NewEncoder(w).Encode(map[string]string{
+					_ = json.NewEncoder(w).Encode(map[string]string{ //nolint:errcheck
 						"error": "invalid token type",
 						"code":  "INVALID_TOKEN",
 					})
@@ -345,7 +345,7 @@ func JWTAuthWithProviderDenylistAndSinauth(sp *SecretProvider, denylist *TokenDe
 				if err == errInvalidTokenType {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusUnauthorized)
-					_ = json.NewEncoder(w).Encode(map[string]string{
+					_ = json.NewEncoder(w).Encode(map[string]string{ //nolint:errcheck
 						"error": "invalid token type",
 						"code":  "INVALID_TOKEN",
 					})
@@ -422,7 +422,7 @@ func jwtAuthWithSinauthClient(secret, previousSecret string, sc *sinauth.Client,
 				if err == errInvalidTokenType {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusUnauthorized)
-					_ = json.NewEncoder(w).Encode(map[string]string{
+					_ = json.NewEncoder(w).Encode(map[string]string{ //nolint:errcheck
 						"error": "invalid token type",
 						"code":  "INVALID_TOKEN",
 					})
@@ -543,7 +543,7 @@ func base64URLDecode(s string) ([]byte, error) {
 func unauthorized(w http.ResponseWriter, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
-	_ = json.NewEncoder(w).Encode(map[string]string{
+	_ = json.NewEncoder(w).Encode(map[string]string{ //nolint:errcheck
 		"error":   "unauthorized",
 		"message": message,
 	})

@@ -2,8 +2,10 @@ import logging
 import threading
 import time
 import uuid as _uuid_mod
+from typing import Any, cast
 
-from flask import jsonify, request
+from flask import Flask, Response, jsonify, request
+from flask.typing import ResponseReturnValue
 from flask_cors import CORS
 
 from . import extensions
@@ -40,7 +42,7 @@ _rate_limit_script = None
 _rate_limit_script_lock = threading.Lock()
 
 
-def _get_rate_limit_script(rc):
+def _get_rate_limit_script(rc: Any) -> Any:
     """Return the registered Lua script, registering it on first call (thread-safe)."""
     global _rate_limit_script
     if _rate_limit_script is None:
@@ -98,7 +100,7 @@ def _check_rate_limit(ip: str, limit: int, window: int = 60) -> tuple[bool, int]
     if not allowed:
         # Estimate retry_after from the oldest entry still in the window.
         try:
-            oldest_score = rc.zrange(key, 0, 0, withscores=True)
+            oldest_score = cast(list, rc.zrange(key, 0, 0, withscores=True))
             if oldest_score:
                 oldest_ms = oldest_score[0][1]
                 retry_after = int((oldest_ms + window_ms - now_ms) / 1000) + 1
@@ -111,7 +113,7 @@ def _check_rate_limit(ip: str, limit: int, window: int = 60) -> tuple[bool, int]
     return True, 0
 
 
-def apply_middleware(app) -> None:
+def apply_middleware(app: Flask) -> None:
     """Register before/after request hooks on the Flask app."""
 
     # CORS — restrict to configured origins in production
@@ -125,7 +127,7 @@ def apply_middleware(app) -> None:
     CORS(app, origins=allowed_origins, supports_credentials=False)
 
     @app.before_request
-    def rate_limit():
+    def rate_limit() -> ResponseReturnValue | None:
         # Skip rate limiting for health check
         if request.path == "/health":
             return None
@@ -139,9 +141,7 @@ def apply_middleware(app) -> None:
                 import base64
                 import json as _json
 
-                import jwt as _jwt
-
-                token = auth_header[len("Bearer ") :]
+                token = auth_header[len("Bearer ") :]  # noqa: E203 (black formats this space; flake8 disagrees)
                 payload_b64 = token.split(".")[1]
                 payload_b64 += "=" * (4 - len(payload_b64) % 4)
                 claims = _json.loads(base64.urlsafe_b64decode(payload_b64))
@@ -162,7 +162,7 @@ def apply_middleware(app) -> None:
         return None
 
     @app.after_request
-    def security_headers(response):
+    def security_headers(response: Response) -> Response:
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"

@@ -21,11 +21,11 @@ def _sanitise(s: object) -> str:
     return text[:_MAX_FIELD_LEN]
 
 
-def _isoformat(val) -> str:
+def _isoformat(val: object) -> str:
     if val is None:
         return ""
     if hasattr(val, "isoformat"):
-        return val.isoformat()
+        return str(val.isoformat())
     return str(val)
 
 
@@ -47,7 +47,7 @@ def generate_nca_report(assessment: Any, controls: list[Any], organisation: Any)
     )
 
     # ── Assessment element ────────────────────────────────────────────────────
-    assessment_el = ET.SubElement(
+    ET.SubElement(
         root,
         "Assessment",
         attrib={

@@ -9,7 +9,7 @@ from .metrics import init_metrics
 from .middleware import apply_middleware
 
 
-def create_app(config_class=Config):
+def create_app(config_class: type = Config) -> Flask:
     app = Flask(__name__)
     app.config.from_object(config_class)
 

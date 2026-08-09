@@ -81,7 +81,7 @@ func TestKeys_Register_Success(t *testing.T) {
 	h := NewKeys(zerolog.Nop(), store, verifier)
 
 	body, _ := json.Marshal(registerKeyRequest{UserID: "101", Token: "tok-101", KeyID: "cli-1", PublicKey: "abcd"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/keys/register", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/keys/register", bytes.NewReader(body))
 	rw := httptest.NewRecorder()
 	h.Register(rw, req)
 
@@ -101,7 +101,7 @@ func TestKeys_Register_RejectsMismatchedToken(t *testing.T) {
 
 	// Attempt to register a key for user 999 using user 101's token.
 	body, _ := json.Marshal(registerKeyRequest{UserID: "999", Token: "tok-101", KeyID: "cli-1", PublicKey: "abcd"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/keys/register", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/keys/register", bytes.NewReader(body))
 	rw := httptest.NewRecorder()
 	h.Register(rw, req)
 
@@ -119,7 +119,7 @@ func TestKeys_Register_RejectsUnknownToken(t *testing.T) {
 	h := NewKeys(zerolog.Nop(), store, verifier)
 
 	body, _ := json.Marshal(registerKeyRequest{UserID: "101", Token: "does-not-exist", KeyID: "cli-1", PublicKey: "abcd"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/keys/register", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/keys/register", bytes.NewReader(body))
 	rw := httptest.NewRecorder()
 	h.Register(rw, req)
 
@@ -134,7 +134,7 @@ func TestKeys_Register_MissingFields(t *testing.T) {
 	h := NewKeys(zerolog.Nop(), store, verifier)
 
 	body, _ := json.Marshal(registerKeyRequest{UserID: "101"})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/keys/register", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/keys/register", bytes.NewReader(body))
 	rw := httptest.NewRecorder()
 	h.Register(rw, req)
 
@@ -149,7 +149,7 @@ func TestKeys_Get_Found(t *testing.T) {
 	h := NewKeys(zerolog.Nop(), store, verifier)
 	_ = store.RegisterKey(context.Background(), "101", "cli-1", "abcd")
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/keys/101", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/keys/101", nil)
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("user_id", "101")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rc))
@@ -166,7 +166,7 @@ func TestKeys_Get_NotFound(t *testing.T) {
 	verifier := newFakeVerifier()
 	h := NewKeys(zerolog.Nop(), store, verifier)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/keys/999", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/keys/999", nil)
 	rc := chi.NewRouteContext()
 	rc.URLParams.Add("user_id", "999")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rc))

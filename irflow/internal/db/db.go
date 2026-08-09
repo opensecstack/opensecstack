@@ -6,8 +6,20 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// querier is the minimal subset of *pgxpool.Pool that the store types
+// depend on. Abstracting it as an interface lets tests substitute a mock
+// implementation (e.g. pgxmock) without a real PostgreSQL connection, while
+// production code continues to pass the concrete *pgxpool.Pool unchanged.
+type querier interface {
+	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row
+}
 
 // NewPool creates a configured PostgreSQL connection pool.
 func NewPool(ctx context.Context, host string, port int, name, user, password, sslmode string) (*pgxpool.Pool, error) {

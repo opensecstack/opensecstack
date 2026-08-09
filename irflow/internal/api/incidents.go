@@ -142,8 +142,15 @@ func (s *Server) handlePatchIncident(w http.ResponseWriter, r *http.Request) {
 
 	inc, err := s.incidents.Patch(r.Context(), id, &req)
 	if err != nil {
-		s.logger.Error("failed to patch incident", zap.String("id", id), zap.Error(err))
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		switch {
+		case errors.Is(err, incident.ErrNotFound):
+			writeError(w, http.StatusNotFound, "incident not found")
+		case errors.Is(err, incident.ErrInvalidTransition):
+			writeError(w, http.StatusBadRequest, err.Error())
+		default:
+			s.logger.Error("failed to patch incident", zap.String("id", id), zap.Error(err))
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
 		return
 	}
 
@@ -162,6 +169,10 @@ func (s *Server) handleDeleteIncident(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.incidents.Delete(r.Context(), id); err != nil {
+		if errors.Is(err, incident.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "incident not found")
+			return
+		}
 		s.logger.Error("failed to delete incident", zap.String("id", id), zap.Error(err))
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return

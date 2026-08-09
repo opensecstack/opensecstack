@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -35,7 +36,7 @@ func TestRequestLogger_CallsNext(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ping", nil)
 	applyRequestLogger(next, req)
 
 	if !called {
@@ -46,7 +47,7 @@ func TestRequestLogger_CallsNext(t *testing.T) {
 // TestRequestLogger_PassesThrough200 verifies that a 200 response from the
 // downstream handler is propagated unchanged.
 func TestRequestLogger_PassesThrough200(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", nil)
 	rr := applyRequestLogger(makeStatusHandler(http.StatusOK), req)
 
 	if rr.Code != http.StatusOK {
@@ -57,7 +58,7 @@ func TestRequestLogger_PassesThrough200(t *testing.T) {
 // TestRequestLogger_PassesThrough404 verifies that a 404 from downstream is
 // not altered by the logging middleware.
 func TestRequestLogger_PassesThrough404(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/missing", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/missing", nil)
 	rr := applyRequestLogger(makeStatusHandler(http.StatusNotFound), req)
 
 	if rr.Code != http.StatusNotFound {
@@ -68,7 +69,7 @@ func TestRequestLogger_PassesThrough404(t *testing.T) {
 // TestRequestLogger_PassesThrough500 verifies that a 500 from downstream is
 // not altered by the logging middleware.
 func TestRequestLogger_PassesThrough500(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/boom", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/boom", nil)
 	rr := applyRequestLogger(makeStatusHandler(http.StatusInternalServerError), req)
 
 	if rr.Code != http.StatusInternalServerError {
@@ -101,7 +102,7 @@ func TestRequestLogger_MethodsAndPaths(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			})
 
-			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req := httptest.NewRequestWithContext(context.Background(), tc.method, tc.path, nil)
 			wrapped := RequestLogger(logger, nil)(capture)
 			rr := httptest.NewRecorder()
 			wrapped.ServeHTTP(rr, req)
@@ -125,7 +126,7 @@ func TestRequestLogger_NilTrustedProxies(t *testing.T) {
 	logger := zerolog.Nop()
 	wrapped := RequestLogger(logger, nil)(makeStatusHandler(http.StatusOK))
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	rr := httptest.NewRecorder()
 
 	// Should not panic.
@@ -147,7 +148,7 @@ func TestRequestLogger_ResponseBodyPassedThrough(t *testing.T) {
 		_, _ = w.Write([]byte(want))
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	rr := applyRequestLogger(next, req)
 
 	if got := rr.Body.String(); got != want {

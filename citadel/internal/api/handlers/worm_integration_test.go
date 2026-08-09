@@ -58,7 +58,7 @@ func TestWORM_Integration_ChainVerification(t *testing.T) {
 			"project_id": "worm-integration-test",
 			"payload":    map[string]any{"seq": i},
 		})
-		req := httptest.NewRequest(http.MethodPost, "/api/v1/worm/emit", bytes.NewBuffer(body))
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/worm/emit", bytes.NewBuffer(body))
 		rw := httptest.NewRecorder()
 		h.Emit(rw, req)
 		if rw.Code != http.StatusOK {
@@ -126,7 +126,7 @@ func TestWORM_Integration_ChainVerification(t *testing.T) {
 func verifyChain(t *testing.T, h *WORM, from, to time.Time) db.VerifyResult {
 	t.Helper()
 	url := fmt.Sprintf("/api/v1/worm/verify?from=%s&to=%s", from.Format(time.RFC3339), to.Format(time.RFC3339))
-	req := httptest.NewRequest(http.MethodGet, url, nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
 	rw := httptest.NewRecorder()
 	h.Verify(rw, req)
 	if rw.Code != http.StatusOK {

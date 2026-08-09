@@ -1,46 +1,59 @@
+version: "2"
 run:
-  timeout: 5m
   modules-download-mode: readonly
-
 linters:
   enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
-    - gosec
-    - goimports
-    - misspell
-    - exhaustive
-    - noctx
     - bodyclose
-    - sqlclosecheck
-    - rowserrcheck
-    - exportloopref
+    - exhaustive
     - godot
-
-linters-settings:
-  gosec:
-    excludes:
-      - G104  # Errors unhandled in defer (handled by errcheck)
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-  goimports:
-    local-prefixes: github.com/opensecstack/opensecstack
-  godot:
-    scope: declarations
-
+    - gosec
+    - misspell
+    - noctx
+    - rowserrcheck
+    - sqlclosecheck
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    godot:
+      scope: declarations
+    gosec:
+      excludes:
+        - G104
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - errcheck
+          - gosec
+        path: .*_test\.go
+      - linters:
+          - exhaustive
+        path: cmd/
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - node_modules
 issues:
-  exclude-rules:
-    - path: ".*_test\\.go"
-      linters:
-        - errcheck
-        - gosec
-    - path: "cmd/"
-      linters:
-        - exhaustive
   max-issues-per-linter: 0
   max-same-issues: 0
+formatters:
+  enable:
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/opensecstack/opensecstack
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - node_modules

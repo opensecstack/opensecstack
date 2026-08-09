@@ -72,7 +72,7 @@ var okHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 })
 
 func newRequest(authHeader string) *http.Request {
-	r := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/protected", nil)
 	if authHeader != "" {
 		r.Header.Set("Authorization", authHeader)
 	}
@@ -110,7 +110,7 @@ func TestJWTAuth_ValidToken(t *testing.T) {
 
 func TestJWTAuth_NoAuthorizationHeader(t *testing.T) {
 	rr := httptest.NewRecorder()
-	JWTAuth("secret", nil)(okHandler).ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+	JWTAuth("secret", nil)(okHandler).ServeHTTP(rr, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil))
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", rr.Code)
 	}

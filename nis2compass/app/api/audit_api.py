@@ -2,6 +2,7 @@ import uuid as uuid_lib
 from datetime import datetime, timezone
 
 from flask import Blueprint, g, jsonify, request
+from flask.typing import ResponseReturnValue
 
 from ..auth import require_auth
 from ..extensions import db
@@ -12,7 +13,7 @@ audit_api_bp = Blueprint("audit_api", __name__)
 
 @audit_api_bp.get("/audit")
 @require_auth
-def list_audit():
+def list_audit() -> ResponseReturnValue:
     page = max(1, request.args.get("page", 1, type=int))
     per_page = min(100, max(1, request.args.get("per_page", 20, type=int)))
 
@@ -60,7 +61,7 @@ def list_audit():
 
 @audit_api_bp.get("/audit/<uuid:entry_id>")
 @require_auth
-def get_audit_entry(entry_id):
+def get_audit_entry(entry_id: uuid_lib.UUID) -> ResponseReturnValue:
     entry = db.session.get(AuditLog, entry_id)
     if entry is None:
         return jsonify({"error": "Audit entry not found", "code": "NOT_FOUND"}), 404

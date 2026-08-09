@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/zeebo/blake3"
 )
 
@@ -229,7 +231,14 @@ func (d *DB) GetLastChainHash(ctx context.Context) (string, error) {
 		`SELECT chain_hash FROM worm_entries ORDER BY sequence_num DESC LIMIT 1`,
 	).Scan(&ch)
 	if err != nil {
-		return genesisHash(), nil
+		if errors.Is(err, pgx.ErrNoRows) {
+			return genesisHash(), nil
+		}
+		// A real query/connection failure must not be silently reported as
+		// "empty chain, use genesis" — a caller anchoring a new entry off a
+		// fabricated genesis hash during a DB outage would corrupt chain
+		// continuity instead of failing loudly.
+		return "", fmt.Errorf("db: GetLastChainHash: query: %w", err)
 	}
 	return ch, nil
 }

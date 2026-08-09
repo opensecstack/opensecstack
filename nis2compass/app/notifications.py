@@ -13,11 +13,12 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from email.mime.text import MIMEText
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def _get_config():
+def _get_config() -> dict:
     """Return app config dict or empty dict if no app context."""
     try:
         from flask import current_app
@@ -27,7 +28,7 @@ def _get_config():
         return {}
 
 
-def notify_assessment_status_change(assessment, old_status: str, new_status: str) -> None:
+def notify_assessment_status_change(assessment: Any, old_status: str, new_status: str) -> None:
     """Send a webhook POST when an assessment status changes."""
     config = _get_config()
     url = config.get("NOTIFICATION_WEBHOOK_URL") or ""
@@ -44,7 +45,7 @@ def notify_assessment_status_change(assessment, old_status: str, new_status: str
     _post_webhook(url, payload)
 
 
-def notify_control_overdue(assessment, control) -> None:
+def notify_control_overdue(assessment: Any, control: Any) -> None:
     """Send a webhook POST when a control remediation is overdue."""
     config = _get_config()
     url = config.get("NOTIFICATION_WEBHOOK_URL") or ""

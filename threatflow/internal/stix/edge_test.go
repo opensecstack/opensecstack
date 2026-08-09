@@ -51,6 +51,34 @@ func TestPattern_UnicodeValue(t *testing.T) {
 	}
 }
 
+// TestDecodeObjects_TypeLongerThanID is a regression test for a production
+// bug found in validateObject: it computed `o.ID[:len(o.Type)]` to check the
+// STIX id-prefix-matches-type convention, without first checking that
+// len(o.Type) <= len(o.ID). Since `type` and `id` are independent
+// attacker-controlled JSON fields on untrusted feed input (STIX bundles from
+// external TAXII servers), a payload with a `type` string longer than its
+// `id` string caused a slice-bounds-out-of-range panic — a trivial DoS via
+// a single malformed object anywhere in an ingested bundle. Fixed by
+// bounds-checking before slicing; this test proves DecodeObjects now returns
+// an error instead of crashing the process.
+func TestDecodeObjects_TypeLongerThanID(t *testing.T) {
+	payload := `{"type":"bundle","id":"bundle--44444444-4444-4444-4444-444444444444","spec_version":"2.1","objects":[` +
+		`{"type":"this-type-string-is-deliberately-much-longer-than-the-id-field-below","id":"a--00000000-0000-0000-0000-000000000000"}` +
+		`]}`
+	b, err := ParseBundle([]byte(payload))
+	if err != nil {
+		t.Fatalf("parse bundle: %v", err)
+	}
+
+	_, err = DecodeObjects(b)
+	if err == nil {
+		t.Fatal("expected an error for type longer than id, got nil (and no panic — good, but should still be rejected)")
+	}
+	if !strings.Contains(err.Error(), "object[0]") {
+		t.Errorf("error should identify object index, got: %v", err)
+	}
+}
+
 // TestDecodeObjects_InvalidID surfaces the exact position of a bad id so
 // callers can point feed operators at the malformed object.
 func TestDecodeObjects_InvalidID(t *testing.T) {

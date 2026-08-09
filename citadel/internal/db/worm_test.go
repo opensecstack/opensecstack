@@ -1,8 +1,11 @@
 package db
 
 import (
+	"context"
 	"encoding/hex"
+	"strings"
 	"testing"
+	"time"
 )
 
 // ── TripleHash unit tests (no DB required) ────────────────────────────────────
@@ -124,6 +127,75 @@ func TestNullIfEmpty_NonEmptyStringReturnsItself(t *testing.T) {
 	}
 	if s != "abc123" {
 		t.Errorf("nullIfEmpty(\"abc123\") = %q, want %q", s, "abc123")
+	}
+}
+
+// ── AppendWORM / VerifyChain / GetLastChainHash error paths (no live DB) ──────
+
+// TestAppendWORM_BeginTxErrorIsWrapped confirms AppendWORM propagates a real
+// transaction-begin failure (DB unreachable) instead of silently returning a
+// zero-value entry — a WORM append that "succeeds" without actually writing
+// would be a silent audit-trail gap, exactly what the WORM chain exists to
+// prevent.
+func TestAppendWORM_BeginTxErrorIsWrapped(t *testing.T) {
+	d := unreachableDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	entry, err := d.AppendWORM(ctx, "test-source", "test.event", "proj-1", []byte(`{}`), "", "")
+	if err == nil {
+		t.Fatal("expected error appending to WORM against an unreachable database")
+	}
+	if entry != nil {
+		t.Errorf("expected nil entry on error, got %+v", entry)
+	}
+	if !strings.Contains(err.Error(), "worm: begin tx:") {
+		t.Errorf("expected wrapped 'worm: begin tx:' error, got: %v", err)
+	}
+}
+
+// TestVerifyChain_QueryErrorIsWrapped confirms VerifyChain propagates a real
+// query failure rather than reporting an empty-but-"Valid: true" result,
+// which would be a false assurance that the audit chain is intact.
+func TestVerifyChain_QueryErrorIsWrapped(t *testing.T) {
+	d := unreachableDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	from := time.Now().UTC().Add(-time.Hour)
+	to := time.Now().UTC()
+
+	result, err := d.VerifyChain(ctx, from, to)
+	if err == nil {
+		t.Fatal("expected error verifying chain against an unreachable database")
+	}
+	if result != nil {
+		t.Errorf("expected nil result on error, got %+v", result)
+	}
+	if !strings.Contains(err.Error(), "worm: verify query:") {
+		t.Errorf("expected wrapped 'worm: verify query:' error, got: %v", err)
+	}
+}
+
+// TestGetLastChainHash_QueryErrorIsNotConflatedWithGenesis confirms a real
+// query failure surfaces as an error rather than being disguised as "empty
+// chain, use genesis" — silently anchoring a new entry on a fabricated
+// genesis hash during an outage would corrupt chain continuity instead of
+// failing loudly.
+func TestGetLastChainHash_QueryErrorIsNotConflatedWithGenesis(t *testing.T) {
+	d := unreachableDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	hash, err := d.GetLastChainHash(ctx)
+	if err == nil {
+		t.Fatal("expected error for a real query failure, got nil")
+	}
+	if hash != "" {
+		t.Errorf("expected empty hash on error, got %q", hash)
+	}
+	if !strings.Contains(err.Error(), "db: GetLastChainHash: query:") {
+		t.Errorf("expected wrapped 'db: GetLastChainHash: query:' error, got: %v", err)
 	}
 }
 

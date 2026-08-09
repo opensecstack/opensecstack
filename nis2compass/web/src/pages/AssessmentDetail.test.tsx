@@ -78,7 +78,7 @@ function renderPage(assessmentId = 'assess-001') {
   return render(
     <MemoryRouter initialEntries={[`/assessments/${assessmentId}`]}>
       <Routes>
-        <Route path="/assessments/:id" element={<AssessmentDetail />} />
+        <Route path="/assessments/:id" element={<AssessmentDetail role="admin" />} />
       </Routes>
     </MemoryRouter>,
   )
@@ -133,8 +133,6 @@ describe('AssessmentDetail page', () => {
     const mockObjectURL = 'blob:mock-url'
     URL.createObjectURL = vi.fn().mockReturnValue(mockObjectURL)
     URL.revokeObjectURL = vi.fn()
-    const appendSpy = vi.spyOn(document.body, 'appendChild').mockImplementation(node => node)
-    const removeSpy = vi.spyOn(document.body, 'removeChild').mockImplementation(node => node)
 
     renderPage()
 
@@ -144,9 +142,6 @@ describe('AssessmentDetail page', () => {
     await waitFor(() =>
       expect(downloadAssessmentPDF).toHaveBeenCalledWith('assess-001'),
     )
-
-    appendSpy.mockRestore()
-    removeSpy.mockRestore()
   })
 
   it('shows error message when PDF download fails', async () => {

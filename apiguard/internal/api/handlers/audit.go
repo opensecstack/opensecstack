@@ -49,6 +49,10 @@ func (a *Audit) List(w http.ResponseWriter, r *http.Request) {
 			db.AuditActionReportExported,
 			db.AuditActionAPIKeyCreated,
 			db.AuditActionAPIKeyRevoked,
+			db.AuditActionAPIKeyUsed,
+			db.AuditActionUserLogin,
+			db.AuditActionUserLogout,
+			db.AuditActionJWTSecretRotated,
 			db.AuditActionScanApprovalRequested,
 			db.AuditActionScanApprovalApproved,
 			db.AuditActionScanApprovalRejected:

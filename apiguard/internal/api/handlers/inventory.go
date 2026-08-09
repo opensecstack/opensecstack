@@ -32,9 +32,9 @@ func (h *Inventory) List(w http.ResponseWriter, r *http.Request) {
 
 	if h.db == nil {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"items": []any{},
-			"total": 0,
-			"limit": limit,
+			"items":  []any{},
+			"total":  0,
+			"limit":  limit,
 			"offset": offset,
 		})
 		return

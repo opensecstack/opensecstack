@@ -6,10 +6,12 @@ All endpoints require authentication and respect assessment locking.
 
 import hashlib
 import hmac
+import uuid as uuid_lib
 from datetime import datetime, timezone
 from decimal import Decimal
 
 from flask import Blueprint, current_app, g, jsonify, request
+from flask.typing import ResponseReturnValue
 
 from .. import citadel_client
 from ..audit import write_audit
@@ -36,7 +38,7 @@ def _compute_compliance_score(controls: list[Control]) -> Decimal | None:
     scored = [c for c in controls if c.status != "not_applicable"]
     if not scored:
         return None
-    total = sum(_STATUS_WEIGHT.get(c.status, Decimal("0")) for c in scored)
+    total = sum((_STATUS_WEIGHT.get(c.status, Decimal("0")) for c in scored), start=Decimal("0"))
     return (total / len(scored)).quantize(Decimal("0.01"))
 
 
@@ -49,7 +51,7 @@ def _evaluate_or_error(
     verifier_role: str | None = None,
     verifier_token: str = "",
     verifier_email: str | None = None,
-):
+) -> ResponseReturnValue | None:
     """Submit a governance-candidate action to CITADEL MARSHAL and translate a
     blocking verdict into a Flask (response, status) tuple.
 
@@ -105,7 +107,7 @@ def _evaluate_or_error(
     return None
 
 
-def _check_locked(assessment: Assessment):
+def _check_locked(assessment: Assessment) -> ResponseReturnValue | None:
     """Return a 409 response if assessment is locked, or None if editable."""
     if assessment.locked:
         return (
@@ -130,12 +132,14 @@ def _check_locked(assessment: Assessment):
 @compliance_bp.post("/assessments/<uuid:assessment_id>/score")
 @require_auth
 @require_scope("read_write")
-def compute_score(assessment_id):
+def compute_score(assessment_id: uuid_lib.UUID) -> ResponseReturnValue:
     """Recalculate and persist the compliance score."""
     assessment = db.session.get(Assessment, assessment_id)
     if not assessment:
         return jsonify({"error": "Assessment not found", "code": "NOT_FOUND"}), 404
-    _check_org_access(assessment.org_id)
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
 
     controls = list(assessment.controls)
     score = _compute_compliance_score(controls)
@@ -184,12 +188,14 @@ def compute_score(assessment_id):
 
 @compliance_bp.get("/assessments/<uuid:assessment_id>/score")
 @require_auth
-def get_score(assessment_id):
+def get_score(assessment_id: uuid_lib.UUID) -> ResponseReturnValue:
     """Return the last computed compliance score."""
     assessment = db.session.get(Assessment, assessment_id)
     if not assessment:
         return jsonify({"error": "Assessment not found", "code": "NOT_FOUND"}), 404
-    _check_org_access(assessment.org_id)
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
 
     return jsonify(
         {
@@ -209,12 +215,14 @@ VALID_APPROVAL_ACTIONS = {"approve", "reject"}
 @compliance_bp.post("/assessments/<uuid:assessment_id>/approve")
 @require_auth
 @require_scope("read_write")
-def approve_assessment(assessment_id):
+def approve_assessment(assessment_id: uuid_lib.UUID) -> ResponseReturnValue:
     """Approve or reject an assessment. Body: {"action": "approve"|"reject", "notes": "..."}"""
     assessment = db.session.get(Assessment, assessment_id)
     if not assessment:
         return jsonify({"error": "Assessment not found", "code": "NOT_FOUND"}), 404
-    _check_org_access(assessment.org_id)
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
 
     if assessment.status != "under_review":
         return (
@@ -271,12 +279,14 @@ def approve_assessment(assessment_id):
 @compliance_bp.post("/assessments/<uuid:assessment_id>/lock")
 @require_auth
 @require_scope("read_write")
-def lock_assessment(assessment_id):
+def lock_assessment(assessment_id: uuid_lib.UUID) -> ResponseReturnValue:
     """Lock an assessment to prevent further edits. Body: {"reason": "..."}"""
     assessment = db.session.get(Assessment, assessment_id)
     if not assessment:
         return jsonify({"error": "Assessment not found", "code": "NOT_FOUND"}), 404
-    _check_org_access(assessment.org_id)
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
 
     if assessment.locked:
         return jsonify({"error": "Already locked", "code": "ALREADY_LOCKED"}), 409
@@ -319,12 +329,14 @@ def lock_assessment(assessment_id):
 @compliance_bp.post("/assessments/<uuid:assessment_id>/unlock")
 @require_auth
 @require_scope("read_write")
-def unlock_assessment(assessment_id):
+def unlock_assessment(assessment_id: uuid_lib.UUID) -> ResponseReturnValue:
     """Unlock a previously locked assessment."""
     assessment = db.session.get(Assessment, assessment_id)
     if not assessment:
         return jsonify({"error": "Assessment not found", "code": "NOT_FOUND"}), 404
-    _check_org_access(assessment.org_id)
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
 
     if not assessment.locked:
         return jsonify({"error": "Not locked", "code": "NOT_LOCKED"}), 409
@@ -365,7 +377,7 @@ def _sign_artifact(file_hash: str, actor: str, secret: str) -> str:
 @compliance_bp.post("/artifacts/<uuid:artifact_id>/sign")
 @require_auth
 @require_scope("read_write")
-def sign_artifact(artifact_id):
+def sign_artifact(artifact_id: uuid_lib.UUID) -> ResponseReturnValue:
     """Digitally sign an artifact as proof of evidence."""
     artifact = db.session.get(Artifact, artifact_id)
     if not artifact:
@@ -373,7 +385,9 @@ def sign_artifact(artifact_id):
 
     assessment = db.session.get(Assessment, artifact.assessment_id)
     if assessment:
-        _check_org_access(assessment.org_id)
+        err = _check_org_access(assessment.org_id)
+        if err:
+            return err
 
     if artifact.signature:
         return jsonify({"error": "Already signed", "code": "ALREADY_SIGNED"}), 409
@@ -430,7 +444,7 @@ def sign_artifact(artifact_id):
 
 @compliance_bp.get("/artifacts/<uuid:artifact_id>/verify")
 @require_auth
-def verify_artifact(artifact_id):
+def verify_artifact(artifact_id: uuid_lib.UUID) -> ResponseReturnValue:
     """Verify a previously signed artifact's chain of custody."""
     artifact = db.session.get(Artifact, artifact_id)
     if not artifact:
@@ -475,12 +489,14 @@ _MEASURE_LABELS = {
 @compliance_bp.post("/assessments/<uuid:assessment_id>/analyze-gaps")
 @require_auth
 @require_scope("read_write")
-def analyze_gaps(assessment_id):
+def analyze_gaps(assessment_id: uuid_lib.UUID) -> ResponseReturnValue:
     """Run gap analysis and store results on the assessment."""
     assessment = db.session.get(Assessment, assessment_id)
     if not assessment:
         return jsonify({"error": "Assessment not found", "code": "NOT_FOUND"}), 404
-    _check_org_access(assessment.org_id)
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
 
     controls = list(assessment.controls)
     now = datetime.now(timezone.utc)
@@ -545,12 +561,14 @@ def analyze_gaps(assessment_id):
 
 @compliance_bp.get("/assessments/<uuid:assessment_id>/gaps")
 @require_auth
-def get_gaps(assessment_id):
+def get_gaps(assessment_id: uuid_lib.UUID) -> ResponseReturnValue:
     """Return the last computed gap analysis report."""
     assessment = db.session.get(Assessment, assessment_id)
     if not assessment:
         return jsonify({"error": "Assessment not found", "code": "NOT_FOUND"}), 404
-    _check_org_access(assessment.org_id)
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
 
     if not assessment.gap_report:
         return jsonify({"error": "No gap analysis has been run yet", "code": "NO_DATA"}), 404
@@ -565,12 +583,14 @@ def get_gaps(assessment_id):
 
 @compliance_bp.get("/assessments/<uuid:assessment_id>/history")
 @require_auth
-def get_compliance_history(assessment_id):
+def get_compliance_history(assessment_id: uuid_lib.UUID) -> ResponseReturnValue:
     """Return all compliance snapshots for the assessment ordered by snapshot_at asc."""
     assessment = db.session.get(Assessment, assessment_id)
     if not assessment:
         return jsonify({"error": "Assessment not found", "code": "NOT_FOUND"}), 404
-    _check_org_access(assessment.org_id)
+    err = _check_org_access(assessment.org_id)
+    if err:
+        return err
 
     snapshots = (
         db.session.query(ComplianceSnapshot)

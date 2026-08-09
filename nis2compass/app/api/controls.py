@@ -1,7 +1,9 @@
 import json
+import uuid as uuid_lib
 from datetime import date, datetime, timezone
 
 from flask import Blueprint, current_app, g, jsonify, request
+from flask.typing import ResponseReturnValue
 
 from .. import citadel_client
 from ..audit import write_audit
@@ -14,11 +16,12 @@ controls_bp = Blueprint("controls", __name__)
 
 
 @controls_bp.before_request
-def require_json_content_type():
+def require_json_content_type() -> ResponseReturnValue | None:
     if request.method in ("POST", "PUT", "PATCH"):
         ct = request.content_type or ""
         if ct and not ct.startswith("application/json"):
             return jsonify({"error": "Content-Type must be application/json", "code": "UNSUPPORTED_MEDIA_TYPE"}), 415
+    return None
 
 
 VALID_STATUSES = {"not_assessed", "compliant", "partially_compliant", "non_compliant", "not_applicable"}
@@ -33,7 +36,7 @@ VALID_REMEDIATION_STATUSES = {"not_started", "in_progress", "blocked", "complete
 
 @controls_bp.get("/assessments/<uuid:assessment_id>/controls")
 @require_auth
-def list_controls(assessment_id):
+def list_controls(assessment_id: uuid_lib.UUID) -> ResponseReturnValue:
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
         return jsonify({"error": "Assessment not found", "code": "NOT_FOUND"}), 404
@@ -77,9 +80,9 @@ def list_controls(assessment_id):
 
 @controls_bp.get("/assessments/<uuid:assessment_id>/controls/<string:measure_ref>")
 @require_auth
-def get_control(assessment_id, measure_ref):
+def get_control(assessment_id: uuid_lib.UUID, measure_ref: str) -> ResponseReturnValue:
     if measure_ref not in VALID_MEASURE_REFS:
-        return jsonify({"error": f"measure_ref must be a single letter a-j", "code": "INVALID_INPUT"}), 400
+        return jsonify({"error": "measure_ref must be a single letter a-j", "code": "INVALID_INPUT"}), 400
 
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
@@ -106,7 +109,7 @@ def get_control(assessment_id, measure_ref):
 @controls_bp.patch("/assessments/<uuid:assessment_id>/controls/<string:measure_ref>")
 @require_auth
 @require_scope("read_write")
-def update_control(assessment_id, measure_ref):
+def update_control(assessment_id: uuid_lib.UUID, measure_ref: str) -> ResponseReturnValue:
     if measure_ref not in VALID_MEASURE_REFS:
         return jsonify({"error": "measure_ref must be a single letter a-j", "code": "INVALID_INPUT"}), 400
 
@@ -300,7 +303,8 @@ def update_control(assessment_id, measure_ref):
             return (
                 jsonify(
                     {
-                        "error": "Control status update could not be authorized — CITADEL governance engine unavailable",
+                        "error": "Control status update could not be authorized — "
+                        "CITADEL governance engine unavailable",
                         "code": "CITADEL_UNAVAILABLE",
                     }
                 ),

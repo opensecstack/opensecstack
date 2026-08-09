@@ -19,7 +19,7 @@ const (
 // Specs handles OpenAPI spec upload so clients can provide spec files to the
 // server without needing a publicly reachable URL.
 type Specs struct {
-	logger  zerolog.Logger
+	logger    zerolog.Logger
 	uploadDir string
 }
 

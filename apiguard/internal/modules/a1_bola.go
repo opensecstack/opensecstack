@@ -100,8 +100,8 @@ func (m *BOLAModule) runIDEnumeration(ctx context.Context, exec HTTPExecutor, tc
 					Request:  fmt.Sprintf("%s %s", tc.Method, url),
 					Response: fmt.Sprintf("HTTP %d", resp.StatusCode),
 					Detail: map[string]interface{}{
-						"test_id":                testID,
-						"notes":                  "Object returned without authorization check on resource ID",
+						"test_id": testID,
+						"notes":   "Object returned without authorization check on resource ID",
 					},
 				},
 				Remediation: "Implement object-level authorization checks. Verify that the authenticated user owns or has explicit access to the requested resource ID before returning it.",
@@ -254,4 +254,3 @@ func applyAuth(req *http.Request, auth *AuthConfig) {
 		}
 	}
 }
-

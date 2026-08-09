@@ -3,6 +3,7 @@ import json
 import re
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import text
 
@@ -36,7 +37,7 @@ _PII_KEYS = frozenset(
 )
 
 
-def redact_pii(obj):
+def redact_pii(obj: Any) -> Any:
     """Return a deep copy of *obj* with PII values replaced by '[REDACTED]'.
 
     - Any dict key in ``_PII_KEYS`` has its value masked.
@@ -137,11 +138,11 @@ def _forward_to_citadel(log_entry: dict) -> None:
 
 
 def write_audit(
-    db_session,
+    db_session: Any,
     action: str,
     actor: str,
     resource_type: str,
-    resource_id=None,
+    resource_id: Any = None,
     risk_class: str = "INFO",
     metadata: dict | None = None,
     obj: dict | None = None,
@@ -214,12 +215,12 @@ def write_audit(
 
             from sqlalchemy import event as sa_event
 
-            def _after_commit(session):
+            def _after_commit(session: Any) -> None:
                 dispatch(entry_dict, webhook_url, webhook_secret)
                 sa_event.remove(session, "after_commit", _after_commit)
                 sa_event.remove(session, "after_rollback", _after_rollback)
 
-            def _after_rollback(session):
+            def _after_rollback(session: Any) -> None:
                 sa_event.remove(session, "after_commit", _after_commit)
                 sa_event.remove(session, "after_rollback", _after_rollback)
 
@@ -246,12 +247,12 @@ def write_audit(
                 "chain_hash": chain_hash,
             }
 
-            def _after_commit_citadel(session):
+            def _after_commit_citadel(session: Any) -> None:
                 _forward_to_citadel(entry_data)
                 sa_event.remove(session, "after_commit", _after_commit_citadel)
                 sa_event.remove(session, "after_rollback", _after_rollback_citadel)
 
-            def _after_rollback_citadel(session):
+            def _after_rollback_citadel(session: Any) -> None:
                 sa_event.remove(session, "after_commit", _after_commit_citadel)
                 sa_event.remove(session, "after_rollback", _after_rollback_citadel)
 

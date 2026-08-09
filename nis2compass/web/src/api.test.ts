@@ -32,13 +32,13 @@ afterEach(() => {
 
 describe('api.auth.login', () => {
   it('returns the token on success', async () => {
-    global.fetch = mockFetch(200, { token: 'tok-nis2' })
+    global.fetch = mockFetch(200, { access_token: 'tok-nis2' })
     const token = await api.auth.login('nis2_apk_test')
     expect(token).toBe('tok-nis2')
   })
 
   it('POSTs to /api/v1/auth/token with api_key in body', async () => {
-    const fetchMock = mockFetch(200, { token: 'tok' })
+    const fetchMock = mockFetch(200, { access_token: 'tok' })
     global.fetch = fetchMock
     await api.auth.login('mykey')
     const [url, opts] = fetchMock.mock.calls[0]
@@ -61,7 +61,7 @@ describe('api.organisations.list', () => {
   beforeEach(() => localStorage.setItem(TOKEN_KEY, 'test-token'))
 
   it('calls /api/v1/organisations', async () => {
-    const fetchMock = mockFetch(200, [])
+    const fetchMock = mockFetch(200, { data: [] })
     global.fetch = fetchMock
     await api.organisations.list()
     const [url] = fetchMock.mock.calls[0]
@@ -69,7 +69,7 @@ describe('api.organisations.list', () => {
   })
 
   it('includes Bearer auth header', async () => {
-    const fetchMock = mockFetch(200, [])
+    const fetchMock = mockFetch(200, { data: [] })
     global.fetch = fetchMock
     await api.organisations.list()
     const [, opts] = fetchMock.mock.calls[0]
@@ -77,7 +77,7 @@ describe('api.organisations.list', () => {
   })
 
   it('supports page and per_page params', async () => {
-    const fetchMock = mockFetch(200, [])
+    const fetchMock = mockFetch(200, { data: [] })
     global.fetch = fetchMock
     await api.organisations.list(2, 10)
     const [url] = fetchMock.mock.calls[0]
@@ -87,7 +87,7 @@ describe('api.organisations.list', () => {
 
   it('returns the array from the response', async () => {
     const orgs = [{ id: 'o1', name: 'Acme' }]
-    global.fetch = mockFetch(200, orgs)
+    global.fetch = mockFetch(200, { data: orgs })
     const result = await api.organisations.list()
     expect(result).toEqual(orgs)
   })
@@ -255,14 +255,14 @@ describe('api.reports.generate', () => {
 describe('api.audit.list', () => {
   it('reads X-Total-Count header', async () => {
     const entries = [{ id: 'e1', chain_hash: 'abc' }]
-    global.fetch = mockFetch(200, entries, { 'x-total-count': '55' })
+    global.fetch = mockFetch(200, { data: entries }, { 'x-total-count': '55' })
     const result = await api.audit.list()
     expect(result.total).toBe(55)
     expect(result.entries).toEqual(entries)
   })
 
   it('filters by risk_class', async () => {
-    const fetchMock = mockFetch(200, [], { 'x-total-count': '0' })
+    const fetchMock = mockFetch(200, { data: [] }, { 'x-total-count': '0' })
     global.fetch = fetchMock
     await api.audit.list({ risk_class: 'CRITICAL' })
     const [url] = fetchMock.mock.calls[0]
@@ -270,7 +270,7 @@ describe('api.audit.list', () => {
   })
 
   it('supports actor and action filters', async () => {
-    const fetchMock = mockFetch(200, [], { 'x-total-count': '0' })
+    const fetchMock = mockFetch(200, { data: [] }, { 'x-total-count': '0' })
     global.fetch = fetchMock
     await api.audit.list({ actor: 'alice', action: 'assessment.created' })
     const [url] = fetchMock.mock.calls[0]

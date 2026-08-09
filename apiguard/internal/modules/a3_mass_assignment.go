@@ -104,12 +104,12 @@ func (m *MassAssignmentModule) executeExtraFields(ctx context.Context, exec HTTP
 						Request:  fmt.Sprintf("%s %s (injected: %s)", method, url, fieldName),
 						Response: fmt.Sprintf("HTTP %d", attackResp.StatusCode),
 						Detail: map[string]interface{}{
-							"injected_field":        fieldName,
-							"all_injected_fields":   formatInjectedFields(injectedFields),
-							"baseline_status":       baselineResp.StatusCode,
-							"attack_status":         attackResp.StatusCode,
-							"field_reflected":       true,
-							"category":              "mass_assign_extra_fields",
+							"injected_field":      fieldName,
+							"all_injected_fields": formatInjectedFields(injectedFields),
+							"baseline_status":     baselineResp.StatusCode,
+							"attack_status":       attackResp.StatusCode,
+							"field_reflected":     true,
+							"category":            "mass_assign_extra_fields",
 						},
 					},
 					Remediation: "Implement allowlist-based input validation. Only accept fields explicitly defined in the API schema. Reject or ignore unknown properties.",
@@ -247,8 +247,8 @@ func diffResponseBodies(baseline, attack []byte) []string {
 			changed = append(changed, key)
 			continue
 		}
-		b1, _ := json.Marshal(baseVal)
-		b2, _ := json.Marshal(attackVal)
+		b1, _ := json.Marshal(baseVal) //nolint:errcheck // baseVal was itself decoded from JSON; re-marshal cannot fail
+		b2, _ := json.Marshal(attackVal) //nolint:errcheck // attackVal was itself decoded from JSON; re-marshal cannot fail
 		if !bytes.Equal(b1, b2) {
 			changed = append(changed, key)
 		}
@@ -276,8 +276,8 @@ func findReflectedFieldsInBody(responseBody []byte, injectedFields map[string]in
 		if !exists {
 			continue
 		}
-		expJSON, _ := json.Marshal(expectedValue)
-		actJSON, _ := json.Marshal(actual)
+		expJSON, _ := json.Marshal(expectedValue) //nolint:errcheck // expectedValue was itself decoded from JSON; re-marshal cannot fail
+		actJSON, _ := json.Marshal(actual) //nolint:errcheck // actual was itself decoded from JSON; re-marshal cannot fail
 		if string(expJSON) == string(actJSON) {
 			reflected = append(reflected, fieldName)
 		}
@@ -321,9 +321,8 @@ func formatInjectedFields(fields map[string]interface{}) string {
 	}
 	parts := make([]string, 0, len(fields))
 	for k, v := range fields {
-		valJSON, _ := json.Marshal(v)
+		valJSON, _ := json.Marshal(v) //nolint:errcheck // v is a JSON-safe literal (string/bool/slice) defined in this package
 		parts = append(parts, fmt.Sprintf("%s=%s", k, string(valJSON)))
 	}
 	return strings.Join(parts, ", ")
 }
-

@@ -74,3 +74,78 @@ func TestAuthConfig_String_EmptySecret(t *testing.T) {
 		t.Errorf("expected [NOT SET] in String(), got %q", s)
 	}
 }
+
+func TestEffectiveJWTSecrets_MultiSecretTakesPrecedence(t *testing.T) {
+	a := AuthConfig{
+		JWTSecrets:        []string{"key1", "key2", "key3"},
+		JWTSecret:         "legacy",
+		PreviousJWTSecret: "legacy-prev",
+	}
+	got := a.EffectiveJWTSecrets()
+	want := []string{"key1", "key2", "key3"}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d secrets, got %d (%v)", len(want), len(got), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("secret[%d]: expected %q, got %q", i, want[i], got[i])
+		}
+	}
+}
+
+func TestEffectiveJWTSecrets_LegacyTwoSlot(t *testing.T) {
+	a := AuthConfig{
+		JWTSecret:         "current",
+		PreviousJWTSecret: "previous",
+	}
+	got := a.EffectiveJWTSecrets()
+	want := []string{"current", "previous"}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d secrets, got %d (%v)", len(want), len(got), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("secret[%d]: expected %q, got %q", i, want[i], got[i])
+		}
+	}
+}
+
+func TestEffectiveJWTSecrets_OnlyCurrentSecret(t *testing.T) {
+	a := AuthConfig{JWTSecret: "only-one"}
+	got := a.EffectiveJWTSecrets()
+	if len(got) != 1 || got[0] != "only-one" {
+		t.Errorf("expected [only-one], got %v", got)
+	}
+}
+
+func TestEffectiveJWTSecrets_OnlyPreviousSetWithoutCurrent(t *testing.T) {
+	// PreviousJWTSecret without JWTSecret is a degenerate config, but the
+	// implementation still surfaces it as a single verification-only secret
+	// rather than silently dropping it.
+	a := AuthConfig{PreviousJWTSecret: "previous-only"}
+	got := a.EffectiveJWTSecrets()
+	if len(got) != 1 || got[0] != "previous-only" {
+		t.Errorf("expected [previous-only], got %v", got)
+	}
+}
+
+func TestEffectiveJWTSecrets_AllEmpty(t *testing.T) {
+	a := AuthConfig{}
+	got := a.EffectiveJWTSecrets()
+	if len(got) != 0 {
+		t.Errorf("expected empty slice, got %v", got)
+	}
+}
+
+func TestWarnIfInsecure_DoesNotPanic(t *testing.T) {
+	// WarnIfInsecure only logs; verify all branches execute without error
+	// regardless of configuration state.
+	c := &Config{}
+	c.WarnIfInsecure() // TLSSkipVerify=false, JWTSecret="" -> warns about missing secret
+
+	c2 := &Config{Scanner: ScannerConfig{TLSSkipVerify: true}, Auth: AuthConfig{JWTSecret: "set"}}
+	c2.WarnIfInsecure() // TLSSkipVerify=true -> warns; JWTSecret set -> no warning
+
+	c3 := &Config{Auth: AuthConfig{JWTSecret: "set"}}
+	c3.WarnIfInsecure() // neither condition triggers a warning
+}

@@ -1,8 +1,10 @@
 import hashlib
 import secrets
+import uuid as uuid_lib
 from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, g, jsonify, request
+from flask.typing import ResponseReturnValue
 
 from ..audit import write_audit
 from ..auth import require_auth, require_scope
@@ -13,11 +15,12 @@ api_keys_bp = Blueprint("api_keys", __name__)
 
 
 @api_keys_bp.before_request
-def require_json_content_type():
+def require_json_content_type() -> ResponseReturnValue | None:
     if request.method in ("POST", "PUT", "PATCH"):
         ct = request.content_type or ""
         if ct and not ct.startswith("application/json"):
             return jsonify({"error": "Content-Type must be application/json", "code": "UNSUPPORTED_MEDIA_TYPE"}), 415
+    return None
 
 
 VALID_SCOPES = {"read", "read_write"}
@@ -35,7 +38,7 @@ def _hash_key(plaintext: str) -> str:
 
 @api_keys_bp.get("/api-keys")
 @require_auth
-def list_api_keys():
+def list_api_keys() -> ResponseReturnValue:
     page = max(1, request.args.get("page", 1, type=int))
     per_page = min(100, max(1, request.args.get("per_page", 20, type=int)))
 
@@ -64,7 +67,7 @@ def list_api_keys():
 @api_keys_bp.post("/api-keys")
 @require_auth
 @require_scope("read_write")
-def create_api_key():
+def create_api_key() -> ResponseReturnValue:
     data = request.get_json(silent=True) or {}
     label = (data.get("label") or "").strip() or None
     scope = data.get("scope", "read_write")
@@ -128,7 +131,7 @@ def create_api_key():
 @api_keys_bp.delete("/api-keys/<uuid:key_id>")
 @require_auth
 @require_scope("read_write")
-def revoke_api_key(key_id):
+def revoke_api_key(key_id: uuid_lib.UUID) -> ResponseReturnValue:
     api_key = db.session.get(ApiKey, key_id)
     if api_key is None:
         return jsonify({"error": "API key not found", "code": "NOT_FOUND"}), 404

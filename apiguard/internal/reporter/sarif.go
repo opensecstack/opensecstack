@@ -14,15 +14,15 @@ type SARIFReporter struct{}
 
 // sarifModuleMapping maps internal module IDs to SARIF rule IDs.
 var sarifModuleMapping = map[string]string{
-	"a1_bola":               "apiguard/a1-bola",
-	"a2_auth":               "apiguard/a2-broken-auth",
-	"a3_mass_assignment":    "apiguard/a3-property-auth",
-	"a4_rate_limiting":      "apiguard/a4-resource-consumption",
-	"a5_function_auth":      "apiguard/a5-function-auth",
-	"a6_business_flow":      "apiguard/a6-business-flow",
-	"a7_ssrf":               "apiguard/a7-ssrf",
-	"a8_misconfig":          "apiguard/a8-misconfig",
-	"a9_inventory":          "apiguard/a9-inventory",
+	"a1_bola":                "apiguard/a1-bola",
+	"a2_auth":                "apiguard/a2-broken-auth",
+	"a3_mass_assignment":     "apiguard/a3-property-auth",
+	"a4_rate_limiting":       "apiguard/a4-resource-consumption",
+	"a5_function_auth":       "apiguard/a5-function-auth",
+	"a6_business_flow":       "apiguard/a6-business-flow",
+	"a7_ssrf":                "apiguard/a7-ssrf",
+	"a8_misconfig":           "apiguard/a8-misconfig",
+	"a9_inventory":           "apiguard/a9-inventory",
 	"a10_unsafe_consumption": "apiguard/a10-unsafe-consumption",
 }
 
@@ -80,7 +80,7 @@ type sarifResult struct {
 }
 
 type sarifLocation struct {
-	PhysicalLocation sarifPhysicalLocation  `json:"physicalLocation"`
+	PhysicalLocation sarifPhysicalLocation   `json:"physicalLocation"`
 	Properties       sarifLocationProperties `json:"properties"`
 }
 

@@ -146,7 +146,7 @@ func TestGate1_Pass(t *testing.T) {
 
 func TestGate1_Warn_NoToken_SoftMode(t *testing.T) {
 	store, verifier, _, _ := storeWithUsers("operator", "analyst")
-	engine := New(store, verifier) // soft mode: identity checks warn, don't block
+	engine := New(store, verifier)                                 // soft mode: identity checks warn, don't block
 	d, err := engine.Evaluate(context.Background(), baseKerkese()) // no ActorToken
 	if err != nil {
 		t.Fatal(err)

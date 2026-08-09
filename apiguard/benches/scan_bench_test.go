@@ -15,25 +15,25 @@ import (
 // benchmarks. It intentionally lives here rather than importing the internal
 // model so the bench package remains a lightweight, standalone harness.
 type scanRequest struct {
-	SpecURL string `json:"spec_url"`
-	Target  string `json:"target"`
-	Profile string `json:"profile,omitempty"`
+	SpecURL string   `json:"spec_url"`
+	Target  string   `json:"target"`
+	Profile string   `json:"profile,omitempty"`
 	Tags    []string `json:"tags,omitempty"`
 }
 
 // finding mirrors a typical finding payload with all common fields populated.
 type finding struct {
-	ID          string `json:"id"`
-	ScanID      string `json:"scan_id"`
-	Severity    string `json:"severity"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Path        string `json:"path"`
-	Method      string `json:"method"`
-	Evidence    string `json:"evidence"`
-	Remediation string `json:"remediation"`
+	ID          string  `json:"id"`
+	ScanID      string  `json:"scan_id"`
+	Severity    string  `json:"severity"`
+	Title       string  `json:"title"`
+	Description string  `json:"description"`
+	Path        string  `json:"path"`
+	Method      string  `json:"method"`
+	Evidence    string  `json:"evidence"`
+	Remediation string  `json:"remediation"`
 	CVSS        float64 `json:"cvss_score"`
-	CreatedAt   string `json:"created_at"`
+	CreatedAt   string  `json:"created_at"`
 }
 
 // BenchmarkValidateTarget measures the cost of parsing and validating a target

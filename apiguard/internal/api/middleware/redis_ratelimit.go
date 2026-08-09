@@ -127,7 +127,14 @@ func (rl *RedisRateLimiter) Middleware(next http.Handler) http.Handler {
 		}
 
 		// The script always returns a two-element slice: {allowed int64, payload string}.
-		allowed, _ := result[0].(int64)
+		// If that contract is ever violated (e.g. script edited without updating this
+		// handler), fail open rather than silently rate-limiting every request.
+		allowed, ok := result[0].(int64)
+		if !ok {
+			log.Warn().Str("key", key).Interface("value", result[0]).Msg("redis rate limit script returned unexpected type, allowing request")
+			next.ServeHTTP(w, r)
+			return
+		}
 		if allowed == 1 {
 			next.ServeHTTP(w, r)
 			return
@@ -152,7 +159,7 @@ func (rl *RedisRateLimiter) Middleware(next http.Handler) http.Handler {
 		w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusTooManyRequests)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
 			"error":       "Rate limit exceeded",
 			"code":        "RATE_LIMITED",
 			"retry_after": retryAfter,

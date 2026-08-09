@@ -126,7 +126,14 @@ func validateObject(o *Object) error {
 	if !stixIDPattern.MatchString(o.ID) {
 		return fmt.Errorf("invalid id %q", o.ID)
 	}
-	// STIX ID prefix must match type (indicator--..., malware--..., etc.)
+	// STIX ID prefix must match type (indicator--..., malware--..., etc.).
+	// Guard the slice bound explicitly: o.Type is attacker-controlled input
+	// from the feed payload and is not length-constrained by stixIDPattern
+	// (which only validates o.ID), so a Type longer than the ID would panic
+	// on the slice expression below without this check.
+	if len(o.Type) > len(o.ID) {
+		return fmt.Errorf("id prefix does not match type %q", o.Type)
+	}
 	prefix := o.ID[:len(o.Type)]
 	if prefix != o.Type {
 		return fmt.Errorf("id prefix %q does not match type %q", prefix, o.Type)

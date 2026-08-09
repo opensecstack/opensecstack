@@ -37,8 +37,8 @@ type auditEntry struct {
 // StartAuditWorker and must be non-nil before AppendAuditLog is called.
 var (
 	auditQueue     chan *auditEntry
-	auditQueueMu   sync.Mutex  // guards initialisation check only
-	auditWorkerOne sync.Once   // ensures the worker goroutine is started at most once
+	auditQueueMu   sync.Mutex // guards initialisation check only
+	auditWorkerOne sync.Once  // ensures the worker goroutine is started at most once
 
 	// auditWg tracks entries that have been enqueued but not yet processed by
 	// the worker. Add(1) is called before sending to auditQueue; Done() is

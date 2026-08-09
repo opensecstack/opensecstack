@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,7 +11,7 @@ import (
 // recorded response after a single GET request.
 func makeSecHandler(next http.Handler) *httptest.ResponseRecorder {
 	wrapped := SecurityHeaders(next)
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	rr := httptest.NewRecorder()
 	wrapped.ServeHTTP(rr, req)
 	return rr
@@ -131,17 +132,17 @@ func TestSecurityHeaders_TableDriven(t *testing.T) {
 		statusCode  int
 		wantCSP     bool
 	}{
-		{"200 JSON",           "application/json",              http.StatusOK,                  false},
-		{"200 HTML",           "text/html",                     http.StatusOK,                  true},
-		{"200 HTML charset",   "text/html; charset=utf-8",      http.StatusOK,                  true},
-		{"201 JSON",           "application/json",              http.StatusCreated,             false},
-		{"301 no body",        "",                              http.StatusMovedPermanently,    false},
-		{"400 JSON",           "application/json",              http.StatusBadRequest,          false},
-		{"401 JSON",           "application/json",              http.StatusUnauthorized,        false},
-		{"403 HTML",           "text/html",                     http.StatusForbidden,           true},
-		{"404 JSON",           "application/json",              http.StatusNotFound,            false},
-		{"500 JSON",           "application/json",              http.StatusInternalServerError, false},
-		{"200 plain text",     "text/plain",                    http.StatusOK,                  false},
+		{"200 JSON", "application/json", http.StatusOK, false},
+		{"200 HTML", "text/html", http.StatusOK, true},
+		{"200 HTML charset", "text/html; charset=utf-8", http.StatusOK, true},
+		{"201 JSON", "application/json", http.StatusCreated, false},
+		{"301 no body", "", http.StatusMovedPermanently, false},
+		{"400 JSON", "application/json", http.StatusBadRequest, false},
+		{"401 JSON", "application/json", http.StatusUnauthorized, false},
+		{"403 HTML", "text/html", http.StatusForbidden, true},
+		{"404 JSON", "application/json", http.StatusNotFound, false},
+		{"500 JSON", "application/json", http.StatusInternalServerError, false},
+		{"200 plain text", "text/plain", http.StatusOK, false},
 	}
 
 	const wantCSP = "default-src 'none'; style-src 'unsafe-inline'"

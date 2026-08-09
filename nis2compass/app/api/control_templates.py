@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+from flask.typing import ResponseReturnValue
 
 from ..auth import require_auth
 from ..extensions import db
@@ -11,7 +12,7 @@ _VALID_FRAMEWORKS = frozenset({"nis2", "soc2", "iso27001"})
 
 @control_templates_bp.get("/control-templates")
 @require_auth
-def list_control_templates():
+def list_control_templates() -> ResponseReturnValue:
     try:
         page = max(1, int(request.args.get("page", 1)))
         per_page = min(100, max(1, int(request.args.get("per_page", 20))))

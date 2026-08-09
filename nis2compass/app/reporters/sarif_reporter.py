@@ -63,7 +63,7 @@ def generate_sarif_report(assessment: Any, controls: list[Any], organisation: An
     Returns UTF-8 encoded JSON bytes.
     """
 
-    def _str(val) -> str:
+    def _str(val: object) -> str:
         """Convert enum/str to plain string; sanitise for injection safety (H11)."""
         if val is None:
             return ""

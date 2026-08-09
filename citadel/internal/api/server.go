@@ -121,7 +121,18 @@ func (s *Server) Router() chi.Router {
 
 func (s *Server) setupMiddleware() {
 	s.router.Use(chimw.RequestID)
-	s.router.Use(chimw.RealIP)
+	// Deliberately NOT using chimw.RealIP: it unconditionally trusts the
+	// client-supplied X-Forwarded-For/X-Real-IP/X-Forwarded headers to
+	// overwrite r.RemoteAddr, which lets any caller spoof the source IP
+	// that ends up in chimw.Logger's access log and any future audit
+	// trail (GHSA-3fxj-6jh8-hvhx). CITADEL has no config for a trusted
+	// reverse-proxy CIDR range to validate those headers against, so the
+	// safe default for a governance/audit service is to log the raw TCP
+	// peer address from r.RemoteAddr, which the client cannot forge. If
+	// CITADEL is ever deployed behind a trusted proxy that must be
+	// reflected in the logs, add explicit trusted-proxy configuration
+	// and a scoped chimw.RealIP (or equivalent) that only honors these
+	// headers from that proxy's address.
 	s.router.Use(chimw.Logger)
 	s.router.Use(chimw.Recoverer)
 	s.router.Use(chimw.Timeout(60 * time.Second))

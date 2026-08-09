@@ -138,7 +138,7 @@ func TestGate2_RBACFail_AlwaysRefuses_RegardlessOfPermify(t *testing.T) {
 // default-allow.
 func TestGate2_UnknownRole_FailsClosed_EvenWithPermifyUnknown(t *testing.T) {
 	store, verifier, opPriv, vfPriv := storeWithUsers("contractor", "analyst") // "contractor" is not a rbacMap key at all
-	snap := newFakePermifySnapshot()                                          // no opinion either
+	snap := newFakePermifySnapshot()                                           // no opinion either
 	engine := New(store, verifier).PermifySnapshot(snap).EnforcePermifyAuthz(true)
 	k := baseKerkese()
 	k.Actor.Role = "contractor"

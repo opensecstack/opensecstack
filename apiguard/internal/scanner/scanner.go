@@ -178,7 +178,7 @@ func CreatePinnedTransport(validatedHost string, validatedIPs []net.IP, tlsSkipV
 // validateTargetURL validates the target URL to prevent SSRF attacks.
 // It rejects private/internal network addresses unless allowInternal is true.
 // Returns the resolved IPs for use in DNS pinning to prevent rebinding attacks.
-func validateTargetURL(rawURL string, allowInternal bool) ([]net.IP, error) {
+func validateTargetURL(ctx context.Context, rawURL string, allowInternal bool) ([]net.IP, error) {
 	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid target URL: %w", err)
@@ -221,11 +221,14 @@ func validateTargetURL(rawURL string, allowInternal bool) ([]net.IP, error) {
 			return nil, fmt.Errorf("numeric IP notation %q is not allowed as target", hostname)
 		}
 
-		addrs, err := net.LookupIP(hostname)
+		addrs, err := net.DefaultResolver.LookupIPAddr(ctx, hostname)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve target hostname %q: %w", hostname, err)
 		}
-		ips = addrs
+		ips = make([]net.IP, len(addrs))
+		for i, a := range addrs {
+			ips[i] = a.IP
+		}
 	}
 
 	for _, addr := range ips {
@@ -309,8 +312,13 @@ func validateParserBin(binPath string) error {
 		if info.IsDir() {
 			return fmt.Errorf("parser binary path %q is a directory", binPath)
 		}
-		// On Unix, check executable bit. On Windows, existence is sufficient.
-		if info.Mode()&0111 == 0 {
+		// On Unix, check executable bit. On Windows, os.Stat never reports
+		// executable bits (info.Mode() is always rw-rw-rw- for regular files,
+		// regardless of the file's actual PE-executable status), so the 0111
+		// check would incorrectly reject every valid absolute parser path on
+		// Windows. Skip the bit check there — existence is sufficient, as the
+		// original doc comment always intended.
+		if runtime.GOOS != "windows" && info.Mode()&0111 == 0 {
 			return fmt.Errorf("parser binary %q is not executable", binPath)
 		}
 		return nil
@@ -330,7 +338,7 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 	startedAt := time.Now()
 
 	// Validate target URL for SSRF protection and get resolved IPs for DNS pinning.
-	validatedIPs, err := validateTargetURL(req.Target, req.AllowInternal)
+	validatedIPs, err := validateTargetURL(ctx, req.Target, req.AllowInternal)
 	if err != nil {
 		return nil, fmt.Errorf("target URL validation failed: %w", err)
 	}

@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -95,7 +96,7 @@ func TestRequireJSONContentType(t *testing.T) {
 			next, called := makeNext()
 			handler := RequireJSONContentType(next)
 
-			req := httptest.NewRequest(tc.method, "/api/test", nil)
+			req := httptest.NewRequestWithContext(context.Background(), tc.method, "/api/test", nil)
 			if tc.setHeader {
 				req.Header.Set("Content-Type", tc.contentType)
 			}

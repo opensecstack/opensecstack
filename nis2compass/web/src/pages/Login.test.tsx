@@ -2,15 +2,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import Login from './Login'
 
-vi.mock('../api', () => ({
-  api: {
-    auth: {
-      login: vi.fn(),
-    },
-  },
+vi.mock('../sinauth', () => ({
+  loginWithPopup: vi.fn(),
 }))
 
-import { api } from '../api'
+import { loginWithPopup } from '../sinauth'
 
 const TOKEN_KEY = 'nis2compass_token'
 
@@ -22,70 +18,58 @@ describe('Login page', () => {
     localStorage.clear()
   })
 
-  it('renders the API key input', () => {
+  it('renders the sinauth sign-in button', () => {
     render(<Login onLogin={onLogin} />)
-    expect(screen.getByLabelText(/api key/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /sign in with sinauth/i })).toBeInTheDocument()
   })
 
-  it('renders the sign-in button', () => {
+  it('calls onLogin with the access token on success', async () => {
+    vi.mocked(loginWithPopup).mockResolvedValueOnce({
+      access_token: 'tok-nis2',
+      refresh_token: 'refresh-nis2',
+      expires_in: 3600,
+    })
     render(<Login onLogin={onLogin} />)
-    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
-  })
 
-  it('calls onLogin with the token on success', async () => {
-    vi.mocked(api.auth.login).mockResolvedValueOnce('tok-nis2')
-    render(<Login onLogin={onLogin} />)
-
-    fireEvent.change(screen.getByLabelText(/api key/i), { target: { value: 'nis2_apk_test' } })
-    fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
+    fireEvent.click(screen.getByRole('button', { name: /sign in with sinauth/i }))
 
     await waitFor(() => expect(onLogin).toHaveBeenCalledWith('tok-nis2'))
   })
 
-  it('stores token in localStorage on success', async () => {
-    vi.mocked(api.auth.login).mockResolvedValueOnce('tok-stored')
+  it('stores access token in localStorage on success', async () => {
+    vi.mocked(loginWithPopup).mockResolvedValueOnce({
+      access_token: 'tok-stored',
+      refresh_token: 'refresh-stored',
+      expires_in: 3600,
+    })
     render(<Login onLogin={onLogin} />)
 
-    fireEvent.change(screen.getByLabelText(/api key/i), { target: { value: 'key' } })
-    fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
+    fireEvent.click(screen.getByRole('button', { name: /sign in with sinauth/i }))
 
     await waitFor(() => expect(localStorage.getItem(TOKEN_KEY)).toBe('tok-stored'))
   })
 
   it('shows error message on failure', async () => {
-    vi.mocked(api.auth.login).mockRejectedValueOnce(new Error('Invalid API key'))
+    vi.mocked(loginWithPopup).mockRejectedValueOnce(new Error('Popup blocked. Please allow popups for this site.'))
     render(<Login onLogin={onLogin} />)
 
-    fireEvent.change(screen.getByLabelText(/api key/i), { target: { value: 'bad' } })
-    fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
+    fireEvent.click(screen.getByRole('button', { name: /sign in with sinauth/i }))
 
-    await waitFor(() => expect(screen.getByText(/invalid api key/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/popup blocked/i)).toBeInTheDocument())
     expect(onLogin).not.toHaveBeenCalled()
   })
 
   it('disables the button while loading', async () => {
-    let resolve!: (v: string) => void
-    vi.mocked(api.auth.login).mockReturnValueOnce(
-      new Promise<string>(r => { resolve = r }),
+    let resolve!: (v: { access_token: string; refresh_token: string; expires_in: number }) => void
+    vi.mocked(loginWithPopup).mockReturnValueOnce(
+      new Promise(r => { resolve = r }),
     )
     render(<Login onLogin={onLogin} />)
 
-    fireEvent.change(screen.getByLabelText(/api key/i), { target: { value: 'key' } })
-    fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
+    fireEvent.click(screen.getByRole('button', { name: /sign in with sinauth/i }))
 
     await waitFor(() => expect(screen.getByRole('button')).toBeDisabled())
-    resolve('tok')
+    resolve({ access_token: 'tok', refresh_token: 'refresh', expires_in: 3600 })
     await waitFor(() => expect(screen.getByRole('button')).not.toBeDisabled())
-  })
-
-  it('button is disabled when API key input is empty', () => {
-    render(<Login onLogin={onLogin} />)
-    expect(screen.getByRole('button', { name: /sign in/i })).toBeDisabled()
-  })
-
-  it('button enables when API key is typed', () => {
-    render(<Login onLogin={onLogin} />)
-    fireEvent.change(screen.getByLabelText(/api key/i), { target: { value: 'nis2_apk_x' } })
-    expect(screen.getByRole('button', { name: /sign in/i })).not.toBeDisabled()
   })
 })

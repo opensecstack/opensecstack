@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+from flask.typing import ResponseReturnValue
 from sqlalchemy import text
 
 from ..auth import decode_jwt
@@ -37,7 +38,7 @@ def _collect_checks() -> dict:
 
 
 @health_bp.get("/health")
-def health():
+def health() -> ResponseReturnValue:
     """Public liveness probe — returns only aggregate status (H10)."""
     checks = _collect_checks()
     aggregate = checks.get("status", "degraded")
@@ -46,12 +47,12 @@ def health():
 
 
 @health_bp.get("/health/detail")
-def health_detail():
+def health_detail() -> ResponseReturnValue:
     """Detailed health check — requires a valid Bearer JWT (H10)."""
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         return jsonify({"error": "Missing or invalid Authorization header", "code": "UNAUTHORIZED"}), 401
-    token = auth_header[len("Bearer ") :]
+    token = auth_header[len("Bearer ") :]  # noqa: E203 (black formats this space; flake8 disagrees)
     if decode_jwt(token) is None:
         return jsonify({"error": "Token is invalid or expired", "code": "UNAUTHORIZED"}), 401
 

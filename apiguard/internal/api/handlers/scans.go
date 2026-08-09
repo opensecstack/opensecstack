@@ -197,13 +197,13 @@ func parseTrustedProxies(cfg *config.Config) []*net.IPNet {
 
 // createScanRequest is the JSON body for POST /api/v1/scans.
 type createScanRequest struct {
-	SpecURL  string   `json:"spec_url"`
-	SpecPath string   `json:"spec_path"`
-	Target   string   `json:"target"`
-	Modules  []string `json:"modules"`
-	AuthType string   `json:"auth_type"`
-	AuthToken string  `json:"auth_token"`
-	AuthHeader string `json:"auth_header"`
+	SpecURL    string   `json:"spec_url"`
+	SpecPath   string   `json:"spec_path"`
+	Target     string   `json:"target"`
+	Modules    []string `json:"modules"`
+	AuthType   string   `json:"auth_type"`
+	AuthToken  string   `json:"auth_token"`
+	AuthHeader string   `json:"auth_header"`
 }
 
 // Create handles POST /api/v1/scans.
@@ -426,192 +426,192 @@ func (s *Scans) launchScan(scanID uuid.UUID, req createScanRequest) {
 
 	bgCtx := s.shutdownCtx
 
-		// A-H2: track whether the scan reached a terminal status so the deferred
-		// cleanup can mark it failed if an unexpected exit occurs.
-		// Use context.Background() with a short timeout so the cleanup can still
-		// run even if the server shutdown context has already been cancelled.
-		completed := false
-		defer func() {
-			if !completed {
-				cleanCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				defer cancel()
-				if dbErr := s.db.UpdateScanStatus(cleanCtx, scanID, db.ScanStatusFailed); dbErr != nil {
-					s.logger.Error().Err(dbErr).Str("scan_id", scanID.String()).Msg("failed to set scan status to failed in deferred cleanup")
+	// A-H2: track whether the scan reached a terminal status so the deferred
+	// cleanup can mark it failed if an unexpected exit occurs.
+	// Use context.Background() with a short timeout so the cleanup can still
+	// run even if the server shutdown context has already been cancelled.
+	completed := false
+	defer func() {
+		if !completed {
+			cleanCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if dbErr := s.db.UpdateScanStatus(cleanCtx, scanID, db.ScanStatusFailed); dbErr != nil {
+				s.logger.Error().Err(dbErr).Str("scan_id", scanID.String()).Msg("failed to set scan status to failed in deferred cleanup")
+			}
+		}
+	}()
+
+	// If a spec URL was provided (and no local path), download it to a temp
+	// file so the scanner's validateSpecPath can open it as a local file.
+	var tempSpecFile string
+	if req.SpecURL != "" && req.SpecPath == "" {
+		maxSpecSize := 10 // 10 MB default
+		if s.cfg != nil && s.cfg.Scanner.MaxSpecSize > 0 {
+			maxSpecSize = s.cfg.Scanner.MaxSpecSize
+		}
+		path, dlErr := downloadSpecToTemp(bgCtx, req.SpecURL, maxSpecSize)
+		if dlErr != nil {
+			s.logger.Error().Err(dlErr).Str("scan_id", scanID.String()).Str("spec_url", req.SpecURL).Msg("failed to download spec")
+			if dbErr := s.db.UpdateScanError(bgCtx, scanID, fmt.Sprintf("failed to download spec: %v", dlErr)); dbErr != nil {
+				s.logger.Error().Err(dbErr).Str("scan_id", scanID.String()).Msg("failed to record scan error")
+			}
+			return
+		}
+		// M4: remove the temp file inside the goroutine, after the scan completes.
+		tempSpecFile = path
+		defer os.Remove(tempSpecFile)
+		scanReq.SpecPath = tempSpecFile
+	}
+
+	if err := s.db.UpdateScanStatus(bgCtx, scanID, db.ScanStatusRunning); err != nil {
+		s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to set scan status to running")
+	}
+	s.auditLog(bgCtx, db.AuditActionScanStarted, "scans", &scanID, "", "", nil)
+
+	// WORM: immutable record of scan start.
+	if s.citadel != nil && s.cfg != nil {
+		projectID := s.cfg.Citadel.ProjectID
+		_, _, wormErr := s.citadel.EmitWORM(bgCtx, "apiguard", "scan.started", projectID, map[string]any{
+			"scan_id":    scanID.String(),
+			"target_url": req.Target,
+			"modules":    req.Modules,
+		})
+		if wormErr != nil {
+			s.logger.Warn().Err(wormErr).Str("scan_id", scanID.String()).Msg("CITADEL WORM emit scan.started failed")
+		}
+	}
+
+	result, err := s.scanner.Run(bgCtx, scanReq)
+	if err != nil {
+		s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("scan failed")
+		if dbErr := s.db.UpdateScanError(bgCtx, scanID, err.Error()); dbErr != nil {
+			s.logger.Error().Err(dbErr).Str("scan_id", scanID.String()).Msg("failed to record scan error")
+		}
+		s.auditLog(bgCtx, db.AuditActionScanFailed, "scans", &scanID, "", "",
+			map[string]interface{}{"error": err.Error()})
+		return
+	}
+
+	// Persist findings.
+	if len(result.Findings) > 0 {
+		dbFindings := make([]db.Finding, 0, len(result.Findings))
+		for _, f := range result.Findings {
+			dbf := db.Finding{
+				ScanID:         scanID,
+				OwaspID:        f.OWASPId,
+				ModuleID:       f.ModuleID,
+				Title:          f.Title,
+				Description:    f.Description,
+				Severity:       db.FindingSeverity(f.Severity),
+				CVSSScore:      f.CVSSScore,
+				EndpointPath:   f.EndpointPath,
+				EndpointMethod: f.EndpointMethod,
+				Remediation:    sql.NullString{String: f.Remediation, Valid: f.Remediation != ""},
+			}
+			if f.CVSSVector != "" {
+				dbf.CVSSVector = sql.NullString{String: f.CVSSVector, Valid: true}
+			}
+			if f.Evidence.Request != "" {
+				dbf.EvidenceRequest = sql.NullString{String: f.Evidence.Request, Valid: true}
+			}
+			if f.Evidence.Response != "" {
+				dbf.EvidenceResponse = sql.NullString{String: f.Evidence.Response, Valid: true}
+			}
+			if len(f.Evidence.Detail) > 0 {
+				if b, err := json.Marshal(f.Evidence.Detail); err == nil {
+					dbf.EvidenceJSON = b
 				}
 			}
-		}()
-
-		// If a spec URL was provided (and no local path), download it to a temp
-		// file so the scanner's validateSpecPath can open it as a local file.
-		var tempSpecFile string
-		if req.SpecURL != "" && req.SpecPath == "" {
-			maxSpecSize := 10 // 10 MB default
-			if s.cfg != nil && s.cfg.Scanner.MaxSpecSize > 0 {
-				maxSpecSize = s.cfg.Scanner.MaxSpecSize
-			}
-			path, dlErr := downloadSpecToTemp(bgCtx, req.SpecURL, maxSpecSize)
-			if dlErr != nil {
-				s.logger.Error().Err(dlErr).Str("scan_id", scanID.String()).Str("spec_url", req.SpecURL).Msg("failed to download spec")
-				if dbErr := s.db.UpdateScanError(bgCtx, scanID, fmt.Sprintf("failed to download spec: %v", dlErr)); dbErr != nil {
-					s.logger.Error().Err(dbErr).Str("scan_id", scanID.String()).Msg("failed to record scan error")
-				}
-				return
-			}
-			// M4: remove the temp file inside the goroutine, after the scan completes.
-			tempSpecFile = path
-			defer os.Remove(tempSpecFile)
-			scanReq.SpecPath = tempSpecFile
+			dbFindings = append(dbFindings, dbf)
 		}
 
-		if err := s.db.UpdateScanStatus(bgCtx, scanID, db.ScanStatusRunning); err != nil {
-			s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to set scan status to running")
-		}
-		s.auditLog(bgCtx, db.AuditActionScanStarted, "scans", &scanID, "", "", nil)
-
-		// WORM: immutable record of scan start.
-		if s.citadel != nil && s.cfg != nil {
-			projectID := s.cfg.Citadel.ProjectID
-			_, _, wormErr := s.citadel.EmitWORM(bgCtx, "apiguard", "scan.started", projectID, map[string]any{
-				"scan_id":    scanID.String(),
-				"target_url": req.Target,
-				"modules":    req.Modules,
-			})
-			if wormErr != nil {
-				s.logger.Warn().Err(wormErr).Str("scan_id", scanID.String()).Msg("CITADEL WORM emit scan.started failed")
-			}
-		}
-
-		result, err := s.scanner.Run(bgCtx, scanReq)
-		if err != nil {
-			s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("scan failed")
-			if dbErr := s.db.UpdateScanError(bgCtx, scanID, err.Error()); dbErr != nil {
+		if err := s.db.CreateFindings(bgCtx, dbFindings); err != nil {
+			s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to persist findings")
+			if dbErr := s.db.UpdateScanError(bgCtx, scanID, "failed to persist findings: "+err.Error()); dbErr != nil {
 				s.logger.Error().Err(dbErr).Str("scan_id", scanID.String()).Msg("failed to record scan error")
 			}
 			s.auditLog(bgCtx, db.AuditActionScanFailed, "scans", &scanID, "", "",
-				map[string]interface{}{"error": err.Error()})
+				map[string]interface{}{"error": "failed to persist findings"})
 			return
 		}
+	}
 
-		// Persist findings.
-		if len(result.Findings) > 0 {
-			dbFindings := make([]db.Finding, 0, len(result.Findings))
-			for _, f := range result.Findings {
-				dbf := db.Finding{
-					ScanID:         scanID,
-					OwaspID:        f.OWASPId,
-					ModuleID:       f.ModuleID,
-					Title:          f.Title,
-					Description:    f.Description,
-					Severity:       db.FindingSeverity(f.Severity),
-					CVSSScore:      f.CVSSScore,
-					EndpointPath:   f.EndpointPath,
-					EndpointMethod: f.EndpointMethod,
-					Remediation:    sql.NullString{String: f.Remediation, Valid: f.Remediation != ""},
-				}
-				if f.CVSSVector != "" {
-					dbf.CVSSVector = sql.NullString{String: f.CVSSVector, Valid: true}
-				}
-				if f.Evidence.Request != "" {
-					dbf.EvidenceRequest = sql.NullString{String: f.Evidence.Request, Valid: true}
-				}
-				if f.Evidence.Response != "" {
-					dbf.EvidenceResponse = sql.NullString{String: f.Evidence.Response, Valid: true}
-				}
-				if len(f.Evidence.Detail) > 0 {
-					if b, err := json.Marshal(f.Evidence.Detail); err == nil {
-						dbf.EvidenceJSON = b
-					}
-				}
-				dbFindings = append(dbFindings, dbf)
-			}
+	// Update summary counts.
+	summary := db.ScanSummary{
+		TotalFindings: result.Summary.TotalFindings,
+		CriticalCount: result.Summary.Critical,
+		HighCount:     result.Summary.High,
+		MediumCount:   result.Summary.Medium,
+		LowCount:      result.Summary.Low,
+		InfoCount:     result.Summary.Info,
+	}
+	if err := s.db.UpdateScanSummary(bgCtx, scanID, summary); err != nil {
+		s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to update scan summary")
+	}
 
-			if err := s.db.CreateFindings(bgCtx, dbFindings); err != nil {
-				s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to persist findings")
-				if dbErr := s.db.UpdateScanError(bgCtx, scanID, "failed to persist findings: "+err.Error()); dbErr != nil {
-					s.logger.Error().Err(dbErr).Str("scan_id", scanID.String()).Msg("failed to record scan error")
+	// M3: mark as completed so the deferred handler does not set status to failed.
+	completed = true
+	if err := s.db.UpdateScanStatus(bgCtx, scanID, db.ScanStatusCompleted); err != nil {
+		s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to set scan status to completed")
+	}
+
+	// WORM: immutable record of scan completion with finding summary.
+	if s.citadel != nil && s.cfg != nil {
+		projectID := s.cfg.Citadel.ProjectID
+
+		// Emit one WORM event per CRITICAL finding with NIS2 measure code.
+		for _, f := range result.Findings {
+			if strings.EqualFold(string(f.Severity), "critical") {
+				nis2Code := citadel.NIS2Measure[f.OWASPId]
+				_, _, wormErr := s.citadel.EmitWORM(bgCtx, "apiguard", "scan.critical_finding", projectID, map[string]any{
+					"scan_id":      scanID.String(),
+					"owasp_id":     f.OWASPId,
+					"title":        f.Title,
+					"endpoint":     f.EndpointPath,
+					"method":       f.EndpointMethod,
+					"nis2_measure": nis2Code,
+				})
+				if wormErr != nil {
+					s.logger.Warn().Err(wormErr).Str("scan_id", scanID.String()).Str("owasp_id", f.OWASPId).Msg("CITADEL WORM emit scan.critical_finding failed")
 				}
-				s.auditLog(bgCtx, db.AuditActionScanFailed, "scans", &scanID, "", "",
-					map[string]interface{}{"error": "failed to persist findings"})
-				return
 			}
 		}
 
-		// Update summary counts.
-		summary := db.ScanSummary{
-			TotalFindings: result.Summary.TotalFindings,
-			CriticalCount: result.Summary.Critical,
-			HighCount:     result.Summary.High,
-			MediumCount:   result.Summary.Medium,
-			LowCount:      result.Summary.Low,
-			InfoCount:     result.Summary.Info,
+		_, _, wormErr := s.citadel.EmitWORM(bgCtx, "apiguard", "scan.completed", projectID, map[string]any{
+			"scan_id":        scanID.String(),
+			"target_url":     req.Target,
+			"total_findings": summary.TotalFindings,
+			"critical":       summary.CriticalCount,
+			"high":           summary.HighCount,
+			"medium":         summary.MediumCount,
+			"low":            summary.LowCount,
+		})
+		if wormErr != nil {
+			s.logger.Warn().Err(wormErr).Str("scan_id", scanID.String()).Msg("CITADEL WORM emit scan.completed failed")
 		}
-		if err := s.db.UpdateScanSummary(bgCtx, scanID, summary); err != nil {
-			s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to update scan summary")
+	}
+
+	// Upsert api_spec and link it to this scan if we have a spec hash.
+	if result.SpecHash != "" {
+		specURL := sql.NullString{}
+		if req.SpecURL != "" {
+			specURL = sql.NullString{String: req.SpecURL, Valid: true}
 		}
-
-		// M3: mark as completed so the deferred handler does not set status to failed.
-		completed = true
-		if err := s.db.UpdateScanStatus(bgCtx, scanID, db.ScanStatusCompleted); err != nil {
-			s.logger.Error().Err(err).Str("scan_id", scanID.String()).Msg("failed to set scan status to completed")
+		spec := &db.APISpec{
+			SpecHash: result.SpecHash,
+			SpecURL:  specURL,
+			BaseURL:  sql.NullString{String: req.Target, Valid: true},
 		}
-
-		// WORM: immutable record of scan completion with finding summary.
-		if s.citadel != nil && s.cfg != nil {
-			projectID := s.cfg.Citadel.ProjectID
-
-			// Emit one WORM event per CRITICAL finding with NIS2 measure code.
-			for _, f := range result.Findings {
-				if strings.EqualFold(string(f.Severity), "critical") {
-					nis2Code := citadel.NIS2Measure[f.OWASPId]
-					_, _, wormErr := s.citadel.EmitWORM(bgCtx, "apiguard", "scan.critical_finding", projectID, map[string]any{
-						"scan_id":      scanID.String(),
-						"owasp_id":     f.OWASPId,
-						"title":        f.Title,
-						"endpoint":     f.EndpointPath,
-						"method":       f.EndpointMethod,
-						"nis2_measure": nis2Code,
-					})
-					if wormErr != nil {
-						s.logger.Warn().Err(wormErr).Str("scan_id", scanID.String()).Str("owasp_id", f.OWASPId).Msg("CITADEL WORM emit scan.critical_finding failed")
-					}
-				}
+		if err := s.db.UpsertAPISpec(bgCtx, spec); err != nil {
+			s.logger.Warn().Err(err).Str("scan_id", scanID.String()).Msg("failed to upsert api_spec")
+		} else {
+			if err := s.db.LinkScanAPISpec(bgCtx, scanID, spec.ID); err != nil {
+				s.logger.Warn().Err(err).Str("scan_id", scanID.String()).Msg("failed to link api_spec to scan")
 			}
-
-			_, _, wormErr := s.citadel.EmitWORM(bgCtx, "apiguard", "scan.completed", projectID, map[string]any{
-				"scan_id":        scanID.String(),
-				"target_url":     req.Target,
-				"total_findings": summary.TotalFindings,
-				"critical":       summary.CriticalCount,
-				"high":           summary.HighCount,
-				"medium":         summary.MediumCount,
-				"low":            summary.LowCount,
-			})
-			if wormErr != nil {
-				s.logger.Warn().Err(wormErr).Str("scan_id", scanID.String()).Msg("CITADEL WORM emit scan.completed failed")
-			}
+			s.auditLog(bgCtx, db.AuditActionSpecParsed, "api_specs", &spec.ID, "", "",
+				map[string]interface{}{"spec_hash": result.SpecHash})
 		}
-
-		// Upsert api_spec and link it to this scan if we have a spec hash.
-		if result.SpecHash != "" {
-			specURL := sql.NullString{}
-			if req.SpecURL != "" {
-				specURL = sql.NullString{String: req.SpecURL, Valid: true}
-			}
-			spec := &db.APISpec{
-				SpecHash: result.SpecHash,
-				SpecURL:  specURL,
-				BaseURL:  sql.NullString{String: req.Target, Valid: true},
-			}
-			if err := s.db.UpsertAPISpec(bgCtx, spec); err != nil {
-				s.logger.Warn().Err(err).Str("scan_id", scanID.String()).Msg("failed to upsert api_spec")
-			} else {
-				if err := s.db.LinkScanAPISpec(bgCtx, scanID, spec.ID); err != nil {
-					s.logger.Warn().Err(err).Str("scan_id", scanID.String()).Msg("failed to link api_spec to scan")
-				}
-				s.auditLog(bgCtx, db.AuditActionSpecParsed, "api_specs", &spec.ID, "", "",
-					map[string]interface{}{"spec_hash": result.SpecHash})
-			}
-		}
+	}
 
 	s.auditLog(bgCtx, db.AuditActionScanCompleted, "scans", &scanID, "", "",
 		map[string]interface{}{"total_findings": summary.TotalFindings})
@@ -1076,9 +1076,9 @@ func (s *Scans) Report(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := &domain.ScanResult{
-		ID:     scan.ID.String(),
-		Status: domain.ScanStatus(scan.Status),
-		Target: scan.TargetURL,
+		ID:       scan.ID.String(),
+		Status:   domain.ScanStatus(scan.Status),
+		Target:   scan.TargetURL,
 		Findings: domainFindings,
 		Summary: domain.ScanSummary{
 			TotalFindings: scan.TotalFindings,

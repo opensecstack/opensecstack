@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -20,7 +21,7 @@ var rlOKHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) 
 // remoteAddr (host:port) and optional X-Forwarded-For header value.
 func doRequest(t *testing.T, h http.Handler, remoteAddr, xff string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.RemoteAddr = remoteAddr
 	if xff != "" {
 		req.Header.Set("X-Forwarded-For", xff)
@@ -339,7 +340,7 @@ func TestRateLimiter_XFFMultipleValues(t *testing.T) {
 // doRequestWithXRealIP fires a GET request with both XFF and X-Real-IP headers set.
 func doRequestWithXRealIP(t *testing.T, h http.Handler, remoteAddr, xff, xri string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.RemoteAddr = remoteAddr
 	if xff != "" {
 		req.Header.Set("X-Forwarded-For", xff)
@@ -357,7 +358,7 @@ func doRequestWithXRealIP(t *testing.T, h http.Handler, remoteAddr, xff, xri str
 func TestClientIPFromRequest_XRealIPFallback(t *testing.T) {
 	proxies := ParseTrustedProxyCIDRs([]string{"10.0.0.1/32"})
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.RemoteAddr = "10.0.0.1:1234"
 	req.Header.Set("X-Real-IP", "5.6.7.8")
 	// No X-Forwarded-For set.
@@ -373,7 +374,7 @@ func TestClientIPFromRequest_XRealIPFallback(t *testing.T) {
 func TestClientIPFromRequest_XFFPreferredOverXRealIP(t *testing.T) {
 	proxies := ParseTrustedProxyCIDRs([]string{"10.0.0.1/32"})
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.RemoteAddr = "10.0.0.1:1234"
 	req.Header.Set("X-Forwarded-For", "1.2.3.4")
 	req.Header.Set("X-Real-IP", "5.6.7.8")
@@ -389,7 +390,7 @@ func TestClientIPFromRequest_XFFPreferredOverXRealIP(t *testing.T) {
 func TestClientIPFromRequest_XRealIPIgnoredForUntrustedPeer(t *testing.T) {
 	proxies := ParseTrustedProxyCIDRs([]string{"10.0.0.1/32"})
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.RemoteAddr = "192.168.99.1:1234" // not in trusted list
 	req.Header.Set("X-Real-IP", "5.6.7.8")
 
@@ -424,7 +425,7 @@ func TestClientIPFromRequestWithDepth_Depth2(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.RemoteAddr = "10.0.0.1:1234"
 		req.Header.Set("X-Forwarded-For", tc.xff)
 
@@ -443,7 +444,7 @@ func TestClientIPFromRequestWithDepth_Depth2(t *testing.T) {
 func TestClientIPFromRequestWithDepth_Depth1IsDefault(t *testing.T) {
 	proxies := ParseTrustedProxyCIDRs([]string{"10.0.0.1/32"})
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.RemoteAddr = "10.0.0.1:1234"
 	// XFF: original client on the left, the trusted proxy added itself on the right.
 	req.Header.Set("X-Forwarded-For", "1.2.3.4, 10.0.0.1")
@@ -463,7 +464,7 @@ func TestClientIPFromRequestWithDepth_Depth1IsDefault(t *testing.T) {
 func TestClientIPFromRequestWithDepth_ZeroClampedToOne(t *testing.T) {
 	proxies := ParseTrustedProxyCIDRs([]string{"10.0.0.1/32"})
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.RemoteAddr = "10.0.0.1:1234"
 	// XFF: original client on the left, the trusted proxy added itself on the right.
 	req.Header.Set("X-Forwarded-For", "1.2.3.4, 10.0.0.1")
@@ -515,7 +516,7 @@ func TestRateLimiter_DepthBasedXFFStripping(t *testing.T) {
 
 	// Exhaust allowance for the resolved client IP (1.2.3.4).
 	for i := 0; i < rate; i++ {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.RemoteAddr = "10.0.0.1:9999"
 		req.Header.Set("X-Forwarded-For", xff)
 		rr := httptest.NewRecorder()
@@ -526,7 +527,7 @@ func TestRateLimiter_DepthBasedXFFStripping(t *testing.T) {
 	}
 
 	// Next request for the same resolved client (1.2.3.4) should be rate-limited.
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.RemoteAddr = "10.0.0.1:9999"
 	req.Header.Set("X-Forwarded-For", xff)
 	rr := httptest.NewRecorder()

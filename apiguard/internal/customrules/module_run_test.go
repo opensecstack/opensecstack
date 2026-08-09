@@ -117,7 +117,7 @@ func TestParseSeverity(t *testing.T) {
 // ---- applyAuth ----
 
 func TestApplyAuth_Bearer(t *testing.T) {
-	req, _ := http.NewRequest(http.MethodGet, "https://example.com", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://example.com", nil)
 	applyAuth(req, &modules.AuthConfig{Type: "bearer", Token: "tok123"})
 	if got := req.Header.Get("Authorization"); got != "Bearer tok123" {
 		t.Errorf("Authorization = %q, want Bearer tok123", got)
@@ -125,7 +125,7 @@ func TestApplyAuth_Bearer(t *testing.T) {
 }
 
 func TestApplyAuth_APIKeyHeader(t *testing.T) {
-	req, _ := http.NewRequest(http.MethodGet, "https://example.com", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://example.com", nil)
 	applyAuth(req, &modules.AuthConfig{Type: "apikey", APIKey: "key1", APIKeyName: "X-Api-Key", APIKeyIn: "header"})
 	if got := req.Header.Get("X-Api-Key"); got != "key1" {
 		t.Errorf("X-Api-Key = %q, want key1", got)
@@ -133,7 +133,7 @@ func TestApplyAuth_APIKeyHeader(t *testing.T) {
 }
 
 func TestApplyAuth_APIKeyQuery(t *testing.T) {
-	req, _ := http.NewRequest(http.MethodGet, "https://example.com/path", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://example.com/path", nil)
 	applyAuth(req, &modules.AuthConfig{Type: "apikey", APIKey: "key1", APIKeyName: "api_key", APIKeyIn: "query"})
 	if got := req.URL.Query().Get("api_key"); got != "key1" {
 		t.Errorf("query api_key = %q, want key1", got)
@@ -141,7 +141,7 @@ func TestApplyAuth_APIKeyQuery(t *testing.T) {
 }
 
 func TestApplyAuth_Basic(t *testing.T) {
-	req, _ := http.NewRequest(http.MethodGet, "https://example.com", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://example.com", nil)
 	applyAuth(req, &modules.AuthConfig{Type: "basic", Username: "user", Password: "pass"})
 	u, p, ok := req.BasicAuth()
 	if !ok || u != "user" || p != "pass" {
@@ -150,7 +150,7 @@ func TestApplyAuth_Basic(t *testing.T) {
 }
 
 func TestApplyAuth_EmptyTokenNoHeader(t *testing.T) {
-	req, _ := http.NewRequest(http.MethodGet, "https://example.com", nil)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://example.com", nil)
 	applyAuth(req, &modules.AuthConfig{Type: "bearer", Token: ""})
 	if got := req.Header.Get("Authorization"); got != "" {
 		t.Errorf("expected no Authorization header, got %q", got)

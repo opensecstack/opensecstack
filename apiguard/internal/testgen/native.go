@@ -291,13 +291,13 @@ func (g *Generator) generateMassAssignmentTests(endpoint *IREndpoint) []TestCase
 
 	// Test: Extra privileged fields injection.
 	extraFields := map[string]interface{}{
-		"admin":    true,
-		"role":     "admin",
-		"is_admin": true,
-		"isAdmin":  true,
+		"admin":       true,
+		"role":        "admin",
+		"is_admin":    true,
+		"isAdmin":     true,
 		"permissions": []string{"*"},
 	}
-	extraFieldsJSON, _ := json.Marshal(extraFields)
+	extraFieldsJSON, _ := json.Marshal(extraFields) //nolint:errcheck // extraFields is a hardcoded literal of JSON-safe types, cannot fail
 
 	cases = append(cases, TestCase{
 		ID:             generateTestID(),
@@ -328,7 +328,7 @@ func (g *Generator) generateMassAssignmentTests(endpoint *IREndpoint) []TestCase
 		"created_at": "2000-01-01T00:00:00Z",
 		"updated_at": "2000-01-01T00:00:00Z",
 	}
-	readOnlyJSON, _ := json.Marshal(readOnlyFields)
+	readOnlyJSON, _ := json.Marshal(readOnlyFields) //nolint:errcheck // readOnlyFields is a hardcoded literal of JSON-safe types, cannot fail
 
 	cases = append(cases, TestCase{
 		ID:             generateTestID(),

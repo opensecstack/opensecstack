@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/opensecstack/sdk/go/sinauth"
 )
 
 // makeJWTWithTyp builds a valid HS256 JWT with an explicit typ claim, so
@@ -50,6 +52,41 @@ func TestContextWithClaims(t *testing.T) {
 	}
 	if got != claims {
 		t.Error("returned claims pointer does not match stored claims")
+	}
+}
+
+// ---- sinauthClaimsToLocal ----
+
+func TestSinauthClaimsToLocal_MapsFieldsAndForcesTypAccess(t *testing.T) {
+	sc := &sinauth.Claims{
+		Sub:       "user-42",
+		ExpiresAt: 1700000100,
+		IssuedAt:  1700000000,
+		Issuer:    "https://sinauth.example.com", // must NOT leak through — Iss is hardcoded
+		Role:      "admin",
+	}
+	got := sinauthClaimsToLocal(sc)
+
+	if got.Sub != "user-42" {
+		t.Errorf("Sub: expected user-42, got %q", got.Sub)
+	}
+	if got.Exp != 1700000100 {
+		t.Errorf("Exp: expected 1700000100, got %d", got.Exp)
+	}
+	if got.Iat != 1700000000 {
+		t.Errorf("Iat: expected 1700000000, got %d", got.Iat)
+	}
+	if got.Iss != "sinauth" {
+		t.Errorf("Iss: expected hardcoded %q, got %q", "sinauth", got.Iss)
+	}
+	if got.Typ != "access" {
+		t.Errorf("Typ: expected access, got %q", got.Typ)
+	}
+	if got.Nbf != 0 {
+		t.Errorf("Nbf: expected zero-value (not set by sinauth conversion), got %d", got.Nbf)
+	}
+	if got.Aud != "" {
+		t.Errorf("Aud: expected empty (not carried over), got %q", got.Aud)
 	}
 }
 
@@ -156,7 +193,7 @@ func TestJWTAuthWithProvider_NoSecretsConfigured(t *testing.T) {
 func TestJWTAuthWithProvider_NoAuthHeader(t *testing.T) {
 	sp := NewSecretProvider("secret")
 	rr := httptest.NewRecorder()
-	JWTAuthWithProvider(sp, nil)(okHandler).ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+	JWTAuthWithProvider(sp, nil)(okHandler).ServeHTTP(rr, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil))
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rr.Code)
 	}

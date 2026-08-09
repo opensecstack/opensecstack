@@ -132,7 +132,7 @@ func BenchmarkMARSHAL_Evaluate_Refuse(b *testing.B) {
 	engine := marshal.New(benchStore{}, benchTokenVerifier{}).EnforceSignatures(true)
 	ctx := context.Background()
 	k := baseKerkese()
-	k.Actor.UserID = "999"  // no matching token → Gate 1 FAIL
+	k.Actor.UserID = "999" // no matching token → Gate 1 FAIL
 	k.ActorToken = "bogus"
 	b.ResetTimer()
 	b.ReportAllocs()

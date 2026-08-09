@@ -7,9 +7,9 @@ import (
 
 func TestKnownVectors(t *testing.T) {
 	tests := []struct {
-		vector   string
+		vector    string
 		wantScore float64
-		wantSev  string
+		wantSev   string
 	}{
 		// NIST NVD reference values
 		{"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N", 9.1, "Critical"},

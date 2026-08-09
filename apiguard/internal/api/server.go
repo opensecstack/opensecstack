@@ -206,7 +206,7 @@ func (s *Server) setupMiddleware() {
 		rateLimit = 120
 	}
 	s.globalLimiter = middleware.NewLimiter(s.config.Redis.URL, s.config.Redis.Password, s.config.Redis.DB, rateLimit, "global", s.config.RateLimit.TrustedProxies, s.config.RateLimit.TrustedProxyDepth)
-	s.router.Use(s.globalLimiter.Middleware) // requests per minute per IP
+	s.router.Use(s.globalLimiter.Middleware)             // requests per minute per IP
 	s.router.Use(middleware.CORS(s.config.CORS.Origins)) // CORS must run before JWT auth
 }
 

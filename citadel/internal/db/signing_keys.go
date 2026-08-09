@@ -4,8 +4,11 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // RegisterKey binds an Ed25519 public key (hex-encoded) to userID (a sinauth
@@ -43,7 +46,16 @@ func (d *DB) GetActiveKey(ctx context.Context, userID string) (pubKey ed25519.Pu
 		userID,
 	)
 	if scanErr := row.Scan(&keyID, &pkHex); scanErr != nil {
-		return nil, "", false, nil
+		if errors.Is(scanErr, pgx.ErrNoRows) {
+			return nil, "", false, nil
+		}
+		// A real query/connection failure (e.g. DB unreachable) must not be
+		// silently reported as "no active key" — MARSHAL's signature gates
+		// (verifyOperatorSignature/verifyVerifierSignature) already fail
+		// closed on exists=false, but conflating "genuinely unregistered"
+		// with "we couldn't ask" would hide real outages from callers and
+		// operators (e.g. Keys.Get would return 404 instead of 500).
+		return nil, "", false, fmt.Errorf("db: GetActiveKey: query: %w", scanErr)
 	}
 
 	raw, decErr := hex.DecodeString(pkHex)
@@ -65,7 +77,14 @@ func (d *DB) GetActiveKeyID(ctx context.Context, userID string) (keyID string, r
 		userID,
 	)
 	if scanErr := row.Scan(&keyID, &registeredAt); scanErr != nil {
-		return "", time.Time{}, false, nil
+		if errors.Is(scanErr, pgx.ErrNoRows) {
+			return "", time.Time{}, false, nil
+		}
+		// See GetActiveKey: a real query failure must be reported as an
+		// error, not disguised as "no active key" (which would make the
+		// GET /api/v1/keys/{user_id} handler return 404 instead of 500
+		// during a DB outage).
+		return "", time.Time{}, false, fmt.Errorf("db: GetActiveKeyID: query: %w", scanErr)
 	}
 	return keyID, registeredAt, true, nil
 }

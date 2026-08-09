@@ -4,8 +4,10 @@ import threading
 import time
 import uuid as _uuid_mod
 from datetime import date, datetime, timezone
+from typing import Any
 
 from flask import Blueprint, abort, current_app, g, jsonify, request, send_file
+from flask.typing import ResponseReturnValue
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -31,11 +33,12 @@ assessments_bp = Blueprint("assessments", __name__)
 
 
 @assessments_bp.before_request
-def require_json_content_type():
+def require_json_content_type() -> ResponseReturnValue | None:
     if request.method in ("POST", "PUT", "PATCH"):
         ct = request.content_type or ""
         if ct and not ct.startswith("application/json"):
             return jsonify({"error": "Content-Type must be application/json", "code": "UNSUPPORTED_MEDIA_TYPE"}), 415
+    return None
 
 
 _VALID_FRAMEWORK_VERSIONS = frozenset({"NIS2-2022/0383"})
@@ -108,7 +111,7 @@ def _check_report_rate_limit(actor: str) -> bool:
         return True
 
 
-def _check_org_access(org_id):
+def _check_org_access(org_id: Any) -> ResponseReturnValue | None:
     """Return a 403 response if the current actor does not own the org, else None.
 
     Orgs with created_by=NULL are legacy rows created before ownership was
@@ -127,10 +130,10 @@ def _check_org_access(org_id):
         # Use a savepoint (nested transaction) so only this CAS UPDATE is
         # isolated; the caller's staged ORM changes are not prematurely flushed.
         with db.session.begin_nested():
-            updated = db.session.execute(
+            db.session.execute(
                 db.text("UPDATE organisations SET created_by = :actor" " WHERE id = :id AND created_by IS NULL"),
                 {"actor": g.actor, "id": str(org_id)},
-            ).rowcount
+            )
             db.session.flush()
         # Make the savepoint visible within the outer transaction.
         db.session.flush()
@@ -169,7 +172,7 @@ NIST_MAP = {
 }
 
 
-def _create_controls_from_templates(assessment_id, db_session, framework="nis2"):
+def _create_controls_from_templates(assessment_id: Any, db_session: Any, framework: str = "nis2") -> bool:
     """Populate control rows from control_templates filtered by framework.
 
     For the legacy 'nis2' framework falls back to NIST_MAP when a template
@@ -234,7 +237,7 @@ def _create_controls_from_templates(assessment_id, db_session, framework="nis2")
 
 @assessments_bp.get("/organisations/<uuid:org_id>/assessments")
 @require_auth
-def list_assessments(org_id):
+def list_assessments(org_id: _uuid_mod.UUID) -> ResponseReturnValue:
     err = _check_org_access(org_id)
     if err:
         return err
@@ -271,7 +274,7 @@ def list_assessments(org_id):
 @assessments_bp.post("/organisations/<uuid:org_id>/assessments")
 @require_auth
 @require_scope("read_write")
-def create_assessment(org_id):
+def create_assessment(org_id: _uuid_mod.UUID) -> ResponseReturnValue:
     err = _check_org_access(org_id)
     if err:
         return err
@@ -362,7 +365,7 @@ def create_assessment(org_id):
 
 @assessments_bp.get("/assessments/<uuid:assessment_id>")
 @require_auth
-def get_assessment(assessment_id):
+def get_assessment(assessment_id: _uuid_mod.UUID) -> ResponseReturnValue:
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
         return jsonify({"error": "Assessment not found", "code": "NOT_FOUND"}), 404
@@ -380,7 +383,7 @@ def get_assessment(assessment_id):
 @assessments_bp.patch("/assessments/<uuid:assessment_id>")
 @require_auth
 @require_scope("read_write")
-def update_assessment(assessment_id):
+def update_assessment(assessment_id: _uuid_mod.UUID) -> ResponseReturnValue:
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
         return jsonify({"error": "Assessment not found", "code": "NOT_FOUND"}), 404
@@ -463,7 +466,7 @@ def update_assessment(assessment_id):
 @assessments_bp.delete("/assessments/<uuid:assessment_id>")
 @require_auth
 @require_scope("read_write")
-def delete_assessment(assessment_id):
+def delete_assessment(assessment_id: _uuid_mod.UUID) -> ResponseReturnValue:
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
         return jsonify({"error": "Assessment not found", "code": "NOT_FOUND"}), 404
@@ -530,7 +533,7 @@ _STATUS_LABELS = {
 _NIST_CATEGORIES = ["identify", "protect", "detect", "respond", "recover"]
 
 
-def _generate_pdf(assessment, org, controls, templates):
+def _generate_pdf(assessment: Any, org: Any, controls: list, templates: list) -> io.BytesIO:
     """
     Build a NIS2 assessment PDF and return it as a BytesIO buffer.
 
@@ -580,12 +583,6 @@ def _generate_pdf(assessment, org, controls, templates):
         textColor=colors.HexColor("#2c3e50"),
     )
     body_style = styles["BodyText"]
-    small_style = ParagraphStyle(
-        "NIS2Small",
-        parent=styles["Normal"],
-        fontSize=8,
-        textColor=colors.HexColor("#555555"),
-    )
     footer_style = ParagraphStyle(
         "NIS2Footer",
         parent=styles["Normal"],
@@ -712,9 +709,6 @@ def _generate_pdf(assessment, org, controls, templates):
     story.append(HRFlowable(width=W, thickness=1, color=colors.HexColor("#cccccc")))
     story.append(Spacer(1, 3 * mm))
 
-    # Build template lookup for descriptions
-    tmpl_map = {t.measure_ref: t for t in templates}
-
     ctrl_header = ["Ref", "Article", "NIST", "Control Title", "Status", "Evidence", "Notes"]
     ctrl_col_w = [
         8 * mm,  # Ref
@@ -797,7 +791,7 @@ def _generate_pdf(assessment, org, controls, templates):
 @assessments_bp.post("/assessments/<uuid:assessment_id>/report")
 @require_auth
 @require_scope("read")
-def generate_report(assessment_id):
+def generate_report(assessment_id: _uuid_mod.UUID) -> ResponseReturnValue:
     # Enforce per-user rate limit of 3 report requests per minute.
     # Uses Redis when available (shared across workers); in-memory fallback otherwise.
     if not _check_report_rate_limit(g.actor):

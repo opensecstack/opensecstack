@@ -51,7 +51,7 @@ func (f *fakeMarshalVerifier) Verify(_ context.Context, _ string) (string, strin
 
 func TestMarshal_ServeHTTP_InvalidBody(t *testing.T) {
 	h := NewMarshal(zerolog.Nop(), nil)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/marshal/evaluate", bytes.NewBufferString("not-json"))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/marshal/evaluate", bytes.NewBufferString("not-json"))
 	rw := httptest.NewRecorder()
 	h.ServeHTTP(rw, req)
 
@@ -79,7 +79,7 @@ func TestMarshal_ServeHTTP_FillsDefaultsAndReturnsDecision(t *testing.T) {
 		"verifier": {"user_id": "u2", "role": "analyst"},
 		"sod": {"operator_user_id": "u1", "verifier_user_id": "u2"}
 	}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/marshal/evaluate", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/marshal/evaluate", bytes.NewReader(body))
 	rw := httptest.NewRecorder()
 	h.ServeHTTP(rw, req)
 
@@ -127,7 +127,7 @@ func TestMarshal_ServeHTTP_PreservesProvidedExecutionID(t *testing.T) {
 		SoD:            marshal.KerkeseSoD{OperatorUserID: "u1", VerifierUserID: "u2"},
 	}
 	body, _ := json.Marshal(k)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/marshal/evaluate", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/marshal/evaluate", bytes.NewReader(body))
 	rw := httptest.NewRecorder()
 	h.ServeHTTP(rw, req)
 

@@ -1,9 +1,11 @@
 import hashlib
 import os
 import uuid as uuid_lib
+from typing import Any
 
 import magic
 from flask import Blueprint, current_app, g, jsonify, request, send_file
+from flask.typing import ResponseReturnValue
 from werkzeug.utils import secure_filename
 
 from ..audit import write_audit
@@ -29,11 +31,12 @@ artifacts_bp = Blueprint("artifacts", __name__)
 
 
 @artifacts_bp.before_request
-def require_json_content_type():
+def require_json_content_type() -> ResponseReturnValue | None:
     if request.method in ("POST", "PUT", "PATCH"):
         ct = request.content_type or ""
         if ct and not ct.startswith("application/json") and not ct.startswith("multipart/form-data"):
             return jsonify({"error": "Content-Type must be application/json", "code": "UNSUPPORTED_MEDIA_TYPE"}), 415
+    return None
 
 
 VALID_TYPES = {"policy", "procedure", "evidence", "report", "screenshot", "log", "certificate", "contract"}
@@ -57,7 +60,7 @@ ALLOWED_MIME_TYPES = {
 }
 
 
-def _save_file(file_storage, assessment_id: str) -> tuple[str, str, int, str]:
+def _save_file(file_storage: Any, assessment_id: str) -> tuple[str, str, int, str]:
     """Save uploaded file, return (file_path, sha256_hex, size_bytes, mime_type)."""
     upload_dir = os.path.join(current_app.config["UPLOAD_DIR"], assessment_id)
     os.makedirs(upload_dir, exist_ok=True)
@@ -86,7 +89,7 @@ def _save_file(file_storage, assessment_id: str) -> tuple[str, str, int, str]:
 
 @artifacts_bp.get("/assessments/<uuid:assessment_id>/artifacts")
 @require_auth
-def list_artifacts(assessment_id):
+def list_artifacts(assessment_id: uuid_lib.UUID) -> ResponseReturnValue:
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
         return jsonify({"error": "Assessment not found", "code": "NOT_FOUND"}), 404
@@ -129,7 +132,7 @@ def list_artifacts(assessment_id):
 @artifacts_bp.post("/assessments/<uuid:assessment_id>/artifacts")
 @require_auth
 @require_scope("read_write")
-def upload_artifact(assessment_id):
+def upload_artifact(assessment_id: uuid_lib.UUID) -> ResponseReturnValue:
     assessment = db.session.get(Assessment, assessment_id)
     if assessment is None:
         return jsonify({"error": "Assessment not found", "code": "NOT_FOUND"}), 404
@@ -258,7 +261,7 @@ def upload_artifact(assessment_id):
 
 @artifacts_bp.get("/artifacts/<uuid:artifact_id>")
 @require_auth
-def get_artifact(artifact_id):
+def get_artifact(artifact_id: uuid_lib.UUID) -> ResponseReturnValue:
     artifact = db.session.get(Artifact, artifact_id)
     if artifact is None:
         return jsonify({"error": "Artifact not found", "code": "NOT_FOUND"}), 404
@@ -278,7 +281,7 @@ def get_artifact(artifact_id):
 
 @artifacts_bp.get("/artifacts/<uuid:artifact_id>/download")
 @require_auth
-def download_artifact(artifact_id):
+def download_artifact(artifact_id: uuid_lib.UUID) -> ResponseReturnValue:
     artifact = db.session.get(Artifact, artifact_id)
     if artifact is None:
         return jsonify({"error": "Artifact not found", "code": "NOT_FOUND"}), 404
@@ -336,7 +339,7 @@ def download_artifact(artifact_id):
 @artifacts_bp.delete("/artifacts/<uuid:artifact_id>")
 @require_auth
 @require_scope("read_write")
-def delete_artifact(artifact_id):
+def delete_artifact(artifact_id: uuid_lib.UUID) -> ResponseReturnValue:
     artifact = db.session.get(Artifact, artifact_id)
     if artifact is None:
         return jsonify({"error": "Artifact not found", "code": "NOT_FOUND"}), 404

@@ -17,14 +17,14 @@ import (
 // APIKey represents a row in the api_keys table.
 // key_hash is never exposed in JSON responses.
 type APIKey struct {
-	ID          uuid.UUID      `json:"id"`
-	Label       sql.NullString `json:"label"`
-	CreatedBy   string         `json:"created_by"`
-	IsActive    bool           `json:"is_active"`
-	LastUsedAt  sql.NullTime   `json:"last_used_at"`
-	CreatedAt   time.Time      `json:"created_at"`
-	RevokedAt   sql.NullTime   `json:"revoked_at"`
-	RevokedBy   sql.NullString `json:"revoked_by"`
+	ID         uuid.UUID      `json:"id"`
+	Label      sql.NullString `json:"label"`
+	CreatedBy  string         `json:"created_by"`
+	IsActive   bool           `json:"is_active"`
+	LastUsedAt sql.NullTime   `json:"last_used_at"`
+	CreatedAt  time.Time      `json:"created_at"`
+	RevokedAt  sql.NullTime   `json:"revoked_at"`
+	RevokedBy  sql.NullString `json:"revoked_by"`
 }
 
 // CreateAPIKey generates a new API key, stores its SHA-256 hash, and returns
@@ -146,7 +146,8 @@ func (d *DB) LookupAPIKeyByHash(ctx context.Context, keyHash string) (bool, erro
 	}
 
 	// Update last_used_at in the background — best effort, non-fatal.
-	_, _ = d.Pool.Exec(ctx, `
+	_, _ = d.Pool.Exec(ctx, //nolint:errcheck
+		`
 		UPDATE api_keys SET last_used_at = NOW() WHERE id = $1
 	`, id)
 

@@ -1,4 +1,3 @@
-import uuid
 from datetime import datetime
 
 from sqlalchemy import text
@@ -6,8 +5,15 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from .extensions import db
 
+# NOTE: Flask-SQLAlchemy sets `db.Model` as a dynamic instance attribute
+# (built at SQLAlchemy() construction time), so mypy cannot statically
+# resolve it as a valid base class without the (unconfigured) SQLAlchemy
+# mypy plugin. This is a known Flask-SQLAlchemy + mypy limitation, not a
+# real type-safety hole -- `db.Model` is a perfectly concrete class at
+# runtime. Each subclass below is annotated accordingly.
 
-class Organisation(db.Model):
+
+class Organisation(db.Model):  # type: ignore[name-defined]
     __tablename__ = "organisations"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
@@ -32,7 +38,7 @@ class Organisation(db.Model):
 
     assessments = db.relationship("Assessment", backref="organisation", cascade="all, delete-orphan", lazy="dynamic")
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             "id": str(self.id),
             "name": self.name,
@@ -48,7 +54,7 @@ class Organisation(db.Model):
         }
 
 
-class Assessment(db.Model):
+class Assessment(db.Model):  # type: ignore[name-defined]
     __tablename__ = "assessments"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
@@ -91,7 +97,7 @@ class Assessment(db.Model):
     controls = db.relationship("Control", backref="assessment", cascade="all, delete-orphan", lazy="dynamic")
     artifacts = db.relationship("Artifact", backref="assessment", cascade="all, delete-orphan", lazy="dynamic")
 
-    def to_dict(self, include_stats=False):
+    def to_dict(self, include_stats: bool = False) -> dict:
         d = {
             "id": str(self.id),
             "org_id": str(self.org_id),
@@ -116,7 +122,7 @@ class Assessment(db.Model):
         }
         if include_stats:
             controls = list(self.controls)
-            status_counts = {}
+            status_counts: dict[str, int] = {}
             for c in controls:
                 status_counts[c.status] = status_counts.get(c.status, 0) + 1
             scores = [float(c.risk_score) for c in controls if c.risk_score is not None]
@@ -128,7 +134,7 @@ class Assessment(db.Model):
         return d
 
 
-class Control(db.Model):
+class Control(db.Model):  # type: ignore[name-defined]
     __tablename__ = "controls"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
@@ -163,7 +169,7 @@ class Control(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             "id": str(self.id),
             "assessment_id": str(self.assessment_id),
@@ -190,7 +196,7 @@ class Control(db.Model):
         }
 
 
-class Artifact(db.Model):
+class Artifact(db.Model):  # type: ignore[name-defined]
     __tablename__ = "artifacts"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
@@ -225,7 +231,7 @@ class Artifact(db.Model):
     signed_by = db.Column(db.String(255), nullable=True)
     signed_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             "id": str(self.id),
             "assessment_id": str(self.assessment_id),
@@ -244,7 +250,7 @@ class Artifact(db.Model):
         }
 
 
-class ComplianceSnapshot(db.Model):
+class ComplianceSnapshot(db.Model):  # type: ignore[name-defined]
     __tablename__ = "compliance_snapshots"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
@@ -256,7 +262,7 @@ class ComplianceSnapshot(db.Model):
     non_compliant_controls = db.Column(db.Integer, nullable=False)
     snapshot_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             "id": str(self.id),
             "assessment_id": str(self.assessment_id),
@@ -269,7 +275,7 @@ class ComplianceSnapshot(db.Model):
         }
 
 
-class AuditLog(db.Model):
+class AuditLog(db.Model):  # type: ignore[name-defined]
     __tablename__ = "audit_log"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
@@ -290,7 +296,7 @@ class AuditLog(db.Model):
     hash_version = db.Column(db.SmallInteger, nullable=False, default=2)
     timestamp = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             "id": str(self.id),
             "action": self.action,
@@ -307,7 +313,7 @@ class AuditLog(db.Model):
         }
 
 
-class ApiKey(db.Model):
+class ApiKey(db.Model):  # type: ignore[name-defined]
     __tablename__ = "api_keys"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
@@ -321,7 +327,7 @@ class ApiKey(db.Model):
     last_used_at = db.Column(db.DateTime(timezone=True), nullable=True)
     expires_at = db.Column(db.DateTime(timezone=True), nullable=True)  # NULL = never expires
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             "id": str(self.id),
             "label": self.label,
@@ -335,7 +341,7 @@ class ApiKey(db.Model):
         }
 
 
-class RevokedToken(db.Model):
+class RevokedToken(db.Model):  # type: ignore[name-defined]
     """DB fallback store for revoked JTIs when Redis is unavailable."""
 
     __tablename__ = "revoked_tokens"
@@ -345,7 +351,7 @@ class RevokedToken(db.Model):
     expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
 
 
-class ControlTemplate(db.Model):
+class ControlTemplate(db.Model):  # type: ignore[name-defined]
     __tablename__ = "control_templates"
 
     __table_args__ = (
@@ -361,7 +367,7 @@ class ControlTemplate(db.Model):
     guidance = db.Column(db.Text, nullable=True)
     framework = db.Column(db.String(32), nullable=False, default="nis2", index=True)
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return {
             "id": self.id,
             "measure_ref": self.measure_ref,

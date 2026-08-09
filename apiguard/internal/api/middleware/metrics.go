@@ -12,8 +12,8 @@ import (
 // Exposes counts and latency histograms at GET /metrics (JSON).
 type MetricsCollector struct {
 	mu            sync.Mutex
-	requestsTotal *expvar.Map  // keyed by "method:status"
-	requestsDur   *expvar.Map  // keyed by "method:path" — cumulative ms
+	requestsTotal *expvar.Map // keyed by "method:status"
+	requestsDur   *expvar.Map // keyed by "method:path" — cumulative ms
 	activeReqs    *expvar.Int
 	errorsTotal   *expvar.Int
 }

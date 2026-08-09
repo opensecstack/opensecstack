@@ -11,17 +11,17 @@ import (
 
 // Config holds the complete application configuration.
 type Config struct {
-	Port      int              `mapstructure:"port"`
-	LogLevel  string           `mapstructure:"log_level"`
-	DB        DatabaseConfig   `mapstructure:"db"`
-	Redis     RedisConfig      `mapstructure:"redis"`
-	Scanner   ScannerConfig    `mapstructure:"scanner"`
-	Auth      AuthConfig       `mapstructure:"auth"`
-	Report    ReportConfig     `mapstructure:"report"`
-	Dashboard DashboardConfig  `mapstructure:"dashboard"`
-	CORS      CORSConfig       `mapstructure:"cors"`
-	RateLimit RateLimitConfig  `mapstructure:"ratelimit"`
-	Citadel   CitadelConfig    `mapstructure:"citadel"`
+	Port      int             `mapstructure:"port"`
+	LogLevel  string          `mapstructure:"log_level"`
+	DB        DatabaseConfig  `mapstructure:"db"`
+	Redis     RedisConfig     `mapstructure:"redis"`
+	Scanner   ScannerConfig   `mapstructure:"scanner"`
+	Auth      AuthConfig      `mapstructure:"auth"`
+	Report    ReportConfig    `mapstructure:"report"`
+	Dashboard DashboardConfig `mapstructure:"dashboard"`
+	CORS      CORSConfig      `mapstructure:"cors"`
+	RateLimit RateLimitConfig `mapstructure:"ratelimit"`
+	Citadel   CitadelConfig   `mapstructure:"citadel"`
 }
 
 // DatabaseConfig holds PostgreSQL connection settings.
@@ -234,12 +234,12 @@ func Load() *Config {
 			TrustedProxyDepth: viper.GetInt("ratelimit.trusted_proxy_depth"),
 		},
 		Citadel: CitadelConfig{
-			APIURL:    viper.GetString("citadel.api_url"),
-			KeyID:     viper.GetString("citadel.key_id"),
-			KeySecret: viper.GetString("citadel.key_secret"),
-			ProjectID: viper.GetString("citadel.project_id"),
-			DryRun:    viper.GetBool("citadel.dry_run"),
-			WebhookSecret: viper.GetString("citadel.webhook_secret"),
+			APIURL:          viper.GetString("citadel.api_url"),
+			KeyID:           viper.GetString("citadel.key_id"),
+			KeySecret:       viper.GetString("citadel.key_secret"),
+			ProjectID:       viper.GetString("citadel.project_id"),
+			DryRun:          viper.GetBool("citadel.dry_run"),
+			WebhookSecret:   viper.GetString("citadel.webhook_secret"),
 			RequireApproval: viper.GetBool("citadel.require_approval"),
 		},
 	}

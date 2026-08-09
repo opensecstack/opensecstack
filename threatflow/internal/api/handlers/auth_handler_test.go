@@ -13,6 +13,7 @@ import (
 
 	"github.com/opensecstack/threatflow/internal/api/middleware"
 	"github.com/opensecstack/threatflow/internal/auth"
+	"github.com/opensecstack/threatflow/internal/db/store"
 )
 
 func TestAuthToken_ServiceDisabledReturns503(t *testing.T) {
@@ -180,6 +181,89 @@ func TestAuthMe_ReturnsIdentityFromContext(t *testing.T) {
 	}
 	if body["role"] != string(auth.RoleOperator) {
 		t.Errorf("role = %v, want %q", body["role"], auth.RoleOperator)
+	}
+}
+
+// TestAuthCreateKey_RejectsMalformedJSON proves the validation path (which
+// runs before any store access) rejects unparseable bodies with 400 even
+// when a real, non-nil store is wired.
+func TestAuthCreateKey_RejectsMalformedJSON(t *testing.T) {
+	h := NewAuth(zerolog.Nop(), nil, store.NewAPIKeyStore(nil))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/auth/keys", strings.NewReader(`{not json`))
+
+	h.CreateKey(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", rec.Code)
+	}
+}
+
+// TestAuthCreateKey_RejectsMissingNameOrRole proves both required fields are
+// enforced independently — a request missing either one must 400 before
+// ever reaching h.keys.Create (which would panic on the nil pool if reached).
+func TestAuthCreateKey_RejectsMissingNameOrRole(t *testing.T) {
+	cases := []string{
+		`{"role":"viewer"}`,     // missing name
+		`{"name":"x"}`,          // missing role
+		`{"name":"","role":""}`, // both empty
+	}
+	for _, body := range cases {
+		h := NewAuth(zerolog.Nop(), nil, store.NewAPIKeyStore(nil))
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/auth/keys", strings.NewReader(body))
+
+		h.CreateKey(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("body=%s: want 400, got %d; response=%s", body, rec.Code, rec.Body.String())
+		}
+	}
+}
+
+// TestAuthCreateKey_RejectsInvalidRole proves an out-of-vocabulary role
+// string is rejected at the handler boundary rather than being persisted
+// and only failing downstream RBAC checks silently.
+func TestAuthCreateKey_RejectsInvalidRole(t *testing.T) {
+	h := NewAuth(zerolog.Nop(), nil, store.NewAPIKeyStore(nil))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/auth/keys", strings.NewReader(`{"name":"x","role":"superadmin"}`))
+
+	h.CreateKey(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+	var body map[string]string
+	json.NewDecoder(rec.Body).Decode(&body)
+	if body["error"] == "" {
+		t.Error("expected non-empty error message for invalid role")
+	}
+}
+
+// TestAuthListKeys_NonNilStoreWithBrokenPoolReturns500 proves that when a
+// store IS configured but the underlying query fails (simulated here by a
+// nil pgxpool, which the store methods hit before ever reaching Postgres —
+// they panic, so this test intentionally avoids calling List and instead
+// documents the nil-store branch is the only one reachable without a live
+// DB). Retained as a guard: NilStoreReturnsEmptyList must keep returning the
+// *disabled* shape ({"keys":[]}), not silently change to an error shape.
+func TestAuthListKeys_NilStoreShapeIsStable(t *testing.T) {
+	h := NewAuth(zerolog.Nop(), nil, nil)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/auth/keys", nil)
+
+	h.ListKeys(rec, req)
+
+	var body map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if _, ok := body["keys"]; !ok {
+		t.Fatal(`expected "keys" field in disabled-store response`)
+	}
+	if _, hasError := body["error"]; hasError {
+		t.Error("disabled store must return an empty list, not an error shape")
 	}
 }
 

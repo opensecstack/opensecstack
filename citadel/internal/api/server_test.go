@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
@@ -32,8 +33,8 @@ func newFakeSinauth(t *testing.T) *httptest.Server {
 		})
 	})
 	mux.HandleFunc("/.well-known/jwks.json", func(w http.ResponseWriter, r *http.Request) {
-		n := base64.RawURLEncoding.EncodeToString(priv.PublicKey.N.Bytes())
-		e := base64.RawURLEncoding.EncodeToString(big.NewInt(int64(priv.PublicKey.E)).Bytes())
+		n := base64.RawURLEncoding.EncodeToString(priv.N.Bytes())
+		e := base64.RawURLEncoding.EncodeToString(big.NewInt(int64(priv.E)).Bytes())
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"keys": []map[string]string{
@@ -87,7 +88,7 @@ func TestNewServer_RegistersRoutes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(tt.method, tt.path, nil)
+			req := httptest.NewRequestWithContext(context.Background(), tt.method, tt.path, nil)
 			rw := httptest.NewRecorder()
 			s.Router().ServeHTTP(rw, req)
 			if rw.Code != tt.wantStatus {

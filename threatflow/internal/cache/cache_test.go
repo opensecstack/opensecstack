@@ -5,8 +5,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/rs/zerolog"
 )
+
+// newTestCache spins up an in-process miniredis server and returns a Cache
+// wired to it via a real Open() call, so the "enabled" code paths (Get/Set/
+// Invalidate actually talking to Redis) get exercised with a real client,
+// not just the disabled no-op branch.
+func newTestCache(t *testing.T, ttl time.Duration) *Cache {
+	t.Helper()
+	mr := miniredis.RunT(t)
+	c, err := Open(context.Background(), "redis://"+mr.Addr(), ttl, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+	return c
+}
 
 // TestOpen_EmptyURLReturnsNoOpCache proves the documented no-op contract: an
 // empty Redis URL must not attempt to dial anything and must yield a cache
@@ -113,6 +129,136 @@ func TestInvalidate_DisabledCacheIsNoOp(t *testing.T) {
 func TestInvalidate_NoKeysIsNoOp(t *testing.T) {
 	c, _ := Open(context.Background(), "", time.Minute, zerolog.Nop())
 	c.Invalidate(context.Background())
+}
+
+// TestOpen_ReachableRedisEnablesCache proves Open successfully wires an
+// enabled cache against a live Redis server (rather than only ever
+// exercising the empty-URL / unreachable-URL error branches).
+func TestOpen_ReachableRedisEnablesCache(t *testing.T) {
+	c := newTestCache(t, time.Minute)
+	if !c.Enabled() {
+		t.Fatal("expected cache to be enabled against a reachable redis")
+	}
+}
+
+// TestSetThenGet_RoundTripsValue proves the enabled Set/Get path actually
+// stores and retrieves data through Redis, not just "doesn't panic".
+func TestSetThenGet_RoundTripsValue(t *testing.T) {
+	c := newTestCache(t, time.Minute)
+	ctx := context.Background()
+
+	type payload struct {
+		Type  string `json:"type"`
+		Value string `json:"value"`
+	}
+	in := payload{Type: "ipv4-addr", Value: "198.51.100.42"}
+	c.Set(ctx, "ioc:1", in)
+
+	var out payload
+	if err := c.Get(ctx, "ioc:1", &out); err != nil {
+		t.Fatalf("Get after Set: %v", err)
+	}
+	if out != in {
+		t.Fatalf("Get returned %+v, want %+v", out, in)
+	}
+
+	hits, misses := c.Stats()
+	if hits != 1 {
+		t.Errorf("hits = %d, want 1", hits)
+	}
+	if misses != 0 {
+		t.Errorf("misses = %d, want 0", misses)
+	}
+}
+
+// TestGet_MissingKeyReturnsErrMissAndCountsMiss proves a genuine cache miss
+// (key never set) surfaces ErrMiss and increments the miss counter, matching
+// the "callers fall through to the DB" contract.
+func TestGet_MissingKeyReturnsErrMissAndCountsMiss(t *testing.T) {
+	c := newTestCache(t, time.Minute)
+	var out map[string]string
+	err := c.Get(context.Background(), "does-not-exist", &out)
+	if err != ErrMiss {
+		t.Fatalf("Get = %v, want ErrMiss", err)
+	}
+	_, misses := c.Stats()
+	if misses != 1 {
+		t.Errorf("misses = %d, want 1", misses)
+	}
+}
+
+// TestGet_CorruptedValueReturnsErrMiss proves a value stored at the key that
+// isn't valid JSON for the target type is treated as a miss (logged, not
+// propagated as a decode error to the caller) — the cache must never make a
+// handler fail because of a bad cache entry.
+func TestGet_CorruptedValueReturnsErrMiss(t *testing.T) {
+	c := newTestCache(t, time.Minute)
+	ctx := context.Background()
+	// Store a JSON array where the caller expects an object.
+	c.Set(ctx, "bad", []int{1, 2, 3})
+
+	var out map[string]string
+	err := c.Get(ctx, "bad", &out)
+	if err != ErrMiss {
+		t.Fatalf("Get on type-mismatched value = %v, want ErrMiss", err)
+	}
+}
+
+// TestInvalidate_RemovesKey proves Invalidate actually deletes the key from
+// Redis rather than being a pure no-op on an enabled cache.
+func TestInvalidate_RemovesKey(t *testing.T) {
+	c := newTestCache(t, time.Minute)
+	ctx := context.Background()
+	c.Set(ctx, "victim", map[string]string{"a": "b"})
+
+	var out map[string]string
+	if err := c.Get(ctx, "victim", &out); err != nil {
+		t.Fatalf("precondition: expected hit before invalidate, got %v", err)
+	}
+
+	c.Invalidate(ctx, "victim")
+
+	err := c.Get(ctx, "victim", &out)
+	if err != ErrMiss {
+		t.Fatalf("Get after Invalidate = %v, want ErrMiss", err)
+	}
+}
+
+// TestInvalidate_MultipleKeysRemovesAll proves the variadic keys... form
+// deletes every listed key, not just the first.
+func TestInvalidate_MultipleKeysRemovesAll(t *testing.T) {
+	c := newTestCache(t, time.Minute)
+	ctx := context.Background()
+	c.Set(ctx, "k1", "v1")
+	c.Set(ctx, "k2", "v2")
+
+	c.Invalidate(ctx, "k1", "k2")
+
+	var out string
+	if err := c.Get(ctx, "k1", &out); err != ErrMiss {
+		t.Errorf("k1 Get after Invalidate = %v, want ErrMiss", err)
+	}
+	if err := c.Get(ctx, "k2", &out); err != ErrMiss {
+		t.Errorf("k2 Get after Invalidate = %v, want ErrMiss", err)
+	}
+}
+
+// TestSet_RespectsTTL proves Set actually applies the configured TTL to the
+// stored key (not e.g. leaving it persistent, which would defeat cache
+// invalidation-by-expiry).
+func TestSet_RespectsTTL(t *testing.T) {
+	mr := miniredis.RunT(t)
+	c, err := Open(context.Background(), "redis://"+mr.Addr(), 30*time.Second, zerolog.Nop())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+
+	c.Set(context.Background(), "ttl-key", "value")
+
+	if got := mr.TTL("ttl-key"); got != 30*time.Second {
+		t.Fatalf("stored TTL = %v, want 30s", got)
+	}
 }
 
 func TestIOCMatchKey_FormatsTypeAndValue(t *testing.T) {

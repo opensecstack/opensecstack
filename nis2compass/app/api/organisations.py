@@ -1,6 +1,9 @@
 import re
+import uuid as uuid_lib
+from typing import Any
 
 from flask import Blueprint, g, jsonify, request
+from flask.typing import ResponseReturnValue
 from sqlalchemy.exc import IntegrityError
 
 from ..audit import write_audit
@@ -15,11 +18,12 @@ organisations_bp = Blueprint("organisations", __name__)
 
 
 @organisations_bp.before_request
-def require_json_content_type():
+def require_json_content_type() -> ResponseReturnValue | None:
     if request.method in ("POST", "PUT", "PATCH"):
         ct = request.content_type or ""
         if ct and not ct.startswith("application/json"):
             return jsonify({"error": "Content-Type must be application/json", "code": "UNSUPPORTED_MEDIA_TYPE"}), 415
+    return None
 
 
 VALID_SIZES = {"micro", "small", "medium", "large"}
@@ -281,7 +285,7 @@ _ISO3166_ALPHA2: frozenset = frozenset(
 )
 
 
-def _paginate(query, page, per_page):
+def _paginate(query: Any, page: int, per_page: int) -> tuple[list, int]:
     total = query.count()
     items = query.offset((page - 1) * per_page).limit(per_page).all()
     return items, total
@@ -294,7 +298,7 @@ def _paginate(query, page, per_page):
 
 @organisations_bp.get("/organisations")
 @require_auth
-def list_organisations():
+def list_organisations() -> ResponseReturnValue:
     page = max(1, request.args.get("page", 1, type=int))
     per_page = min(100, max(1, request.args.get("per_page", 20, type=int)))
 
@@ -302,7 +306,7 @@ def list_organisations():
     # (created_by IS NULL) that can be claimed via the CAS mechanism.
     query = (
         db.session.query(Organisation)
-        .filter(db.or_(Organisation.created_by == g.actor, Organisation.created_by == None))
+        .filter(db.or_(Organisation.created_by == g.actor, Organisation.created_by.is_(None)))
         .order_by(Organisation.created_at.desc())
     )
     items, total = _paginate(query, page, per_page)
@@ -327,7 +331,7 @@ def list_organisations():
 @organisations_bp.post("/organisations")
 @require_auth
 @require_scope("read_write")
-def create_organisation():
+def create_organisation() -> ResponseReturnValue:
     data = request.get_json(silent=True) or {}
 
     name = (data.get("name") or "").strip()
@@ -428,11 +432,13 @@ def create_organisation():
 
 @organisations_bp.get("/organisations/<uuid:org_id>")
 @require_auth
-def get_organisation(org_id):
+def get_organisation(org_id: uuid_lib.UUID) -> ResponseReturnValue:
     err = _check_org_access(org_id)
     if err:
         return err
     org = db.session.get(Organisation, org_id)
+    if org is None:
+        return jsonify({"error": "Organisation not found", "code": "NOT_FOUND"}), 404
     return jsonify(org.to_dict()), 200
 
 
@@ -444,11 +450,13 @@ def get_organisation(org_id):
 @organisations_bp.patch("/organisations/<uuid:org_id>")
 @require_auth
 @require_scope("read_write")
-def update_organisation(org_id):
+def update_organisation(org_id: uuid_lib.UUID) -> ResponseReturnValue:
     err = _check_org_access(org_id)
     if err:
         return err
     org = db.session.get(Organisation, org_id)
+    if org is None:
+        return jsonify({"error": "Organisation not found", "code": "NOT_FOUND"}), 404
 
     data = request.get_json(silent=True) or {}
     before = org.to_dict()
@@ -534,11 +542,13 @@ def update_organisation(org_id):
 @organisations_bp.delete("/organisations/<uuid:org_id>")
 @require_auth
 @require_scope("read_write")
-def delete_organisation(org_id):
+def delete_organisation(org_id: uuid_lib.UUID) -> ResponseReturnValue:
     err = _check_org_access(org_id)
     if err:
         return err
     org = db.session.get(Organisation, org_id)
+    if org is None:
+        return jsonify({"error": "Organisation not found", "code": "NOT_FOUND"}), 404
 
     write_audit(
         db.session,

@@ -18,7 +18,7 @@ const queryTimeout = 30 * time.Second
 
 // PGStore implements incident.Store using PostgreSQL.
 type PGStore struct {
-	pool *pgxpool.Pool
+	pool querier
 }
 
 // NewPGStore creates a new PostgreSQL-backed incident store.

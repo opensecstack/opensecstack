@@ -114,7 +114,7 @@ func TestSnapshot_Allowed_KnownAfterReplace(t *testing.T) {
 	snap := NewSnapshot()
 	snap.replace(map[RoleAction]bool{
 		{Role: "admin", ActionType: "API_SCAN_INITIATE"}: true,
-		{Role: "viewer", ActionType: "DATA_EXPORT"}:       false,
+		{Role: "viewer", ActionType: "DATA_EXPORT"}:      false,
 	})
 
 	if allowed, known := snap.Allowed("admin", "API_SCAN_INITIATE"); !known || !allowed {
@@ -261,6 +261,28 @@ func TestSyncer_Run_TicksUntilContextCanceled(t *testing.T) {
 
 	if calls := fetcher.callCount(); calls < 2 {
 		t.Fatalf("expected at least 2 fetch calls (immediate + at least one tick), got %d", calls)
+	}
+}
+
+// TestSyncer_Snapshot_ReturnsSameInstancePassedToNew confirms Snapshot() is
+// a plain accessor returning the exact *Snapshot instance the caller
+// constructed and shared via New — not a copy — since callers (server.go's
+// registerRoutes) rely on this to hand the same live, concurrently-updated
+// snapshot to Gate 2.
+func TestSyncer_Snapshot_ReturnsSameInstancePassedToNew(t *testing.T) {
+	snap := NewSnapshot()
+	s := New(&fakeFetcher{}, newFakeStore(), snap, time.Hour, testLogger())
+
+	got := s.Snapshot()
+	if got != snap {
+		t.Fatal("expected Snapshot() to return the exact same *Snapshot instance passed to New")
+	}
+
+	// Mutating through the returned accessor must be visible on the
+	// original reference, proving it is the same object, not a copy.
+	got.replace(map[RoleAction]bool{{Role: "admin", ActionType: "X"}: true})
+	if allowed, known := snap.Allowed("admin", "X"); !known || !allowed {
+		t.Fatal("expected mutation through Snapshot() to be visible on the original *Snapshot")
 	}
 }
 

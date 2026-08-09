@@ -139,7 +139,13 @@ func (m *CustomRuleModule) evaluate(
 		}
 
 	case "response_time_exceeds":
-		thresholdMs, _ := strconv.ParseInt(check.Params["ms"], 10, 64)
+		thresholdMs, err := strconv.ParseInt(check.Params["ms"], 10, 64)
+		if err != nil {
+			// Malformed rule config ("ms" missing or not numeric). Do not silently
+			// default to a 0ms threshold, which would trigger a finding on every
+			// request; treat the check as inapplicable instead.
+			break
+		}
 		actualMs := resp.Duration.Milliseconds()
 		if actualMs > thresholdMs {
 			triggered = true

@@ -9,12 +9,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/spf13/cobra"
 
 	"github.com/opensecstack/opensecstack/irflow/internal/config"
 	"github.com/opensecstack/opensecstack/irflow/internal/db"
 )
+
+// migratorPool is the minimal subset of *pgxpool.Pool the migration helpers
+// depend on. Abstracting it lets tests exercise the migration logic with a
+// mock (e.g. pgxmock) instead of a real PostgreSQL connection.
+type migratorPool interface {
+	Exec(ctx context.Context, sql string, args ...interface{}) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error)
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
 
 var migrationsDir string
 
@@ -87,7 +97,7 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func ensureMigrationsTable(ctx context.Context, pool *pgxpool.Pool) error {
+func ensureMigrationsTable(ctx context.Context, pool migratorPool) error {
 	_, err := pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			version VARCHAR(50) PRIMARY KEY,
@@ -96,7 +106,7 @@ func ensureMigrationsTable(ctx context.Context, pool *pgxpool.Pool) error {
 	return err
 }
 
-func appliedMigrations(ctx context.Context, pool *pgxpool.Pool) (map[string]bool, error) {
+func appliedMigrations(ctx context.Context, pool migratorPool) (map[string]bool, error) {
 	rows, err := pool.Query(ctx, "SELECT version FROM schema_migrations")
 	if err != nil {
 		return nil, err
@@ -130,7 +140,7 @@ func listMigrationFiles(dir string) ([]string, error) {
 	return files, nil
 }
 
-func applyMigration(ctx context.Context, pool *pgxpool.Pool, path, name string) error {
+func applyMigration(ctx context.Context, pool migratorPool, path, name string) error {
 	sqlBytes, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("reading file: %w", err)

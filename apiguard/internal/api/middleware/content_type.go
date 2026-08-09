@@ -17,7 +17,7 @@ func RequireJSONContentType(next http.Handler) http.Handler {
 			if ct != "" && !strings.HasPrefix(ct, "application/json") {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnsupportedMediaType)
-				json.NewEncoder(w).Encode(map[string]string{"error": "Content-Type must be application/json"})
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "Content-Type must be application/json"}) //nolint:errcheck
 				return
 			}
 		}

@@ -60,9 +60,8 @@ func (m *Marshal) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Msg("MARSHAL decision")
 
 	status := http.StatusOK
-	if decision.Outcome == marshal.OutcomeHardStop {
-		status = http.StatusForbidden
-	} else if decision.Outcome == marshal.OutcomeRefuse {
+	switch decision.Outcome {
+	case marshal.OutcomeHardStop, marshal.OutcomeRefuse:
 		status = http.StatusForbidden
 	}
 

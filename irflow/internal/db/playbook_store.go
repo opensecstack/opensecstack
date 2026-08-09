@@ -17,7 +17,7 @@ import (
 // It shares a connection pool with PGStore but keeps a distinct type so the
 // incident and playbook domains remain independent.
 type PGPlaybookStore struct {
-	pool *pgxpool.Pool
+	pool querier
 }
 
 // NewPGPlaybookStore creates a new PostgreSQL-backed playbook store.

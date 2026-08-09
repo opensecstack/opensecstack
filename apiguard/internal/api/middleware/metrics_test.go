@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"expvar"
 	"net/http"
 	"net/http/httptest"
@@ -24,10 +25,10 @@ func TestMetricsCollector_Handler(t *testing.T) {
 	// Exercise the middleware once so http_requests_total has an entry.
 	mc.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-	})).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/x", nil))
+	})).ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/x", nil))
 
 	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics", nil)
 	mc.Handler().ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
@@ -86,7 +87,7 @@ func TestMetricsMiddleware_CallsNext(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/test", nil)
 	rr := httptest.NewRecorder()
 	mc.Middleware(next).ServeHTTP(rr, req)
 
@@ -99,7 +100,7 @@ func TestMetricsMiddleware_CallsNext(t *testing.T) {
 // altered by the middleware.
 func TestMetricsMiddleware_PassesThrough200(t *testing.T) {
 	mc := newTestCollector()
-	req := httptest.NewRequest(http.MethodGet, "/ok", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ok", nil)
 	rr := httptest.NewRecorder()
 	mc.Middleware(makeStatusHandler(http.StatusOK)).ServeHTTP(rr, req)
 
@@ -111,7 +112,7 @@ func TestMetricsMiddleware_PassesThrough200(t *testing.T) {
 // TestMetricsMiddleware_PassesThrough404 confirms 404 is forwarded unchanged.
 func TestMetricsMiddleware_PassesThrough404(t *testing.T) {
 	mc := newTestCollector()
-	req := httptest.NewRequest(http.MethodGet, "/missing", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/missing", nil)
 	rr := httptest.NewRecorder()
 	mc.Middleware(makeStatusHandler(http.StatusNotFound)).ServeHTTP(rr, req)
 
@@ -123,7 +124,7 @@ func TestMetricsMiddleware_PassesThrough404(t *testing.T) {
 // TestMetricsMiddleware_PassesThrough500 confirms 500 is forwarded unchanged.
 func TestMetricsMiddleware_PassesThrough500(t *testing.T) {
 	mc := newTestCollector()
-	req := httptest.NewRequest(http.MethodGet, "/boom", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/boom", nil)
 	rr := httptest.NewRecorder()
 	mc.Middleware(makeStatusHandler(http.StatusInternalServerError)).ServeHTTP(rr, req)
 
@@ -141,7 +142,7 @@ func TestMetricsMiddleware_RequestCountIncrements(t *testing.T) {
 	before := getExpvarMapKey("http_requests_total", key)
 
 	for i := 0; i < 3; i++ {
-		req := httptest.NewRequest(http.MethodGet, "/count", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/count", nil)
 		rr := httptest.NewRecorder()
 		mc.Middleware(makeStatusHandler(http.StatusOK)).ServeHTTP(rr, req)
 	}
@@ -159,7 +160,7 @@ func TestMetricsMiddleware_ErrorsTotalIncrements(t *testing.T) {
 
 	before := getExpvarInt("http_errors_total")
 
-	req := httptest.NewRequest(http.MethodGet, "/err", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/err", nil)
 	rr := httptest.NewRecorder()
 	mc.Middleware(makeStatusHandler(http.StatusInternalServerError)).ServeHTTP(rr, req)
 
@@ -176,7 +177,7 @@ func TestMetricsMiddleware_ErrorsNotIncrementedFor4xx(t *testing.T) {
 
 	before := getExpvarInt("http_errors_total")
 
-	req := httptest.NewRequest(http.MethodGet, "/notfound", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/notfound", nil)
 	rr := httptest.NewRecorder()
 	mc.Middleware(makeStatusHandler(http.StatusNotFound)).ServeHTTP(rr, req)
 
@@ -211,7 +212,7 @@ func TestMetricsMiddleware_ActiveRequestsTracked(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		req := httptest.NewRequest(http.MethodGet, "/active", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/active", nil)
 		rr := httptest.NewRecorder()
 		mc.Middleware(capture).ServeHTTP(rr, req)
 	}()
@@ -241,7 +242,7 @@ func TestMetricsMiddleware_DurationRecorded(t *testing.T) {
 	const path = "/duration-probe"
 	durKey := "GET:" + path
 
-	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, nil)
 	rr := httptest.NewRecorder()
 	mc.Middleware(makeStatusHandler(http.StatusOK)).ServeHTTP(rr, req)
 

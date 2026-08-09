@@ -64,7 +64,7 @@ def _deliver_once(url: str, payload_bytes: bytes, signature: str) -> bool:
     )
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
-            return 200 <= resp.status < 300
+            return bool(200 <= resp.status < 300)
     except urllib.error.HTTPError as exc:
         logger.warning("Webhook HTTP error %s for %s", exc.code, url)
         return False

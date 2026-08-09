@@ -41,8 +41,8 @@ func newFakeSinauth(t *testing.T) *fakeSinauth {
 		})
 	})
 	mux.HandleFunc("/.well-known/jwks.json", func(w http.ResponseWriter, r *http.Request) {
-		n := base64.RawURLEncoding.EncodeToString(priv.PublicKey.N.Bytes())
-		e := base64.RawURLEncoding.EncodeToString(big.NewInt(int64(priv.PublicKey.E)).Bytes())
+		n := base64.RawURLEncoding.EncodeToString(priv.N.Bytes())
+		e := base64.RawURLEncoding.EncodeToString(big.NewInt(int64(priv.E)).Bytes())
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"keys": []map[string]string{

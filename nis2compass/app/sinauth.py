@@ -6,8 +6,7 @@ import logging
 import threading
 import time
 import urllib.request
-from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 _log = logging.getLogger(__name__)
 
@@ -40,7 +39,7 @@ def _b64url_decode(s: str) -> bytes:
     return base64.urlsafe_b64decode(s)
 
 
-def _jwk_to_public_key(jwk: dict):
+def _jwk_to_public_key(jwk: dict) -> Any:
     """Convert a JWK RSA key to a cryptography RSAPublicKey."""
     from cryptography.hazmat.backends import default_backend
     from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
@@ -110,6 +109,6 @@ def is_rs256_token(token: str) -> bool:
         if len(parts) != 3:
             return False
         header = json.loads(_b64url_decode(parts[0]))
-        return header.get("alg") == "RS256"
+        return bool(header.get("alg") == "RS256")
     except Exception:
         return False

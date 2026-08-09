@@ -122,7 +122,7 @@ func (c *Client) evaluateScan(ctx context.Context, k *Kerkese) (*Decision, error
 		return nil, err
 	}
 	defer resp.Body.Close()
-	defer func() { _, _ = io.Copy(io.Discard, resp.Body) }()
+	defer func() { _, _ = io.Copy(io.Discard, resp.Body) }() //nolint:errcheck // best-effort drain to allow connection reuse
 
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -185,7 +185,7 @@ func (c *Client) EmitWORM(ctx context.Context, source, eventType, projectID stri
 		return "", "", err
 	}
 	defer resp.Body.Close()
-	defer func() { _, _ = io.Copy(io.Discard, resp.Body) }()
+	defer func() { _, _ = io.Copy(io.Discard, resp.Body) }() //nolint:errcheck // best-effort drain to allow connection reuse
 
 	if resp.StatusCode != http.StatusOK {
 		return "", "", fmt.Errorf("citadel: POST /api/v1/worm/emit returned status %d", resp.StatusCode)
@@ -241,7 +241,7 @@ func (c *Client) LogEvent(
 			defer func() { <-c.sem }()
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			_, _, _ = c.EmitWORM(ctx, systemModule, actionType, "apiguard", payload)
+			_, _, _ = c.EmitWORM(ctx, systemModule, actionType, "apiguard", payload) //nolint:errcheck // fire-and-forget async audit emission, already bounded/best-effort per comment below
 		}()
 	default:
 		// semaphore full — drop event (best-effort, bounded goroutine count)
@@ -282,7 +282,7 @@ func (c *Client) VerifyChain(ctx context.Context, from, to time.Time) (*VerifyRe
 		return nil, err
 	}
 	defer resp.Body.Close()
-	defer func() { _, _ = io.Copy(io.Discard, resp.Body) }()
+	defer func() { _, _ = io.Copy(io.Discard, resp.Body) }() //nolint:errcheck // best-effort drain to allow connection reuse
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("citadel: GET /api/v1/worm/verify returned status %d", resp.StatusCode)
@@ -352,7 +352,7 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte) (*htt
 		}
 
 		// 5xx — server error, retryable. Drain and close the body before retrying.
-		_, _ = io.Copy(io.Discard, resp.Body)
+		_, _ = io.Copy(io.Discard, resp.Body) //nolint:errcheck // best-effort drain to allow connection reuse
 		resp.Body.Close()
 		lastErr = fmt.Errorf("citadel: %s %s: server returned %d", method, path, resp.StatusCode)
 	}

@@ -2,6 +2,7 @@ import hmac
 import uuid
 from datetime import datetime, timedelta, timezone
 from functools import wraps
+from typing import Any, Callable
 
 import jwt
 from flask import current_app, g, jsonify, request
@@ -42,7 +43,7 @@ def validate_api_key(api_key: str) -> tuple[bool, str, str]:
         from .extensions import db
         from .models import ApiKey
 
-        record = db.session.query(ApiKey).filter(ApiKey.key_hash == key_hash, ApiKey.is_active == True).first()
+        record = db.session.query(ApiKey).filter(ApiKey.key_hash == key_hash, ApiKey.is_active.is_(True)).first()
         if record is not None:
             # Reject expired keys
             if record.expires_at is not None and record.expires_at <= datetime.now(timezone.utc):
@@ -84,7 +85,7 @@ def validate_api_key(api_key: str) -> tuple[bool, str, str]:
         # In production, fail closed: do not allow access when we cannot
         # confirm that the key has not been revoked.
         if current_app.config.get("ENV") == "production":
-            return False, None, None
+            return False, "read_write", "viewer"
 
     # Bootstrap fallback: env-var keys (constant-time comparison).
     # Only reached in non-production environments when the DB is unavailable,
@@ -196,7 +197,7 @@ def verify_token(token: str, expected_type: str) -> dict:
         revoked = False
         if redis_client is not None:
             try:
-                revoked = redis_client.exists(f"revoked_jti:{jti}") > 0
+                revoked = bool(redis_client.exists(f"revoked_jti:{jti}"))
             except Exception as exc:
                 current_app.logger.warning(
                     "Redis unavailable during token revocation check — falling back to DB: %s", exc
@@ -222,7 +223,7 @@ def _db_is_revoked(jti: str) -> bool:
             return False
         # Honour expires_at so we match the Redis TTL semantics:
         # a revoked record is only active while its TTL has not elapsed.
-        return record.expires_at > datetime.now(timezone.utc)
+        return bool(record.expires_at > datetime.now(timezone.utc))
     except Exception:
         # Cannot confirm revocation — fail open (consistent with existing
         # DB-unavailable behaviour in validate_api_key for non-prod).
@@ -283,7 +284,7 @@ def revoke_token(jti: str, exp: datetime) -> None:
             )
 
 
-def require_auth(f):
+def require_auth(f: Callable[..., Any]) -> Callable[..., Any]:
     """Decorator that enforces Bearer JWT authentication on a route.
 
     Validates the token as an access token (type claim, expiry, revocation).
@@ -294,11 +295,11 @@ def require_auth(f):
     """
 
     @wraps(f)
-    def decorated(*args, **kwargs):
+    def decorated(*args: Any, **kwargs: Any) -> Any:
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             return jsonify({"error": "Missing or invalid Authorization header", "code": "UNAUTHORIZED"}), 401
-        token = auth_header[len("Bearer ") :]
+        token = auth_header[len("Bearer ") :]  # noqa: E203 (black formats this space; flake8 disagrees)
 
         # Stash the raw bearer token for the current request. Needed as
         # CITADEL Kerkese.ActorToken (see app/citadel_client.py) — CITADEL
@@ -374,7 +375,7 @@ def require_auth(f):
     return decorated
 
 
-def require_scope(scope: str):
+def require_scope(scope: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator factory that enforces a minimum scope on a route.
 
     Must be applied *after* @require_auth (i.e. listed below it), so that
@@ -394,9 +395,9 @@ def require_scope(scope: str):
     """
     _SCOPE_RANK = {"read": 0, "read_write": 1}
 
-    def decorator(f):
+    def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(f)
-        def decorated(*args, **kwargs):
+        def decorated(*args: Any, **kwargs: Any) -> Any:
             token_scope = getattr(g, "token_scope", "read_write")
             required_rank = _SCOPE_RANK.get(scope, 1)
             token_rank = _SCOPE_RANK.get(token_scope, -1)
@@ -432,7 +433,7 @@ _ROLE_RANK = {
 VALID_ROLES = frozenset(_ROLE_RANK.keys())
 
 
-def require_role(*allowed_roles: str):
+def require_role(*allowed_roles: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator factory that restricts a route to one or more RBAC roles.
 
     Must be applied *after* @require_auth so that ``g.token_role`` is set.
@@ -453,9 +454,9 @@ def require_role(*allowed_roles: str):
     """
     allowed = frozenset(allowed_roles)
 
-    def decorator(f):
+    def decorator(f: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(f)
-        def decorated(*args, **kwargs):
+        def decorated(*args: Any, **kwargs: Any) -> Any:
             token_role = getattr(g, "token_role", "viewer")
             if token_role not in allowed:
                 return (

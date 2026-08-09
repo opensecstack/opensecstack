@@ -68,7 +68,7 @@ func LoadRulesFromFile(path string) ([]CustomRule, error) {
 	var rawFile struct {
 		Rules []map[string]interface{} `yaml:"rules"`
 	}
-	_ = yaml.Unmarshal(data, &rawFile) // errors already caught above; ignore here
+	_ = yaml.Unmarshal(data, &rawFile) //nolint:errcheck // errors already caught above; ignore here
 	for i := range rf.Rules {
 		if i >= len(rawFile.Rules) {
 			// Raw parse shorter than typed parse — treat as enabled.
@@ -97,12 +97,12 @@ func Validate(rules []CustomRule) []error {
 	}
 
 	validCheckTypes := map[string]bool{
-		"header_missing":              true,
-		"header_value":                true,
-		"status_code":                 true,
-		"response_body_contains":      true,
-		"response_body_not_contains":  true,
-		"response_time_exceeds":       true,
+		"header_missing":             true,
+		"header_value":               true,
+		"status_code":                true,
+		"response_body_contains":     true,
+		"response_body_not_contains": true,
+		"response_time_exceeds":      true,
 	}
 
 	var errs []error

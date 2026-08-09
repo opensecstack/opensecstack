@@ -98,9 +98,9 @@ func Load() *Config {
 			ConnMaxLifetime: viper.GetDuration("db.conn_max_lifetime"),
 		},
 		Citadel: CitadelConfig{
-			MasterKey:         viper.GetString("citadel.master_key"),
-			AnchorInterval:    viper.GetInt("citadel.anchor_interval"),
-			GenesisHash:       viper.GetString("citadel.genesis_hash"),
+			MasterKey:           viper.GetString("citadel.master_key"),
+			AnchorInterval:      viper.GetInt("citadel.anchor_interval"),
+			GenesisHash:         viper.GetString("citadel.genesis_hash"),
 			EnforceIdentity:     viper.GetBool("citadel.enforce_identity"),
 			EnforceSignatures:   viper.GetBool("citadel.enforce_signatures"),
 			SinauthIssuerURL:    viper.GetString("citadel.sinauth_issuer_url"),

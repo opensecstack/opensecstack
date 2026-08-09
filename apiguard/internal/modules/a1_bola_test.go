@@ -14,7 +14,7 @@ func TestBOLAIDEnumFinding(t *testing.T) {
 	// Baseline uses ID "1", then probes "2","3",... — second call uses "2".
 	exec := &mockExecutor{
 		responses: []*HTTPResponse{
-			resp(200, `{"id":1}`),           // baseline (ID=1)
+			resp(200, `{"id":1}`),              // baseline (ID=1)
 			resp(200, `{"id":2,"secret":"x"}`), // probe (ID=2) → BOLA finding
 		},
 	}

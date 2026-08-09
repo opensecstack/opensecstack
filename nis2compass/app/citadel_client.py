@@ -26,6 +26,7 @@ precedent this module follows.
 import logging
 import uuid as _uuid
 from datetime import datetime, timezone
+from typing import Any
 
 _log = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ class CitadelGovernanceError(Exception):
         super().__init__(f"CITADEL {self.outcome}: {'; '.join(self.reasons) or 'no reason given'}")
 
 
-def _citadel_config():
+def _citadel_config() -> tuple[str | None, str | None]:
     """Return (citadel_url, api_key) from the current Flask app config.
 
     Raises RuntimeError if there is no active app context (propagated to
@@ -158,7 +159,7 @@ def build_kerkese(
     json tags — see the module docstring.
     """
     now = datetime.now(timezone.utc)
-    kerkese = {
+    kerkese: dict[str, Any] = {
         "kerkese_version": KERKESE_VERSION,
         "ts_utc": now.isoformat(),
         "project_id": PROJECT_ID,
@@ -227,7 +228,7 @@ def evaluate(kerkese: dict, *, timeout: float = 5.0) -> dict:
         raise CitadelUnavailableError(f"CITADEL marshal/evaluate request failed: {exc}") from exc
 
     try:
-        decision = resp.json()
+        decision: dict = resp.json()
     except ValueError as exc:
         raise CitadelUnavailableError(f"CITADEL returned a non-JSON response (HTTP {resp.status_code}): {exc}") from exc
 

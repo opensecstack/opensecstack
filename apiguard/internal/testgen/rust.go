@@ -28,7 +28,12 @@ func (g *Generator) generateViaRust(ctx context.Context, irPath string) (*TestSu
 	// Build module list argument.
 	modulesArg := strings.Join(g.modules, ",")
 
-	cmd := exec.CommandContext(ctx, testgenBin,
+	// testgenBin defaults to a fixed binary name and is otherwise only overridable via
+	// the operator-configured APIGUARD_TESTGEN_BIN env var (trusted, not request input).
+	// Arguments are passed as a structured exec.Cmd argument list (no shell is invoked),
+	// so there is no command-injection vector here; g.targetURL was already validated by
+	// validateTargetURL and irPath/outputPath are internally generated temp paths.
+	cmd := exec.CommandContext(ctx, testgenBin, //nolint:gosec // structured argv, no shell; args are internally generated or pre-validated, see comment above
 		"generate",
 		"--ir", irPath,
 		"--target", g.targetURL,

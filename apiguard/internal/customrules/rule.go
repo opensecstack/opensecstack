@@ -2,13 +2,13 @@ package customrules
 
 // CustomRule defines a user-supplied security check rule loaded from YAML.
 type CustomRule struct {
-	ID          string  `yaml:"id"`          // e.g. "CR-001"
-	Name        string  `yaml:"name"`        // Human-readable name
+	ID          string  `yaml:"id"`   // e.g. "CR-001"
+	Name        string  `yaml:"name"` // Human-readable name
 	Description string  `yaml:"description"`
-	OWASPRef    string  `yaml:"owasp_ref"`   // e.g. "API1:2023" (optional)
-	Severity    string  `yaml:"severity"`    // critical|high|medium|low|info
-	Enabled     bool    `yaml:"enabled"`     // default true
-	Checks      []Check `yaml:"checks"`      // one or more checks to run
+	OWASPRef    string  `yaml:"owasp_ref"` // e.g. "API1:2023" (optional)
+	Severity    string  `yaml:"severity"`  // critical|high|medium|low|info
+	Enabled     bool    `yaml:"enabled"`   // default true
+	Checks      []Check `yaml:"checks"`    // one or more checks to run
 }
 
 // Check defines a single condition to evaluate against an HTTP response.

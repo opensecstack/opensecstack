@@ -7,13 +7,14 @@ Uses prometheus_flask_exporter for automatic Flask integration.
 
 from __future__ import annotations
 
+from flask import Flask
 from prometheus_flask_exporter import PrometheusMetrics
 
 # Module-level singleton — initialised by init_metrics().
 _metrics: PrometheusMetrics | None = None
 
 
-def init_metrics(app) -> PrometheusMetrics:
+def init_metrics(app: Flask) -> PrometheusMetrics:
     """Initialise and register Prometheus metrics on the Flask app.
 
     Call once from the application factory (create_app). Subsequent calls

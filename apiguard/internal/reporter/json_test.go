@@ -138,9 +138,9 @@ func TestJSONReporter_ScanMetadata(t *testing.T) {
 	}
 
 	checks := map[string]string{
-		"id":       result.ID,
-		"target":   result.Target,
-		"status":   string(result.Status),
+		"id":        result.ID,
+		"target":    result.Target,
+		"status":    string(result.Status),
 		"spec_hash": result.SpecHash,
 	}
 	for field, want := range checks {
@@ -268,8 +268,8 @@ func TestJSONReporter_ModulesEnabled(t *testing.T) {
 
 	// Should have exactly one entry per unique module referenced in findings.
 	wantModules := map[string]bool{
-		"a1_bola":      false,
-		"a2_auth":      false,
+		"a1_bola":       false,
+		"a2_auth":       false,
 		"a4_rate_limit": false,
 	}
 	for _, m := range modsRaw {

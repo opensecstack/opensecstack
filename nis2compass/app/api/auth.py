@@ -3,11 +3,11 @@ from datetime import datetime, timezone
 
 import jwt
 from flask import Blueprint, current_app, g, jsonify, request
+from flask.typing import ResponseReturnValue
 
 from ..auth import (
     create_access_token,
     create_refresh_token,
-    issue_jwt,
     revoke_token,
     validate_api_key,
     verify_token,
@@ -17,7 +17,7 @@ auth_bp = Blueprint("auth_api", __name__)
 
 
 @auth_bp.post("/auth/token")
-def token():
+def token() -> ResponseReturnValue:
     """Exchange an API key for an access + refresh token pair."""
     data = request.get_json(silent=True) or {}
     api_key = data.get("api_key", "").strip()
@@ -66,7 +66,7 @@ def token():
 
 
 @auth_bp.post("/auth/token/refresh")
-def token_refresh():
+def token_refresh() -> ResponseReturnValue:
     """Issue a new access + refresh pair by presenting a valid refresh token.
 
     The presented refresh token is immediately revoked (rotation) so that
@@ -115,7 +115,7 @@ def token_refresh():
 
 
 @auth_bp.post("/auth/token/revoke")
-def token_revoke():
+def token_revoke() -> ResponseReturnValue:
     """Revoke any token (access or refresh) by its JTI.
 
     The signature is not verified — only the JTI and expiry are extracted so

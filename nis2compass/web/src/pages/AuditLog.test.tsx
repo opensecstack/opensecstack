@@ -57,7 +57,7 @@ const ENTRIES = [
 function renderPage() {
   return render(
     <MemoryRouter>
-      <AuditLog />
+      <AuditLog role="auditor" />
     </MemoryRouter>,
   )
 }

@@ -168,7 +168,7 @@ func scanCmd() *cobra.Command {
 			}
 
 			if output != "" {
-				if err := os.WriteFile(output, data, 0644); err != nil {
+				if err := os.WriteFile(output, data, 0o600); err != nil {
 					return fmt.Errorf("writing report to %s: %w", output, err)
 				}
 				log.Info().Str("file", output).Msg("report written")

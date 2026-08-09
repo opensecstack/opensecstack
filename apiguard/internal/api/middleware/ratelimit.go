@@ -27,7 +27,7 @@ type RateLimiter struct {
 	window         time.Duration // window duration
 	trustedProxies []*net.IPNet  // upstream proxy IPs whose XFF header is trusted
 	proxyDepth     int           // number of proxy hops to skip in XFF (≥1)
-	done           chan struct{}  // closed by Stop() to signal the cleanup goroutine to exit
+	done           chan struct{} // closed by Stop() to signal the cleanup goroutine to exit
 	stopOnce       sync.Once     // ensures Stop() is idempotent
 }
 
@@ -82,9 +82,9 @@ func ParseTrustedProxyCIDRs(cidrs []string) []*net.IPNet {
 type discardSlogHandler struct{}
 
 func (discardSlogHandler) Enabled(_ context.Context, _ slog.Level) bool  { return false }
-func (discardSlogHandler) Handle(_ context.Context, _ slog.Record) error  { return nil }
-func (discardSlogHandler) WithAttrs(_ []slog.Attr) slog.Handler           { return discardSlogHandler{} }
-func (discardSlogHandler) WithGroup(_ string) slog.Handler                { return discardSlogHandler{} }
+func (discardSlogHandler) Handle(_ context.Context, _ slog.Record) error { return nil }
+func (discardSlogHandler) WithAttrs(_ []slog.Attr) slog.Handler          { return discardSlogHandler{} }
+func (discardSlogHandler) WithGroup(_ string) slog.Handler               { return discardSlogHandler{} }
 
 // NewRateLimiterWithProxies creates a RateLimiter that only trusts the
 // X-Forwarded-For header when the direct peer (r.RemoteAddr) is one of the
@@ -210,7 +210,7 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusTooManyRequests)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
 				"error":       "Rate limit exceeded",
 				"code":        "RATE_LIMITED",
 				"retry_after": retryAfter,
@@ -230,9 +230,9 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 //     right. depth is the number of trusted proxy hops that will have appended
 //     to XFF. The real client is therefore at index max(0, len-1-depth) from
 //     the left. Examples:
-//       XFF="client, proxy1"          depth=1 → parts[max(0,2-1-1)=0] = "client"
-//       XFF="client, proxy1, proxy2"  depth=2 → parts[max(0,3-1-2)=0] = "client"
-//       XFF="client, proxy1, proxy2"  depth=1 → parts[max(0,3-1-1)=1] = "proxy1"
+//     XFF="client, proxy1"          depth=1 → parts[max(0,2-1-1)=0] = "client"
+//     XFF="client, proxy1, proxy2"  depth=2 → parts[max(0,3-1-2)=0] = "client"
+//     XFF="client, proxy1, proxy2"  depth=1 → parts[max(0,3-1-1)=1] = "proxy1"
 //     If depth exceeds the list length the leftmost (index 0) entry is returned.
 //  2. X-Real-IP: accepted as a fallback when no XFF header is present (common
 //     with nginx upstreams that set only X-Real-IP).

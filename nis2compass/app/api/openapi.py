@@ -1,6 +1,7 @@
 import json
 
-from flask import Blueprint, Response, jsonify
+from flask import Blueprint, Response
+from flask.typing import ResponseReturnValue
 
 openapi_bp = Blueprint("openapi", __name__)
 
@@ -112,7 +113,9 @@ _SPEC = {
                         "type": "string",
                         "nullable": True,
                         "maxLength": 2048,
-                        "description": "URL of the linked Jira/GitHub/Linear ticket (must start with http:// or https://)",
+                        "description": (
+                            "URL of the linked Jira/GitHub/Linear ticket (must start with http:// or https://)"
+                        ),
                     },
                     "remediation_notes": {
                         "type": "string",
@@ -475,7 +478,10 @@ _SPEC = {
                                     "external_ticket_url": {
                                         "type": "string",
                                         "maxLength": 2048,
-                                        "description": "URL of the linked Jira/GitHub/Linear ticket (must start with http:// or https://)",
+                                        "description": (
+                                            "URL of the linked Jira/GitHub/Linear ticket "
+                                            "(must start with http:// or https://)"
+                                        ),
                                     },
                                     "remediation_notes": {
                                         "type": "string",
@@ -562,7 +568,10 @@ _SPEC = {
             "get": {
                 "tags": ["Artifacts"],
                 "summary": "Download artifact file",
-                "description": "Streams the artifact file as an attachment. Returns 410 Gone if the file has been removed from disk.",
+                "description": (
+                    "Streams the artifact file as an attachment. "
+                    "Returns 410 Gone if the file has been removed from disk."
+                ),
                 "responses": {
                     "200": {
                         "description": "File content streamed as attachment",
@@ -658,7 +667,7 @@ _SPEC = {
 
 
 @openapi_bp.get("/openapi.json")
-def openapi_json():
+def openapi_json() -> Response:
     """Serve the OpenAPI 3.0.3 specification as JSON."""
     return Response(
         json.dumps(_SPEC, indent=2),
@@ -667,9 +676,9 @@ def openapi_json():
 
 
 @openapi_bp.get("/docs")
-def swagger_ui():
+def swagger_ui() -> ResponseReturnValue:
     """Serve Swagger UI for interactive API exploration."""
-    html = f"""<!DOCTYPE html>
+    html = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -680,13 +689,13 @@ def swagger_ui():
   <div id="swagger-ui"></div>
   <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
   <script>
-    SwaggerUIBundle({{
+    SwaggerUIBundle({
       url: '/api/v1/openapi.json',
       dom_id: '#swagger-ui',
       presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
       layout: 'BaseLayout',
       deepLinking: true,
-    }});
+    });
   </script>
 </body>
 </html>"""

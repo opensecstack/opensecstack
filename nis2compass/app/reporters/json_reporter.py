@@ -107,14 +107,14 @@ def generate_json_report(assessment: Any, controls: list[Any], organisation: Any
     total = len(controls)
     compliance_pct = round((status_counts["compliant"] / total * 100) if total > 0 else 0.0, 1)
 
-    def _isoformat(val) -> str | None:
+    def _isoformat(val: object) -> str | None:
         if val is None:
             return None
         if hasattr(val, "isoformat"):
-            return val.isoformat()
+            return str(val.isoformat())
         return str(val)
 
-    def _str(val) -> str | None:
+    def _str(val: object) -> str | None:
         if val is None:
             return None
         return str(val.value if hasattr(val, "value") else val)
@@ -145,6 +145,7 @@ def generate_json_report(assessment: Any, controls: list[Any], organisation: Any
         "summary": {
             "total_controls": total,
             **status_counts,
+            "assessed_controls": assessed,
             "overall_compliance_pct": compliance_pct,
         },
         "controls": [

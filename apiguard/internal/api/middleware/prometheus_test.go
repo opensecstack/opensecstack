@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -39,7 +40,7 @@ type expvarStringerFunc func() string
 func (f expvarStringerFunc) String() string { return f() }
 
 func TestPrometheusHandler_StatusCode(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/metrics/prometheus", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics/prometheus", nil)
 	rr := httptest.NewRecorder()
 
 	PrometheusHandler().ServeHTTP(rr, req)
@@ -50,7 +51,7 @@ func TestPrometheusHandler_StatusCode(t *testing.T) {
 }
 
 func TestPrometheusHandler_ContentType(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/metrics/prometheus", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics/prometheus", nil)
 	rr := httptest.NewRecorder()
 
 	PrometheusHandler().ServeHTTP(rr, req)
@@ -67,7 +68,7 @@ func TestPrometheusHandler_ContainsMetricNames(t *testing.T) {
 	// NewMetricsCollector is idempotent — safe to call multiple times.
 	NewMetricsCollector()
 
-	req := httptest.NewRequest(http.MethodGet, "/metrics/prometheus", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/metrics/prometheus", nil)
 	rr := httptest.NewRecorder()
 
 	PrometheusHandler().ServeHTTP(rr, req)

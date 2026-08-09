@@ -2,6 +2,7 @@ import logging
 import os
 
 import redis as redis_lib
+from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
@@ -10,7 +11,7 @@ redis_client: redis_lib.Redis | None = None
 _log = logging.getLogger(__name__)
 
 
-def init_extensions(app) -> None:
+def init_extensions(app: Flask) -> None:
     db.init_app(app)
 
     global redis_client

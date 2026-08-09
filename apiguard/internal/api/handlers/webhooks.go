@@ -22,8 +22,8 @@ type WebhookEvent struct {
 
 // Webhooks handles inbound webhook events from CITADEL.
 type Webhooks struct {
-	logger       zerolog.Logger
-	secret       string
+	logger        zerolog.Logger
+	secret        string
 	emergencyStop func() // called on citadel.hard_stop to cancel in-flight scans
 }
 

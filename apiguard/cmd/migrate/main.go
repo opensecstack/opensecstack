@@ -104,11 +104,11 @@ func migrateUp(ctx context.Context, pool *pgxpool.Pool) error {
 		}
 
 		if _, err := tx.Exec(ctx, string(sql)); err != nil {
-			_ = tx.Rollback(ctx)
+			_ = tx.Rollback(ctx) //nolint:errcheck // best-effort cleanup after a failed statement; the original error is what we report
 			return fmt.Errorf("applying %s: %w", f, err)
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO schema_migrations (version) VALUES ($1)`, ver); err != nil {
-			_ = tx.Rollback(ctx)
+			_ = tx.Rollback(ctx) //nolint:errcheck // best-effort cleanup after a failed statement; the original error is what we report
 			return fmt.Errorf("recording %s: %w", f, err)
 		}
 		if err := tx.Commit(ctx); err != nil {
@@ -141,7 +141,10 @@ func migrateDown(ctx context.Context, pool *pgxpool.Pool) error {
 	downFile := fmt.Sprintf("%s.down.sql", last)
 	path := filepath.Join(migrationsDir, downFile)
 
-	sql, err := os.ReadFile(path)
+	// `last` comes from schema_migrations, which only ever contains versions this
+	// same tool previously wrote after parsing them from local migration filenames
+	// (see migrationVersion/listMigrationFiles); it is not user- or network-controlled.
+	sql, err := os.ReadFile(path) //nolint:gosec // path derived from trusted local migration filenames, see comment above
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", path, err)
 	}
@@ -151,11 +154,11 @@ func migrateDown(ctx context.Context, pool *pgxpool.Pool) error {
 		return err
 	}
 	if _, err := tx.Exec(ctx, string(sql)); err != nil {
-		_ = tx.Rollback(ctx)
+		_ = tx.Rollback(ctx) //nolint:errcheck // best-effort cleanup after a failed statement; the original error is what we report
 		return fmt.Errorf("applying %s: %w", downFile, err)
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM schema_migrations WHERE version = $1`, last); err != nil {
-		_ = tx.Rollback(ctx)
+		_ = tx.Rollback(ctx) //nolint:errcheck // best-effort cleanup after a failed statement; the original error is what we report
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {

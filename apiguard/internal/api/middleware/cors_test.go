@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,15 +20,15 @@ func TestCORS(t *testing.T) {
 	}
 
 	tests := []struct {
-		name               string
-		allowedOrigins     []string
-		method             string
-		origin             string
-		wantStatus         int
-		wantNextCalled     bool
-		wantACAO           string // Access-Control-Allow-Origin
-		wantVary           bool   // expect Vary: Origin header
-		wantNoACAO         bool   // explicitly assert header is absent
+		name           string
+		allowedOrigins []string
+		method         string
+		origin         string
+		wantStatus     int
+		wantNextCalled bool
+		wantACAO       string // Access-Control-Allow-Origin
+		wantVary       bool   // expect Vary: Origin header
+		wantNoACAO     bool   // explicitly assert header is absent
 	}{
 		// 1. Empty origins + preflight → 403, next NOT called
 		{
@@ -170,7 +171,7 @@ func TestCORS(t *testing.T) {
 			next, called := makeNext(t)
 			handler := CORS(tc.allowedOrigins)(next)
 
-			req := httptest.NewRequest(tc.method, "/api/test", nil)
+			req := httptest.NewRequestWithContext(context.Background(), tc.method, "/api/test", nil)
 			if tc.origin != "" {
 				req.Header.Set("Origin", tc.origin)
 			}

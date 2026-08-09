@@ -32,7 +32,7 @@ func isValidUUID(s string) bool {
 // TestCorrelationID_NoInboundHeader verifies that when the request carries no
 // X-Request-ID header a valid UUID is generated and set on the response.
 func TestCorrelationID_NoInboundHeader(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	rr := applyCorrelationID(req)
 
 	got := rr.Header().Get("X-Request-ID")
@@ -49,7 +49,7 @@ func TestCorrelationID_NoInboundHeader(t *testing.T) {
 func TestCorrelationID_ValidInboundHeader(t *testing.T) {
 	inbound := uuid.New().String()
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("X-Request-ID", inbound)
 	rr := applyCorrelationID(req)
 
@@ -71,7 +71,7 @@ func TestCorrelationID_InvalidInboundHeader(t *testing.T) {
 
 	for _, bad := range invalidValues {
 		t.Run("invalid="+bad, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 			if bad != "" {
 				req.Header.Set("X-Request-ID", bad)
 			}
@@ -102,7 +102,7 @@ func TestCorrelationID_StoredInContext(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("X-Request-ID", inbound)
 
 	wrapped := CorrelationID(captureHandler)
@@ -131,7 +131,7 @@ func TestCorrelationID_ResponseIDMatchesContext(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	wrapped := CorrelationID(captureHandler)
 	rr := httptest.NewRecorder()
 	wrapped.ServeHTTP(rr, req)

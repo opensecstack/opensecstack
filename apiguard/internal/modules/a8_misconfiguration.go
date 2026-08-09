@@ -296,7 +296,7 @@ func (m *MisconfigModule) runHTTPMethods(ctx context.Context, exec HTTPExecutor,
 					Request:  fmt.Sprintf("OPTIONS %s", url),
 					Response: fmt.Sprintf("HTTP %d (Allow: %s)", resp.StatusCode, allow),
 					Detail: map[string]interface{}{
-						"allow_header":    allow,
+						"allow_header":     allow,
 						"dangerous_method": dangerous,
 					},
 				},

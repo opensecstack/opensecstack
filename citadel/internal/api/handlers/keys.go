@@ -39,9 +39,9 @@ func NewKeys(logger zerolog.Logger, store keysStore, verifier keysTokenVerifier)
 }
 
 type registerKeyRequest struct {
-	UserID string `json:"user_id"`
-	Token  string `json:"token"`
-	KeyID  string `json:"key_id"`
+	UserID    string `json:"user_id"`
+	Token     string `json:"token"`
+	KeyID     string `json:"key_id"`
 	PublicKey string `json:"public_key"`
 }
 

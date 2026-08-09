@@ -353,6 +353,41 @@ func doRequestWithXRealIP(t *testing.T, h http.Handler, remoteAddr, xff, xri str
 	return rr
 }
 
+// TestRateLimiter_XFFTakesPrecedenceOverXRealIP verifies that, when a request
+// arrives from a trusted proxy with both X-Forwarded-For and X-Real-IP set,
+// the rate limiter keys on the XFF-derived client IP (X-Real-IP is only a
+// fallback used when XFF is absent, per clientIPFromRequestWithDepth).
+func TestRateLimiter_XFFTakesPrecedenceOverXRealIP(t *testing.T) {
+	const rate = 2
+	rl := NewRateLimiterWithProxies(rate, []string{"10.0.0.1/32"})
+	defer rl.Stop()
+
+	h := rl.Middleware(rlOKHandler)
+
+	// Exhaust allowance for the XFF-derived client IP 1.1.1.1. X-Real-IP is set
+	// to a different address (2.2.2.2) on every request to prove it is ignored.
+	for i := 0; i < rate; i++ {
+		rr := doRequestWithXRealIP(t, h, "10.0.0.1:1234", "1.1.1.1, 10.0.0.1", "2.2.2.2")
+		if rr.Code != http.StatusOK {
+			t.Fatalf("request %d: got %d, want 200", i+1, rr.Code)
+		}
+	}
+
+	// 1.1.1.1 (from XFF) should now be rate-limited.
+	rr := doRequestWithXRealIP(t, h, "10.0.0.1:1234", "1.1.1.1, 10.0.0.1", "2.2.2.2")
+	if rr.Code != http.StatusTooManyRequests {
+		t.Errorf("XFF client 1.1.1.1 should be rate-limited; got %d", rr.Code)
+	}
+
+	// A request with no XFF falls back to X-Real-IP (2.2.2.2) as the rate-limit
+	// key. That key has never been used above (XFF's 1.1.1.1 was the key for
+	// every prior request), so it must still have its full allowance.
+	rr2 := doRequestWithXRealIP(t, h, "10.0.0.1:1234", "", "2.2.2.2")
+	if rr2.Code != http.StatusOK {
+		t.Errorf("first request keyed on X-Real-IP fallback 2.2.2.2 should not be limited; got %d", rr2.Code)
+	}
+}
+
 // TestClientIPFromRequest_XRealIPFallback verifies that X-Real-IP is used when
 // no X-Forwarded-For header is present and the direct peer is a trusted proxy.
 func TestClientIPFromRequest_XRealIPFallback(t *testing.T) {
@@ -504,7 +539,7 @@ func TestMustParseTrustedProxyCIDRs_WarnsOnInvalidEntry(t *testing.T) {
 // with depth=2 keys rate limiting on the original client IP, stripping 2 proxy
 // hops from the right of XFF.
 //
-// XFF="1.2.3.4, proxy1, proxy2" depth=2 → idx=max(0,3-1-2)=0 → "1.2.3.4"
+// XFF="1.2.3.4, proxy1, proxy2" depth=2 → idx=max(0,3-1-2)=0 → "1.2.3.4".
 func TestRateLimiter_DepthBasedXFFStripping(t *testing.T) {
 	const rate = 2
 	rl := NewRateLimiterWithProxiesAndDepth(rate, []string{"10.0.0.1/32"}, 2)

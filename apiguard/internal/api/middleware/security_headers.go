@@ -33,7 +33,7 @@ func (s *securityHeadersWriter) writeSecurityHeaders() {
 		return
 	}
 	s.headersSent = true
-	h := s.ResponseWriter.Header()
+	h := s.Header()
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("X-Frame-Options", "DENY")
 	h.Set("X-XSS-Protection", "1; mode=block")

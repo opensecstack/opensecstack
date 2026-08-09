@@ -12,7 +12,7 @@ import (
 // Score parses a CVSS 3.1 vector string and returns the base score rounded to
 // one decimal place using the CVSS 3.1 specification rounding algorithm.
 //
-// Example vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N"
+// Example vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N".
 func Score(vector string) (float64, error) {
 	if !strings.HasPrefix(vector, "CVSS:3.1/") {
 		return 0, fmt.Errorf("cvss: vector must start with CVSS:3.1/, got %q", vector)

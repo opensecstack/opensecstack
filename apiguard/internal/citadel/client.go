@@ -100,7 +100,7 @@ func New(baseURL, keyID, secret string) *Client {
 // synthesized per c.FailMode (HARD_STOP by default), so a caller checking
 // decision.Allowed() without also branching on err still gets the safe
 // behavior. Check err separately to log/alert on "couldn't evaluate" vs.
-// "evaluated and refused."
+// "evaluated and refused".
 func (c *Client) EvaluateScan(ctx context.Context, k *Kerkese) (*Decision, error) {
 	if c == nil || c.baseURL == "" {
 		return nil, nil

@@ -4,14 +4,14 @@ import (
 	"expvar"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
 )
 
 // MetricsCollector tracks HTTP request metrics using expvar (stdlib).
 // Exposes counts and latency histograms at GET /metrics (JSON).
+// All fields are expvar types, which are already safe for concurrent use
+// internally, so no additional locking is needed here.
 type MetricsCollector struct {
-	mu            sync.Mutex
 	requestsTotal *expvar.Map // keyed by "method:status"
 	requestsDur   *expvar.Map // keyed by "method:path" — cumulative ms
 	activeReqs    *expvar.Int

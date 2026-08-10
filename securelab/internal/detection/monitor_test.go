@@ -93,6 +93,44 @@ func TestMonitor_WatchAlerts_EnvelopeFormat(t *testing.T) {
 	}
 }
 
+// TestMonitor_WatchAlerts_NilTechniqueFilterForwardsEverything is a
+// regression test for a production bug: passing a nil/empty
+// expectedTechniques (as MonitorAdapter.WaitForDetection intentionally does,
+// documented as "no run-ID or technique filter") must forward every alert
+// regardless of its Technique field. The original implementation only
+// forwarded events whose Technique field was itself empty, silently
+// dropping every alert that actually names a technique (e.g. "bola") when
+// no filter was requested — which meant the executor's detection-confirmed
+// signal would never fire for realistic alerts in production.
+func TestMonitor_WatchAlerts_NilTechniqueFilterForwardsEverything(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`[{"alert_id":"a1","technique":"bola","severity":"high","timestamp":"2024-01-01T00:00:00Z"}]`))
+	}))
+	defer server.Close()
+
+	m := detection.NewMonitor(server.URL, "", "")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// No technique filter (nil), mirroring MonitorAdapter's "accept any
+	// alert" call pattern.
+	ch := m.WatchAlerts(ctx, "run-1", nil)
+
+	select {
+	case ev, ok := <-ch:
+		if !ok {
+			t.Fatal("expected an alert event, got closed channel")
+		}
+		if ev.Technique != "bola" {
+			t.Errorf("Technique = %q, want bola", ev.Technique)
+		}
+	case <-time.After(4 * time.Second):
+		t.Fatal("timed out waiting for alert with nil technique filter — technique-named alerts must still be forwarded when no filter is set")
+	}
+}
+
 func TestMonitor_WatchAlerts_ClosesOnContextCancel(t *testing.T) {
 	m := detection.NewMonitor("", "", "") // no platforms configured — nothing to poll
 	ctx, cancel := context.WithCancel(context.Background())

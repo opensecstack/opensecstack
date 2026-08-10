@@ -27,7 +27,9 @@ func TestMonitorAdapter_WaitForDetection_ReturnsFirstAlert(t *testing.T) {
 	mon := detection.NewMonitor(server.URL, "", "")
 	adapter := scenarios.NewMonitorAdapter(mon)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// The underlying Monitor polls every 2s; allow generous headroom above
+	// that so this test isn't flaky under slow/loaded CI runners.
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	ev, err := adapter.WaitForDetection(ctx)

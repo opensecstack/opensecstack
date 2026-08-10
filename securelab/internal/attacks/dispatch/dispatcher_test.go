@@ -102,6 +102,92 @@ func TestDispatch_BOLA_RoutesToAPIModuleAndReturnsSuccess(t *testing.T) {
 	}
 }
 
+func TestDispatch_MassAssignment_RoutesToAPIModule(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"role":"admin"}`))
+	}))
+	defer server.Close()
+
+	d := NewDispatcher()
+	success, err := d.Dispatch(context.Background(), scenarios.StepSpec{
+		Kind:   "mass_assignment",
+		Params: map[string]any{"endpoints": []string{"/api/profile"}},
+	}, server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !success {
+		t.Error("expected success=true when server reflects a privileged field")
+	}
+}
+
+func TestDispatch_SSRF_RoutesToAPIModule(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	d := NewDispatcher()
+	success, err := d.Dispatch(context.Background(), scenarios.StepSpec{
+		Kind: "ssrf",
+		Params: map[string]any{
+			"endpoints":   []string{"/api/fetch"},
+			"param_names": []string{"url"},
+		},
+	}, server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if success {
+		t.Error("expected success=false when every SSRF probe 404s")
+	}
+}
+
+// TestDispatch_Misconfig_RoutesToAPIModule uses a bare server that returns a
+// plain 404 with no security headers on every path. Since the misconfig
+// attack's "missing security headers" check (step 4) probes the base URL
+// unconditionally, such a server is flagged as misconfigured even though it
+// has no exposed debug endpoints or default credentials — this asserts that
+// finding is what actually drives success=true here.
+func TestDispatch_Misconfig_RoutesToAPIModule(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	d := NewDispatcher()
+	success, err := d.Dispatch(context.Background(), scenarios.StepSpec{
+		Kind: "misconfig",
+	}, server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !success {
+		t.Error("expected success=true when the server is missing all required security headers")
+	}
+}
+
+func TestDispatch_RateLimitBypass_RoutesToAPIModule(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	d := NewDispatcher()
+	success, err := d.Dispatch(context.Background(), scenarios.StepSpec{
+		Kind:   "rate_limit_bypass",
+		Params: map[string]any{"burst": 5, "concurrency": 2},
+	}, server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if success {
+		t.Error("expected success=false when every request is rate-limited")
+	}
+}
+
 func TestDispatch_SynFlood_InvalidTargetURL(t *testing.T) {
 	d := NewDispatcher()
 	_, err := d.Dispatch(context.Background(), scenarios.StepSpec{Kind: "syn_flood"}, "/no-host")

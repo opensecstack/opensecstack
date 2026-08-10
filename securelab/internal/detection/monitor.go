@@ -84,7 +84,13 @@ func (m *Monitor) WatchAlerts(ctx context.Context, runID string, expectedTechniq
 						continue
 					}
 					for _, ev := range events {
-						if _, match := techniqueSet[strings.ToLower(ev.Technique)]; match || ev.Technique == "" {
+						_, techMatch := techniqueSet[strings.ToLower(ev.Technique)]
+						// An empty techniqueSet means the caller passed no
+						// technique filter at all (e.g. MonitorAdapter's
+						// "accept any alert" mode) and must match every
+						// event, not just ones with an empty Technique field.
+						noFilter := len(techniqueSet) == 0
+						if noFilter || techMatch || ev.Technique == "" {
 							select {
 							case ch <- ev:
 							case <-ctx.Done():

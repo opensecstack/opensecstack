@@ -4,8 +4,10 @@
 package middleware_test
 
 import (
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -13,6 +15,9 @@ import (
 
 	"github.com/opensecstack/securelab/internal/api/middleware"
 )
+
+// itoa is a tiny local alias to keep the alg=none test body compact.
+func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 
 const testSecret = "super-secret-key-for-tests"
 
@@ -241,6 +246,78 @@ func TestRequireRole_AnalystPassesAnalyst(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+}
+
+// TestRequireRole_UnknownMinRoleBlocksEveryone exercises the fail-safe branch
+// in RequireRole: if it is ever misconfigured with a role name that is not in
+// roleRank (e.g. a typo like "admim"), it must deny access to everyone,
+// including admins, rather than fail open.
+func TestRequireRole_UnknownMinRoleBlocksEveryone(t *testing.T) {
+	h := requireRoleChain(testSecret, "admim") // typo: not a real role
+
+	tok := mintJWT(t, testSecret, map[string]any{
+		"sub":  "u1",
+		"role": "admin",
+		"exp":  time.Now().Add(time.Hour).Unix(),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 (fail-safe deny-all) for unrecognised minRole, got %d", rr.Code)
+	}
+}
+
+// TestRequireRole_UnknownTokenRoleIsRejected verifies that a role claim which
+// is not one of the known roles (e.g. a token forged/misconfigured with role
+// "superadmin") is treated as insufficient privilege rather than granted
+// access by falling through some default.
+func TestRequireRole_UnknownTokenRoleIsRejected(t *testing.T) {
+	h := requireRoleChain(testSecret, "viewer")
+
+	tok := mintJWT(t, testSecret, map[string]any{
+		"sub":  "u1",
+		"role": "superadmin", // not in roleRank
+		"exp":  time.Now().Add(time.Hour).Unix(),
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for unrecognised token role, got %d", rr.Code)
+	}
+}
+
+// TestAuthenticate_AlgNoneRejected guards against the classic JWT
+// "alg confusion" / algorithm-downgrade attack, where an attacker crafts a
+// token with header alg=none (or any non-HS256 alg) and an empty/garbage
+// signature, hoping a permissive verifier accepts it. Authenticate must
+// reject it outright since isRS256Token returns false for it and the HS256
+// path enforces jwt.WithValidMethods([]string{"HS256"}).
+func TestAuthenticate_AlgNoneRejected(t *testing.T) {
+	mw := middleware.Authenticate(testSecret, "")
+	h := mw(okHandler)
+
+	// Hand-craft a JWT with alg=none: header.payload. (empty signature).
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"attacker","role":"admin","exp":` +
+		itoa(time.Now().Add(time.Hour).Unix()) + `}`))
+	forged := header + "." + payload + "."
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+forged)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for alg=none forged token, got %d", rr.Code)
 	}
 }
 

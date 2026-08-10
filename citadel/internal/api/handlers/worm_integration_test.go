@@ -123,6 +123,92 @@ func TestWORM_Integration_ChainVerification(t *testing.T) {
 	}
 }
 
+// TestImmutability_UpdateAndDeleteAreNoOps confirms the append-only guarantee
+// documented in migrations/000001_initial.up.sql: worm_no_update and
+// worm_no_delete are PostgreSQL RULEs of the form "DO INSTEAD NOTHING", so a
+// direct UPDATE/DELETE against worm_entries — bypassing the application layer
+// entirely, e.g. a compromised superuser — must silently affect zero rows and
+// leave the persisted entry byte-for-byte unchanged, rather than erroring or
+// (worse) succeeding.
+func TestImmutability_UpdateAndDeleteAreNoOps(t *testing.T) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL not set — skipping WORM immutability test")
+	}
+
+	ctx := context.Background()
+	database, err := db.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("db.New: %v", err)
+	}
+	defer database.Close()
+
+	h := NewWORM(zerolog.Nop(), database)
+
+	body, _ := json.Marshal(map[string]any{
+		"source":     "immutability-test",
+		"event_type": "scan.created",
+		"project_id": "worm-immutability-test",
+		"payload":    map[string]any{"seq": 0},
+	})
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/worm/emit", bytes.NewBuffer(body))
+	rw := httptest.NewRecorder()
+	h.Emit(rw, req)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("emit: expected 200, got %d: %s", rw.Code, rw.Body.String())
+	}
+	var emitResp struct {
+		WORMEntryID string `json:"worm_entry_id"`
+		ChainHash   string `json:"chain_hash"`
+	}
+	if err := json.Unmarshal(rw.Body.Bytes(), &emitResp); err != nil {
+		t.Fatalf("emit: decode response: %v", err)
+	}
+	id, err := uuid.Parse(emitResp.WORMEntryID)
+	if err != nil {
+		t.Fatalf("emit: invalid worm_entry_id %q: %v", emitResp.WORMEntryID, err)
+	}
+
+	// Attempt a direct UPDATE without disabling worm_no_update — this must be
+	// rejected (turned into a no-op) by the RULE, not by application code.
+	updateTag, err := database.Pool.Exec(ctx,
+		`UPDATE worm_entries SET payload = $1 WHERE id = $2`,
+		[]byte(`{"tampered":true}`), id,
+	)
+	if err != nil {
+		t.Fatalf("UPDATE against worm_entries returned an error instead of a silent no-op: %v", err)
+	}
+	if updateTag.RowsAffected() != 0 {
+		t.Fatalf("expected worm_no_update RULE to block the UPDATE (0 rows affected), got %d", updateTag.RowsAffected())
+	}
+
+	var chainHash string
+	if err := database.Pool.QueryRow(ctx, `SELECT chain_hash FROM worm_entries WHERE id = $1`, id).Scan(&chainHash); err != nil {
+		t.Fatalf("re-read entry after UPDATE attempt: %v", err)
+	}
+	if chainHash != emitResp.ChainHash {
+		t.Fatalf("entry was mutated despite worm_no_update RULE: chain_hash changed from %q to %q", emitResp.ChainHash, chainHash)
+	}
+
+	// Attempt a direct DELETE without disabling worm_no_delete — same
+	// expectation: silently blocked, row still present afterward.
+	deleteTag, err := database.Pool.Exec(ctx, `DELETE FROM worm_entries WHERE id = $1`, id)
+	if err != nil {
+		t.Fatalf("DELETE against worm_entries returned an error instead of a silent no-op: %v", err)
+	}
+	if deleteTag.RowsAffected() != 0 {
+		t.Fatalf("expected worm_no_delete RULE to block the DELETE (0 rows affected), got %d", deleteTag.RowsAffected())
+	}
+
+	var stillExists bool
+	if err := database.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM worm_entries WHERE id = $1)`, id).Scan(&stillExists); err != nil {
+		t.Fatalf("re-check entry existence after DELETE attempt: %v", err)
+	}
+	if !stillExists {
+		t.Fatal("entry was deleted despite worm_no_delete RULE")
+	}
+}
+
 func verifyChain(t *testing.T, h *WORM, from, to time.Time) db.VerifyResult {
 	t.Helper()
 	url := fmt.Sprintf("/api/v1/worm/verify?from=%s&to=%s", from.Format(time.RFC3339), to.Format(time.RFC3339))

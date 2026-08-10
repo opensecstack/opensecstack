@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -47,6 +48,59 @@ func TestToPeerResponse_MapsJurisdictionToCountryAndPreservesFields(t *testing.T
 	}
 	if resp.Ed25519Fingerprint != "abcd1234" {
 		t.Errorf("Ed25519Fingerprint = %q, want abcd1234", resp.Ed25519Fingerprint)
+	}
+}
+
+// unreachablePeersPool returns a pgx pool configured against a
+// syntactically valid but unreachable address, letting List/Handshake's
+// real (previously 0%-covered) store-call and error-propagation branches
+// be exercised without a live Postgres and without mocking db.PeerStore,
+// which has no interface seam.
+func unreachablePeersPool(t *testing.T) *db.Pool {
+	t.Helper()
+	pool, err := db.Open(context.Background(), "postgres://user:pass@127.0.0.1:1/db", 1)
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+func TestPeersList_StoreErrorReturns500(t *testing.T) {
+	h := &Peers{Store: db.NewPeerStore(unreachablePeersPool(t))}
+	req := httptest.NewRequest(http.MethodGet, "/peers", nil)
+	w := httptest.NewRecorder()
+	h.List(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("code = %d, want 500; body=%s", w.Code, w.Body.String())
+	}
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["error"] == "" {
+		t.Error("expected a non-empty error message in the response body")
+	}
+}
+
+// TestPeersHandshake_ValidUUIDStoreErrorMapsTo500 exercises Handshake's
+// real UpdateHandshakeAt store call (a valid UUID passes parseUUIDParam,
+// unlike the existing invalid-UUID test) failing against an unreachable
+// DB, proving it's mapped through mapDBError to a 500 rather than e.g.
+// panicking or silently succeeding.
+func TestPeersHandshake_ValidUUIDStoreErrorMapsTo500(t *testing.T) {
+	h := &Peers{Store: db.NewPeerStore(unreachablePeersPool(t))}
+	id := uuid.New()
+	req := httptest.NewRequest(http.MethodPost, "/peers/"+id.String()+"/handshake", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", id.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	w := httptest.NewRecorder()
+	h.Handshake(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("code = %d, want 500; body=%s", w.Code, w.Body.String())
 	}
 }
 

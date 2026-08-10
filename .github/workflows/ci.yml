@@ -407,14 +407,14 @@ jobs:
       - name: WORM chain writer + verifier tests
         env:
           DATABASE_URL: postgres://citadel:citadel@localhost:5432/citadel_worm_test?sslmode=disable
-        run: go test ./internal/worm/... -v -count=1 -timeout 120s
+        run: go test -tags=integration ./internal/api/handlers/... -v -count=1 -run TestWORM_Integration -timeout 120s
 
       - name: WORM immutability constraint tests
         env:
           DATABASE_URL: postgres://citadel:citadel@localhost:5432/citadel_worm_test?sslmode=disable
         run: |
-          echo "Verify that UPDATE/DELETE on worm_log is rejected by the DB trigger"
-          go test ./internal/worm/... -v -count=1 -run TestImmut -timeout 60s
+          echo "Verify that UPDATE/DELETE on worm_entries is rejected by the DB rule"
+          go test -tags=integration ./internal/api/handlers/... -v -count=1 -run TestImmutability -timeout 60s
 
   # ──────────────────────────────────────────────────────────────────────────
   # 3c. IRFlow — Go tests (with Postgres)

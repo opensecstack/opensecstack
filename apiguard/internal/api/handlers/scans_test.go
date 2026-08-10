@@ -24,7 +24,7 @@ func newScans() *Scans {
 
 func TestScansCreate_MalformedJSON(t *testing.T) {
 	h := newScans()
-	req := httptest.NewRequest(http.MethodPost, "/scans", strings.NewReader(`{not json`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/scans", strings.NewReader(`{not json`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.Create(rec, req)
@@ -36,7 +36,7 @@ func TestScansCreate_MalformedJSON(t *testing.T) {
 func TestScansCreate_MissingSpecAndTarget(t *testing.T) {
 	h := newScans()
 	body, _ := json.Marshal(map[string]string{})
-	req := httptest.NewRequest(http.MethodPost, "/scans", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/scans", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.Create(rec, req)
@@ -49,7 +49,7 @@ func TestScansCreate_MissingSpecAndTarget(t *testing.T) {
 func TestScansCreate_MissingTarget(t *testing.T) {
 	h := newScans()
 	body, _ := json.Marshal(map[string]string{"spec_url": "https://example.com/openapi.yaml"})
-	req := httptest.NewRequest(http.MethodPost, "/scans", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/scans", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.Create(rec, req)
@@ -64,7 +64,7 @@ func TestScansCreate_InvalidTargetScheme(t *testing.T) {
 		"spec_url": "https://example.com/api.yaml",
 		"target":   "ftp://example.com",
 	})
-	req := httptest.NewRequest(http.MethodPost, "/scans", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/scans", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.Create(rec, req)
@@ -79,7 +79,7 @@ func TestScansCreate_InvalidTargetNoHostname(t *testing.T) {
 		"spec_url": "https://example.com/api.yaml",
 		"target":   "https://",
 	})
-	req := httptest.NewRequest(http.MethodPost, "/scans", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/scans", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.Create(rec, req)
@@ -94,7 +94,7 @@ func TestScansCreate_SpecPathTraversal(t *testing.T) {
 		"spec_path": "/etc/passwd",
 		"target":    "https://api.example.com",
 	})
-	req := httptest.NewRequest(http.MethodPost, "/scans", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/scans", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.Create(rec, req)
@@ -109,7 +109,7 @@ func TestScansCreate_SpecPathTraversal_DotDot(t *testing.T) {
 		"spec_path": "../../etc/shadow",
 		"target":    "https://api.example.com",
 	})
-	req := httptest.NewRequest(http.MethodPost, "/scans", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/scans", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.Create(rec, req)
@@ -122,7 +122,7 @@ func TestScansCreate_SpecPathTraversal_DotDot(t *testing.T) {
 
 func TestScansList_InvalidStatus(t *testing.T) {
 	h := newScans()
-	req := httptest.NewRequest(http.MethodGet, "/scans?status=invalid_status", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans?status=invalid_status", nil)
 	rec := httptest.NewRecorder()
 	h.List(rec, req)
 	if rec.Code != http.StatusBadRequest {
@@ -135,7 +135,7 @@ func TestScansList_ValidStatuses(t *testing.T) {
 	for _, st := range validStatuses {
 		t.Run(st, func(t *testing.T) {
 			h := newScans()
-			req := httptest.NewRequest(http.MethodGet, "/scans?status="+st, nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans?status="+st, nil)
 			rec := httptest.NewRecorder()
 			func() {
 				defer func() { recover() }() //nolint:errcheck
@@ -150,7 +150,7 @@ func TestScansList_ValidStatuses(t *testing.T) {
 
 func TestScansList_NoParams(t *testing.T) {
 	h := newScans()
-	req := httptest.NewRequest(http.MethodGet, "/scans", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans", nil)
 	rec := httptest.NewRecorder()
 	func() {
 		defer func() { recover() }() //nolint:errcheck
@@ -166,7 +166,7 @@ func TestScansList_NoParams(t *testing.T) {
 
 func TestScansGet_InvalidUUID(t *testing.T) {
 	h := newScans()
-	req := httptest.NewRequest(http.MethodGet, "/scans/not-a-uuid", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans/not-a-uuid", nil)
 	req = injectChiID(req, "not-a-uuid")
 	rec := httptest.NewRecorder()
 	h.Get(rec, req)
@@ -177,7 +177,7 @@ func TestScansGet_InvalidUUID(t *testing.T) {
 
 func TestScansGet_MissingID(t *testing.T) {
 	h := newScans()
-	req := httptest.NewRequest(http.MethodGet, "/scans/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans/", nil)
 	rec := httptest.NewRecorder()
 	h.Get(rec, req)
 	if rec.Code != http.StatusBadRequest {
@@ -188,7 +188,7 @@ func TestScansGet_MissingID(t *testing.T) {
 func TestScansGet_ValidUUID_HitsDB(t *testing.T) {
 	const validID = "550e8400-e29b-41d4-a716-446655440000"
 	h := newScans()
-	req := httptest.NewRequest(http.MethodGet, "/scans/"+validID, nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans/"+validID, nil)
 	req = injectChiID(req, validID)
 	rec := httptest.NewRecorder()
 	func() {
@@ -205,7 +205,7 @@ func TestScansGet_ValidUUID_HitsDB(t *testing.T) {
 
 func TestScansDelete_InvalidUUID(t *testing.T) {
 	h := newScans()
-	req := httptest.NewRequest(http.MethodDelete, "/scans/bad", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/scans/bad", nil)
 	req = injectChiID(req, "bad")
 	rec := httptest.NewRecorder()
 	h.Delete(rec, req)
@@ -216,7 +216,7 @@ func TestScansDelete_InvalidUUID(t *testing.T) {
 
 func TestScansDelete_MissingID(t *testing.T) {
 	h := newScans()
-	req := httptest.NewRequest(http.MethodDelete, "/scans/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/scans/", nil)
 	rec := httptest.NewRecorder()
 	h.Delete(rec, req)
 	if rec.Code != http.StatusBadRequest {
@@ -228,7 +228,7 @@ func TestScansDelete_MissingID(t *testing.T) {
 
 func TestScansFindingsSub_InvalidUUID(t *testing.T) {
 	h := newScans()
-	req := httptest.NewRequest(http.MethodGet, "/scans/not-uuid/findings", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans/not-uuid/findings", nil)
 	req = injectChiID(req, "not-uuid")
 	rec := httptest.NewRecorder()
 	h.Findings(rec, req)
@@ -239,7 +239,7 @@ func TestScansFindingsSub_InvalidUUID(t *testing.T) {
 
 func TestScansFindingsSub_MissingID(t *testing.T) {
 	h := newScans()
-	req := httptest.NewRequest(http.MethodGet, "/scans//findings", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans//findings", nil)
 	rec := httptest.NewRecorder()
 	h.Findings(rec, req)
 	if rec.Code != http.StatusBadRequest {
@@ -250,7 +250,7 @@ func TestScansFindingsSub_MissingID(t *testing.T) {
 func TestScansFindingsSub_InvalidSeverity(t *testing.T) {
 	const validID = "550e8400-e29b-41d4-a716-446655440000"
 	h := newScans()
-	req := httptest.NewRequest(http.MethodGet, "/scans/"+validID+"/findings?severity=extreme", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans/"+validID+"/findings?severity=extreme", nil)
 	req = injectChiID(req, validID)
 	rec := httptest.NewRecorder()
 	h.Findings(rec, req)
@@ -262,7 +262,7 @@ func TestScansFindingsSub_InvalidSeverity(t *testing.T) {
 func TestScansFindingsSub_InvalidStatus(t *testing.T) {
 	const validID = "550e8400-e29b-41d4-a716-446655440000"
 	h := newScans()
-	req := httptest.NewRequest(http.MethodGet, "/scans/"+validID+"/findings?status=bad_status", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans/"+validID+"/findings?status=bad_status", nil)
 	req = injectChiID(req, validID)
 	rec := httptest.NewRecorder()
 	h.Findings(rec, req)
@@ -276,7 +276,7 @@ func TestScansFindingsSub_ValidSeverities(t *testing.T) {
 	for _, sev := range []string{"critical", "high", "medium", "low", "info"} {
 		t.Run(sev, func(t *testing.T) {
 			h := newScans()
-			req := httptest.NewRequest(http.MethodGet, "/scans/"+validID+"/findings?severity="+sev, nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans/"+validID+"/findings?severity="+sev, nil)
 			req = injectChiID(req, validID)
 			rec := httptest.NewRecorder()
 			func() {
@@ -295,7 +295,7 @@ func TestScansFindingsSub_ValidStatuses(t *testing.T) {
 	for _, st := range []string{"open", "confirmed", "false_positive", "accepted", "fixed"} {
 		t.Run(st, func(t *testing.T) {
 			h := newScans()
-			req := httptest.NewRequest(http.MethodGet, "/scans/"+validID+"/findings?status="+st, nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans/"+validID+"/findings?status="+st, nil)
 			req = injectChiID(req, validID)
 			rec := httptest.NewRecorder()
 			func() {
@@ -313,7 +313,7 @@ func TestScansFindingsSub_ValidStatuses(t *testing.T) {
 
 func TestScansReport_InvalidUUID(t *testing.T) {
 	h := newScans()
-	req := httptest.NewRequest(http.MethodGet, "/scans/bad-id/report", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans/bad-id/report", nil)
 	req = injectChiID(req, "bad-id")
 	rec := httptest.NewRecorder()
 	h.Report(rec, req)
@@ -325,7 +325,7 @@ func TestScansReport_InvalidUUID(t *testing.T) {
 func TestScansReport_ValidUUID_PassesValidation(t *testing.T) {
 	const validID = "550e8400-e29b-41d4-a716-446655440000"
 	h := newScans()
-	req := httptest.NewRequest(http.MethodGet, "/scans/"+validID+"/report", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans/"+validID+"/report", nil)
 	req = injectChiID(req, validID)
 	rec := httptest.NewRecorder()
 	func() {
@@ -374,7 +374,7 @@ func TestValidateTarget_EmptyHostname(t *testing.T) {
 // ---- parsePagination unit tests ---------------------------------------------
 
 func TestParsePagination_Defaults(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/scans", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans", nil)
 	page, perPage := parsePagination(req, 1, 20, 100)
 	if page != 1 {
 		t.Errorf("expected default page=1, got %d", page)
@@ -385,7 +385,7 @@ func TestParsePagination_Defaults(t *testing.T) {
 }
 
 func TestParsePagination_ExplicitValues(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/scans?page=3&per_page=50", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans?page=3&per_page=50", nil)
 	page, perPage := parsePagination(req, 1, 20, 100)
 	if page != 3 {
 		t.Errorf("expected page=3, got %d", page)
@@ -396,7 +396,7 @@ func TestParsePagination_ExplicitValues(t *testing.T) {
 }
 
 func TestParsePagination_CappedAtMax(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/scans?per_page=999", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans?per_page=999", nil)
 	_, perPage := parsePagination(req, 1, 20, 100)
 	if perPage != 100 {
 		t.Errorf("expected per_page capped at 100, got %d", perPage)
@@ -404,7 +404,7 @@ func TestParsePagination_CappedAtMax(t *testing.T) {
 }
 
 func TestParsePagination_ZeroPageFallsBack(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/scans?page=0", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans?page=0", nil)
 	page, _ := parsePagination(req, 1, 20, 100)
 	if page != 1 {
 		t.Errorf("expected page=0 to fall back to default 1, got %d", page)
@@ -412,7 +412,7 @@ func TestParsePagination_ZeroPageFallsBack(t *testing.T) {
 }
 
 func TestParsePagination_NonNumericIgnored(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/scans?page=abc&per_page=xyz", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/scans?page=abc&per_page=xyz", nil)
 	page, perPage := parsePagination(req, 1, 20, 100)
 	if page != 1 {
 		t.Errorf("expected default page=1 for non-numeric, got %d", page)

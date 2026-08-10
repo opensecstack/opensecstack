@@ -84,7 +84,7 @@ func newTestRouter(t *testing.T) (http.Handler, func()) {
 // doRequest is a helper to make a test request against the router.
 func doRequest(t *testing.T, r http.Handler, method, path string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(method, path, nil)
+	req := httptest.NewRequestWithContext(context.Background(), method, path, nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 	return rr

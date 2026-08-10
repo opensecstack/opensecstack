@@ -27,7 +27,7 @@ func injectChiParam(r *http.Request, key, value string) *http.Request {
 func TestInventoryList_NilDB_ReturnsEmptyList(t *testing.T) {
 	h := newInventory()
 
-	req := httptest.NewRequest(http.MethodGet, "/inventory", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/inventory", nil)
 	rec := httptest.NewRecorder()
 	h.List(rec, req)
 
@@ -51,7 +51,7 @@ func TestInventoryList_NilDB_ReturnsEmptyList(t *testing.T) {
 func TestInventoryList_ReturnsJSON(t *testing.T) {
 	h := newInventory()
 
-	req := httptest.NewRequest(http.MethodGet, "/inventory", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/inventory", nil)
 	rec := httptest.NewRecorder()
 	h.List(rec, req)
 
@@ -64,7 +64,7 @@ func TestInventoryList_ReturnsJSON(t *testing.T) {
 func TestInventoryList_PaginationDefaults(t *testing.T) {
 	h := newInventory()
 
-	req := httptest.NewRequest(http.MethodGet, "/inventory", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/inventory", nil)
 	rec := httptest.NewRecorder()
 	h.List(rec, req)
 
@@ -82,7 +82,7 @@ func TestInventoryList_PaginationDefaults(t *testing.T) {
 func TestInventoryList_CustomPagination(t *testing.T) {
 	h := newInventory()
 
-	req := httptest.NewRequest(http.MethodGet, "/inventory?limit=10&offset=20", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/inventory?limit=10&offset=20", nil)
 	rec := httptest.NewRecorder()
 	h.List(rec, req)
 
@@ -102,7 +102,7 @@ func TestInventoryList_CustomPagination(t *testing.T) {
 func TestInventoryGetHistory_InvalidID(t *testing.T) {
 	h := newInventory()
 
-	req := httptest.NewRequest(http.MethodGet, "/inventory/not-a-uuid/history", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/inventory/not-a-uuid/history", nil)
 	req = injectChiParam(req, "id", "not-a-uuid")
 	rec := httptest.NewRecorder()
 	h.GetHistory(rec, req)
@@ -115,7 +115,7 @@ func TestInventoryGetHistory_InvalidID(t *testing.T) {
 func TestInventoryGetHistory_NilDB_ReturnsNotFound(t *testing.T) {
 	h := newInventory()
 
-	req := httptest.NewRequest(http.MethodGet, "/inventory/550e8400-e29b-41d4-a716-446655440000/history", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/inventory/550e8400-e29b-41d4-a716-446655440000/history", nil)
 	req = injectChiParam(req, "id", "550e8400-e29b-41d4-a716-446655440000")
 	rec := httptest.NewRecorder()
 	h.GetHistory(rec, req)

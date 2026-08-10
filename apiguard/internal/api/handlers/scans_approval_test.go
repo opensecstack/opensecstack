@@ -140,7 +140,7 @@ func TestApprovalCitadelKerkese_DistinctIdentitiesAndTokens(t *testing.T) {
 // the handler does.
 func TestApprove_Unauthorized_NoClaims(t *testing.T) {
 	h := newScans()
-	req := httptest.NewRequest(http.MethodPost, "/scans/"+uuid.New().String()+"/approve", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/scans/"+uuid.New().String()+"/approve", nil)
 	req = injectChiID(req, uuid.New().String())
 	rec := httptest.NewRecorder()
 	h.Approve(rec, req)
@@ -153,7 +153,7 @@ func TestApprove_Unauthorized_NoClaims(t *testing.T) {
 // for the reject endpoint.
 func TestReject_Unauthorized_NoClaims(t *testing.T) {
 	h := newScans()
-	req := httptest.NewRequest(http.MethodPost, "/scans/"+uuid.New().String()+"/reject", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/scans/"+uuid.New().String()+"/reject", nil)
 	req = injectChiID(req, uuid.New().String())
 	rec := httptest.NewRecorder()
 	h.Reject(rec, req)
@@ -166,7 +166,7 @@ func TestReject_Unauthorized_NoClaims(t *testing.T) {
 // else (no DB, no auth needed to fail this).
 func TestApprove_InvalidUUID(t *testing.T) {
 	h := newScans()
-	req := httptest.NewRequest(http.MethodPost, "/scans/not-a-uuid/approve", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/scans/not-a-uuid/approve", nil)
 	req = injectChiID(req, "not-a-uuid")
 	rec := httptest.NewRecorder()
 	h.Approve(rec, req)
@@ -260,7 +260,7 @@ func setupApprovalScan(t *testing.T, d *db.DB, h *Scans, requestedBy, actorToken
 }
 
 func approveRequest(scanID uuid.UUID, approverUserID, approverToken string) *http.Request {
-	req := httptest.NewRequest(http.MethodPost, "/scans/"+scanID.String()+"/approve", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/scans/"+scanID.String()+"/approve", nil)
 	req = injectChiID(req, scanID.String())
 	req.Header.Set("Authorization", "Bearer "+approverToken)
 	ctx := middleware.ContextWithClaims(req.Context(), &middleware.Claims{Sub: approverUserID})
@@ -413,7 +413,7 @@ func TestReject_DifferentUser_MarksRejected(t *testing.T) {
 	)
 	scanID := setupApprovalScan(t, d, h, operatorUserID, "operator-token")
 
-	req := httptest.NewRequest(http.MethodPost, "/scans/"+scanID.String()+"/reject",
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/scans/"+scanID.String()+"/reject",
 		strings.NewReader(`{"reason":"target out of scope"}`))
 	req = injectChiID(req, scanID.String())
 	ctx := middleware.ContextWithClaims(req.Context(), &middleware.Claims{Sub: reviewerUserID})
@@ -474,7 +474,7 @@ func TestCreate_RequireApproval_ReturnsPendingApproval(t *testing.T) {
 		t.Fatalf("marshaling request body: %v", err)
 	}
 	body := strings.NewReader(string(bodyBytes))
-	req := httptest.NewRequest(http.MethodPost, "/scans", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/scans", body)
 	req.Header.Set("Content-Type", "application/json")
 	ctx := middleware.ContextWithClaims(req.Context(), &middleware.Claims{Sub: operatorUserID})
 	req = req.WithContext(ctx)

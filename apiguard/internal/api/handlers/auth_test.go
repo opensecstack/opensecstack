@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -28,7 +29,7 @@ func TestAuthToken_ValidKey(t *testing.T) {
 	h := NewAuth(logger, cfg)
 
 	body := bytes.NewBufferString(`{"api_key":"valid-key-1"}`)
-	req := httptest.NewRequest(http.MethodPost, "/auth/token", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/token", body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.Token(w, req)
@@ -58,7 +59,7 @@ func TestAuthToken_InvalidKey(t *testing.T) {
 	h := NewAuth(logger, cfg)
 
 	body := bytes.NewBufferString(`{"api_key":"wrong-key"}`)
-	req := httptest.NewRequest(http.MethodPost, "/auth/token", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/token", body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.Token(w, req)
@@ -74,7 +75,7 @@ func TestAuthToken_EmptyAPIKey(t *testing.T) {
 	h := NewAuth(logger, cfg)
 
 	body := bytes.NewBufferString(`{"api_key":""}`)
-	req := httptest.NewRequest(http.MethodPost, "/auth/token", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/token", body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.Token(w, req)
@@ -90,7 +91,7 @@ func TestAuthToken_MalformedJSON(t *testing.T) {
 	h := NewAuth(logger, cfg)
 
 	body := bytes.NewBufferString(`not valid json`)
-	req := httptest.NewRequest(http.MethodPost, "/auth/token", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/token", body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.Token(w, req)
@@ -106,7 +107,7 @@ func TestAuthToken_MissingJWTSecret(t *testing.T) {
 	h := NewAuth(logger, cfg)
 
 	body := bytes.NewBufferString(`{"api_key":"valid-key-1"}`)
-	req := httptest.NewRequest(http.MethodPost, "/auth/token", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/token", body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.Token(w, req)
@@ -122,7 +123,7 @@ func TestAuthToken_EmptyAPIKeysList(t *testing.T) {
 	h := NewAuth(logger, cfg)
 
 	body := bytes.NewBufferString(`{"api_key":"any-key"}`)
-	req := httptest.NewRequest(http.MethodPost, "/auth/token", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/token", body)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.Token(w, req)
@@ -137,7 +138,7 @@ func TestAuthPing_Returns200WithHintField(t *testing.T) {
 	cfg := testConfig("supersecret", "valid-key-1")
 	h := NewAuth(logger, cfg)
 
-	req := httptest.NewRequest(http.MethodGet, "/auth/token", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/auth/token", nil)
 	w := httptest.NewRecorder()
 	h.Ping(w, req)
 
@@ -165,7 +166,7 @@ func TestAuthPing_HasAlgorithmsField(t *testing.T) {
 	cfg := testConfig("supersecret", "valid-key-1")
 	h := NewAuth(logger, cfg)
 
-	req := httptest.NewRequest(http.MethodGet, "/auth/token", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/auth/token", nil)
 	w := httptest.NewRecorder()
 	h.Ping(w, req)
 
@@ -188,7 +189,7 @@ func TestAuthPing_NoConfiguredFieldRegardlessOfSetup(t *testing.T) {
 	cfg := testConfig("") // no secret, no keys
 	h := NewAuth(logger, cfg)
 
-	req := httptest.NewRequest(http.MethodGet, "/auth/token", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/auth/token", nil)
 	w := httptest.NewRecorder()
 	h.Ping(w, req)
 

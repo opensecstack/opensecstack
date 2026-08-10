@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -15,7 +16,7 @@ func TestAuditList_InvalidAction(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewAudit(logger, nil) // nil db — validation fires before any DB call
 
-	req := httptest.NewRequest(http.MethodGet, "/audit?action=invalid_action", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/audit?action=invalid_action", nil)
 	rec := httptest.NewRecorder()
 	h.List(rec, req)
 
@@ -40,7 +41,7 @@ func TestAuditList_InvalidResourceID(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewAudit(logger, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/audit?resource_id=not-a-uuid", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/audit?resource_id=not-a-uuid", nil)
 	rec := httptest.NewRecorder()
 	h.List(rec, req)
 
@@ -67,7 +68,7 @@ func TestAuditList_ValidAction(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewAudit(logger, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/audit?action=scan_created", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/audit?action=scan_created", nil)
 	rec := httptest.NewRecorder()
 
 	// Recover from the nil-pointer dereference that occurs when the handler
@@ -89,7 +90,7 @@ func TestAuditList_NoParams(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewAudit(logger, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/audit", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/audit", nil)
 	rec := httptest.NewRecorder()
 
 	func() {
@@ -128,7 +129,7 @@ func TestAuditList_AllValidActions(t *testing.T) {
 		t.Run(action, func(t *testing.T) {
 			h := NewAudit(logger, nil)
 
-			req := httptest.NewRequest(http.MethodGet, "/audit?action="+action, nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/audit?action="+action, nil)
 			rec := httptest.NewRecorder()
 
 			func() {
@@ -149,7 +150,7 @@ func TestAuditList_ValidUUIDResourceID(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewAudit(logger, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/audit?resource_id=550e8400-e29b-41d4-a716-446655440000", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/audit?resource_id=550e8400-e29b-41d4-a716-446655440000", nil)
 	rec := httptest.NewRecorder()
 
 	func() {

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -40,7 +41,7 @@ func TestCITADELWebhook_ValidSignature_200(t *testing.T) {
 	body := makeWebhookEvent("citadel.vigil_amber")
 	sig := signBody(body, testWebhookSecret)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Webhook-Signature", sig)
 	rec := httptest.NewRecorder()
@@ -59,7 +60,7 @@ func TestCITADELWebhook_InvalidSignature_401(t *testing.T) {
 	body := makeWebhookEvent("citadel.vigil_amber")
 	wrongSig := signBody(body, "wrong-secret")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Webhook-Signature", wrongSig)
 	rec := httptest.NewRecorder()
@@ -77,7 +78,7 @@ func TestCITADELWebhook_MissingSignature_401(t *testing.T) {
 
 	body := makeWebhookEvent("citadel.vigil_amber")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	// No X-Webhook-Signature header.
 	rec := httptest.NewRecorder()
@@ -97,7 +98,7 @@ func TestCITADELWebhook_HardStop_Logged(t *testing.T) {
 	body := makeWebhookEvent("citadel.hard_stop")
 	sig := signBody(body, testWebhookSecret)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Webhook-Signature", sig)
 	rec := httptest.NewRecorder()
@@ -126,7 +127,7 @@ func TestCITADELWebhook_VIGILRed_Logged(t *testing.T) {
 	body := makeWebhookEvent("citadel.vigil_red")
 	sig := signBody(body, testWebhookSecret)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Webhook-Signature", sig)
 	rec := httptest.NewRecorder()
@@ -153,7 +154,7 @@ func TestCITADELWebhook_UnknownEvent_200(t *testing.T) {
 	body := makeWebhookEvent("citadel.some_future_event")
 	sig := signBody(body, testWebhookSecret)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Webhook-Signature", sig)
 	rec := httptest.NewRecorder()
@@ -172,7 +173,7 @@ func TestCITADELWebhook_MalformedBody_400(t *testing.T) {
 	body := []byte(`{this is not valid json}`)
 	sig := signBody(body, testWebhookSecret)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Webhook-Signature", sig)
 	rec := httptest.NewRecorder()
@@ -193,7 +194,7 @@ func TestCITADELWebhook_EmptySecret_401(t *testing.T) {
 	body := makeWebhookEvent("citadel.vigil_amber")
 	sig := signBody(body, "")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Webhook-Signature", sig)
 	rec := httptest.NewRecorder()
@@ -213,7 +214,7 @@ func TestCITADELWebhook_MalformedSignatureFormat_401(t *testing.T) {
 
 	body := makeWebhookEvent("citadel.vigil_amber")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/webhooks/citadel", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Webhook-Signature", "not-sha256-format")
 	rec := httptest.NewRecorder()

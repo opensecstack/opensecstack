@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -187,7 +188,7 @@ func TestJWTBase64Decode_ValidAndInvalid(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestActorFromJWT_WithClaims(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/x", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/x", nil)
 	ctx := middleware.ContextWithClaims(req.Context(), &middleware.Claims{Sub: "alice"})
 	req = req.WithContext(ctx)
 
@@ -197,14 +198,14 @@ func TestActorFromJWT_WithClaims(t *testing.T) {
 }
 
 func TestActorFromJWT_NoClaims(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/x", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/x", nil)
 	if got := actorFromJWT(req); got != "unknown" {
 		t.Errorf("expected unknown, got %q", got)
 	}
 }
 
 func TestActorFromJWT_EmptySub(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/x", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/x", nil)
 	ctx := middleware.ContextWithClaims(req.Context(), &middleware.Claims{Sub: ""})
 	req = req.WithContext(ctx)
 	if got := actorFromJWT(req); got != "unknown" {
@@ -255,7 +256,7 @@ func TestValidateAccessToken_AllSecretsFail(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func newRefreshRequest(body string) *http.Request {
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/refresh", bytes.NewBufferString(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/auth/refresh", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	return req
 }
@@ -355,7 +356,7 @@ func TestRefreshToken_AccessTokenRejected(t *testing.T) {
 
 func TestRevokeRefreshToken_NoBearer401(t *testing.T) {
 	h := NewAuth(zerolog.Nop(), testConfig("supersecret"))
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/auth/refresh", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/v1/auth/refresh", nil)
 	w := httptest.NewRecorder()
 	h.RevokeRefreshToken(w, req)
 	if w.Result().StatusCode != http.StatusUnauthorized {
@@ -365,7 +366,7 @@ func TestRevokeRefreshToken_NoBearer401(t *testing.T) {
 
 func TestRevokeRefreshToken_InvalidToken401(t *testing.T) {
 	h := NewAuth(zerolog.Nop(), testConfig("supersecret"))
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/auth/refresh", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/v1/auth/refresh", nil)
 	req.Header.Set("Authorization", "Bearer garbage.not.valid")
 	w := httptest.NewRecorder()
 	h.RevokeRefreshToken(w, req)
@@ -378,7 +379,7 @@ func TestRevokeRefreshToken_FirstRevokeThenIdempotent(t *testing.T) {
 	h := NewAuth(zerolog.Nop(), testConfig("supersecret"))
 	tok, _ := issueJWT("supersecret", "user-rev-1", "apiguard", "apiguard", "refresh", time.Hour)
 
-	req1 := httptest.NewRequest(http.MethodDelete, "/api/v1/auth/refresh", nil)
+	req1 := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/v1/auth/refresh", nil)
 	req1.Header.Set("Authorization", "Bearer "+tok)
 	w1 := httptest.NewRecorder()
 	h.RevokeRefreshToken(w1, req1)
@@ -387,7 +388,7 @@ func TestRevokeRefreshToken_FirstRevokeThenIdempotent(t *testing.T) {
 	}
 
 	// Second revocation of the same token should be idempotent (200, not 204).
-	req2 := httptest.NewRequest(http.MethodDelete, "/api/v1/auth/refresh", nil)
+	req2 := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/v1/auth/refresh", nil)
 	req2.Header.Set("Authorization", "Bearer "+tok)
 	w2 := httptest.NewRecorder()
 	h.RevokeRefreshToken(w2, req2)
@@ -414,7 +415,7 @@ func TestLogout_ValidTokenAddsToDenylist(t *testing.T) {
 	h := NewAuthWithDB(zerolog.Nop(), testConfig("supersecret"), nil, nil, nil, denylist)
 
 	tok, _ := issueJWT("supersecret", "user-1", "apiguard", "apiguard", "access", time.Hour)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/auth/logout", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
 	w := httptest.NewRecorder()
 	h.Logout(w, req)
@@ -429,7 +430,7 @@ func TestLogout_ValidTokenAddsToDenylist(t *testing.T) {
 
 func TestLogout_MissingBearer401(t *testing.T) {
 	h := NewAuth(zerolog.Nop(), testConfig("supersecret"))
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/auth/logout", nil)
 	w := httptest.NewRecorder()
 	h.Logout(w, req)
 	if w.Result().StatusCode != http.StatusUnauthorized {
@@ -439,7 +440,7 @@ func TestLogout_MissingBearer401(t *testing.T) {
 
 func TestLogout_InvalidToken401(t *testing.T) {
 	h := NewAuth(zerolog.Nop(), testConfig("supersecret"))
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/auth/logout", nil)
 	req.Header.Set("Authorization", "Bearer not-a-real-token")
 	w := httptest.NewRecorder()
 	h.Logout(w, req)
@@ -450,7 +451,7 @@ func TestLogout_InvalidToken401(t *testing.T) {
 
 func TestLogout_MissingJWTSecret503(t *testing.T) {
 	h := NewAuth(zerolog.Nop(), testConfig(""))
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/logout", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/auth/logout", nil)
 	req.Header.Set("Authorization", "Bearer x")
 	w := httptest.NewRecorder()
 	h.Logout(w, req)
@@ -465,7 +466,7 @@ func TestLogout_MissingJWTSecret503(t *testing.T) {
 
 func TestRotateSecret_NoProviderConfigured503(t *testing.T) {
 	h := NewAuth(zerolog.Nop(), testConfig("supersecret"))
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/rotate", bytes.NewBufferString(`{"new_secret":"01234567890123456789012345678901"}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/admin/auth/rotate", bytes.NewBufferString(`{"new_secret":"01234567890123456789012345678901"}`))
 	w := httptest.NewRecorder()
 	h.RotateSecret(w, req)
 	if w.Result().StatusCode != http.StatusServiceUnavailable {
@@ -476,7 +477,7 @@ func TestRotateSecret_NoProviderConfigured503(t *testing.T) {
 func TestRotateSecret_TooShortSecret422(t *testing.T) {
 	sp := middleware.NewSecretProvider("original-secret-that-is-long-enough")
 	h := NewAuthWithDB(zerolog.Nop(), testConfig("supersecret"), nil, nil, sp, nil)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/rotate", bytes.NewBufferString(`{"new_secret":"tooshort"}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/admin/auth/rotate", bytes.NewBufferString(`{"new_secret":"tooshort"}`))
 	w := httptest.NewRecorder()
 	h.RotateSecret(w, req)
 	if w.Result().StatusCode != http.StatusUnprocessableEntity {
@@ -487,7 +488,7 @@ func TestRotateSecret_TooShortSecret422(t *testing.T) {
 func TestRotateSecret_MalformedBody400(t *testing.T) {
 	sp := middleware.NewSecretProvider("original-secret-that-is-long-enough")
 	h := NewAuthWithDB(zerolog.Nop(), testConfig("supersecret"), nil, nil, sp, nil)
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/rotate", bytes.NewBufferString(`not json`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/admin/auth/rotate", bytes.NewBufferString(`not json`))
 	w := httptest.NewRecorder()
 	h.RotateSecret(w, req)
 	if w.Result().StatusCode != http.StatusBadRequest {
@@ -500,7 +501,7 @@ func TestRotateSecret_ValidRequestRotates(t *testing.T) {
 	h := NewAuthWithDB(zerolog.Nop(), testConfig("supersecret"), nil, nil, sp, nil)
 
 	newSecret := "brand-new-secret-that-is-long-enough-too"
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/auth/rotate", bytes.NewBufferString(`{"new_secret":"`+newSecret+`"}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/admin/auth/rotate", bytes.NewBufferString(`{"new_secret":"`+newSecret+`"}`))
 	w := httptest.NewRecorder()
 	h.RotateSecret(w, req)
 

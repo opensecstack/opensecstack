@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -26,7 +27,7 @@ func newTestAPIKeys(t *testing.T) *APIKeys {
 func TestAPIKeysList_InvalidPage(t *testing.T) {
 	h := newTestAPIKeys(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/api-keys?page=notanumber", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/api-keys?page=notanumber", nil)
 	rec := httptest.NewRecorder()
 
 	func() {
@@ -44,7 +45,7 @@ func TestAPIKeysList_InvalidPage(t *testing.T) {
 func TestAPIKeysList_NegativePage(t *testing.T) {
 	h := newTestAPIKeys(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/api-keys?page=-5", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/api-keys?page=-5", nil)
 	rec := httptest.NewRecorder()
 
 	func() {
@@ -62,7 +63,7 @@ func TestAPIKeysList_NegativePage(t *testing.T) {
 func TestAPIKeysList_ZeroPage(t *testing.T) {
 	h := newTestAPIKeys(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/api-keys?page=0", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/api-keys?page=0", nil)
 	rec := httptest.NewRecorder()
 
 	func() {
@@ -82,7 +83,7 @@ func TestAPIKeysList_ZeroPage(t *testing.T) {
 func TestAPIKeysCreate_MalformedJSON(t *testing.T) {
 	h := newTestAPIKeys(t)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/api-keys", strings.NewReader(`{not valid json`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/api-keys", strings.NewReader(`{not valid json`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.Create(rec, req)
@@ -97,7 +98,7 @@ func TestAPIKeysCreate_MalformedJSON(t *testing.T) {
 func TestAPIKeysCreate_EmptyBody(t *testing.T) {
 	h := newTestAPIKeys(t)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/api-keys", strings.NewReader(""))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/api-keys", strings.NewReader(""))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.Create(rec, req)
@@ -112,7 +113,7 @@ func TestAPIKeysCreate_EmptyBody(t *testing.T) {
 func TestAPIKeysCreate_NonObjectJSON(t *testing.T) {
 	h := newTestAPIKeys(t)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/api-keys", strings.NewReader(`["label","value"]`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/api-keys", strings.NewReader(`["label","value"]`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.Create(rec, req)
@@ -129,7 +130,7 @@ func TestAPIKeysCreate_NonObjectJSON(t *testing.T) {
 func TestAPIKeysRevoke_InvalidUUID(t *testing.T) {
 	h := newTestAPIKeys(t)
 
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/api-keys/not-a-uuid", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/v1/api-keys/not-a-uuid", nil)
 	req = injectChiID(req, "not-a-uuid")
 	rec := httptest.NewRecorder()
 	h.Revoke(rec, req)
@@ -145,7 +146,7 @@ func TestAPIKeysRevoke_MissingID(t *testing.T) {
 	h := newTestAPIKeys(t)
 
 	// No chi context injected — URLParam returns "".
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/api-keys/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/v1/api-keys/", nil)
 	rec := httptest.NewRecorder()
 	h.Revoke(rec, req)
 
@@ -160,7 +161,7 @@ func TestAPIKeysRevoke_GarbageUUID(t *testing.T) {
 	h := newTestAPIKeys(t)
 
 	badID := "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/api-keys/"+badID, nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/v1/api-keys/"+badID, nil)
 	req = injectChiID(req, badID)
 	rec := httptest.NewRecorder()
 	h.Revoke(rec, req)

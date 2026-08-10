@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,7 +9,7 @@ import (
 )
 
 func TestOpenAPI_StatusOK(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/openapi.json", nil)
 	w := httptest.NewRecorder()
 	OpenAPI(w, req)
 
@@ -18,7 +19,7 @@ func TestOpenAPI_StatusOK(t *testing.T) {
 }
 
 func TestOpenAPI_ContentTypeJSON(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/openapi.json", nil)
 	w := httptest.NewRecorder()
 	OpenAPI(w, req)
 
@@ -29,7 +30,7 @@ func TestOpenAPI_ContentTypeJSON(t *testing.T) {
 }
 
 func TestOpenAPI_ValidJSON(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/openapi.json", nil)
 	w := httptest.NewRecorder()
 	OpenAPI(w, req)
 
@@ -40,7 +41,7 @@ func TestOpenAPI_ValidJSON(t *testing.T) {
 }
 
 func TestOpenAPI_HasOpenapiKey(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/openapi.json", nil)
 	w := httptest.NewRecorder()
 	OpenAPI(w, req)
 

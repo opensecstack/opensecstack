@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,7 +14,7 @@ func TestHealthHandler_Health(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewHealth(logger)
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 	h.Health(w, req)
 
@@ -44,7 +45,7 @@ func TestHealthHandler_HealthResponseFields(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewHealth(logger)
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 	h.Health(w, req)
 
@@ -67,7 +68,7 @@ func TestHealthHandler_UptimeIsNonEmpty(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewHealth(logger)
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/health", nil)
 	w := httptest.NewRecorder()
 	h.Health(w, req)
 
@@ -93,7 +94,7 @@ func TestHealthHandler_Version(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewHealth(logger)
 
-	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/version", nil)
 	w := httptest.NewRecorder()
 	h.Version(w, req)
 
@@ -122,7 +123,7 @@ func TestHealthHandler_VersionHasGitCommit(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewHealth(logger)
 
-	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/version", nil)
 	w := httptest.NewRecorder()
 	h.Version(w, req)
 
@@ -140,7 +141,7 @@ func TestHealthHandler_VersionHasGoVersion(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewHealth(logger)
 
-	req := httptest.NewRequest(http.MethodGet, "/version", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/version", nil)
 	w := httptest.NewRecorder()
 	h.Version(w, req)
 

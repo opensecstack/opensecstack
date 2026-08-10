@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -18,7 +19,7 @@ func TestSpecsUpload_RawYAML(t *testing.T) {
 	h := NewSpecs(logger, t.TempDir())
 
 	yamlContent := "openapi: 3.0.0\ninfo:\n  title: Test\n  version: 1.0.0\npaths: {}\n"
-	req := httptest.NewRequest(http.MethodPost, "/specs/upload", strings.NewReader(yamlContent))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/specs/upload", strings.NewReader(yamlContent))
 	req.Header.Set("Content-Type", "text/plain")
 	w := httptest.NewRecorder()
 	h.Upload(w, req)
@@ -45,7 +46,7 @@ func TestSpecsUpload_RawJSON_ExtensionIsJSON(t *testing.T) {
 	h := NewSpecs(logger, t.TempDir())
 
 	jsonContent := `{"openapi":"3.0.0","info":{"title":"Test","version":"1.0.0"},"paths":{}}`
-	req := httptest.NewRequest(http.MethodPost, "/specs/upload", strings.NewReader(jsonContent))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/specs/upload", strings.NewReader(jsonContent))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.Upload(w, req)
@@ -84,7 +85,7 @@ func TestSpecsUpload_MultipartForm(t *testing.T) {
 	fw.Write([]byte(yamlContent))
 	mw.Close()
 
-	req := httptest.NewRequest(http.MethodPost, "/specs/upload", &buf)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/specs/upload", &buf)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	w := httptest.NewRecorder()
 	h.Upload(w, req)
@@ -108,7 +109,7 @@ func TestSpecsUpload_EmptyBody_Returns422(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewSpecs(logger, t.TempDir())
 
-	req := httptest.NewRequest(http.MethodPost, "/specs/upload", strings.NewReader(""))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/specs/upload", strings.NewReader(""))
 	req.Header.Set("Content-Type", "text/plain")
 	w := httptest.NewRecorder()
 	h.Upload(w, req)
@@ -126,7 +127,7 @@ func TestSpecsUpload_Deduplication(t *testing.T) {
 	yamlContent := "openapi: 3.0.0\ninfo:\n  title: Dedup Test\n  version: 1.0.0\npaths: {}\n"
 
 	doUpload := func() map[string]interface{} {
-		req := httptest.NewRequest(http.MethodPost, "/specs/upload", strings.NewReader(yamlContent))
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/specs/upload", strings.NewReader(yamlContent))
 		req.Header.Set("Content-Type", "text/plain")
 		w := httptest.NewRecorder()
 		h.Upload(w, req)
@@ -160,7 +161,7 @@ func TestSpecsUpload_FileExistsOnDisk(t *testing.T) {
 	h := NewSpecs(logger, dir)
 
 	yamlContent := "openapi: 3.0.0\ninfo:\n  title: Disk Test\n  version: 1.0.0\npaths: {}\n"
-	req := httptest.NewRequest(http.MethodPost, "/specs/upload", strings.NewReader(yamlContent))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/specs/upload", strings.NewReader(yamlContent))
 	req.Header.Set("Content-Type", "text/plain")
 	w := httptest.NewRecorder()
 	h.Upload(w, req)

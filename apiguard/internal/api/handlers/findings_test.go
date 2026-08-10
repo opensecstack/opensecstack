@@ -26,7 +26,7 @@ func TestFindingsList_InvalidSeverity(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewFindings(logger, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/findings?severity=invalid", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/findings?severity=invalid", nil)
 	rec := httptest.NewRecorder()
 	h.List(rec, req)
 
@@ -39,7 +39,7 @@ func TestFindingsList_InvalidStatus(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewFindings(logger, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/findings?status=invalid_status", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/findings?status=invalid_status", nil)
 	rec := httptest.NewRecorder()
 	h.List(rec, req)
 
@@ -52,7 +52,7 @@ func TestFindingsList_InvalidScanID(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewFindings(logger, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/findings?scan_id=not-a-uuid", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/findings?scan_id=not-a-uuid", nil)
 	rec := httptest.NewRecorder()
 	h.List(rec, req)
 
@@ -72,7 +72,7 @@ func TestFindingsList_ValidSeverities(t *testing.T) {
 		t.Run(sev, func(t *testing.T) {
 			h := NewFindings(logger, nil)
 
-			req := httptest.NewRequest(http.MethodGet, "/findings?severity="+sev, nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/findings?severity="+sev, nil)
 			rec := httptest.NewRecorder()
 
 			func() {
@@ -97,7 +97,7 @@ func TestFindingsList_ValidStatuses(t *testing.T) {
 		t.Run(st, func(t *testing.T) {
 			h := NewFindings(logger, nil)
 
-			req := httptest.NewRequest(http.MethodGet, "/findings?status="+st, nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/findings?status="+st, nil)
 			rec := httptest.NewRecorder()
 
 			func() {
@@ -118,7 +118,7 @@ func TestFindingsGet_InvalidUUID(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewFindings(logger, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/findings/not-a-uuid", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/findings/not-a-uuid", nil)
 	req = injectChiID(req, "not-a-uuid")
 	rec := httptest.NewRecorder()
 	h.Get(rec, req)
@@ -133,7 +133,7 @@ func TestFindingsGet_MissingID(t *testing.T) {
 	h := NewFindings(logger, nil)
 
 	// No chi route context injected — URLParam returns "".
-	req := httptest.NewRequest(http.MethodGet, "/findings/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/findings/", nil)
 	rec := httptest.NewRecorder()
 	h.Get(rec, req)
 
@@ -152,7 +152,7 @@ func TestFindingsUpdate_EmptyBody_Returns400WithCode(t *testing.T) {
 	h := NewFindings(logger, nil)
 
 	body := bytes.NewBufferString(`{}`)
-	req := httptest.NewRequest(http.MethodPatch, "/findings/"+validFindingID, body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/findings/"+validFindingID, body)
 	req.Header.Set("Content-Type", "application/json")
 	req = injectChiID(req, validFindingID)
 	rec := httptest.NewRecorder()
@@ -176,7 +176,7 @@ func TestFindingsUpdate_InvalidStatus_Returns422(t *testing.T) {
 	h := NewFindings(logger, nil)
 
 	payload := `{"status":"not_a_real_status"}`
-	req := httptest.NewRequest(http.MethodPatch, "/findings/"+validFindingID, strings.NewReader(payload))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/findings/"+validFindingID, strings.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req = injectChiID(req, validFindingID)
 	rec := httptest.NewRecorder()
@@ -202,7 +202,7 @@ func TestFindingsUpdate_NoteTooLong_Returns400(t *testing.T) {
 		"note":   longNote,
 	})
 
-	req := httptest.NewRequest(http.MethodPatch, "/findings/"+validFindingID, bytes.NewReader(payload))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/findings/"+validFindingID, bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req = injectChiID(req, validFindingID)
 	rec := httptest.NewRecorder()
@@ -221,7 +221,7 @@ func TestFindingsUpdate_MalformedJSON_Returns400(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewFindings(logger, nil)
 
-	req := httptest.NewRequest(http.MethodPatch, "/findings/"+validFindingID, strings.NewReader(`{not valid json`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/findings/"+validFindingID, strings.NewReader(`{not valid json`))
 	req.Header.Set("Content-Type", "application/json")
 	req = injectChiID(req, validFindingID)
 	rec := httptest.NewRecorder()
@@ -236,7 +236,7 @@ func TestFindingsUpdate_InvalidUUID_Returns400(t *testing.T) {
 	logger := zerolog.Nop()
 	h := NewFindings(logger, nil)
 
-	req := httptest.NewRequest(http.MethodPatch, "/findings/bad-id", strings.NewReader(`{"status":"open"}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/findings/bad-id", strings.NewReader(`{"status":"open"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req = injectChiID(req, "bad-id")
 	rec := httptest.NewRecorder()
@@ -261,7 +261,7 @@ func TestFindingsUpdate_ExactlyMaxNoteLength(t *testing.T) {
 		"note":   note,
 	})
 
-	req := httptest.NewRequest(http.MethodPatch, "/findings/"+validFindingID, bytes.NewReader(payload))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPatch, "/findings/"+validFindingID, bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	req = injectChiID(req, validFindingID)
 	rec := httptest.NewRecorder()

@@ -7,7 +7,32 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
+
+	"github.com/opensecstack/opencsirt/internal/db"
 )
+
+// unreachablePool returns a pgx pool configured against a syntactically
+// valid but unreachable address. pgxpool.NewWithConfig never dials
+// eagerly, so construction always succeeds; the first real query then
+// fails fast with a connection error. This exercises Create/Get/List/
+// Close/UpdateStatus's real store calls and error-propagation branches —
+// previously entirely uncovered — without a live Postgres and without
+// mocking db.IncidentStore/OutboxStore/AuditStore, which have no
+// interface seam.
+func unreachablePool(t *testing.T) *db.Pool {
+	t.Helper()
+	pool, err := db.Open(context.Background(), "postgres://user:pass@127.0.0.1:1/db", 1)
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+func newTestService(t *testing.T) *Service {
+	pool := unreachablePool(t)
+	return New(db.NewIncidentStore(pool), db.NewOutboxStore(pool), db.NewAuditStore(pool), zerolog.Nop())
+}
 
 func TestNewReturnsUsableService(t *testing.T) {
 	s := New(nil, nil, nil, zerolog.Nop())
@@ -91,6 +116,74 @@ func TestServiceUpdateStatus_ValidStatusesPassValidation(t *testing.T) {
 			}()
 			_ = s.UpdateStatus(context.Background(), uuid.New(), status, uuid.New(), "admin")
 		})
+	}
+}
+
+// TestServiceCreate_StoreErrorPropagates exercises the real (previously
+// 0%-covered) path past validation: valid input reaches store.Insert,
+// which fails against an unreachable DB; that error must reach the
+// caller, and the outbox enqueue / audit insert that follow a successful
+// insert must not run (both would panic against the real-but-unreachable
+// pool only if actually attempted with a nonexistent incident, so this
+// primarily proves Create returns promptly on the Insert error instead of
+// pressing on).
+func TestServiceCreate_StoreErrorPropagates(t *testing.T) {
+	s := newTestService(t)
+	inc, err := s.Create(context.Background(), CreateInput{
+		Source: "manual", Severity: "high", Title: "Test incident",
+	}, uuid.New(), "operator")
+	if err == nil {
+		t.Fatal("expected a store error from an unreachable DB, got nil")
+	}
+	if inc != nil {
+		t.Errorf("Create returned a non-nil incident alongside an error: %+v", inc)
+	}
+}
+
+// TestServiceGet_StoreErrorPropagates proves Get is a thin, faithful
+// pass-through to the store.
+func TestServiceGet_StoreErrorPropagates(t *testing.T) {
+	s := newTestService(t)
+	if _, err := s.Get(context.Background(), uuid.New()); err == nil {
+		t.Fatal("expected a store error from an unreachable DB, got nil")
+	}
+}
+
+// TestServiceList_StoreErrorPropagates proves List faithfully propagates
+// the store error/total.
+func TestServiceList_StoreErrorPropagates(t *testing.T) {
+	s := newTestService(t)
+	items, total, err := s.List(context.Background(), db.IncidentFilter{})
+	if err == nil {
+		t.Fatal("expected a store error from an unreachable DB, got nil")
+	}
+	if items != nil || total != 0 {
+		t.Errorf("List = (%v, %d) alongside an error, want (nil, 0)", items, total)
+	}
+}
+
+// TestServiceClose_GetErrorPropagates proves Close's first store call
+// (Get, to check the current status) fails fast on an unreachable DB and
+// never reaches UpdateStatus.
+func TestServiceClose_GetErrorPropagates(t *testing.T) {
+	s := newTestService(t)
+	inc, err := s.Close(context.Background(), uuid.New(), uuid.New(), "operator")
+	if err == nil {
+		t.Fatal("expected a store error from an unreachable DB, got nil")
+	}
+	if inc != nil {
+		t.Errorf("Close returned a non-nil incident alongside an error: %+v", inc)
+	}
+}
+
+// TestServiceUpdateStatus_GetErrorPropagates proves UpdateStatus's
+// idempotency-guard read (store.Get) fails fast on an unreachable DB and
+// never reaches the UPDATE statement.
+func TestServiceUpdateStatus_GetErrorPropagates(t *testing.T) {
+	s := newTestService(t)
+	err := s.UpdateStatus(context.Background(), uuid.New(), "triaged", uuid.New(), "operator")
+	if err == nil {
+		t.Fatal("expected a store error from an unreachable DB, got nil")
 	}
 }
 

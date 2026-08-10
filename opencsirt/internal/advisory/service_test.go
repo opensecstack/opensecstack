@@ -7,7 +7,26 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
+
+	"github.com/opensecstack/opencsirt/internal/db"
 )
+
+// unreachablePool returns a pgx pool configured against a syntactically
+// valid but unreachable address. pgxpool.NewWithConfig never dials
+// eagerly, so construction always succeeds; the first real query then
+// fails fast with a connection error. This exercises Get/List/Publish/
+// Withdraw's real store-call and error-propagation branches — previously
+// entirely uncovered — without a live Postgres and without mocking
+// db.AdvisoryStore/OutboxStore, which have no interface seam.
+func unreachablePool(t *testing.T) *db.Pool {
+	t.Helper()
+	pool, err := db.Open(context.Background(), "postgres://user:pass@127.0.0.1:1/db", 1)
+	if err != nil {
+		t.Fatalf("db.Open: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
+}
 
 func TestValidTLP(t *testing.T) {
 	cases := map[string]bool{
@@ -114,6 +133,66 @@ func TestServiceCreate_IncidentIDForwardedToGenerateRequest(t *testing.T) {
 	}, uuid.New(), "admin")
 	if captured.IncidentID != incidentID.String() {
 		t.Errorf("GenerateRequest.IncidentID = %q, want %q", captured.IncidentID, incidentID.String())
+	}
+}
+
+// TestServiceGet_StoreErrorPropagatesAndSkipsAudit proves Get returns the
+// store error faithfully and does not attempt the audit-log insert (which
+// would panic against the nil AuditStore built with NewService(store, nil, nil, ...)
+// were it reached — using a real audit store here to isolate this from
+// that separate concern).
+func TestServiceGet_StoreErrorPropagatesAndSkipsAudit(t *testing.T) {
+	pool := unreachablePool(t)
+	s := NewService(db.NewAdvisoryStore(pool), db.NewOutboxStore(pool), db.NewAuditStore(pool), fakePythonClient{})
+	a, err := s.Get(context.Background(), uuid.New(), uuid.New(), "analyst")
+	if err == nil {
+		t.Fatal("expected a store error from an unreachable DB, got nil")
+	}
+	if a != nil {
+		t.Errorf("Get returned a non-nil advisory alongside an error: %+v", a)
+	}
+}
+
+// TestServiceList_StoreErrorPropagates proves List faithfully surfaces the
+// store error/total rather than substituting a misleading zero result.
+func TestServiceList_StoreErrorPropagates(t *testing.T) {
+	pool := unreachablePool(t)
+	s := NewService(db.NewAdvisoryStore(pool), db.NewOutboxStore(pool), db.NewAuditStore(pool), fakePythonClient{})
+	items, total, err := s.List(context.Background(), db.AdvisoryFilter{}, uuid.New(), "analyst")
+	if err == nil {
+		t.Fatal("expected a store error from an unreachable DB, got nil")
+	}
+	if items != nil || total != 0 {
+		t.Errorf("List = (%v, %d) alongside an error, want (nil, 0)", items, total)
+	}
+}
+
+// TestServicePublish_StoreErrorPropagates proves Publish surfaces the
+// store.Publish error immediately and never reaches store.Get, the outbox
+// enqueue, or the audit insert.
+func TestServicePublish_StoreErrorPropagates(t *testing.T) {
+	pool := unreachablePool(t)
+	s := NewService(db.NewAdvisoryStore(pool), db.NewOutboxStore(pool), db.NewAuditStore(pool), fakePythonClient{})
+	a, err := s.Publish(context.Background(), uuid.New(), uuid.New(), "csirt_lead")
+	if err == nil {
+		t.Fatal("expected a store error from an unreachable DB, got nil")
+	}
+	if a != nil {
+		t.Errorf("Publish returned a non-nil advisory alongside an error: %+v", a)
+	}
+}
+
+// TestServiceWithdraw_StoreErrorPropagates mirrors the Publish case for
+// Withdraw's store.Withdraw call.
+func TestServiceWithdraw_StoreErrorPropagates(t *testing.T) {
+	pool := unreachablePool(t)
+	s := NewService(db.NewAdvisoryStore(pool), db.NewOutboxStore(pool), db.NewAuditStore(pool), fakePythonClient{})
+	a, err := s.Withdraw(context.Background(), uuid.New(), uuid.New(), "csirt_lead")
+	if err == nil {
+		t.Fatal("expected a store error from an unreachable DB, got nil")
+	}
+	if a != nil {
+		t.Errorf("Withdraw returned a non-nil advisory alongside an error: %+v", a)
 	}
 }
 

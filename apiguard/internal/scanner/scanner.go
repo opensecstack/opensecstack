@@ -126,10 +126,14 @@ func init() {
 		"fe80::/10",
 	}
 	for _, cidr := range cidrs {
-		_, network, _ := net.ParseCIDR(cidr)
-		if network != nil {
-			privateNetworks = append(privateNetworks, network)
+		// These CIDRs are hardcoded constants that back the SSRF private-range
+		// check; a typo here would silently weaken that protection, so fail
+		// loudly at startup instead of swallowing the error.
+		_, network, err := net.ParseCIDR(cidr)
+		if err != nil {
+			panic(fmt.Sprintf("scanner: invalid hardcoded private CIDR %q: %v", cidr, err))
 		}
+		privateNetworks = append(privateNetworks, network)
 	}
 }
 
@@ -148,7 +152,10 @@ func isNumericHost(host string) bool {
 		return false
 	}
 	for _, c := range host {
-		if !((c >= '0' && c <= '9') || c == 'x' || c == 'X' || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || c == '.') {
+		isDigit := c >= '0' && c <= '9'
+		isHexLetter := (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+		isSeparator := c == 'x' || c == 'X' || c == '.'
+		if !isDigit && !isHexLetter && !isSeparator {
 			return false
 		}
 	}
@@ -171,7 +178,7 @@ func CreatePinnedTransport(validatedHost string, validatedIPs []net.IP, tlsSkipV
 			}
 			return (&net.Dialer{Timeout: 30 * time.Second}).DialContext(ctx, network, addr)
 		},
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: tlsSkipVerify},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: tlsSkipVerify}, //nolint:gosec // explicit caller opt-in for scanning targets with self-signed/internal certs, same convention as internal/modules/module.go
 	}
 }
 
@@ -305,7 +312,11 @@ func validateParserBin(binPath string) error {
 
 	// If it's an absolute path, verify the file exists and is executable.
 	if filepath.IsAbs(binPath) {
-		info, err := os.Stat(binPath)
+		// binPath is either the hardcoded default "apiguard-parser" or the
+		// operator-configured APIGUARD_PARSER_BIN env var (trusted process
+		// config, not request input), and shell metacharacters were already
+		// rejected above.
+		info, err := os.Stat(binPath) //nolint:gosec // trusted operator config, see comment above
 		if err != nil {
 			return fmt.Errorf("parser binary not found at %q: %w", binPath, err)
 		}
@@ -578,7 +589,11 @@ func (s *Scanner) parseSpec(ctx context.Context, specPath string) (*ParsedSpec, 
 		return nil, fmt.Errorf("parser binary validation failed: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, parserBin, "parse", "--input", specPath, "--output", outputPath)
+	// parserBin was validated above (no shell metacharacters, resolved via trusted
+	// operator config); specPath was already sanitized by validateSpecPath and
+	// outputPath is an internally generated temp path. Args are passed as a
+	// structured exec.Cmd argument list, so there is no shell to inject into.
+	cmd := exec.CommandContext(ctx, parserBin, "parse", "--input", specPath, "--output", outputPath) //nolint:gosec // args are structured/validated, see comment above
 	cmd.Stderr = os.Stderr
 
 	s.logger.Debug().

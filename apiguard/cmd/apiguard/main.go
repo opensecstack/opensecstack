@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -80,10 +81,19 @@ func serverCmd() *cobra.Command {
 	cmd.Flags().String("redis-url", "", "Redis connection string")
 	cmd.Flags().String("jwt-secret", "", "secret used to sign JWT tokens")
 
-	_ = viper.BindPFlag("port", cmd.Flags().Lookup("port"))
-	_ = viper.BindPFlag("db.url", cmd.Flags().Lookup("db-url"))
-	_ = viper.BindPFlag("redis.url", cmd.Flags().Lookup("redis-url"))
-	_ = viper.BindPFlag("auth.jwt_secret", cmd.Flags().Lookup("jwt-secret"))
+	// BindPFlag only fails if the named flag was never registered above (a
+	// programmer error, e.g. a typo), so fail fast at startup rather than
+	// silently running with CLI flag overrides that never take effect.
+	for _, b := range []struct{ key, flag string }{
+		{"port", "port"},
+		{"db.url", "db-url"},
+		{"redis.url", "redis-url"},
+		{"auth.jwt_secret", "jwt-secret"},
+	} {
+		if err := viper.BindPFlag(b.key, cmd.Flags().Lookup(b.flag)); err != nil {
+			log.Fatal().Err(err).Str("flag", b.flag).Msg("failed to bind CLI flag to config key")
+		}
+	}
 
 	return cmd
 }
@@ -361,7 +371,22 @@ func initConfig(cfgFile string) {
 		viper.AddConfigPath("$HOME/.apiguard")
 		viper.AddConfigPath("/etc/apiguard")
 	}
-	_ = viper.ReadInConfig()
+	if err := viper.ReadInConfig(); err != nil {
+		var notFound viper.ConfigFileNotFoundError
+		switch {
+		case errors.As(err, &notFound):
+			// No config file in any search path — config comes entirely from
+			// flags/env/defaults, which is a normal, supported mode.
+		case cfgFile != "":
+			// The user explicitly pointed at a config file with --config; if it
+			// can't be read/parsed that is a real misconfiguration, not silence.
+			log.Fatal().Err(err).Str("config", cfgFile).Msg("failed to read config file")
+		default:
+			// A config file was found on the search path but failed to parse
+			// (e.g. invalid YAML); warn rather than silently running on defaults.
+			log.Warn().Err(err).Msg("found a config file but failed to parse it; continuing with flags/env/defaults")
+		}
+	}
 }
 
 func initLogger() {

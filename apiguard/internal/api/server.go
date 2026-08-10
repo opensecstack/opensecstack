@@ -195,7 +195,15 @@ func (s *Server) Router() chi.Router {
 func (s *Server) setupMiddleware() {
 	s.router.Use(middleware.CorrelationID) // must be first so all subsequent middleware can read the correlation ID
 	s.router.Use(chimw.RequestID)
-	s.router.Use(chimw.RealIP)
+	// Deliberately NOT using chimw.RealIP: it unconditionally trusts XFF/X-Real-IP
+	// from any peer and rewrites r.RemoteAddr in place, which lets a direct,
+	// non-proxied attacker spoof their reported IP and poisons every downstream
+	// consumer of r.RemoteAddr (rate limiters, auth logging) before they get a
+	// chance to apply their own trusted-proxy allowlist. See GHSA-3fxj-6jh8-hvhx,
+	// GHSA-rjr7-jggh-pgcp, GHSA-9g5q-2w5x-hmxf. Instead, r.RemoteAddr is left as
+	// the real TCP peer address, and middleware.ClientIPFromRequest(WithDepth)
+	// resolves the client IP itself, only trusting XFF/X-Real-IP when the direct
+	// peer is in the configured trusted-proxy CIDRs.
 	s.router.Use(middleware.RequestLogger(s.logger, middleware.ParseTrustedProxyCIDRs(s.config.RateLimit.TrustedProxies), s.config.RateLimit.TrustedProxyDepth))
 	s.router.Use(chimw.Recoverer)
 	s.router.Use(chimw.Timeout(60 * time.Second))

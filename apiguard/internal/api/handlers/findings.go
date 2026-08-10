@@ -25,7 +25,7 @@ func (f *Findings) auditLog(ctx context.Context, action db.AuditAction, resource
 		actorID = claims.Sub
 		actorType = "user"
 	}
-	metaJSON, _ := json.Marshal(meta)
+	metaJSON, _ := json.Marshal(meta) //nolint:errcheck // meta is always a literal map of JSON-safe types built by call sites in this package
 	entry := &db.AuditLog{
 		ActorID:      actorID,
 		ActorType:    actorType,

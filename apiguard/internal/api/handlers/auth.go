@@ -223,7 +223,7 @@ func jwtBase64(data []byte) string {
 // Ping handles GET /api/v1/auth/token.
 // Returns usage instructions for the token endpoint.
 func (a *Auth) Ping(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]interface{}{ //nolint:gosec // "hint" is a usage-instructions string, not a hardcoded credential
 		"hint":       "POST /api/v1/auth/token with {\"api_key\":\"<your-key>\"} to obtain a Bearer token",
 		"token_type": "HS256 JWT",
 		"algorithms": []string{"HS256"},

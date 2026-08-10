@@ -25,7 +25,7 @@ func NewAudit(logger zerolog.Logger, database *db.DB) *Audit {
 }
 
 // List handles GET /api/v1/audit.
-// Query params: actor_id, action, resource_id, resource_type, page, per_page
+// Query params: actor_id, action, resource_id, resource_type, page, per_page.
 func (a *Audit) List(w http.ResponseWriter, r *http.Request) {
 	page, perPage := parsePagination(r, 1, 50, 100)
 

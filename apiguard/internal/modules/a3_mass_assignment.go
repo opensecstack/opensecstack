@@ -247,7 +247,7 @@ func diffResponseBodies(baseline, attack []byte) []string {
 			changed = append(changed, key)
 			continue
 		}
-		b1, _ := json.Marshal(baseVal) //nolint:errcheck // baseVal was itself decoded from JSON; re-marshal cannot fail
+		b1, _ := json.Marshal(baseVal)   //nolint:errcheck // baseVal was itself decoded from JSON; re-marshal cannot fail
 		b2, _ := json.Marshal(attackVal) //nolint:errcheck // attackVal was itself decoded from JSON; re-marshal cannot fail
 		if !bytes.Equal(b1, b2) {
 			changed = append(changed, key)
@@ -277,7 +277,7 @@ func findReflectedFieldsInBody(responseBody []byte, injectedFields map[string]in
 			continue
 		}
 		expJSON, _ := json.Marshal(expectedValue) //nolint:errcheck // expectedValue was itself decoded from JSON; re-marshal cannot fail
-		actJSON, _ := json.Marshal(actual) //nolint:errcheck // actual was itself decoded from JSON; re-marshal cannot fail
+		actJSON, _ := json.Marshal(actual)        //nolint:errcheck // actual was itself decoded from JSON; re-marshal cannot fail
 		if string(expJSON) == string(actJSON) {
 			reflected = append(reflected, fieldName)
 		}

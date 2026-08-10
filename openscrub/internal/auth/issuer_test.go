@@ -57,3 +57,33 @@ func TestIssuerRefusesEmptySecret(t *testing.T) {
 		t.Fatalf("expected no-secret error, got %v", err)
 	}
 }
+
+// TestNewIssuerDefaultsTTLWhenNonPositive proves the documented
+// "ttl<=0 -> 1h" fallback: a caller passing a zero or negative TTL
+// (e.g. an unset env-var parsed as 0) still gets a token that expires
+// in the future, not an immediately-expired one.
+func TestNewIssuerDefaultsTTLWhenNonPositive(t *testing.T) {
+	for _, ttl := range []time.Duration{0, -time.Minute} {
+		iss := NewIssuer("s", "openscrub", ttl)
+		_, exp, err := iss.Mint("u", RoleAdmin)
+		if err != nil {
+			t.Fatalf("ttl=%v: Mint: %v", ttl, err)
+		}
+		// Must be close to now+1h, not now+ttl (which would be in the
+		// past or exactly now).
+		wantMin := time.Now().Add(55 * time.Minute)
+		if exp.Before(wantMin) {
+			t.Fatalf("ttl=%v: exp=%v, want >= %v (1h default)", ttl, exp, wantMin)
+		}
+	}
+}
+
+// TestCredentialStoreVerifyRejectsMalformedStoredHash proves a
+// corrupt (non-hex) hash in the credential store fails closed rather
+// than panicking on hex.DecodeString or comparing garbage bytes.
+func TestCredentialStoreVerifyRejectsMalformedStoredHash(t *testing.T) {
+	store := NewCredentialStore("p", "alice:operator:not-valid-hex!!")
+	if _, err := store.Verify("alice", "whatever"); err == nil {
+		t.Fatal("expected error for malformed stored hash")
+	}
+}

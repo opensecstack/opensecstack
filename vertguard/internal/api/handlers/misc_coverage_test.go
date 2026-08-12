@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -339,7 +338,7 @@ func TestScan_GenericScannerError_Returns500(t *testing.T) {
 }
 
 func TestScan_InputTooLargeError_Returns413(t *testing.T) {
-	h := &PromptHandler{Scanner: &fakeScanner{err: &prompt.InputTooLargeError{Limit: 10, Actual: 20}}}
+	h := &PromptHandler{Scanner: &fakeScanner{err: &prompt.InputTooLargeError{Max: 10, Seen: 20}}}
 	w := httptest.NewRecorder()
 	h.Scan(w, newReq(t, map[string]string{"input": "hello"}))
 	if w.Code != http.StatusRequestEntityTooLarge {

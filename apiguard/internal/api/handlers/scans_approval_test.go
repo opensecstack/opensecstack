@@ -185,9 +185,12 @@ func TestApprove_InvalidUUID(t *testing.T) {
 
 func approvalTestDB(t *testing.T) *db.DB {
 	t.Helper()
-	u := os.Getenv("TEST_DB_URL")
+	u := os.Getenv("DATABASE_URL")
 	if u == "" {
-		t.Skip("TEST_DB_URL not set — skipping DB integration test")
+		u = os.Getenv("TEST_DB_URL")
+	}
+	if u == "" {
+		t.Skip("DATABASE_URL/TEST_DB_URL not set — skipping DB integration test")
 	}
 	d, err := db.New(context.Background(), u)
 	if err != nil {

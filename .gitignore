@@ -77,6 +77,8 @@ lcov.info
 # profiles from local/agent coverage runs — coverage.out alone above
 # doesn't catch these prefixed/suffixed variants)
 coverage_*.out
+*_coverage.out
+*_cov.out
 cov.out
 coverage*.xml
 

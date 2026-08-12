@@ -424,7 +424,19 @@ func (s *Scanner) Run(ctx context.Context, req ScanRequest) (*domain.ScanResult,
 	// Step 4: Execute scan modules against the test suite.
 
 	// Build the HTTP executor using the pinned transport (prevents DNS rebinding).
-	httpExec := modules.NewDefaultExecutor(s.transport, 30*time.Second)
+	// s.transport is a typed *http.Transport that stays nil when target
+	// validation didn't produce pinned IPs (e.g. AllowInternal targets skip
+	// DNS pinning). Passing a nil *http.Transport directly as the
+	// http.RoundTripper interface parameter would NOT compare equal to a nil
+	// interface inside NewDefaultExecutor (typed-nil-in-interface), leaving a
+	// nil transport on the http.Client and panicking on the first request.
+	// Only forward it when it's actually set, so NewDefaultExecutor's own
+	// nil check falls back to http.DefaultTransport correctly.
+	var roundTripper http.RoundTripper
+	if s.transport != nil {
+		roundTripper = s.transport
+	}
+	httpExec := modules.NewDefaultExecutor(roundTripper, 30*time.Second)
 
 	// Build the auth config for modules from the scan request credentials.
 	// Generate a synthetic "other user" JWT so BOLA cross-user tests can run

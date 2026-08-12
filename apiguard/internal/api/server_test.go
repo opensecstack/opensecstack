@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -81,7 +82,7 @@ func TestNewServer_ConstructsWithAllDependencies(t *testing.T) {
 }
 
 // TestNewServer_SinauthDisabledByDefault verifies that when
-// cfg.Auth.SinauthURL is empty (the default), no sinauth client is created —
+// cfg.Auth.SinauthURL is empty (the default), no sinauth client is created --
 // only HS256 tokens are accepted.
 func TestNewServer_SinauthDisabledByDefault(t *testing.T) {
 	s, cleanup := newTestServer(t)
@@ -93,7 +94,7 @@ func TestNewServer_SinauthDisabledByDefault(t *testing.T) {
 }
 
 // TestNewServer_SinauthInvalidURLIsNonFatal verifies that a malformed
-// sinauth_url does not stop server construction — it logs a warning and
+// sinauth_url does not stop server construction -- it logs a warning and
 // continues without RS256 support.
 func TestNewServer_SinauthInvalidURLIsNonFatal(t *testing.T) {
 	cfg := &config.Config{}
@@ -136,34 +137,34 @@ func TestServer_Router(t *testing.T) {
 		t.Fatal("Router() did not return the server's internal router")
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	// /version does not touch the DB pool, unlike /health, so it is safe to
+	// call against a Server built with a DB handle that has no live pool.
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/version", nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
-		t.Errorf("GET /api/v1/health through Router(): got status %d, want %d", rr.Code, http.StatusOK)
+		t.Errorf("GET /api/v1/version through Router(): got status %d, want %d", rr.Code, http.StatusOK)
 	}
 }
 
 // TestServer_SetupMiddleware_SecurityHeaders verifies that the middleware
-// chain wired by setupMiddleware actually runs on every request — using the
+// chain wired by setupMiddleware actually runs on every request -- using the
 // presence of a security header set by middleware.SecurityHeaders as the
 // probe, since that middleware has no other externally visible effect.
 func TestServer_SetupMiddleware_SecurityHeaders(t *testing.T) {
 	s, cleanup := newTestServer(t)
 	defer cleanup()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/version", nil)
 	rr := httptest.NewRecorder()
 	s.router.ServeHTTP(rr, req)
 
 	if rr.Header().Get("X-Content-Type-Options") == "" {
 		t.Error("expected SecurityHeaders middleware to set X-Content-Type-Options")
 	}
-	// chimw.RequestID / correlation ID middleware should stamp a request id
-	// header via the logger chain; at minimum the request must not fail.
-	if rr.Code == http.StatusInternalServerError {
-		t.Errorf("unexpected 500 from middleware chain: %s", rr.Body.String())
+	if rr.Code != http.StatusOK {
+		t.Errorf("unexpected status %d from middleware chain: %s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -179,7 +180,7 @@ func TestServer_SetupMiddleware_GlobalRateLimiterDefault(t *testing.T) {
 		t.Fatal("globalLimiter was not initialised")
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/version", nil)
 	rr := httptest.NewRecorder()
 	s.router.ServeHTTP(rr, req)
 
@@ -204,7 +205,7 @@ func TestServer_RegisterRoutes_LimitersConfigured(t *testing.T) {
 	// Protected route must require auth (proves RegisterRoutes wired the JWT
 	// middleware using the limiters/secret provider/denylist constructed by
 	// registerRoutes).
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/scans", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/scans", nil)
 	rr := httptest.NewRecorder()
 	s.router.ServeHTTP(rr, req)
 	if rr.Code != http.StatusUnauthorized {
@@ -218,10 +219,11 @@ func TestServer_RegisterRoutes_LimitersConfigured(t *testing.T) {
 // depending on OS signal delivery, which is not reliably testable across
 // platforms.
 func TestServer_Start_ListenError(t *testing.T) {
-	// Reserve a wildcard-address TCP port — the same address form Start()
-	// binds to (":<port>") — so the server's ListenAndServe fails immediately
+	// Reserve a wildcard-address TCP port -- the same address form Start()
+	// binds to (":<port>") -- so the server's ListenAndServe fails immediately
 	// with "address already in use" rather than racing on address scope.
-	ln, err := net.Listen("tcp", ":0")
+	var lc net.ListenConfig
+	ln, err := lc.Listen(context.Background(), "tcp", ":0")
 	if err != nil {
 		t.Fatalf("failed to reserve a port: %v", err)
 	}

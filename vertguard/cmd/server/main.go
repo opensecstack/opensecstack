@@ -324,52 +324,7 @@ func main() {
 		iocStore := iocpkg.NewStore(store.Pool)
 		threatFeedH.Store = iocStore
 
-		var sources []iocpkg.SourceSpec
-		if cfg.IOC.MISPURL != "" {
-			auth := cfg.IOC.MISPToken
-			if auth != "" && !strings.HasPrefix(auth, "Bearer ") {
-				auth = "Bearer " + auth
-			}
-			sources = append(sources, iocpkg.SourceSpec{
-				Source:   iocpkg.MISPSource{URL: cfg.IOC.MISPURL, AuthHeader: auth},
-				Interval: cfg.IOC.Interval,
-			})
-		}
-		if cfg.IOC.AbuseChEnabled {
-			sources = append(sources, iocpkg.SourceSpec{
-				Source: iocpkg.AbuseChSource{
-					URL:     cfg.IOC.AbuseChURLs,
-					HashURL: cfg.IOC.AbuseChHashes,
-				},
-				Interval: cfg.IOC.Interval,
-			})
-		}
-		for _, sc := range cfg.IOC.Sources {
-			if !sc.Enabled {
-				continue
-			}
-			interval := sc.Interval
-			if interval <= 0 {
-				interval = cfg.IOC.Interval
-			}
-			switch sc.Type {
-			case "misp":
-				sources = append(sources, iocpkg.SourceSpec{
-					Source:   iocpkg.MISPSource{NameTag: sc.Name, URL: sc.URL, AuthHeader: sc.AuthHeader},
-					Interval: interval,
-				})
-			case "abusech":
-				sources = append(sources, iocpkg.SourceSpec{
-					Source:   iocpkg.AbuseChSource{NameTag: sc.Name, URL: sc.URL, HashURL: sc.HashURL},
-					Interval: interval,
-				})
-			case "file":
-				sources = append(sources, iocpkg.SourceSpec{
-					Source:   iocpkg.FileSource{NameTag: sc.Name, Path: sc.Path},
-					Interval: interval,
-				})
-			}
-		}
+		sources := buildIOCSources(cfg.IOC)
 
 		puller := iocpkg.New(iocpkg.PullerConfig{
 			Store:         iocStore,
@@ -407,15 +362,7 @@ func main() {
 	// ── ThreatFlow webhook publisher (VG-006) ────────────────────
 	var webhookAdmin *handlers.WebhookAdminHandler
 	if cfg.ThreatFlow.APIURL != "" {
-		var seed []webhook.Subscriber
-		if cfg.ThreatFlow.WebhookSecret != "" {
-			seed = append(seed, webhook.Subscriber{
-				ID:         "default",
-				URL:        cfg.ThreatFlow.APIURL,
-				HMACSecret: cfg.ThreatFlow.WebhookSecret,
-				Active:     true,
-			})
-		}
+		seed := buildThreatflowSeed(cfg.ThreatFlow.APIURL, cfg.ThreatFlow.WebhookSecret)
 		pub := webhook.New(logger, metrics.NewThreatFlowMetricsAdapter(mreg), seed)
 		webhookAdmin = handlers.NewWebhookAdminHandler(pub)
 		logger.Info().Int("seed_subscribers", len(seed)).Msg("ThreatFlow webhook publisher enabled")
@@ -642,10 +589,7 @@ func main() {
 	// stop accepting connections. Existing in-flight requests still
 	// complete during srv.Shutdown's grace window.
 	handlers.Ready.Store(false)
-	drainGrace := cfg.Server.DrainGrace
-	if drainGrace <= 0 {
-		drainGrace = 5 * time.Second
-	}
+	drainGrace := effectiveDrainGrace(cfg.Server.DrainGrace)
 	logger.Info().Dur("drain_grace", drainGrace).Msg("readiness flipped off; awaiting LB drain")
 	time.Sleep(drainGrace)
 
@@ -666,4 +610,102 @@ func main() {
 	defer logger.Info().Msg("drain complete")
 
 	logger.Info().Msg("vertguard stopped cleanly")
+}
+
+// ── extracted pure helpers ──────────────────────────────────────────
+//
+// These carry no network/DB/server dependency so they can be unit
+// tested directly, following the pattern used across the ecosystem
+// (see securelab/cmd/server/main.go's runMigrations/sqlExecer split):
+// pull the decision logic out of main() into small, deterministic
+// functions and leave main() itself as thin wiring.
+
+// buildIOCSources composes the VG-006 IOC puller source list from the
+// IOC config: the two convenience env-var-driven sources (MISP,
+// abuse.ch) plus any explicitly declared YAML sources, honouring each
+// source's own interval override (falling back to the global one).
+func buildIOCSources(cfg config.IOCConfig) []iocpkg.SourceSpec {
+	var sources []iocpkg.SourceSpec
+
+	if cfg.MISPURL != "" {
+		sources = append(sources, iocpkg.SourceSpec{
+			Source:   iocpkg.MISPSource{URL: cfg.MISPURL, AuthHeader: mispAuthHeader(cfg.MISPToken)},
+			Interval: cfg.Interval,
+		})
+	}
+	if cfg.AbuseChEnabled {
+		sources = append(sources, iocpkg.SourceSpec{
+			Source: iocpkg.AbuseChSource{
+				URL:     cfg.AbuseChURLs,
+				HashURL: cfg.AbuseChHashes,
+			},
+			Interval: cfg.Interval,
+		})
+	}
+	for _, sc := range cfg.Sources {
+		if !sc.Enabled {
+			continue
+		}
+		interval := sc.Interval
+		if interval <= 0 {
+			interval = cfg.Interval
+		}
+		switch sc.Type {
+		case "misp":
+			sources = append(sources, iocpkg.SourceSpec{
+				Source:   iocpkg.MISPSource{NameTag: sc.Name, URL: sc.URL, AuthHeader: sc.AuthHeader},
+				Interval: interval,
+			})
+		case "abusech":
+			sources = append(sources, iocpkg.SourceSpec{
+				Source:   iocpkg.AbuseChSource{NameTag: sc.Name, URL: sc.URL, HashURL: sc.HashURL},
+				Interval: interval,
+			})
+		case "file":
+			sources = append(sources, iocpkg.SourceSpec{
+				Source:   iocpkg.FileSource{NameTag: sc.Name, Path: sc.Path},
+				Interval: interval,
+			})
+		}
+	}
+	return sources
+}
+
+// mispAuthHeader normalises a raw MISP API token into an Authorization
+// header value: pass through anything already prefixed with "Bearer ",
+// otherwise prepend it. Empty tokens stay empty.
+func mispAuthHeader(token string) string {
+	if token == "" {
+		return ""
+	}
+	if strings.HasPrefix(token, "Bearer ") {
+		return token
+	}
+	return "Bearer " + token
+}
+
+// buildThreatflowSeed builds the initial ThreatFlow webhook subscriber
+// seed list. A seed subscriber is only created when a secret is
+// configured — without it there is nothing to HMAC-sign outbound
+// pushes with, so publishing would be insecure.
+func buildThreatflowSeed(apiURL, secret string) []webhook.Subscriber {
+	if secret == "" {
+		return nil
+	}
+	return []webhook.Subscriber{{
+		ID:         "default",
+		URL:        apiURL,
+		HMACSecret: secret,
+		Active:     true,
+	}}
+}
+
+// effectiveDrainGrace returns cfg unchanged when positive, otherwise
+// falls back to the 5s default used when the operator hasn't set
+// VERTGUARD_SERVER_DRAIN_GRACE.
+func effectiveDrainGrace(cfg time.Duration) time.Duration {
+	if cfg <= 0 {
+		return 5 * time.Second
+	}
+	return cfg
 }

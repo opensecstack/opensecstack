@@ -24,9 +24,9 @@ import (
 
 // math_Float* aliases keep the helper signatures self-documenting at the
 // call site (vs. raw math.* in dense wire-format code).
-func math_Float64bits(f float64) uint64    { return math.Float64bits(f) }
+func math_Float64bits(f float64) uint64     { return math.Float64bits(f) }
 func math_Float64frombits(b uint64) float64 { return math.Float64frombits(b) }
-func math_Float32bits(f float32) uint32    { return math.Float32bits(f) }
+func math_Float32bits(f float32) uint32     { return math.Float32bits(f) }
 func math_Float32frombits(b uint32) float32 { return math.Float32frombits(b) }
 
 // PromptScoreRequest is the single-input scoring shape for prompts.
@@ -72,18 +72,30 @@ func (m *PromptScoreRequest) UnmarshalVT(data []byte) error {
 		case 1:
 			s, n := consumeString(data, typ)
 			m.Input = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 2:
 			s, n := consumeString(data, typ)
 			m.Context = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 3:
 			s, n := consumeString(data, typ)
 			m.CorrelationId = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 4:
 			s, n := consumeString(data, typ)
 			m.Tenant = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		default:
 			n := protowire.ConsumeFieldValue(num, typ, data)
@@ -131,18 +143,30 @@ func (m *PhishingScoreRequest) UnmarshalVT(data []byte) error {
 		case 1:
 			s, n := consumeString(data, typ)
 			m.Input = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 2:
 			s, n := consumeString(data, typ)
 			m.Kind = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 3:
 			s, n := consumeString(data, typ)
 			m.CorrelationId = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 4:
 			s, n := consumeString(data, typ)
 			m.Tenant = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		default:
 			n := protowire.ConsumeFieldValue(num, typ, data)
@@ -202,30 +226,51 @@ func (m *MediaScoreRequest) UnmarshalVT(data []byte) error {
 		case 1:
 			s, n := consumeString(data, typ)
 			m.FileHash = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 2:
 			s, n := consumeString(data, typ)
 			m.MimeType = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 3:
 			v, n := consumeVarint(data, typ)
 			m.FileSize = int64(v)
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 4:
 			v, n := consumeVarint(data, typ)
 			m.HasC2PaManifest = v != 0
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 5:
 			v, n := consumeVarint(data, typ)
 			m.C2PaSignatureValid = v != 0
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 6:
 			s, n := consumeString(data, typ)
 			m.CorrelationId = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 7:
 			s, n := consumeString(data, typ)
 			m.Tenant = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		default:
 			n := protowire.ConsumeFieldValue(num, typ, data)
@@ -284,16 +329,16 @@ func (m *MediaScoreRequest) GetTenant() string {
 // IdentityScoreRequest carries extracted identity claim features for ML.
 // Raw PII is NOT sent — only derived, non-reversible signals.
 type IdentityScoreRequest struct {
-	ClaimType              string
-	Context                string
-	NameTokenCount         int32
+	ClaimType               string
+	Context                 string
+	NameTokenCount          int32
 	EmailDomainIsDisposable bool
-	IdFormatValid          bool
-	IssuerCountry          string
-	HasDob                 bool
-	ReplayCount            int32
-	CorrelationId          string
-	Tenant                 string
+	IdFormatValid           bool
+	IssuerCountry           string
+	HasDob                  bool
+	ReplayCount             int32
+	CorrelationId           string
+	Tenant                  string
 }
 
 func (m *IdentityScoreRequest) Reset() { *m = IdentityScoreRequest{} }
@@ -335,42 +380,72 @@ func (m *IdentityScoreRequest) UnmarshalVT(data []byte) error {
 		case 1:
 			s, n := consumeString(data, typ)
 			m.ClaimType = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 2:
 			s, n := consumeString(data, typ)
 			m.Context = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 3:
 			v, n := consumeVarint(data, typ)
 			m.NameTokenCount = int32(v)
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 4:
 			v, n := consumeVarint(data, typ)
 			m.EmailDomainIsDisposable = v != 0
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 5:
 			v, n := consumeVarint(data, typ)
 			m.IdFormatValid = v != 0
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 6:
 			s, n := consumeString(data, typ)
 			m.IssuerCountry = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 7:
 			v, n := consumeVarint(data, typ)
 			m.HasDob = v != 0
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 8:
 			v, n := consumeVarint(data, typ)
 			m.ReplayCount = int32(v)
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 9:
 			s, n := consumeString(data, typ)
 			m.CorrelationId = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 10:
 			s, n := consumeString(data, typ)
 			m.Tenant = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		default:
 			n := protowire.ConsumeFieldValue(num, typ, data)
@@ -494,30 +569,51 @@ func (m *AudioScoreRequest) UnmarshalVT(data []byte) error {
 		case 1:
 			s, n := consumeString(data, typ)
 			m.SessionId = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 2:
 			raw, n := consumeBytes(data, typ)
 			m.MfccHash = raw
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 3:
 			raw, n := consumeBytes(data, typ)
 			m.SpectralHash = raw
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 4:
 			f, n := consumeFloat32(data, typ)
 			m.DurationMs = f
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 5:
 			v, n := consumeVarint(data, typ)
 			m.VoiceDetected = v != 0
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 6:
 			s, n := consumeString(data, typ)
 			m.CorrelationId = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 7:
 			s, n := consumeString(data, typ)
 			m.Tenant = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		default:
 			n := protowire.ConsumeFieldValue(num, typ, data)
@@ -619,30 +715,51 @@ func (m *VideoFrameRequest) UnmarshalVT(data []byte) error {
 		case 1:
 			s, n := consumeString(data, typ)
 			m.SessionId = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 2:
 			v, n := consumeVarint(data, typ)
 			m.FrameSeq = int64(v)
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 3:
 			v, n := consumeVarint(data, typ)
 			m.FrameTsMs = int64(v)
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 4:
 			raw, n := consumeBytes(data, typ)
 			m.FeatureVector = raw
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 5:
 			v, n := consumeVarint(data, typ)
 			m.FaceDetected = v != 0
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 6:
 			s, n := consumeString(data, typ)
 			m.CorrelationId = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 7:
 			s, n := consumeString(data, typ)
 			m.Tenant = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		default:
 			n := protowire.ConsumeFieldValue(num, typ, data)
@@ -737,26 +854,44 @@ func (m *VideoScoreEvent) UnmarshalVT(data []byte) error {
 		case 1:
 			s, n := consumeString(data, typ)
 			m.SessionId = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 2:
 			v, n := consumeVarint(data, typ)
 			m.FrameSeq = int64(v)
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 3:
 			f, n := consumeDouble(data, typ)
 			m.Confidence = f
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 4:
 			s, n := consumeString(data, typ)
 			m.Verdict = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 5:
 			f, n := consumeDouble(data, typ)
 			m.LatencyMs = f
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 6:
 			s, n := consumeString(data, typ)
 			m.ModelVersion = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		default:
 			n := protowire.ConsumeFieldValue(num, typ, data)
@@ -812,9 +947,11 @@ type FeatureWeight struct {
 	Weight float64
 }
 
-func (m *FeatureWeight) Reset()         { *m = FeatureWeight{} }
-func (m *FeatureWeight) String() string { return fmt.Sprintf("FeatureWeight{%q=%.3f}", m.Name, m.Weight) }
-func (*FeatureWeight) ProtoMessage()    {}
+func (m *FeatureWeight) Reset() { *m = FeatureWeight{} }
+func (m *FeatureWeight) String() string {
+	return fmt.Sprintf("FeatureWeight{%q=%.3f}", m.Name, m.Weight)
+}
+func (*FeatureWeight) ProtoMessage() {}
 
 func (m *FeatureWeight) MarshalVT() ([]byte, error) {
 	var b []byte
@@ -834,10 +971,16 @@ func (m *FeatureWeight) UnmarshalVT(data []byte) error {
 		case 1:
 			s, n := consumeString(data, typ)
 			m.Name = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 2:
 			f, n := consumeDouble(data, typ)
 			m.Weight = f
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		default:
 			n := protowire.ConsumeFieldValue(num, typ, data)
@@ -895,10 +1038,16 @@ func (m *ScoreResponse) UnmarshalVT(data []byte) error {
 		case 1:
 			f, n := consumeDouble(data, typ)
 			m.Confidence = f
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 2:
 			s, n := consumeString(data, typ)
 			m.Verdict = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 3:
 			raw, n := consumeMessage(data, typ)
@@ -907,18 +1056,30 @@ func (m *ScoreResponse) UnmarshalVT(data []byte) error {
 				return err
 			}
 			m.TopFeatures = append(m.TopFeatures, fw)
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 4:
 			f, n := consumeDouble(data, typ)
 			m.LatencyMs = f
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 5:
 			s, n := consumeString(data, typ)
 			m.ModelVersion = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 6:
 			s, n := consumeString(data, typ)
 			m.InputHash = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		default:
 			n := protowire.ConsumeFieldValue(num, typ, data)
@@ -934,9 +1095,9 @@ func (m *ScoreResponse) UnmarshalVT(data []byte) error {
 // ModelInfoRequest is empty — ModelInfo is a poll-style endpoint.
 type ModelInfoRequest struct{}
 
-func (m *ModelInfoRequest) Reset()                    { *m = ModelInfoRequest{} }
-func (m *ModelInfoRequest) String() string            { return "ModelInfoRequest{}" }
-func (*ModelInfoRequest) ProtoMessage()               {}
+func (m *ModelInfoRequest) Reset()                     { *m = ModelInfoRequest{} }
+func (m *ModelInfoRequest) String() string             { return "ModelInfoRequest{}" }
+func (*ModelInfoRequest) ProtoMessage()                {}
 func (m *ModelInfoRequest) MarshalVT() ([]byte, error) { return nil, nil }
 func (m *ModelInfoRequest) UnmarshalVT(data []byte) error {
 	for len(data) > 0 {
@@ -993,26 +1154,44 @@ func (m *ModelInfoResponse) UnmarshalVT(data []byte) error {
 		case 1:
 			s, n := consumeString(data, typ)
 			m.Name = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 2:
 			s, n := consumeString(data, typ)
 			m.Version = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 3:
 			s, n := consumeString(data, typ)
 			m.TrainingSummary = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 4:
 			v, n := consumeVarint(data, typ)
 			m.LoadedAt = int64(v)
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 5:
 			s, n := consumeString(data, typ)
 			m.Backend = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		case 6:
 			s, n := consumeString(data, typ)
 			m.EvalMetricsJson = s
+			if n < 0 {
+				return protowire.ParseError(n)
+			}
 			data = data[n:]
 		default:
 			n := protowire.ConsumeFieldValue(num, typ, data)

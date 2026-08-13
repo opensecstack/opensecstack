@@ -9,7 +9,12 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/opensecstack/vertguard/internal/api/handlers"
+	"github.com/opensecstack/vertguard/internal/audit"
+	"github.com/opensecstack/vertguard/internal/auth"
 	"github.com/opensecstack/vertguard/internal/config"
+	"github.com/opensecstack/vertguard/internal/metrics"
+	"github.com/opensecstack/vertguard/internal/ratelimit"
 )
 
 func minimalConfig() *config.Config {
@@ -204,5 +209,109 @@ func TestMetricsMiddleware_NilRegistry_PassesThrough(t *testing.T) {
 	}
 	if rr.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", rr.Code)
+	}
+}
+
+// TestMetricsMiddleware_RealRegistry_RecordsRequest exercises the
+// non-nil branch of metricsMiddleware — it must still call through and
+// must not panic when incrementing real Prometheus collectors.
+func TestMetricsMiddleware_RealRegistry_RecordsRequest(t *testing.T) {
+	reg := metrics.New()
+	called := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusAccepted)
+	})
+	mw := metricsMiddleware(reg)(next)
+
+	req := httptest.NewRequest(http.MethodGet, "/x", nil)
+	rr := httptest.NewRecorder()
+	mw.ServeHTTP(rr, req)
+
+	if !called {
+		t.Fatal("metrics middleware (real registry) did not call next handler")
+	}
+	if rr.Code != http.StatusAccepted {
+		t.Errorf("status = %d, want 202", rr.Code)
+	}
+}
+
+// TestNew_FullyWiredOptions constructs a Server with every optional
+// handler, plus a real metrics registry, auth verifier, rate limiter,
+// and audit sink, so every conditional branch in New() that registers
+// a route or middleware executes at least once. Requests only need to
+// prove the router doesn't panic and the always-on probes still work
+// — module route behaviour itself is covered by internal/api/handlers'
+// own tests.
+func TestNew_FullyWiredOptions(t *testing.T) {
+	logger := zerolog.Nop()
+	reg := metrics.New()
+	verifier := auth.NewVerifier("test-secret-at-least-32-bytes-long!!", "vertguard-test")
+	rl := ratelimit.New(ratelimit.Config{RPS: 100, Burst: 200})
+	defer rl.Stop()
+	sink := audit.NewMultiSink(&logger, audit.NewLoggerSink(&logger))
+
+	cfg := minimalConfig()
+
+	opts := Options{
+		Config:             cfg,
+		Logger:             &logger,
+		Pinger:             nil,
+		Prompt:             handlers.NewPromptHandler(nil, nil, nil),
+		Phishing:           handlers.NewPhishingHandler(nil, nil, nil),
+		Identity:           handlers.NewIdentityHandler(nil, nil, nil),
+		ThreatFeed:         handlers.NewThreatFeedHandler(),
+		Media:              handlers.NewMediaHandler(nil, nil, logger),
+		ThreatflowReceiver: handlers.NewThreatflowReceiver("", nil, logger),
+		WebhookAdmin:       handlers.NewWebhookAdminHandler(nil),
+		WebhookSubscribers: handlers.NewWebhookSubscribersHandler(nil, nil),
+		AdminAtlas:         handlers.NewAdminAtlasHandler(nil, sink, &logger, metrics.NewAdminMetricsAdapter(reg)),
+		AdminPatterns:      handlers.NewAdminPatternsHandler(nil, nil, "", "", sink, &logger, metrics.NewAdminMetricsAdapter(reg)),
+		AdminML:            handlers.NewAdminMLHandler(nil),
+		Audit:              handlers.NewAuditHandler(nil),
+		AuditSink:          sink,
+		AuditMetrics:       metrics.NewAuditMetricsAdapter(reg),
+		Metrics:            reg,
+		Authenticator:      verifier,
+		TokenRevoker:       nil,
+		Denylist:           handlers.NewDenylistAdminHandler(nil, nil, sink, &logger),
+		RateLimitAdmin:     handlers.NewRateLimitAdminHandler(ratelimit.NewMemoryOverrideStore(), rl, sink, &logger),
+		RateLimiter:        rl,
+		RateLimitMetrics:   metrics.NewRateLimitMetricsAdapter(reg),
+		Auth:               handlers.NewAuthHandler(),
+		Audio:              handlers.NewAudioHandler(nil, logger),
+		Video:              handlers.NewVideoStreamHandler(nil, logger),
+		Meetings:           handlers.NewMeetingsHandler(nil, "", logger),
+	}
+
+	srv := New(opts)
+	if srv == nil {
+		t.Fatal("New() returned nil with fully-wired options")
+	}
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	// Probe endpoints must still work with every module wired.
+	for _, path := range []string{"/livez", "/api/v1/health"} {
+		resp, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusNotFound {
+			t.Errorf("GET %s: got 404, route not wired", path)
+		}
+	}
+
+	// A wired-but-unauthenticated module route must now be gated by the
+	// auth middleware (401/403), not fall through to 404 — proving the
+	// route registration + auth middleware branches both executed.
+	resp, err := http.Post(ts.URL+"/api/v1/prompt/scan", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST /api/v1/prompt/scan: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		t.Errorf("prompt route with wired handler: got 404, want auth-gated response")
 	}
 }

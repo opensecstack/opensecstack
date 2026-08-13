@@ -40,6 +40,13 @@ func (s *Store) Upsert(ctx context.Context, sub *Subscriber) error {
 	}
 	sub.UpdatedAt = now
 	normaliseSlots(sub)
+	if sub.EventTypes == nil {
+		// event_types is NOT NULL; a nil Go slice marshals to SQL NULL
+		// via pgx, not to '{}'. A subscriber that wants "all event
+		// types" (the documented empty-slice semantics in Matches /
+		// ListByEventType) must be persisted as an empty array, not NULL.
+		sub.EventTypes = []string{}
+	}
 
 	_, err := s.Pool.Exec(ctx, `
 		INSERT INTO webhook_subscribers_v2

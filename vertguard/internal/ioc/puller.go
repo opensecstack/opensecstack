@@ -19,17 +19,27 @@ type SourceSpec struct {
 	Interval time.Duration
 }
 
+// pullerStore is the persistence surface the puller needs. Implemented
+// by *Store; tests substitute an in-memory fake so Tick/runSource/
+// runSweep can be exercised without a live Postgres connection.
+type pullerStore interface {
+	Upsert(ctx context.Context, in IOC) (UpsertResult, error)
+	AuditInsert(ctx context.Context, a PullAudit) error
+	ExpireSweep(ctx context.Context) (int64, error)
+	CountActive(ctx context.Context) (int64, error)
+}
+
 // Puller schedules periodic fetches across N sources, applies the
 // allowlist, upserts surviving IOCs, and emits one CITADEL evidence
 // record per successful pull.
 type Puller struct {
-	store     *Store
-	sources   []SourceSpec
-	allow     *Allowlist
-	met       metrics.IOCMetrics
-	logger    zerolog.Logger
-	citadel   citadelEmitter
-	tenant    string
+	store      pullerStore
+	sources    []SourceSpec
+	allow      *Allowlist
+	met        metrics.IOCMetrics
+	logger     zerolog.Logger
+	citadel    citadelEmitter
+	tenant     string
 	sweepEvery time.Duration
 }
 
@@ -39,9 +49,11 @@ type citadelEmitter interface {
 	EmitAsync(ctx context.Context, ev citadel.Evidence) bool
 }
 
-// PullerConfig bundles construction parameters.
+// PullerConfig bundles construction parameters. Store accepts anything
+// satisfying pullerStore — in production this is always *Store; tests
+// may pass an in-memory fake.
 type PullerConfig struct {
-	Store         *Store
+	Store         pullerStore
 	Sources       []SourceSpec
 	Allow         *Allowlist
 	Metrics       metrics.IOCMetrics

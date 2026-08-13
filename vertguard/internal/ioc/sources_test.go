@@ -251,6 +251,38 @@ func TestAbuseChSource_Fetch_HashErrorPropagates(t *testing.T) {
 	}
 }
 
+func TestMISPSource_Fetch_InvalidURLRequestError(t *testing.T) {
+	// A control character in the URL makes http.NewRequestWithContext
+	// fail before any network call is attempted.
+	_, err := (MISPSource{URL: "http://exa\nmple.com"}).Fetch(context.Background())
+	if err == nil {
+		t.Fatal("Fetch() error = nil, want error from malformed request URL")
+	}
+}
+
+func TestMISPSource_Fetch_ConnectionRefused(t *testing.T) {
+	// Port 1 is reserved and nothing listens there — Do() fails with a
+	// network-level (not HTTP-level) error.
+	_, err := (MISPSource{URL: "http://127.0.0.1:1/misp"}).Fetch(context.Background())
+	if err == nil {
+		t.Fatal("Fetch() error = nil, want network error for unreachable host")
+	}
+}
+
+func TestAbuseChSource_Fetch_InvalidURLRequestError(t *testing.T) {
+	_, err := (AbuseChSource{URL: "http://exa\nmple.com"}).Fetch(context.Background())
+	if err == nil {
+		t.Fatal("Fetch() error = nil, want error from malformed request URL")
+	}
+}
+
+func TestAbuseChSource_Fetch_HashURLInvalidRequestError(t *testing.T) {
+	_, err := (AbuseChSource{HashURL: "http://exa\nmple.com"}).Fetch(context.Background())
+	if err == nil {
+		t.Fatal("Fetch() error = nil, want error from malformed hash request URL")
+	}
+}
+
 func TestValidKind(t *testing.T) {
 	tests := []struct {
 		k    Kind

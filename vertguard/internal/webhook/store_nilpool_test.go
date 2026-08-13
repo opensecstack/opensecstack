@@ -11,7 +11,7 @@ import (
 // These exercise the "nil pool" guard clause on every Store method — the
 // documented contract lets a *Store with Pool==nil be constructed (e.g.
 // NewStore(nil)) for tests that only need the dispatcher's fake store.
-// Without a live VERTGUARD_TEST_DB_URL this is also the only way to reach
+// Without a live DATABASE_URL this is also the only way to reach
 // these methods at all in this environment.
 
 func TestStore_NilPool_Upsert(t *testing.T) {

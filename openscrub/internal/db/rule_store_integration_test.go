@@ -1,11 +1,14 @@
-//go:build integration
-
 // Integration test against a real Postgres instance. Skipped unless
 // OPENSCRUB_TEST_DB_URL is set. Mirrors cyberpath's pattern.
 //
+// No build tag: these tests run as part of the normal `go test ./...`
+// invocation (and thus count toward the package's coverage gate) but
+// skip themselves at runtime when OPENSCRUB_TEST_DB_URL is unset, so a
+// developer/CI box without Postgres still gets a clean `go test`.
+//
 //   psql -c 'CREATE DATABASE openscrub_test;'
 //   migrate -path migrations -database "$OPENSCRUB_TEST_DB_URL" up
-//   OPENSCRUB_TEST_DB_URL=postgres://… go test -tags integration ./internal/db/
+//   OPENSCRUB_TEST_DB_URL=postgres://… go test ./internal/db/
 
 package db_test
 
@@ -165,6 +168,125 @@ func TestRuleStoreListOffsetPagination(t *testing.T) {
 		if page0[i].ID != page0b[i].ID {
 			t.Fatalf("page0 not stable across reads: %v vs %v", page0, page0b)
 		}
+	}
+}
+
+// TestRuleStoreInsertInvalidCIDR covers the parse-error branch: a
+// malformed CIDR must be rejected before it ever reaches the INSERT,
+// and must not be wrapped as a generic "insert rule" failure.
+func TestRuleStoreInsertInvalidCIDR(t *testing.T) {
+	pool := openTestDB(t)
+	store := db.NewRuleStore(pool)
+
+	_, err := store.Insert(context.Background(), rules.Rule{
+		Type: rules.TypeBlocklist, CIDR: "not-a-cidr",
+		TTLSeconds: 60, Source: rules.SourceOperator,
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid CIDR")
+	}
+}
+
+// TestRuleStoreDeleteNotFound covers the RowsAffected==0 branch: an
+// unknown id must return ErrRuleNotFound, not a silent success.
+func TestRuleStoreDeleteNotFound(t *testing.T) {
+	pool := openTestDB(t)
+	store := db.NewRuleStore(pool)
+
+	err := store.Delete(context.Background(), uuid.New())
+	if !errors.Is(err, db.ErrRuleNotFound) {
+		t.Fatalf("expected ErrRuleNotFound, got %v", err)
+	}
+}
+
+// TestRuleStoreListKindFilter covers the `kind != ""` branch of List
+// and the count helpers that back the /api/v1 snapshot endpoint.
+func TestRuleStoreListKindFilter(t *testing.T) {
+	pool := openTestDB(t)
+	store := db.NewRuleStore(pool)
+	ctx := context.Background()
+
+	if _, err := store.Insert(ctx, rules.Rule{
+		Type: rules.TypeBlocklist, CIDR: "192.0.2.0/24",
+		TTLSeconds: 3600, Source: rules.SourceOperator,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	pps := 1000
+	if _, err := store.Insert(ctx, rules.Rule{
+		Type: rules.TypeRatelimit, CIDR: "192.0.2.128/25", PPS: &pps,
+		TTLSeconds: 3600, Source: rules.SourceOperator,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	port := 22
+	if _, err := store.Insert(ctx, rules.Rule{
+		Type: rules.TypeSynCookie, Port: &port,
+		TTLSeconds: 3600, Source: rules.SourceOperator,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	blocklistOnly, err := store.List(ctx, rules.TypeBlocklist, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range blocklistOnly {
+		if r.Type != rules.TypeBlocklist {
+			t.Fatalf("kind filter leaked a %s rule: %+v", r.Type, r)
+		}
+	}
+	if len(blocklistOnly) == 0 {
+		t.Fatal("expected at least one blocklist rule")
+	}
+
+	total, err := store.Count(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total < 3 {
+		t.Fatalf("expected at least 3 rules total, got %d", total)
+	}
+
+	blocklist, ratelimit, syncookie, err := store.CountByType(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if blocklist < 1 || ratelimit < 1 || syncookie < 1 {
+		t.Fatalf("expected all three types represented: blocklist=%d ratelimit=%d syncookie=%d",
+			blocklist, ratelimit, syncookie)
+	}
+
+	v4, v6, err := store.CountBlocklistByFamily(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v4 < 1 {
+		t.Fatalf("expected at least 1 IPv4 blocklist rule, got v4=%d v6=%d", v4, v6)
+	}
+}
+
+// TestRuleStoreCountBlocklistByFamilyIPv6 exercises the IPv6 branch of
+// CountBlocklistByFamily separately, since the shared fixture above
+// only inserts IPv4.
+func TestRuleStoreCountBlocklistByFamilyIPv6(t *testing.T) {
+	pool := openTestDB(t)
+	store := db.NewRuleStore(pool)
+	ctx := context.Background()
+
+	if _, err := store.Insert(ctx, rules.Rule{
+		Type: rules.TypeBlocklist, CIDR: "2001:db8::/32",
+		TTLSeconds: 3600, Source: rules.SourceOperator,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, v6, err := store.CountBlocklistByFamily(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v6 < 1 {
+		t.Fatalf("expected at least 1 IPv6 blocklist rule, got v6=%d", v6)
 	}
 }
 

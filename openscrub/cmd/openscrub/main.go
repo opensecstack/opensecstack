@@ -82,7 +82,11 @@ func main() {
 
 	// Dataplane.
 	plane := buildDataplane(cfg, logger)
-	defer plane.Close()
+	defer func() {
+		if err := plane.Close(); err != nil {
+			logger.Warn().Err(err).Msg("dataplane client close failed")
+		}
+	}()
 
 	// CITADEL.
 	//
@@ -377,56 +381,64 @@ func (a *mitigationStoreAdapter) PendingForEmit(ctx context.Context, minDuration
 	}
 	out := make([]citadel.MitigationRecord, 0, len(rows))
 	for _, m := range rows {
-		rec := citadel.MitigationRecord{
-			ID:             m.ID,
-			StartedAt:      m.StartedAt,
-			PacketsDropped: m.PacketsDropped,
-			BytesDropped:   m.BytesDropped,
-		}
-		if m.RuleID.Valid {
-			rec.RuleID = m.RuleID.UUID
-		}
-		if m.EndedAt != nil {
-			rec.EndedAt = *m.EndedAt
-		}
-		if m.SrcIP != nil {
-			rec.SrcIP = m.SrcIP.String()
-		}
-		// Prefer the snapshot captured on the mitigation row at insert
-		// time (so a deleted parent rule still produces a complete
-		// CITADEL payload). Fall back to a live rule lookup only if
-		// the snapshot is empty (legacy rows from before 0002).
-		if m.RuleCIDR != "" || m.RuleType != "" {
-			ruleIDStr := ""
-			if m.RuleID.Valid {
-				ruleIDStr = m.RuleID.UUID.String()
-			}
-			rec.Rule = citadel.RuleSummary{
-				ID:     ruleIDStr,
-				CIDR:   m.RuleCIDR,
-				Type:   m.RuleType,
-				Source: m.RuleSource,
-			}
-		} else if m.RuleID.Valid {
-			if r, err := a.repo.Get(ctx, m.RuleID.UUID); err == nil {
-				rec.Rule = citadel.RuleSummary{
-					ID:         r.ID.String(),
-					CIDR:       r.CIDR,
-					Type:       string(r.Type),
-					PPS:        r.PPS,
-					Port:       r.Port,
-					TTLSeconds: r.TTLSeconds,
-					Source:     r.Source,
-				}
-			} else {
-				rec.Rule = citadel.RuleSummary{ID: m.RuleID.UUID.String(), Type: "unknown"}
-			}
-		} else {
-			rec.Rule = citadel.RuleSummary{Type: "unknown"}
-		}
-		out = append(out, rec)
+		out = append(out, mitigationRecordFromRow(ctx, a.repo, m))
 	}
 	return out, nil
+}
+
+// mitigationRecordFromRow converts one persisted mitigation row into the
+// wire shape CITADEL expects. Split out of PendingForEmit so the mapping
+// (including the legacy rule-lookup fallback) can be unit tested against
+// a rules.Repo without a live Postgres connection.
+func mitigationRecordFromRow(ctx context.Context, repo rules.Repo, m db.Mitigation) citadel.MitigationRecord {
+	rec := citadel.MitigationRecord{
+		ID:             m.ID,
+		StartedAt:      m.StartedAt,
+		PacketsDropped: m.PacketsDropped,
+		BytesDropped:   m.BytesDropped,
+	}
+	if m.RuleID.Valid {
+		rec.RuleID = m.RuleID.UUID
+	}
+	if m.EndedAt != nil {
+		rec.EndedAt = *m.EndedAt
+	}
+	if m.SrcIP != nil {
+		rec.SrcIP = m.SrcIP.String()
+	}
+	// Prefer the snapshot captured on the mitigation row at insert
+	// time (so a deleted parent rule still produces a complete
+	// CITADEL payload). Fall back to a live rule lookup only if
+	// the snapshot is empty (legacy rows from before 0002).
+	if m.RuleCIDR != "" || m.RuleType != "" {
+		ruleIDStr := ""
+		if m.RuleID.Valid {
+			ruleIDStr = m.RuleID.UUID.String()
+		}
+		rec.Rule = citadel.RuleSummary{
+			ID:     ruleIDStr,
+			CIDR:   m.RuleCIDR,
+			Type:   m.RuleType,
+			Source: m.RuleSource,
+		}
+	} else if m.RuleID.Valid {
+		if r, err := repo.Get(ctx, m.RuleID.UUID); err == nil {
+			rec.Rule = citadel.RuleSummary{
+				ID:         r.ID.String(),
+				CIDR:       r.CIDR,
+				Type:       string(r.Type),
+				PPS:        r.PPS,
+				Port:       r.Port,
+				TTLSeconds: r.TTLSeconds,
+				Source:     r.Source,
+			}
+		} else {
+			rec.Rule = citadel.RuleSummary{ID: m.RuleID.UUID.String(), Type: "unknown"}
+		}
+	} else {
+		rec.Rule = citadel.RuleSummary{Type: "unknown"}
+	}
+	return rec
 }
 
 func (a *mitigationStoreAdapter) MarkEmitted(ctx context.Context, id uuid.UUID) error {
@@ -466,15 +478,22 @@ func (a *mitigationListAdapter) List(ctx context.Context, since time.Time, ruleI
 	}
 	out := make([]handlers.MitigationView, 0, len(rows))
 	for _, m := range rows {
-		var ruleID uuid.UUID
-		if m.RuleID.Valid {
-			ruleID = m.RuleID.UUID
-		}
-		out = append(out, handlers.MitigationViewFrom(
-			m.ID, ruleID, m.StartedAt, m.EndedAt,
-			m.PacketsDropped, m.BytesDropped, m.SrcIP, m.Emitted))
+		out = append(out, mitigationViewFromRow(m))
 	}
 	return out, nil
+}
+
+// mitigationViewFromRow converts a persisted mitigation row into the
+// handler's wire view. Split out of List so the conversion can be unit
+// tested without a live Postgres connection.
+func mitigationViewFromRow(m db.Mitigation) handlers.MitigationView {
+	var ruleID uuid.UUID
+	if m.RuleID.Valid {
+		ruleID = m.RuleID.UUID
+	}
+	return handlers.MitigationViewFrom(
+		m.ID, ruleID, m.StartedAt, m.EndedAt,
+		m.PacketsDropped, m.BytesDropped, m.SrcIP, m.Emitted)
 }
 
 // lifecycleStoreAdapter bridges rules.MitigationStore (rules-package
@@ -485,7 +504,15 @@ type lifecycleStoreAdapter struct {
 }
 
 func (a *lifecycleStoreAdapter) Insert(ctx context.Context, m rules.MitigationInsert) error {
-	row := db.Mitigation{
+	_, err := a.store.Insert(ctx, mitigationRowFromInsert(m))
+	return err
+}
+
+// mitigationRowFromInsert converts a rules-package insert request into
+// the DB row shape. Split out of Insert so the field mapping can be
+// unit tested without a live Postgres connection.
+func mitigationRowFromInsert(m rules.MitigationInsert) db.Mitigation {
+	return db.Mitigation{
 		ID:                  m.ID,
 		RuleID:              uuid.NullUUID{UUID: m.RuleID, Valid: m.RuleID != uuid.Nil},
 		RuleCIDR:            m.RuleCIDR,
@@ -496,8 +523,6 @@ func (a *lifecycleStoreAdapter) Insert(ctx context.Context, m rules.MitigationIn
 		StartPacketsDropped: m.StartPacketsDropped,
 		StartBytesDropped:   m.StartBytesDropped,
 	}
-	_, err := a.store.Insert(ctx, row)
-	return err
 }
 
 func (a *lifecycleStoreAdapter) FinalizeForRule(ctx context.Context, ruleID uuid.UUID, endedAt time.Time, endPackets, endBytes int64) error {

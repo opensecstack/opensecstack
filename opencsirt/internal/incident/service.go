@@ -30,13 +30,37 @@ var (
 	validStatuses   = map[string]bool{"open": true, "triaged": true, "contained": true, "closed": true}
 )
 
+// incidentStore, outboxStore and auditStore are the persistence seams
+// Service depends on. The real implementations are *db.IncidentStore,
+// *db.OutboxStore and *db.AuditStore; tests substitute fakes to exercise
+// success and partial-failure branches deterministically without a live
+// Postgres.
+type incidentStore interface {
+	Insert(ctx context.Context, i *db.Incident) error
+	Get(ctx context.Context, id uuid.UUID) (*db.Incident, error)
+	UpdateStatus(ctx context.Context, id uuid.UUID, status string, closedAt *time.Time) error
+	List(ctx context.Context, f db.IncidentFilter) ([]*db.Incident, int, error)
+}
+
+type outboxStore interface {
+	Enqueue(ctx context.Context, e *db.OutboxEntry) error
+}
+
+type auditStore interface {
+	Insert(ctx context.Context, a *db.AuditEntry) error
+}
+
 type Service struct {
-	incidents *db.IncidentStore
-	outbox    *db.OutboxStore
-	audit     *db.AuditStore
+	incidents incidentStore
+	outbox    outboxStore
+	audit     auditStore
 	logger    zerolog.Logger
 }
 
+// New wires a Service against the concrete DB-backed stores. Kept typed as
+// *db.IncidentStore / *db.OutboxStore / *db.AuditStore (rather than the
+// narrower interfaces above) so call sites are unaffected; all three types
+// implicitly satisfy incidentStore/outboxStore/auditStore.
 func New(i *db.IncidentStore, o *db.OutboxStore, a *db.AuditStore, logger zerolog.Logger) *Service {
 	return &Service{incidents: i, outbox: o, audit: a, logger: logger}
 }

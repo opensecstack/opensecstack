@@ -203,3 +203,171 @@ func TestSubmit_TransientNetworkErrorQueuesThenRunDelivers(t *testing.T) {
 		t.Error("expected the server to be hit at least once")
 	}
 }
+
+// TestSubmit_TransientTimeoutIsQueued proves Submit's synchronous path
+// enqueues (rather than drops) a request that fails with a context-deadline
+// timeout — the only error shape isTransient recognizes — and that no error
+// is surfaced to the caller for a queued outcome (only Run's later delivery
+// or failure produces a Confirmation).
+func TestSubmit_TransientTimeoutIsQueued(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, [][]byte{[]byte("secret")}, "kid", "proj", false, zerolog.Nop())
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	outcome, err := c.Submit(ctx, "evt.type", "id-timeout", map[string]any{})
+	if err != nil {
+		t.Fatalf("Submit: unexpected error for a queued transient failure: %v", err)
+	}
+	if outcome != SubmitQueued {
+		t.Fatalf("outcome = %v, want SubmitQueued", outcome)
+	}
+	if d := c.QueueDepth(); d != 1 {
+		t.Errorf("QueueDepth() = %d, want 1", d)
+	}
+}
+
+// TestSubmit_TransientTimeoutWithFullBufferIsDropped proves Submit's buffer-
+// overflow branch: when the retry queue is already at capacity, a further
+// transient failure is dropped (not silently blocked) and a Confirmation is
+// published so a watcher observes the loss.
+func TestSubmit_TransientTimeoutWithFullBufferIsDropped(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, [][]byte{[]byte("secret")}, "kid", "proj", false, zerolog.Nop())
+	// Fill the retry buffer to capacity (1024) so the next transient failure
+	// cannot be enqueued.
+	for i := 0; i < cap(c.queue); i++ {
+		c.queue <- &Envelope{EventType: "filler", EventID: "filler"}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	outcome, err := c.Submit(ctx, "evt.type", "id-overflow", map[string]any{})
+	if err == nil {
+		t.Fatal("expected an error when the retry buffer is full")
+	}
+	if outcome != SubmitDropped {
+		t.Fatalf("outcome = %v, want SubmitDropped", outcome)
+	}
+
+	select {
+	case conf := <-c.Confirmations():
+		if conf.EventID != "id-overflow" {
+			t.Errorf("EventID = %q, want id-overflow", conf.EventID)
+		}
+		if conf.Outcome != SubmitDropped {
+			t.Errorf("Outcome = %v, want SubmitDropped", conf.Outcome)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected a dropped confirmation to be published")
+	}
+}
+
+// TestPublish_ConfirmationChannelFullDropsSilently proves publish()'s
+// default branch: when the confirmations channel is saturated, publish must
+// not block the caller (deliver/Run) — it logs and drops the confirmation.
+func TestPublish_ConfirmationChannelFullDropsSilently(t *testing.T) {
+	c := New("http://unused.invalid", nil, "kid", "proj", true, zerolog.Nop())
+	for i := 0; i < cap(c.confirms); i++ {
+		c.confirms <- Confirmation{EventID: "filler"}
+	}
+	// Must return promptly rather than blocking.
+	done := make(chan struct{})
+	go func() {
+		c.publish(Confirmation{EventID: "overflow"})
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("publish() blocked instead of dropping when the confirms channel is full")
+	}
+	if got := len(c.confirms); got != cap(c.confirms) {
+		t.Errorf("confirms channel len = %d, want unchanged at cap %d (overflow entry must be dropped)", got, cap(c.confirms))
+	}
+}
+
+// TestRun_MaxRetriesExceededPublishesDropped proves Run's retry-exhaustion
+// branch: after maxRetries attempts against a server that always fails, Run
+// publishes a SubmitDropped confirmation instead of retrying forever.
+// maxRetries is lowered to 1 (an unexported field, safe to set from within
+// the package) purely so the attempt-count threshold is crossed on the very
+// first failure, without waiting through the real exponential backoff.
+func TestRun_MaxRetriesExceededPublishesDropped(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, [][]byte{[]byte("secret")}, "kid", "proj", false, zerolog.Nop())
+	c.maxRetries = 1
+
+	env := &Envelope{EventType: "evt", EventID: "maxed-out", attempt: 0}
+	c.queue <- env
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	go c.Run(ctx)
+
+	select {
+	case conf := <-c.Confirmations():
+		if conf.EventID != "maxed-out" {
+			t.Errorf("EventID = %q, want maxed-out", conf.EventID)
+		}
+		if conf.Outcome != SubmitDropped {
+			t.Errorf("Outcome = %v, want SubmitDropped", conf.Outcome)
+		}
+		if conf.Err == nil {
+			t.Error("expected a non-nil Err describing max-retries exhaustion")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the max-retries-exceeded confirmation")
+	}
+}
+
+// TestRun_StopsPromptlyDuringBackoffWait proves Run's ctx.Done() select
+// branch inside the backoff wait (as opposed to the top-level ctx.Done()
+// covered by TestWatcher_Run_RequeueSendingErrorDoesNotBlockStartup-style
+// tests): a permanent failure enters the backoff sleep, and cancelling ctx
+// during that sleep must return promptly rather than waiting out the full
+// backoff duration.
+func TestRun_StopsPromptlyDuringBackoffWait(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, [][]byte{[]byte("secret")}, "kid", "proj", false, zerolog.Nop())
+	c.maxRetries = 5 // must not be exhausted after one failure, so Run reaches the backoff wait
+
+	env := &Envelope{EventType: "evt", EventID: "backoff-1", attempt: 0}
+	c.queue <- env
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		c.Run(ctx)
+		close(done)
+	}()
+
+	// Give Run time to dequeue, fail, and enter the ~1s backoff sleep.
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+		// Returned promptly instead of waiting out the full ~1s backoff.
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Run did not stop promptly on ctx cancellation during backoff wait")
+	}
+}

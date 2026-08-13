@@ -21,12 +21,32 @@ var (
 	ErrEmptyField        = errors.New("constituency: name and sector are required")
 )
 
+// constituencyStore is the persistence seam Service depends on. The real
+// implementation is *db.ConstituencyStore; tests substitute a fake to
+// exercise success and partial-failure branches deterministically without
+// a live Postgres.
+type constituencyStore interface {
+	Insert(ctx context.Context, c *db.Constituency) error
+	Get(ctx context.Context, id uuid.UUID) (*db.Constituency, error)
+	Update(ctx context.Context, c *db.Constituency) error
+	List(ctx context.Context, limit, offset int) ([]*db.Constituency, int, error)
+}
+
+// auditStore is the persistence seam for audit-trail writes.
+type auditStore interface {
+	Insert(ctx context.Context, a *db.AuditEntry) error
+}
+
 type Service struct {
-	store  *db.ConstituencyStore
-	audit  *db.AuditStore
+	store  constituencyStore
+	audit  auditStore
 	logger zerolog.Logger
 }
 
+// New wires a Service against the concrete DB-backed stores. Kept typed as
+// *db.ConstituencyStore / *db.AuditStore (rather than the narrower
+// interfaces above) so call sites are unaffected; both types implicitly
+// satisfy constituencyStore/auditStore.
 func New(store *db.ConstituencyStore, audit *db.AuditStore, logger zerolog.Logger) *Service {
 	return &Service{store: store, audit: audit, logger: logger}
 }

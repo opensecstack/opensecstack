@@ -44,3 +44,27 @@ func TestNoopEnrichTagsAsUnenriched(t *testing.T) {
 		t.Fatalf("expected unenriched tag, got %+v", enriched)
 	}
 }
+
+// TestNoopTriageAbuseEmail_AlwaysReturnsUnknown proves the deterministic
+// stub used when the Python service is unavailable never errors and never
+// fabricates a real classification (must stay "unknown"/0 confidence, not
+// e.g. "legitimate", which would be misleading in a security triage flow).
+func TestNoopTriageAbuseEmail_AlwaysReturnsUnknown(t *testing.T) {
+	c := NoopClient{}
+	res, err := c.TriageAbuseEmail(context.Background(), []byte("From: a@b.com\n\nbody"))
+	if err != nil {
+		t.Fatalf("TriageAbuseEmail: %v", err)
+	}
+	if res.Classification != "unknown" {
+		t.Errorf("Classification = %q, want unknown", res.Classification)
+	}
+	if res.Confidence != 0 {
+		t.Errorf("Confidence = %v, want 0", res.Confidence)
+	}
+}
+
+func TestNoopHealth_AlwaysNil(t *testing.T) {
+	if err := (NoopClient{}).Health(context.Background()); err != nil {
+		t.Fatalf("Health: %v, want nil (noop client is always healthy)", err)
+	}
+}

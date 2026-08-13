@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
@@ -184,6 +185,350 @@ func TestServiceUpdateStatus_GetErrorPropagates(t *testing.T) {
 	err := s.UpdateStatus(context.Background(), uuid.New(), "triaged", uuid.New(), "operator")
 	if err == nil {
 		t.Fatal("expected a store error from an unreachable DB, got nil")
+	}
+}
+
+// ── fake store seams ────────────────────────────────────────────────
+//
+// Service depends on the unexported incidentStore/outboxStore/auditStore
+// interfaces (see service.go); *db.IncidentStore/*db.OutboxStore/
+// *db.AuditStore satisfy them implicitly. These fakes let tests drive the
+// success path and partial-failure branches (e.g. store succeeds but
+// outbox/audit fails) deterministically without a live Postgres.
+
+type fakeIncidentStore struct {
+	insertErr error
+	getErr    error
+	getResult *db.Incident
+	updateErr error
+	listErr   error
+	listItems []*db.Incident
+	listTotal int
+
+	updateCalls []struct {
+		status   string
+		closedAt *time.Time
+	}
+}
+
+func (f *fakeIncidentStore) Insert(_ context.Context, i *db.Incident) error {
+	if f.insertErr != nil {
+		return f.insertErr
+	}
+	i.ID = uuid.New()
+	return nil
+}
+
+func (f *fakeIncidentStore) Get(_ context.Context, _ uuid.UUID) (*db.Incident, error) {
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
+	if f.getResult != nil {
+		cp := *f.getResult
+		return &cp, nil
+	}
+	return &db.Incident{ID: uuid.New(), Status: "open"}, nil
+}
+
+func (f *fakeIncidentStore) UpdateStatus(_ context.Context, _ uuid.UUID, status string, closedAt *time.Time) error {
+	f.updateCalls = append(f.updateCalls, struct {
+		status   string
+		closedAt *time.Time
+	}{status, closedAt})
+	if f.updateErr != nil {
+		return f.updateErr
+	}
+	return nil
+}
+
+func (f *fakeIncidentStore) List(_ context.Context, _ db.IncidentFilter) ([]*db.Incident, int, error) {
+	if f.listErr != nil {
+		return nil, 0, f.listErr
+	}
+	return f.listItems, f.listTotal, nil
+}
+
+type fakeOutboxStore struct {
+	enqueueErr error
+	entries    []*db.OutboxEntry
+}
+
+func (f *fakeOutboxStore) Enqueue(_ context.Context, e *db.OutboxEntry) error {
+	f.entries = append(f.entries, e)
+	if f.enqueueErr != nil {
+		return f.enqueueErr
+	}
+	return nil
+}
+
+type fakeAuditStore struct {
+	insertErr error
+	inserted  []*db.AuditEntry
+}
+
+func (f *fakeAuditStore) Insert(_ context.Context, a *db.AuditEntry) error {
+	f.inserted = append(f.inserted, a)
+	if f.insertErr != nil {
+		return f.insertErr
+	}
+	return nil
+}
+
+var errBoom = errors.New("boom")
+
+func newFakeService() (*Service, *fakeIncidentStore, *fakeOutboxStore, *fakeAuditStore) {
+	inc := &fakeIncidentStore{}
+	out := &fakeOutboxStore{}
+	aud := &fakeAuditStore{}
+	s := New(nil, nil, nil, zerolog.Nop())
+	s.incidents, s.outbox, s.audit = inc, out, aud
+	return s, inc, out, aud
+}
+
+// TestServiceCreate_SuccessEnqueuesOutboxAndAudits exercises Create's full
+// happy path: validation passes, the store insert succeeds, an
+// incident.opened outbox event is enqueued, and an audit entry is
+// recorded.
+func TestServiceCreate_SuccessEnqueuesOutboxAndAudits(t *testing.T) {
+	s, _, out, aud := newFakeService()
+
+	actor := uuid.New()
+	inc, err := s.Create(context.Background(), CreateInput{
+		Source: "manual", Severity: "high", Title: "  Test  ",
+	}, actor, "admin")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if inc == nil || inc.ID == uuid.Nil {
+		t.Fatal("expected an incident with an assigned ID")
+	}
+	if inc.Title != "Test" {
+		t.Errorf("Title = %q, want trimmed 'Test'", inc.Title)
+	}
+	if inc.Status != "open" {
+		t.Errorf("Status = %q, want open", inc.Status)
+	}
+	if len(out.entries) != 1 {
+		t.Fatalf("expected one outbox entry, got %d", len(out.entries))
+	}
+	if len(aud.inserted) != 1 || aud.inserted[0].Action != "incident.create" {
+		t.Fatalf("expected one incident.create audit entry, got %+v", aud.inserted)
+	}
+}
+
+// TestServiceCreate_OutboxAndAuditFailuresAreSwallowed proves that
+// failures in the outbox enqueue and audit insert (both best-effort,
+// post-commit side effects) are logged, not propagated — the caller still
+// gets back the created incident.
+func TestServiceCreate_OutboxAndAuditFailuresAreSwallowed(t *testing.T) {
+	s, _, out, aud := newFakeService()
+	out.enqueueErr = errBoom
+	aud.insertErr = errBoom
+
+	inc, err := s.Create(context.Background(), CreateInput{
+		Source: "manual", Severity: "high", Title: "Test",
+	}, uuid.New(), "admin")
+	if err != nil {
+		t.Fatalf("expected Create to succeed despite outbox/audit failures, got %v", err)
+	}
+	if inc == nil {
+		t.Fatal("expected non-nil incident despite outbox/audit failures")
+	}
+}
+
+// TestServiceClose_SuccessUpdatesEnqueuesAndAudits exercises Close's full
+// happy path: Get finds a non-closed incident, UpdateStatus succeeds, a
+// incident.closed outbox event is enqueued, and an audit entry recorded.
+func TestServiceClose_SuccessUpdatesEnqueuesAndAudits(t *testing.T) {
+	s, inc, out, aud := newFakeService()
+	inc.getResult = &db.Incident{ID: uuid.New(), Status: "open"}
+
+	got, err := s.Close(context.Background(), inc.getResult.ID, uuid.New(), "operator")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Status != "closed" {
+		t.Errorf("Status = %q, want closed", got.Status)
+	}
+	if got.ClosedAt == nil {
+		t.Error("expected ClosedAt to be set")
+	}
+	if len(inc.updateCalls) != 1 || inc.updateCalls[0].status != "closed" {
+		t.Fatalf("expected one UpdateStatus(closed) call, got %+v", inc.updateCalls)
+	}
+	if len(out.entries) != 1 {
+		t.Fatalf("expected one outbox entry, got %d", len(out.entries))
+	}
+	if len(aud.inserted) != 1 || aud.inserted[0].Action != "incident.close" {
+		t.Fatalf("expected one incident.close audit entry, got %+v", aud.inserted)
+	}
+}
+
+// TestServiceClose_AlreadyClosedReturnsErrorWithoutUpdating proves Close
+// short-circuits on an already-closed incident without calling
+// UpdateStatus, enqueueing an outbox event, or writing an audit entry.
+func TestServiceClose_AlreadyClosedReturnsErrorWithoutUpdating(t *testing.T) {
+	s, inc, out, aud := newFakeService()
+	inc.getResult = &db.Incident{ID: uuid.New(), Status: "closed"}
+
+	got, err := s.Close(context.Background(), inc.getResult.ID, uuid.New(), "operator")
+	if !errors.Is(err, ErrAlreadyClosed) {
+		t.Fatalf("got %v want ErrAlreadyClosed", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil incident, got %+v", got)
+	}
+	if len(inc.updateCalls) != 0 {
+		t.Errorf("expected no UpdateStatus call, got %+v", inc.updateCalls)
+	}
+	if len(out.entries) != 0 {
+		t.Errorf("expected no outbox entry, got %+v", out.entries)
+	}
+	if len(aud.inserted) != 0 {
+		t.Errorf("expected no audit entry, got %+v", aud.inserted)
+	}
+}
+
+// TestServiceClose_UpdateStatusErrorPropagatesAndSkipsFollowup proves that
+// when the UpdateStatus store call fails after a successful Get, the error
+// reaches the caller and neither the outbox enqueue nor the audit insert
+// are attempted.
+func TestServiceClose_UpdateStatusErrorPropagatesAndSkipsFollowup(t *testing.T) {
+	s, inc, out, aud := newFakeService()
+	inc.getResult = &db.Incident{ID: uuid.New(), Status: "open"}
+	inc.updateErr = errBoom
+
+	got, err := s.Close(context.Background(), inc.getResult.ID, uuid.New(), "operator")
+	if !errors.Is(err, errBoom) {
+		t.Fatalf("got %v want errBoom", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil incident, got %+v", got)
+	}
+	if len(out.entries) != 0 {
+		t.Errorf("expected no outbox entry when UpdateStatus fails, got %+v", out.entries)
+	}
+	if len(aud.inserted) != 0 {
+		t.Errorf("expected no audit entry when UpdateStatus fails, got %+v", aud.inserted)
+	}
+}
+
+// TestServiceUpdateStatus_IdempotentNoopSkipsStoreWriteAndSideEffects
+// proves the H3 idempotency guard: when the incident is already in the
+// target status, UpdateStatus returns nil without calling the store's
+// UpdateStatus, enqueueing an escalation event, or writing an audit entry.
+func TestServiceUpdateStatus_IdempotentNoopSkipsStoreWriteAndSideEffects(t *testing.T) {
+	s, inc, out, aud := newFakeService()
+	inc.getResult = &db.Incident{ID: uuid.New(), Status: "triaged"}
+
+	err := s.UpdateStatus(context.Background(), inc.getResult.ID, "triaged", uuid.New(), "operator")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(inc.updateCalls) != 0 {
+		t.Errorf("expected no UpdateStatus store call for idempotent no-op, got %+v", inc.updateCalls)
+	}
+	if len(out.entries) != 0 {
+		t.Errorf("expected no outbox entry for idempotent no-op, got %+v", out.entries)
+	}
+	if len(aud.inserted) != 0 {
+		t.Errorf("expected no audit entry for idempotent no-op, got %+v", aud.inserted)
+	}
+}
+
+// TestServiceUpdateStatus_TriagedEnqueuesEscalationAndAudits proves the
+// real transition path: status differs, the store update runs, the
+// "triaged" transition additionally enqueues an escalation outbox event,
+// and an audit entry is recorded.
+func TestServiceUpdateStatus_TriagedEnqueuesEscalationAndAudits(t *testing.T) {
+	s, inc, out, aud := newFakeService()
+	inc.getResult = &db.Incident{ID: uuid.New(), Status: "open"}
+
+	err := s.UpdateStatus(context.Background(), inc.getResult.ID, "triaged", uuid.New(), "operator")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(inc.updateCalls) != 1 || inc.updateCalls[0].status != "triaged" {
+		t.Fatalf("expected one UpdateStatus(triaged) call, got %+v", inc.updateCalls)
+	}
+	if len(out.entries) != 1 {
+		t.Fatalf("expected one escalation outbox entry, got %d", len(out.entries))
+	}
+	if len(aud.inserted) != 1 || aud.inserted[0].Action != "incident.update_status" {
+		t.Fatalf("expected one incident.update_status audit entry, got %+v", aud.inserted)
+	}
+}
+
+// TestServiceUpdateStatus_NonTriagedTransitionDoesNotEnqueueEscalation
+// proves the escalation outbox event is only enqueued for the "triaged"
+// transition, not for other valid status changes.
+func TestServiceUpdateStatus_NonTriagedTransitionDoesNotEnqueueEscalation(t *testing.T) {
+	s, inc, out, aud := newFakeService()
+	inc.getResult = &db.Incident{ID: uuid.New(), Status: "triaged"}
+
+	err := s.UpdateStatus(context.Background(), inc.getResult.ID, "contained", uuid.New(), "operator")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(out.entries) != 0 {
+		t.Errorf("expected no escalation outbox entry for non-triaged transition, got %+v", out.entries)
+	}
+	if len(aud.inserted) != 1 {
+		t.Fatalf("expected one audit entry regardless, got %+v", aud.inserted)
+	}
+}
+
+// TestServiceUpdateStatus_StoreUpdateErrorPropagatesAndSkipsFollowup
+// proves that when the store's UpdateStatus call fails after a successful
+// Get, the error reaches the caller and neither the escalation outbox
+// enqueue nor the audit insert are attempted.
+func TestServiceUpdateStatus_StoreUpdateErrorPropagatesAndSkipsFollowup(t *testing.T) {
+	s, inc, out, aud := newFakeService()
+	inc.getResult = &db.Incident{ID: uuid.New(), Status: "open"}
+	inc.updateErr = errBoom
+
+	err := s.UpdateStatus(context.Background(), inc.getResult.ID, "triaged", uuid.New(), "operator")
+	if !errors.Is(err, errBoom) {
+		t.Fatalf("got %v want errBoom", err)
+	}
+	if len(out.entries) != 0 {
+		t.Errorf("expected no outbox entry when store update fails, got %+v", out.entries)
+	}
+	if len(aud.inserted) != 0 {
+		t.Errorf("expected no audit entry when store update fails, got %+v", aud.inserted)
+	}
+}
+
+// TestServiceList_SuccessPassesThrough proves List returns exactly what
+// the store returns on success.
+func TestServiceList_SuccessPassesThrough(t *testing.T) {
+	s, inc, _, _ := newFakeService()
+	want := []*db.Incident{{ID: uuid.New(), Title: "Acme"}}
+	inc.listItems = want
+	inc.listTotal = 1
+
+	got, total, err := s.List(context.Background(), db.IncidentFilter{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 1 || len(got) != 1 || got[0].Title != "Acme" {
+		t.Errorf("List = (%+v, %d), want ([Acme], 1)", got, total)
+	}
+}
+
+// TestServiceGet_SuccessPassesThrough proves Get is a faithful
+// pass-through on the success path too, not just on error.
+func TestServiceGet_SuccessPassesThrough(t *testing.T) {
+	s, inc, _, _ := newFakeService()
+	want := &db.Incident{ID: uuid.New(), Title: "Acme"}
+	inc.getResult = want
+
+	got, err := s.Get(context.Background(), want.ID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Title != "Acme" {
+		t.Errorf("Get = %+v, want Title=Acme", got)
 	}
 }
 

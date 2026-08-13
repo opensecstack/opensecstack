@@ -21,10 +21,34 @@ var (
 	ErrAlreadyPublished = errors.New("advisory: already published")
 )
 
+// advisoryStore is the subset of *db.AdvisoryStore the service depends on.
+// Defined as an interface (rather than depending on the concrete type
+// directly) purely so unit tests can substitute an in-memory fake to reach
+// the store-success branches (Publish's post-state checks, Withdraw, List)
+// without a live Postgres. *db.AdvisoryStore satisfies this implicitly, so
+// every existing caller (cmd/opencsirt, internal/api/handlers) is unaffected.
+type advisoryStore interface {
+	Insert(ctx context.Context, a *db.Advisory) error
+	Get(ctx context.Context, id uuid.UUID) (*db.Advisory, error)
+	Publish(ctx context.Context, id, by uuid.UUID) error
+	Withdraw(ctx context.Context, id uuid.UUID) error
+	List(ctx context.Context, f db.AdvisoryFilter) ([]*db.Advisory, int, error)
+}
+
+// outboxEnqueuer is the subset of *db.OutboxStore the service depends on.
+type outboxEnqueuer interface {
+	Enqueue(ctx context.Context, e *db.OutboxEntry) error
+}
+
+// auditInserter is the subset of *db.AuditStore the service depends on.
+type auditInserter interface {
+	Insert(ctx context.Context, a *db.AuditEntry) error
+}
+
 type Service struct {
-	store      *db.AdvisoryStore
-	outbox     *db.OutboxStore
-	audit      *db.AuditStore
+	store      advisoryStore
+	outbox     outboxEnqueuer
+	audit      auditInserter
 	python     PythonClient
 	ThreatFlow *integrations.ThreatFlowClient
 	log        zerolog.Logger

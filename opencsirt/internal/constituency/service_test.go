@@ -224,3 +224,213 @@ func TestServiceList_StoreErrorPropagates(t *testing.T) {
 		t.Errorf("List returned total=%d alongside an error, want 0", total)
 	}
 }
+
+// ── fake store seams ────────────────────────────────────────────────
+//
+// Service depends on the unexported constituencyStore/auditStore
+// interfaces (see service.go); *db.ConstituencyStore/*db.AuditStore
+// satisfy them implicitly. These fakes let tests drive the success path
+// and partial-failure branches (e.g. store succeeds but audit fails)
+// deterministically without a live Postgres.
+
+type fakeConstituencyStore struct {
+	insertErr error
+	getErr    error
+	getResult *db.Constituency
+	updateErr error
+	listErr   error
+	listItems []*db.Constituency
+	listTotal int
+
+	inserted *db.Constituency
+	updated  *db.Constituency
+}
+
+func (f *fakeConstituencyStore) Insert(_ context.Context, c *db.Constituency) error {
+	if f.insertErr != nil {
+		return f.insertErr
+	}
+	c.ID = uuid.New()
+	f.inserted = c
+	return nil
+}
+
+func (f *fakeConstituencyStore) Get(_ context.Context, _ uuid.UUID) (*db.Constituency, error) {
+	if f.getErr != nil {
+		return nil, f.getErr
+	}
+	if f.getResult != nil {
+		cp := *f.getResult
+		return &cp, nil
+	}
+	return &db.Constituency{ID: uuid.New()}, nil
+}
+
+func (f *fakeConstituencyStore) Update(_ context.Context, c *db.Constituency) error {
+	if f.updateErr != nil {
+		return f.updateErr
+	}
+	f.updated = c
+	return nil
+}
+
+func (f *fakeConstituencyStore) List(_ context.Context, _, _ int) ([]*db.Constituency, int, error) {
+	if f.listErr != nil {
+		return nil, 0, f.listErr
+	}
+	return f.listItems, f.listTotal, nil
+}
+
+type fakeAuditStore struct {
+	insertErr error
+	inserted  []*db.AuditEntry
+}
+
+func (f *fakeAuditStore) Insert(_ context.Context, a *db.AuditEntry) error {
+	f.inserted = append(f.inserted, a)
+	if f.insertErr != nil {
+		return f.insertErr
+	}
+	return nil
+}
+
+var errBoom = errors.New("boom")
+
+// TestServiceCreate_SuccessInsertsAndAudits exercises the full happy path:
+// validation passes, the store insert succeeds, and a matching audit entry
+// is recorded.
+func TestServiceCreate_SuccessInsertsAndAudits(t *testing.T) {
+	store := &fakeConstituencyStore{}
+	audit := &fakeAuditStore{}
+	s := New(nil, nil, zerolog.Nop())
+	s.store, s.audit = store, audit
+
+	actor := uuid.New()
+	c, err := s.Create(context.Background(), CreateInput{
+		Name: "Acme", Sector: "energy", Country: "al",
+		NIS2Status: "essential", PrimaryContactEmail: "ops@acme.al",
+	}, actor, "admin")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c == nil || c.ID == uuid.Nil {
+		t.Fatal("expected a constituency with an assigned ID")
+	}
+	if c.Country != "AL" {
+		t.Errorf("Country = %q, want normalized uppercase AL", c.Country)
+	}
+	if c.TLPDefault != "green" {
+		t.Errorf("TLPDefault = %q, want default green", c.TLPDefault)
+	}
+	if len(audit.inserted) != 1 || audit.inserted[0].Action != "constituency.create" {
+		t.Fatalf("expected one constituency.create audit entry, got %+v", audit.inserted)
+	}
+	if *audit.inserted[0].ActorID != actor {
+		t.Errorf("audit ActorID = %v, want %v", *audit.inserted[0].ActorID, actor)
+	}
+}
+
+// TestServiceCreate_AuditFailureIsSwallowedButStoreResultReturned proves
+// that an audit-insert failure after a successful store insert is logged,
+// not propagated — the caller still gets back the created constituency.
+func TestServiceCreate_AuditFailureIsSwallowedButStoreResultReturned(t *testing.T) {
+	store := &fakeConstituencyStore{}
+	audit := &fakeAuditStore{insertErr: errBoom}
+	s := New(nil, nil, zerolog.Nop())
+	s.store, s.audit = store, audit
+
+	c, err := s.Create(context.Background(), CreateInput{
+		Name: "Acme", Sector: "energy", NIS2Status: "essential",
+	}, uuid.New(), "admin")
+	if err != nil {
+		t.Fatalf("expected Create to succeed despite audit failure, got %v", err)
+	}
+	if c == nil {
+		t.Fatal("expected non-nil constituency despite audit failure")
+	}
+}
+
+// TestServiceUpdate_SuccessUpdatesAndAudits exercises Update's full happy
+// path: Get succeeds, fields are overwritten from the input, Update
+// succeeds, and an audit entry is recorded.
+func TestServiceUpdate_SuccessUpdatesAndAudits(t *testing.T) {
+	existing := &db.Constituency{ID: uuid.New(), Name: "Old", Sector: "old-sector"}
+	store := &fakeConstituencyStore{getResult: existing}
+	audit := &fakeAuditStore{}
+	s := New(nil, nil, zerolog.Nop())
+	s.store, s.audit = store, audit
+
+	c, err := s.Update(context.Background(), existing.ID, CreateInput{
+		Name: "New Name", Sector: "energy", Country: "al",
+		NIS2Status: "important", TLPDefault: "amber",
+	}, uuid.New(), "admin")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if c.Name != "New Name" || c.Sector != "energy" || c.Country != "AL" || c.TLPDefault != "amber" {
+		t.Errorf("fields not updated as expected: %+v", c)
+	}
+	if store.updated == nil {
+		t.Fatal("expected store.Update to have been called")
+	}
+	if len(audit.inserted) != 1 || audit.inserted[0].Action != "constituency.update" {
+		t.Fatalf("expected one constituency.update audit entry, got %+v", audit.inserted)
+	}
+}
+
+// TestServiceUpdate_UpdateStoreErrorPropagatesAndSkipsAudit proves that
+// when store.Update fails after a successful Get, the error reaches the
+// caller and the audit insert is never attempted.
+func TestServiceUpdate_UpdateStoreErrorPropagatesAndSkipsAudit(t *testing.T) {
+	store := &fakeConstituencyStore{getResult: &db.Constituency{ID: uuid.New()}, updateErr: errBoom}
+	audit := &fakeAuditStore{}
+	s := New(nil, nil, zerolog.Nop())
+	s.store, s.audit = store, audit
+
+	c, err := s.Update(context.Background(), uuid.New(), CreateInput{
+		Name: "Acme", Sector: "energy", NIS2Status: "essential",
+	}, uuid.New(), "admin")
+	if !errors.Is(err, errBoom) {
+		t.Fatalf("got %v want errBoom", err)
+	}
+	if c != nil {
+		t.Errorf("Update returned non-nil constituency alongside an error: %+v", c)
+	}
+	if len(audit.inserted) != 0 {
+		t.Errorf("expected no audit insert when store.Update fails, got %+v", audit.inserted)
+	}
+}
+
+// TestServiceList_SuccessPassesThrough proves List returns exactly what
+// the store returns on success.
+func TestServiceList_SuccessPassesThrough(t *testing.T) {
+	want := []*db.Constituency{{ID: uuid.New(), Name: "Acme"}}
+	store := &fakeConstituencyStore{listItems: want, listTotal: 1}
+	s := New(nil, nil, zerolog.Nop())
+	s.store = store
+
+	got, total, err := s.List(context.Background(), 10, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if total != 1 || len(got) != 1 || got[0].Name != "Acme" {
+		t.Errorf("List = (%+v, %d), want ([Acme], 1)", got, total)
+	}
+}
+
+// TestServiceGet_SuccessPassesThrough proves Get is a faithful pass-through
+// on the success path too, not just on error.
+func TestServiceGet_SuccessPassesThrough(t *testing.T) {
+	want := &db.Constituency{ID: uuid.New(), Name: "Acme"}
+	store := &fakeConstituencyStore{getResult: want}
+	s := New(nil, nil, zerolog.Nop())
+	s.store = store
+
+	got, err := s.Get(context.Background(), want.ID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Name != "Acme" {
+		t.Errorf("Get = %+v, want Name=Acme", got)
+	}
+}

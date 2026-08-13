@@ -78,10 +78,7 @@ func main() {
 	}
 
 	// ── Auth ──
-	secrets := [][]byte{cfg.JWTSecret}
-	if len(cfg.JWTSecret) == 0 && cfg.DevMode {
-		secrets = [][]byte{[]byte("dev-secret-do-not-use-in-prod-aaaaaaaaaaaa")}
-	}
+	secrets := effectiveJWTSecrets(cfg.JWTSecret, cfg.DevMode)
 	authn, err := auth.NewWithSinauth(secrets, cfg.JWTIssuer, cfg.TokenTTL, cfg.PasswordPepper, cfg.Users, cfg.SinauthURL)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("auth init")
@@ -93,7 +90,7 @@ func main() {
 	// ── CITADEL ──
 	citadelClient := citadel.New(cfg.CitadelAPIURL, cfg.CitadelHMACSecrets, cfg.CitadelKeyID, cfg.CitadelProjectID, cfg.CitadelDryRun, logger)
 	go citadelClient.Run(ctx)
-	if cfg.CitadelAPIURL != "" && len(cfg.CitadelHMACSecrets) == 0 {
+	if citadelHMACSecretsMissing(cfg.CitadelAPIURL, cfg.CitadelHMACSecrets) {
 		logger.Fatal().Msg("OPENCSIRT_CITADEL_HMAC_SECRETS required when CITADEL_API_URL is set")
 	}
 
@@ -169,13 +166,7 @@ func main() {
 	if cfg.VertGuardAPIURL != "" && incidentSvc != nil {
 		vg := integrations.NewVertGuardSubscriber(cfg.VertGuardAPIURL, cfg.VertGuardAPIKey,
 			func(ctx context.Context, advisoryID string, payload map[string]any) error {
-				_, err := incidentSvc.Create(ctx, incident.CreateInput{
-					Source:      "peer_csirt",
-					Severity:    "medium",
-					Title:       "VertGuard advisory: " + advisoryID,
-					Description: "Cross-CSIRT AI-threat advisory",
-					Metadata:    map[string]any{"vertguard_advisory_id": advisoryID, "payload": payload},
-				}, uuid.Nil, "vertguard_subscriber")
+				_, err := incidentSvc.Create(ctx, vertGuardIncidentInput(advisoryID, payload), uuid.Nil, "vertguard_subscriber")
 				return err
 			}, logger)
 		go vg.Run(ctx)
@@ -241,5 +232,52 @@ func main() {
 	defer sCancel()
 	_ = srv.Shutdown(shutdownCtx)
 	cancel()
+}
+
+// ── extracted pure helpers ──────────────────────────────────────────
+//
+// These carry no network/DB/server dependency so they can be unit
+// tested directly, following the pattern used across the ecosystem
+// (see vertguard/cmd/server/main.go): pull decision logic out of
+// main() into small, deterministic functions and leave main() itself
+// as thin wiring.
+
+// effectiveJWTSecrets resolves the JWT verification secret set: the
+// configured secret is used whenever it is set, regardless of dev
+// mode. Only when no secret is configured AND dev mode is on does it
+// fall back to a fixed, clearly-named insecure development secret —
+// outside dev mode an empty configured secret is passed through
+// unchanged (auth.NewWithSinauth is expected to reject it), because
+// silently minting a working secret in production would defeat the
+// authentication boundary.
+func effectiveJWTSecrets(configured []byte, devMode bool) [][]byte {
+	if len(configured) == 0 && devMode {
+		return [][]byte{[]byte("dev-secret-do-not-use-in-prod-aaaaaaaaaaaa")}
+	}
+	return [][]byte{configured}
+}
+
+// citadelHMACSecretsMissing reports whether CITADEL has been pointed
+// at a real API URL without also configuring the HMAC secret(s) used
+// to sign outbound WORM emits — an insecure half-configuration that
+// must abort startup rather than silently emit unsigned/unverifiable
+// events.
+func citadelHMACSecretsMissing(citadelAPIURL string, hmacSecrets [][]byte) bool {
+	return citadelAPIURL != "" && len(hmacSecrets) == 0
+}
+
+// vertGuardIncidentInput builds the incident.CreateInput raised when
+// the VertGuard cross-CSIRT AI-threat subscriber delivers a new
+// advisory. Kept separate from the subscriber callback so the exact
+// shape of the synthesized incident (source/severity/title/metadata)
+// is independently testable without a live VertGuard connection.
+func vertGuardIncidentInput(advisoryID string, payload map[string]any) incident.CreateInput {
+	return incident.CreateInput{
+		Source:      "peer_csirt",
+		Severity:    "medium",
+		Title:       "VertGuard advisory: " + advisoryID,
+		Description: "Cross-CSIRT AI-threat advisory",
+		Metadata:    map[string]any{"vertguard_advisory_id": advisoryID, "payload": payload},
+	}
 }
 

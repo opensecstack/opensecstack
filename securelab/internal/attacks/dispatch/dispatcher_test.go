@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/opensecstack/securelab/internal/scenarios"
 )
@@ -106,7 +107,7 @@ func TestDispatch_MassAssignment_RoutesToAPIModule(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"role":"admin"}`))
+		_, _ = w.Write([]byte(`{"role":"admin"}`))
 	}))
 	defer server.Close()
 
@@ -204,5 +205,150 @@ func TestDispatch_PortScan_InvalidTargetURL(t *testing.T) {
 	_, err := d.Dispatch(context.Background(), scenarios.StepSpec{Kind: "port_scan"}, "not a url \x7f")
 	if err == nil {
 		t.Fatal("expected error for port_scan with unparseable target URL")
+	}
+}
+
+func TestDispatch_AuthBypass_RoutesToAPIModuleAndReturnsSuccess(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	d := NewDispatcher()
+	success, err := d.Dispatch(context.Background(), scenarios.StepSpec{
+		Kind:   "auth_bypass",
+		Params: map[string]any{"endpoints": []string{"/api/admin"}},
+	}, server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !success {
+		t.Error("expected success=true when target accepts a forged token with HTTP 200")
+	}
+}
+
+func TestDispatch_EndpointEnum_RoutesToReconModule(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	d := NewDispatcher()
+	success, err := d.Dispatch(context.Background(), scenarios.StepSpec{
+		Kind:   "endpoint_enum",
+		Params: map[string]any{"concurrency": 5},
+	}, server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !success {
+		t.Error("expected success=true when at least one wordlist endpoint is discovered")
+	}
+}
+
+func TestDispatch_VersionDetect_RoutesToReconModule(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Server", "nginx/1.18.0")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	d := NewDispatcher()
+	success, err := d.Dispatch(context.Background(), scenarios.StepSpec{
+		Kind: "version_detect",
+	}, server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !success {
+		t.Error("expected success=true when the Server header discloses a version")
+	}
+}
+
+func TestDispatch_DataExfil_RoutesToExfilModuleAndReturnsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	d := NewDispatcher()
+	// Omitting the required "jwt" param exercises the module's own validation
+	// (fast, no network I/O) while still confirming dispatch routes to it.
+	_, err := d.Dispatch(context.Background(), scenarios.StepSpec{
+		Kind: "data_exfil",
+	}, server.URL)
+	if err == nil {
+		t.Fatal("expected error for data_exfil without required jwt param")
+	}
+	if !strings.Contains(err.Error(), "jwt") {
+		t.Errorf("error = %v, want message mentioning missing jwt param", err)
+	}
+}
+
+func TestDispatch_DNSTunnel_RoutesToExfilModuleAndReturnsError(t *testing.T) {
+	d := NewDispatcher()
+	// Omitting the required "dns_server" param exercises the module's own
+	// validation (fast, no network I/O) while confirming dispatch routes to it.
+	_, err := d.Dispatch(context.Background(), scenarios.StepSpec{
+		Kind: "dns_tunnel",
+	}, "http://127.0.0.1:9999")
+	if err == nil {
+		t.Fatal("expected error for dns_tunnel without required dns_server param")
+	}
+	if !strings.Contains(err.Error(), "dns_server") {
+		t.Errorf("error = %v, want message mentioning missing dns_server param", err)
+	}
+}
+
+func TestDispatch_UDPFlood_InvalidTargetURL(t *testing.T) {
+	d := NewDispatcher()
+	_, err := d.Dispatch(context.Background(), scenarios.StepSpec{Kind: "udp_flood"}, "/no-host")
+	if err == nil {
+		t.Fatal("expected error for udp_flood with no host in target URL")
+	}
+	if !strings.Contains(err.Error(), "dispatch: udp_flood") {
+		t.Errorf("error = %v, want wrapped with 'dispatch: udp_flood'", err)
+	}
+}
+
+func TestDispatch_HTTPFlood_InvalidTargetURL(t *testing.T) {
+	d := NewDispatcher()
+	_, err := d.Dispatch(context.Background(), scenarios.StepSpec{Kind: "http_flood"}, "/no-host")
+	if err == nil {
+		t.Fatal("expected error for http_flood with no host in target URL")
+	}
+	if !strings.Contains(err.Error(), "dispatch: http_flood") {
+		t.Errorf("error = %v, want wrapped with 'dispatch: http_flood'", err)
+	}
+}
+
+func TestDispatch_Slowloris_InvalidTargetURL(t *testing.T) {
+	d := NewDispatcher()
+	_, err := d.Dispatch(context.Background(), scenarios.StepSpec{Kind: "slowloris"}, "/no-host")
+	if err == nil {
+		t.Fatal("expected error for slowloris with no host in target URL")
+	}
+	if !strings.Contains(err.Error(), "dispatch: slowloris") {
+		t.Errorf("error = %v, want wrapped with 'dispatch: slowloris'", err)
+	}
+}
+
+// TestDispatch_SynFlood_ImmediateContextCancellation exercises the syn_flood
+// success path (splitNetworkTarget succeeds, Run is invoked) without waiting
+// out the default 5s duration: an already-expired context makes Run's
+// select loop hit ctx.Done() on its very first iteration.
+func TestDispatch_SynFlood_ImmediateContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+	defer cancel()
+	<-ctx.Done()
+
+	d := NewDispatcher()
+	_, err := d.Dispatch(ctx, scenarios.StepSpec{Kind: "syn_flood"}, "http://127.0.0.1:9999")
+	if err == nil {
+		t.Fatal("expected context deadline exceeded error")
 	}
 }

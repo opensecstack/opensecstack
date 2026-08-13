@@ -103,73 +103,14 @@ func (e *Executor) Execute(ctx context.Context, runID string, spec *ScenarioSpec
 		return fmt.Errorf("executor: mark running: %w", err)
 	}
 
-	attackEvents := make([]AttackEvent, 0, len(spec.Steps))
-	detectionEvents := make([]DetectionEvent, 0)
-	detected := false
-	var detectionLatencyMs *int
-	finalStatus := "passed"
-	notes := ""
-
-	for i, step := range spec.Steps {
-		if execCtx.Err() != nil {
-			finalStatus = "error"
-			notes = "context cancelled or timed out during step execution"
-			break
-		}
-
-		stepStart := time.Now().UTC()
-		e.log.Info("dispatching attack step",
-			zap.String("run_id", runID),
-			zap.Int("step_index", i),
-			zap.String("kind", step.Kind),
-			zap.String("target", env.TargetURL),
-		)
-
-		success, dispatchErr := e.dispatcher.Dispatch(execCtx, step, env.TargetURL)
-		elapsed := time.Since(stepStart)
-
-		ev := AttackEvent{
-			StepIndex: i,
-			Kind:      step.Kind,
-			Params:    step.Params,
-			StartedAt: stepStart,
-			Duration:  fmt.Sprintf("%d", elapsed.Milliseconds()),
-			Success:   success,
-		}
-		if dispatchErr != nil {
-			ev.Error = dispatchErr.Error()
-			finalStatus = "failed"
-			e.log.Warn("attack step failed",
-				zap.String("run_id", runID),
-				zap.Int("step_index", i),
-				zap.Error(dispatchErr),
-			)
-		}
-		attackEvents = append(attackEvents, ev)
-	}
+	attackEvents, finalStatus, notes := e.runSteps(execCtx, runID, spec, env)
 
 	// After all attack steps, wait for a detection signal.
+	detected := false
+	var detectionLatencyMs *int
+	detectionEvents := make([]DetectionEvent, 0)
 	if finalStatus != "error" {
-		detCtx, detCancel := context.WithTimeout(execCtx, 30*time.Second)
-		detEv, detErr := e.monitor.WaitForDetection(detCtx)
-		detCancel()
-
-		if detErr == nil && detEv != nil {
-			detected = true
-			lat := int(detEv.Latency)
-			detectionLatencyMs = &lat
-			detectionEvents = append(detectionEvents, *detEv)
-			e.log.Info("detection confirmed",
-				zap.String("run_id", runID),
-				zap.String("platform", detEv.Platform),
-				zap.Int64("latency_ms", detEv.Latency),
-			)
-		} else if detErr != nil {
-			e.log.Warn("no detection received",
-				zap.String("run_id", runID),
-				zap.Error(detErr),
-			)
-		}
+		detected, detectionEvents, detectionLatencyMs = e.waitForDetection(execCtx, runID)
 	}
 
 	attackJSON, err := json.Marshal(attackEvents)
@@ -217,4 +158,87 @@ func (e *Executor) Execute(ctx context.Context, runID string, spec *ScenarioSpec
 	}
 
 	return nil
+}
+
+// runSteps dispatches every step in spec.Steps against env in order,
+// recording an AttackEvent per step. It stops early — without dispatching
+// remaining steps — if ctx is cancelled or times out between steps, in which
+// case it returns status "error" and an explanatory note. Otherwise it
+// returns status "failed" if any step's dispatch returned an error, or
+// "passed" if every step dispatched without error. runSteps performs no
+// database or network I/O of its own beyond e.dispatcher.Dispatch and
+// e.log, so it is safe to unit test without a live database.
+func (e *Executor) runSteps(ctx context.Context, runID string, spec *ScenarioSpec, env *db.Environment) (events []AttackEvent, status string, notes string) {
+	events = make([]AttackEvent, 0, len(spec.Steps))
+	status = "passed"
+
+	for i, step := range spec.Steps {
+		if ctx.Err() != nil {
+			status = "error"
+			notes = "context cancelled or timed out during step execution"
+			break
+		}
+
+		stepStart := time.Now().UTC()
+		e.log.Info("dispatching attack step",
+			zap.String("run_id", runID),
+			zap.Int("step_index", i),
+			zap.String("kind", step.Kind),
+			zap.String("target", env.TargetURL),
+		)
+
+		success, dispatchErr := e.dispatcher.Dispatch(ctx, step, env.TargetURL)
+		elapsed := time.Since(stepStart)
+
+		ev := AttackEvent{
+			StepIndex: i,
+			Kind:      step.Kind,
+			Params:    step.Params,
+			StartedAt: stepStart,
+			Duration:  fmt.Sprintf("%d", elapsed.Milliseconds()),
+			Success:   success,
+		}
+		if dispatchErr != nil {
+			ev.Error = dispatchErr.Error()
+			status = "failed"
+			e.log.Warn("attack step failed",
+				zap.String("run_id", runID),
+				zap.Int("step_index", i),
+				zap.Error(dispatchErr),
+			)
+		}
+		events = append(events, ev)
+	}
+	return events, status, notes
+}
+
+// waitForDetection blocks — bounded by a 30-second sub-timeout derived from
+// ctx — until a detection signal arrives from e.monitor, ctx is cancelled,
+// or the sub-timeout expires. It returns whether a detection was observed,
+// the (possibly empty) list of DetectionEvents, and the detection latency in
+// milliseconds when one was observed (nil otherwise). Like runSteps, it does
+// no database I/O and is safe to unit test independently of Execute.
+func (e *Executor) waitForDetection(ctx context.Context, runID string) (detected bool, events []DetectionEvent, latencyMs *int) {
+	events = make([]DetectionEvent, 0)
+
+	detCtx, detCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer detCancel()
+	detEv, detErr := e.monitor.WaitForDetection(detCtx)
+
+	if detErr == nil && detEv != nil {
+		lat := int(detEv.Latency)
+		latencyMs = &lat
+		events = append(events, *detEv)
+		e.log.Info("detection confirmed",
+			zap.String("run_id", runID),
+			zap.String("platform", detEv.Platform),
+			zap.Int64("latency_ms", detEv.Latency),
+		)
+	} else if detErr != nil {
+		e.log.Warn("no detection received",
+			zap.String("run_id", runID),
+			zap.Error(detErr),
+		)
+	}
+	return latencyMs != nil, events, latencyMs
 }

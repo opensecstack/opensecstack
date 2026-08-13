@@ -20,7 +20,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 
 	"github.com/opensecstack/securelab/internal/api"
@@ -133,10 +133,18 @@ func main() {
 	log.Info("server stopped")
 }
 
+// sqlExecer is the minimal subset of *pgxpool.Pool that runMigrations needs.
+// Extracting it as an interface lets tests exercise runMigrations' file
+// discovery, ordering, and error-handling logic with a fake, without a live
+// database connection.
+type sqlExecer interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
+
 // runMigrations executes every *.sql file from the embedded migrations FS in
 // lexicographic (numeric-prefix) order. DDL uses IF NOT EXISTS guards so
 // repeated server starts are idempotent.
-func runMigrations(ctx context.Context, pool *pgxpool.Pool, log *zap.Logger) error {
+func runMigrations(ctx context.Context, pool sqlExecer, log *zap.Logger) error {
 	entries, err := fs.ReadDir(migrations.FS, ".")
 	if err != nil {
 		return fmt.Errorf("migrations: read embedded dir: %w", err)

@@ -103,6 +103,52 @@ func TestRunScenario_MissingEnvironmentID(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// DB-error branch tests
+//
+// These use an unreachablePool (see testhelpers_test.go) so the handler runs
+// past validation into the DB call, which fails fast with a connection
+// error — exercising the 500 branches without requiring a live Postgres.
+// ---------------------------------------------------------------------------
+
+func TestListScenarios_DBError(t *testing.T) {
+	h := handlers.NewScenariosHandler(unreachablePool(t), nil, zaptest.NewLogger(t))
+	rr := do(h.ListScenarios, newGetRequest("/", nil))
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 on DB error, got %d", rr.Code)
+	}
+}
+
+func TestGetScenario_DBError(t *testing.T) {
+	h := handlers.NewScenariosHandler(unreachablePool(t), nil, zaptest.NewLogger(t))
+	rr := do(h.GetScenario, newGetRequest("/", map[string]string{"id": "s1"}))
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 on DB error, got %d", rr.Code)
+	}
+}
+
+func TestCreateScenario_ValidYAML_DBError(t *testing.T) {
+	// Valid JSON, valid YAML, spec passes semantic Validate(spec, nil) — the
+	// handler reaches InsertScenario, which fails against the unreachable pool.
+	h := handlers.NewScenariosHandler(unreachablePool(t), nil, zaptest.NewLogger(t))
+	yamlContent := "name: test-scenario\nseverity: low\nsteps:\n  - kind: bola\n"
+	body := `{"yaml_content":"` + escapeForJSON(yamlContent) + `"}`
+	rr := post(h.CreateScenario, body)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 on DB error, got %d", rr.Code)
+	}
+}
+
+func TestRunScenario_DBErrorOnScenarioLookup(t *testing.T) {
+	// Valid body, but GetScenario (the first DB call in RunScenario) fails
+	// against the unreachable pool.
+	h := handlers.NewScenariosHandler(unreachablePool(t), nil, zaptest.NewLogger(t))
+	rr := postWithParams(h.RunScenario, `{"environment_id":"env-1"}`, map[string]string{"id": "scenario-1"})
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500 on DB error, got %d", rr.Code)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
 

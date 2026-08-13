@@ -111,6 +111,33 @@ func TestValidate_SafeURL(t *testing.T) {
 	}
 }
 
+// TestValidate_UnparsableTargetURL verifies the fail-safe behaviour of
+// checkNotProduction: when the target URL cannot even be parsed, Validate
+// must block it rather than silently letting it through.
+func TestValidate_UnparsableTargetURL(t *testing.T) {
+	spec := validSpec()
+	env := envWithURL("://no-scheme")
+	err := scenarios.Validate(spec, env)
+	if err == nil {
+		t.Fatal("expected error for unparsable target URL, got nil")
+	}
+	if !strings.Contains(err.Error(), "not parsable") {
+		t.Errorf("expected error to mention 'not parsable', got: %s", err)
+	}
+}
+
+// TestValidate_EmptyHostnameIsNotBlocked exercises the branch where the
+// target URL parses successfully but yields no hostname (e.g. a relative
+// path). This should not match the production blocklist and must not error.
+func TestValidate_EmptyHostnameIsNotBlocked(t *testing.T) {
+	spec := validSpec()
+	env := envWithURL("/relative/path")
+	err := scenarios.Validate(spec, env)
+	if err != nil {
+		t.Fatalf("expected no error for empty-hostname URL, got: %s", err)
+	}
+}
+
 func TestValidate_AllValidStepKinds(t *testing.T) {
 	for kind := range scenarios.ValidStepKinds {
 		kind := kind // capture

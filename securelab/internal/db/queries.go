@@ -272,7 +272,7 @@ func GetRun(ctx context.Context, q *pgxpool.Pool, id string) (*ScenarioRun, erro
 	const sql = `
 		SELECT id, scenario_id, environment_id, status,
 		       started_at, finished_at, attack_events, detection_events,
-		       detection_latency_ms, detected, notes
+		       detection_latency_ms, detected, COALESCE(notes, '')
 		FROM scenario_runs
 		WHERE id = $1`
 
@@ -296,7 +296,7 @@ func ListRuns(ctx context.Context, q *pgxpool.Pool) ([]*ScenarioRun, error) {
 	const sql = `
 		SELECT id, scenario_id, environment_id, status,
 		       started_at, finished_at, attack_events, detection_events,
-		       detection_latency_ms, detected, notes
+		       detection_latency_ms, detected, COALESCE(notes, '')
 		FROM scenario_runs
 		ORDER BY started_at DESC NULLS LAST`
 

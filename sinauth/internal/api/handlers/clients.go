@@ -60,8 +60,8 @@ func CreateClient(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
-		if body.ClientID == "" || len(body.RedirectURIs) == 0 {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "client_id and at least one redirect_uri are required"})
+		if body.ClientID == "" || len(body.RedirectURIs) == 0 || len(body.AllowedScopes) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "client_id, at least one redirect_uri, and at least one allowed_scope are required"})
 			return
 		}
 		var secretHash string
@@ -85,7 +85,11 @@ func CreateClient(d Deps) http.HandlerFunc {
 			IsConfidential: body.IsConfidential,
 		}
 		if err := d.ClientSvc.Create(r.Context(), &c); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			// Do not echo the raw store/driver error (e.g. a Postgres
+			// constraint violation message) back to the caller — it can leak
+			// schema/internal details. A generic message is sufficient; the
+			// most common cause is a duplicate client_id.
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unable to create client (client_id may already be in use, or a field is invalid)"})
 			return
 		}
 		if d.Audit != nil {

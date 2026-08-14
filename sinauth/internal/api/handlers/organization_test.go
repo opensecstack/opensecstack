@@ -4,6 +4,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/opensecstack/sinauth/internal/api/middleware"
 	"github.com/opensecstack/sinauth/internal/authz"
+	"github.com/opensecstack/sinauth/internal/organization"
 	"github.com/opensecstack/sinauth/internal/token"
 )
 
@@ -222,6 +224,204 @@ func TestRemoveOwnOrganizationMember_NonMemberForbidden(t *testing.T) {
 	rec := doOwnMembersRequest(t, d, http.MethodDelete, "/x/"+org.ID+"/members/"+member.ID, bearerCtx(outsider.ID), "")
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+}
+
+// --- Admin-route handler tests (ListOrganizations/CreateOrganization/
+// GetOrganization/DeleteOrganization/ListOrganizationMembers/
+// AddOrganizationMember/RemoveOrganizationMember). These routes are gated
+// purely by RequireAdmin at the router level (see server.go and
+// server_admin_test.go), so the handler-level tests here call the handlers
+// directly (no admin standing check inside the handler itself) and focus on
+// input validation, success paths, and cross-organization isolation.
+
+func doAdminOrgRequest(t *testing.T, h http.HandlerFunc, method, path, body string, pathValues map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+	var req *http.Request
+	if body != "" {
+		req = httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+	} else {
+		req = httptest.NewRequest(method, path, nil)
+	}
+	for k, v := range pathValues {
+		req.SetPathValue(k, v)
+	}
+	rec := httptest.NewRecorder()
+	h(rec, req)
+	return rec
+}
+
+func TestCreateOrganization_MissingFields_BadRequest(t *testing.T) {
+	pool := requireDB(t)
+	d := testDeps(t, pool)
+
+	rec := doAdminOrgRequest(t, CreateOrganization(d), http.MethodPost, "/admin/organizations", `{"legal_name":"Only Name"}`, nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+func TestCreateOrganization_InvalidJSON_BadRequest(t *testing.T) {
+	pool := requireDB(t)
+	d := testDeps(t, pool)
+
+	rec := doAdminOrgRequest(t, CreateOrganization(d), http.MethodPost, "/admin/organizations", `{not json`, nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+// TestCreateOrganization_GetOrganization_ListOrganizations_DeleteOrganization
+// exercises the full admin org lifecycle through the handlers.
+func TestCreateOrganization_GetOrganization_ListOrganizations_DeleteOrganization(t *testing.T) {
+	pool := requireDB(t)
+	d := testDeps(t, pool)
+	slug := fmt.Sprintf("org-%d", time.Now().UnixNano())
+
+	body := fmt.Sprintf(`{"legal_name":"Test Corp","slug":%q,"org_type":"private","registration_number":"RN-1"}`, slug)
+	rec := doAdminOrgRequest(t, CreateOrganization(d), http.MethodPost, "/admin/organizations", body, nil)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want %d (body: %s)", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+	var created organization.Organization
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("unmarshal create response: %v", err)
+	}
+	if created.ID == "" {
+		t.Fatalf("expected non-empty id in %+v", created)
+	}
+	t.Cleanup(func() { _, _ = d.Pool.Exec(context.Background(), `DELETE FROM organizations WHERE id=$1`, created.ID) })
+
+	getRec := doAdminOrgRequest(t, GetOrganization(d), http.MethodGet, "/admin/organizations/"+created.ID, "", map[string]string{"id": created.ID})
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("get status = %d, want %d (body: %s)", getRec.Code, http.StatusOK, getRec.Body.String())
+	}
+	var fetched organization.Organization
+	if err := json.Unmarshal(getRec.Body.Bytes(), &fetched); err != nil {
+		t.Fatalf("unmarshal get response: %v", err)
+	}
+	if fetched.Slug != slug {
+		t.Errorf("fetched slug = %q, want %q", fetched.Slug, slug)
+	}
+
+	listRec := doAdminOrgRequest(t, ListOrganizations(d), http.MethodGet, "/admin/organizations", "", nil)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want %d", listRec.Code, http.StatusOK)
+	}
+	var orgs []organization.Organization
+	if err := json.Unmarshal(listRec.Body.Bytes(), &orgs); err != nil {
+		t.Fatalf("unmarshal list response: %v", err)
+	}
+	found := false
+	for _, o := range orgs {
+		if o.ID == created.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("created org %s not found in list", created.ID)
+	}
+
+	delRec := doAdminOrgRequest(t, DeleteOrganization(d), http.MethodDelete, "/admin/organizations/"+created.ID, "", map[string]string{"id": created.ID})
+	if delRec.Code != http.StatusNoContent {
+		t.Fatalf("delete status = %d, want %d", delRec.Code, http.StatusNoContent)
+	}
+
+	getRec2 := doAdminOrgRequest(t, GetOrganization(d), http.MethodGet, "/admin/organizations/"+created.ID, "", map[string]string{"id": created.ID})
+	if getRec2.Code != http.StatusNotFound {
+		t.Fatalf("get-after-delete status = %d, want %d (body: %s)", getRec2.Code, http.StatusNotFound, getRec2.Body.String())
+	}
+}
+
+func TestGetOrganization_NotFound(t *testing.T) {
+	pool := requireDB(t)
+	d := testDeps(t, pool)
+
+	rec := doAdminOrgRequest(t, GetOrganization(d), http.MethodGet, "/admin/organizations/00000000-0000-0000-0000-000000000000", "",
+		map[string]string{"id": "00000000-0000-0000-0000-000000000000"})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusNotFound, rec.Body.String())
+	}
+}
+
+func TestAddOrganizationMember_MissingUserID_BadRequest(t *testing.T) {
+	pool := requireDB(t)
+	d := testDeps(t, pool)
+	org := createTestOrg(t, d, "private")
+
+	rec := doAdminOrgRequest(t, AddOrganizationMember(d), http.MethodPost, "/admin/organizations/"+org.ID+"/members", `{}`, map[string]string{"id": org.ID})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
+}
+
+// TestAddOrganizationMember_ListOrganizationMembers_RemoveOrganizationMember_
+// IsolatedBetweenOrgs exercises the admin-route membership lifecycle and, as
+// an IDOR-style check, confirms that listing one organization's members
+// never includes a member added to a different organization.
+func TestAddOrganizationMember_ListOrganizationMembers_RemoveOrganizationMember_IsolatedBetweenOrgs(t *testing.T) {
+	pool := requireDB(t)
+	d := testDeps(t, pool)
+	orgA := createTestOrg(t, d, "private")
+	orgB := createTestOrg(t, d, "ngo")
+	userA := createTestAuthorizeUser(t, d, fmt.Sprintf("membera-%d", time.Now().UnixNano()))
+	userB := createTestAuthorizeUser(t, d, fmt.Sprintf("memberb-%d", time.Now().UnixNano()))
+
+	addRecA := doAdminOrgRequest(t, AddOrganizationMember(d), http.MethodPost, "/admin/organizations/"+orgA.ID+"/members",
+		fmt.Sprintf(`{"user_id":%q,"org_role":"member"}`, userA.ID), map[string]string{"id": orgA.ID})
+	if addRecA.Code != http.StatusNoContent {
+		t.Fatalf("add to orgA status = %d, want %d (body: %s)", addRecA.Code, http.StatusNoContent, addRecA.Body.String())
+	}
+	addRecB := doAdminOrgRequest(t, AddOrganizationMember(d), http.MethodPost, "/admin/organizations/"+orgB.ID+"/members",
+		fmt.Sprintf(`{"user_id":%q,"org_role":"owner"}`, userB.ID), map[string]string{"id": orgB.ID})
+	if addRecB.Code != http.StatusNoContent {
+		t.Fatalf("add to orgB status = %d, want %d (body: %s)", addRecB.Code, http.StatusNoContent, addRecB.Body.String())
+	}
+
+	listRecA := doAdminOrgRequest(t, ListOrganizationMembers(d), http.MethodGet, "/admin/organizations/"+orgA.ID+"/members", "", map[string]string{"id": orgA.ID})
+	if listRecA.Code != http.StatusOK {
+		t.Fatalf("list orgA status = %d, want %d", listRecA.Code, http.StatusOK)
+	}
+	var membersA []organization.Membership
+	if err := json.Unmarshal(listRecA.Body.Bytes(), &membersA); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(membersA) != 1 || membersA[0].OrganizationID != orgA.ID {
+		t.Fatalf("expected exactly userA's membership scoped to orgA, got %+v", membersA)
+	}
+
+	// Isolation: orgB's member must not appear in orgA's listing, and
+	// vice versa.
+	for _, m := range membersA {
+		if m.OrganizationID != orgA.ID {
+			t.Fatalf("cross-org leak: membership %+v does not belong to orgA %s", m, orgA.ID)
+		}
+	}
+
+	remRec := doAdminOrgRequest(t, RemoveOrganizationMember(d), http.MethodDelete, "/admin/organizations/"+orgA.ID+"/members/"+userA.ID, "",
+		map[string]string{"id": orgA.ID, "userId": userA.ID})
+	if remRec.Code != http.StatusNoContent {
+		t.Fatalf("remove status = %d, want %d (body: %s)", remRec.Code, http.StatusNoContent, remRec.Body.String())
+	}
+
+	listRecA2 := doAdminOrgRequest(t, ListOrganizationMembers(d), http.MethodGet, "/admin/organizations/"+orgA.ID+"/members", "", map[string]string{"id": orgA.ID})
+	var membersA2 []organization.Membership
+	if err := json.Unmarshal(listRecA2.Body.Bytes(), &membersA2); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(membersA2) != 0 {
+		t.Fatalf("expected orgA empty after remove, got %+v", membersA2)
+	}
+
+	// orgB's membership must be untouched by orgA's removal.
+	listRecB := doAdminOrgRequest(t, ListOrganizationMembers(d), http.MethodGet, "/admin/organizations/"+orgB.ID+"/members", "", map[string]string{"id": orgB.ID})
+	var membersB []organization.Membership
+	if err := json.Unmarshal(listRecB.Body.Bytes(), &membersB); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(membersB) != 1 || membersB[0].OrganizationID != orgB.ID {
+		t.Fatalf("expected orgB membership untouched, got %+v", membersB)
 	}
 }
 

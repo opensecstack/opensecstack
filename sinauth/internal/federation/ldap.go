@@ -18,6 +18,16 @@ type LDAPUser struct {
 
 // AuthenticateLDAP binds with the user credentials and searches for their entry.
 func AuthenticateLDAP(_ context.Context, p *Provider, username, password string) (*LDAPUser, error) {
+	// RFC 4513 §5.1.2: an LDAP simple bind with a non-empty DN but an empty
+	// password is an "unauthenticated bind" that many directory servers
+	// accept as SUCCESS without checking any credential at all. Without this
+	// guard, submitting an empty password would let an attacker "log in" as
+	// any username that resolves to a directory entry, bypassing
+	// authentication entirely. Reject empty passwords before ever dialing.
+	if password == "" {
+		return nil, fmt.Errorf("ldap user bind failed: empty password not allowed")
+	}
+
 	var conn *ldap.Conn
 	var err error
 

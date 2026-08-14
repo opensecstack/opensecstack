@@ -76,22 +76,12 @@ func runMigrate(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("read migrations dir %q: %w", dir, err)
 	}
-
-	var files []string
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".sql") {
-			files = append(files, e.Name())
-		}
-	}
-	sort.Strings(files)
+	files := sqlFileNames(entries)
+	pending := pendingFiles(files, applied)
 
 	// Apply pending migrations.
 	count := 0
-	for _, name := range files {
-		if applied[name] {
-			continue
-		}
-
+	for _, name := range pending {
 		data, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			return fmt.Errorf("read %s: %w", name, err)
@@ -122,4 +112,33 @@ func applyMigration(ctx context.Context, pool *pgxpool.Pool, name, sql string) e
 			`INSERT INTO schema_migrations (filename) VALUES ($1)`, name)
 		return err
 	})
+}
+
+// sqlFileNames extracts the sorted list of *.sql filenames (directories and
+// non-.sql entries excluded) from a directory listing. Split out of
+// runMigrate so the file-selection logic is unit-testable against a fake
+// os.DirEntry slice, without needing a real migrations directory on disk.
+func sqlFileNames(entries []os.DirEntry) []string {
+	var files []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".sql") {
+			files = append(files, e.Name())
+		}
+	}
+	sort.Strings(files)
+	return files
+}
+
+// pendingFiles filters files down to the ones not present in applied,
+// preserving order. Split out of runMigrate so the pending-vs-applied
+// decision is unit-testable independent of the DB query that produces
+// applied and the filesystem walk that produces files.
+func pendingFiles(files []string, applied map[string]bool) []string {
+	var pending []string
+	for _, f := range files {
+		if !applied[f] {
+			pending = append(pending, f)
+		}
+	}
+	return pending
 }

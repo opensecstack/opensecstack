@@ -15,14 +15,8 @@ var healthCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		addr, _ := cmd.Flags().GetString("addr")
 		client := &http.Client{Timeout: 4 * time.Second}
-		resp, err := client.Get("http://" + addr + "/api/v1/health")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "health check failed: %v\n", err)
-			os.Exit(1)
-		}
-		resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			fmt.Fprintf(os.Stderr, "health check returned %d\n", resp.StatusCode)
+		if err := checkHealth(client, addr); err != nil {
+			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 		return nil
@@ -31,4 +25,20 @@ var healthCmd = &cobra.Command{
 
 func init() {
 	healthCmd.Flags().String("addr", "localhost:8100", "host:port of the sinauth HTTP server")
+}
+
+// checkHealth issues GET http://<addr>/api/v1/health via client and reports
+// an error unless the server responds 200 OK. Split out of healthCmd's RunE
+// so the success/failure decision logic is unit-testable without going
+// through os.Exit (which would kill the test process).
+func checkHealth(client *http.Client, addr string) error {
+	resp, err := client.Get("http://" + addr + "/api/v1/health")
+	if err != nil {
+		return fmt.Errorf("health check failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("health check returned %d", resp.StatusCode)
+	}
+	return nil
 }

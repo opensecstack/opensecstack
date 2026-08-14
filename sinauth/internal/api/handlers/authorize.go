@@ -15,13 +15,13 @@ import (
 func AuthorizeGET(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		clientID    := q.Get("client_id")
+		clientID := q.Get("client_id")
 		redirectURI := q.Get("redirect_uri")
-		scope       := q.Get("scope")
-		state       := q.Get("state")
-		challenge   := q.Get("code_challenge")
-		method      := q.Get("code_challenge_method")
-		nonce       := q.Get("nonce")
+		scope := q.Get("scope")
+		state := q.Get("state")
+		challenge := q.Get("code_challenge")
+		method := q.Get("code_challenge_method")
+		nonce := q.Get("nonce")
 		organizationID := q.Get("organization_id")
 
 		if q.Get("response_type") != "code" {
@@ -74,16 +74,51 @@ func AuthorizePOST(d Deps) http.HandlerFunc {
 			return
 		}
 
-		username    := r.FormValue("username")
-		password    := r.FormValue("password")
-		clientID    := r.FormValue("client_id")
+		username := r.FormValue("username")
+		password := r.FormValue("password")
+		clientID := r.FormValue("client_id")
 		redirectURI := r.FormValue("redirect_uri")
-		scope       := r.FormValue("scope")
-		state       := r.FormValue("state")
-		challenge   := r.FormValue("code_challenge")
-		challengeM  := r.FormValue("code_challenge_method")
-		nonce       := r.FormValue("nonce")
+		scope := r.FormValue("scope")
+		state := r.FormValue("state")
+		challenge := r.FormValue("code_challenge")
+		challengeM := r.FormValue("code_challenge_method")
+		nonce := r.FormValue("nonce")
 		organizationID := r.FormValue("organization_id")
+
+		// Re-validate client_id, redirect_uri, scope and PKCE exactly as
+		// AuthorizeGET does above. AuthorizePOST is a standalone,
+		// stateless HTTP endpoint -- nothing ties a POST here to a prior,
+		// already-validated AuthorizeGET call (no server-side session, no
+		// signed request token binding the two legs together), so a
+		// caller is free to POST directly with arbitrary client_id/
+		// redirect_uri/scope/code_challenge values, entirely bypassing
+		// the browser-driven GET step. Without this re-validation, any
+		// authenticated user could be issued a fresh authorization code
+		// and redirected to ANY URI (not just a client's registered
+		// redirect_uris -- an open redirect and code-exfiltration
+		// primitive), could request scopes the client isn't allowed, and
+		// could silently defeat a client's require_pkce flag by simply
+		// omitting code_challenge from the POST.
+		c, err := d.ClientSvc.GetByClientID(r.Context(), clientID)
+		if err != nil {
+			http.Error(w, "invalid_client", http.StatusBadRequest)
+			return
+		}
+		if err := d.ClientSvc.ValidateRedirectURI(c, redirectURI); err != nil {
+			http.Error(w, "invalid_redirect_uri", http.StatusBadRequest)
+			return
+		}
+
+		scopes := strings.Fields(scope)
+		if err := d.ClientSvc.ValidateScopes(c, scopes); err != nil {
+			redirectWithError(w, r, redirectURI, state, "invalid_scope")
+			return
+		}
+
+		if c.RequirePKCE && challenge == "" {
+			redirectWithError(w, r, redirectURI, state, "invalid_request")
+			return
+		}
 
 		// Authenticate user
 		u, err := d.UserSvc.Authenticate(r.Context(), username, password)
@@ -91,8 +126,6 @@ func AuthorizePOST(d Deps) http.HandlerFunc {
 			redirectWithError(w, r, redirectURI, state, "access_denied")
 			return
 		}
-
-		scopes := strings.Fields(scope)
 
 		// Resolve organization context (ADR 005 v1.1). sinauth never guesses
 		// which organization a token should represent:

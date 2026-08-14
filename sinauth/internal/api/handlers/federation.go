@@ -295,31 +295,30 @@ func SAMLAcs(d Deps) http.HandlerFunc {
 }
 
 // federatedLogin finds or creates a sinauth user for the federated identity and issues a token.
+//
+// Note: sinauth has no single users.role column — authorization is modeled
+// per-OAuth-client via user_client_roles/group_client_roles (see
+// migrations/012_rbac.sql). Provider.DefaultRole is retained on the identity
+// provider config for future per-client RBAC provisioning, but federatedLogin
+// itself is client-agnostic (it authenticates the person, not a specific
+// platform session) and does not assign RBAC roles.
 func federatedLogin(r *http.Request, d Deps, p *federation.Provider, externalID, email, displayName string) (string, string, error) {
 	userID, err := d.FedStore.FindUserByFederatedIdentity(r.Context(), p.ID, externalID)
-	var role string
 
 	if err != nil {
 		// First login — provision the user.
-		role = p.DefaultRole
 		username := strings.Split(email, "@")[0]
 		if username == "" {
 			username = "user_" + externalID[:8]
 		}
 		err = d.Pool.QueryRow(r.Context(),
-			`INSERT INTO users (username, display_name, email, role)
-			 VALUES ($1,$2,$3,$4)
+			`INSERT INTO users (username, display_name, email)
+			 VALUES ($1,$2,$3)
 			 ON CONFLICT (username) DO UPDATE SET display_name=EXCLUDED.display_name, email=EXCLUDED.email
-			 RETURNING id, role`,
-			username, displayName, email, role,
-		).Scan(&userID, &role)
+			 RETURNING id`,
+			username, displayName, email,
+		).Scan(&userID)
 		if err != nil {
-			return "", "", err
-		}
-	} else {
-		if err := d.Pool.QueryRow(r.Context(),
-			`SELECT role FROM users WHERE id=$1`, userID,
-		).Scan(&role); err != nil {
 			return "", "", err
 		}
 	}

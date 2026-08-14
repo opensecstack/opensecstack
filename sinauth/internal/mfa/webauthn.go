@@ -26,8 +26,16 @@ func (u *WAUser) WebAuthnCredentials() []webauthn.Credential { return u.Credenti
 // LoadWAUser fetches a user and all their WebAuthn credentials from the DB.
 func LoadWAUser(ctx context.Context, pool *pgxpool.Pool, userID string) (*WAUser, error) {
 	u := &WAUser{}
+	// id::bytea is not a valid cast for a uuid column in Postgres (uuid and
+	// bytea are unrelated types, and PG rejects the cast outright with
+	// "cannot cast type uuid to bytea"). Since nothing in this codebase ever
+	// populates users.webauthn_id, that column is always NULL, which meant
+	// every single call to LoadWAUser failed with a SQL error — WebAuthn
+	// login/registration was completely broken for every user. uuid_send()
+	// returns the UUID's canonical 16-byte representation and is the
+	// correct way to get a stable bytea fallback from a uuid column.
 	err := pool.QueryRow(ctx,
-		`SELECT COALESCE(webauthn_id, id::bytea), username, COALESCE(display_name, username) FROM users WHERE id=$1`,
+		`SELECT COALESCE(webauthn_id, uuid_send(id)), username, COALESCE(display_name, username) FROM users WHERE id=$1`,
 		userID,
 	).Scan(&u.ID, &u.Name, &u.DisplayName)
 	if err != nil {
@@ -65,11 +73,21 @@ func SaveCredential(ctx context.Context, pool *pgxpool.Pool, userID, name string
 	for i, t := range c.Transport {
 		transports[i] = string(t)
 	}
+	// aaguid is NOT NULL (with a 16-zero-byte default). Some attestation
+	// paths can leave Authenticator.AAGUID nil/empty; passing that through
+	// as an explicit NULL parameter overrides the column default and trips
+	// the NOT NULL constraint, failing the whole registration. Fall back to
+	// 16 zero bytes (the same value the column default would produce) so a
+	// missing AAGUID degrades gracefully instead of erroring.
+	aaguid := c.Authenticator.AAGUID
+	if len(aaguid) == 0 {
+		aaguid = make([]byte, 16)
+	}
 	_, err := pool.Exec(ctx,
 		`INSERT INTO webauthn_credentials
 		 (user_id, credential_id, public_key, aaguid, sign_count, name, transports, backup_eligible, backup_state)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-		userID, c.ID, c.PublicKey, c.Authenticator.AAGUID, c.Authenticator.SignCount,
+		userID, c.ID, c.PublicKey, aaguid, c.Authenticator.SignCount,
 		name, transports, c.Flags.BackupEligible, c.Flags.BackupState,
 	)
 	return err

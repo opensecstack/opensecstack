@@ -74,6 +74,16 @@ func MyOrganizations(d Deps) http.HandlerFunc {
 func DeactivateUser(d Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
+		// UserSvc.Deactivate's UPDATE is a no-op (no error, no rows touched)
+		// when id doesn't match any user, which would otherwise let this
+		// handler report success — and write a "user.deactivated" audit
+		// entry — for an action that never happened. Confirm the user
+		// exists first so both the HTTP response and the audit trail stay
+		// truthful.
+		if _, err := d.UserSvc.GetByID(r.Context(), id); err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+			return
+		}
 		if err := d.UserSvc.Deactivate(r.Context(), id); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return

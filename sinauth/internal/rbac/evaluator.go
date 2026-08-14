@@ -67,6 +67,14 @@ func (s *Store) Evaluate(ctx context.Context, tc TokenContext) error {
 			if p.RoleName != "" && s.roleHeld(ctx, tc, p.RoleName) {
 				return errors.New("role denied by policy: " + p.Name)
 			}
+		default:
+			// The policies table's CHECK constraint (migrations/012_rbac.sql)
+			// allows types this switch doesn't implement (e.g. "allow_client").
+			// Silently ignoring an enabled policy an operator believes is
+			// enforcing something is a fail-open security gap, not a missing
+			// feature — refuse token issuance instead so the gap is loud and
+			// operationally visible rather than a false sense of protection.
+			return errors.New("unimplemented policy type: " + p.Type + " (policy: " + p.Name + ")")
 		}
 	}
 	return nil

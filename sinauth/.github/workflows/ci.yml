@@ -15,6 +15,8 @@ jobs:
           POSTGRES_DB: sinauth_test
           POSTGRES_USER: sinauth
           POSTGRES_PASSWORD: sinauth
+        ports:
+          - 5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -28,9 +30,15 @@ jobs:
       - run: go mod download
       - run: go build ./...
       - run: go vet ./...
-      - run: go test ./...
+      - run: go run ./cmd/sinauth migrate
         env:
+          SINAUTH_DEV_MODE: "true"
           SINAUTH_DB_URL: postgres://sinauth:sinauth@localhost:5432/sinauth_test?sslmode=disable
+      - run: go test -tags=integration ./...
+        env:
+          SINAUTH_DEV_MODE: "true"
+          SINAUTH_DB_URL: postgres://sinauth:sinauth@localhost:5432/sinauth_test?sslmode=disable
+          SINAUTH_TEST_DB_URL: postgres://sinauth:sinauth@localhost:5432/sinauth_test?sslmode=disable
 
   lint:
     runs-on: ubuntu-latest

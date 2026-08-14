@@ -2,6 +2,7 @@ package audit
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"time"
 
@@ -57,10 +58,15 @@ func (s *Store) List(ctx context.Context, limit int) ([]Entry, error) {
 	for rows.Next() {
 		var e Entry
 		var meta []byte
-		if err := rows.Scan(&e.ID, &e.EventType, &e.Actor, &e.ClientID,
-			&e.IPAddress, &e.UserAgent, &meta, &e.CreatedAt); err != nil {
+		var actor, clientID, ipAddress, userAgent sql.NullString
+		if err := rows.Scan(&e.ID, &e.EventType, &actor, &clientID,
+			&ipAddress, &userAgent, &meta, &e.CreatedAt); err != nil {
 			return nil, err
 		}
+		e.Actor = actor.String
+		e.ClientID = clientID.String
+		e.IPAddress = ipAddress.String
+		e.UserAgent = userAgent.String
 		if meta != nil {
 			e.Metadata = json.RawMessage(meta)
 		}

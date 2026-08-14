@@ -172,9 +172,27 @@ func TestVerify_TamperedPayload(t *testing.T) {
 		t.Fatalf("IssueAccessToken: %v", err)
 	}
 
-	// Corrupt the last character of the token (part of the signature), which
-	// must invalidate it regardless of which segment absorbs the change.
-	tampered := tok[:len(tok)-1] + "x"
+	// Corrupt a character from the signature segment, which must invalidate
+	// it regardless of which segment absorbs the change.
+	//
+	// This deliberately avoids the very last character of the token: for a
+	// base64url-encoded value whose byte length isn't a multiple of 3 (true
+	// here — a 256-byte RS256 signature leaves a 1-byte remainder), the
+	// final encoded character only carries 2 significant bits, with the
+	// rest required to decode as zero padding. Many base64 decoders (Go's
+	// included, in raw/no-padding mode) don't reject non-zero padding bits,
+	// so a substantial fraction of substitute characters at that exact
+	// position decode to the same effective value as the original — making
+	// "replace the last char with a fixed letter" flaky (it was observed to
+	// intermittently fail here). Corrupting an interior character instead
+	// always changes a full 6-bit group, so the decoded bytes reliably
+	// differ.
+	idx := len(tok) - 5
+	replacement := byte('A')
+	if tok[idx] == 'A' {
+		replacement = 'B'
+	}
+	tampered := tok[:idx] + string(replacement) + tok[idx+1:]
 	if tampered == tok {
 		t.Fatal("tampering produced identical token; adjust the corrupted byte")
 	}

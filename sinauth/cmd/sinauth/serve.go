@@ -38,10 +38,7 @@ func runServe(cmd *cobra.Command, _ []string) error {
 
 	// Key manager
 	km := keys.New(cfg.SigningKeyID)
-	keyPath := cfg.SigningKeyPath
-	if keyPath == "" {
-		keyPath = "dev-keys/sinauth.pem"
-	}
+	keyPath := resolveKeyPath(cfg.SigningKeyPath)
 	if err := km.LoadOrGenerate(keyPath); err != nil {
 		return fmt.Errorf("keys: %w", err)
 	}
@@ -63,14 +60,7 @@ func runServe(cmd *cobra.Command, _ []string) error {
 	if cfg.BootstrapAdminEmail != "" {
 		store := user.NewStore(pool)
 		promoted, err := store.SetPlatformAdmin(ctx, cfg.BootstrapAdminEmail, true)
-		if err != nil {
-			log.Printf("sinauth: WARNING: failed to bootstrap platform admin %q: %v", cfg.BootstrapAdminEmail, err)
-		} else if promoted {
-			log.Printf("sinauth: bootstrapped platform admin: %s", cfg.BootstrapAdminEmail)
-		} else {
-			log.Printf("sinauth: SINAUTH_BOOTSTRAP_ADMIN_EMAIL=%s set but no matching user exists yet — "+
-				"register that account, then restart sinauth (or re-run) to promote it", cfg.BootstrapAdminEmail)
-		}
+		log.Print(bootstrapAdminMessage(cfg.BootstrapAdminEmail, promoted, err))
 	}
 
 	handler := api.NewServer(cfg, pool, km)
@@ -93,4 +83,32 @@ func runServe(cmd *cobra.Command, _ []string) error {
 // devMode checks if SINAUTH_DEV_MODE is set.
 func devMode() bool {
 	return os.Getenv("SINAUTH_DEV_MODE") == "true"
+}
+
+// resolveKeyPath returns the configured signing key path, falling back to
+// the dev-mode default when unset. Extracted from runServe so the fallback
+// decision is unit-testable without touching the filesystem or DB.
+func resolveKeyPath(configured string) string {
+	if configured == "" {
+		return "dev-keys/sinauth.pem"
+	}
+	return configured
+}
+
+// bootstrapAdminMessage renders the single log line runServe emits after
+// attempting to bootstrap the configured platform-admin email, covering
+// the three possible outcomes (store error, promoted, no matching user
+// yet). Split out of runServe so the message-selection logic — which
+// email/outcome maps to which of the three operator-facing messages — is
+// unit-testable without a live DB.
+func bootstrapAdminMessage(email string, promoted bool, err error) string {
+	switch {
+	case err != nil:
+		return fmt.Sprintf("sinauth: WARNING: failed to bootstrap platform admin %q: %v", email, err)
+	case promoted:
+		return fmt.Sprintf("sinauth: bootstrapped platform admin: %s", email)
+	default:
+		return fmt.Sprintf("sinauth: SINAUTH_BOOTSTRAP_ADMIN_EMAIL=%s set but no matching user exists yet — "+
+			"register that account, then restart sinauth (or re-run) to promote it", email)
+	}
 }

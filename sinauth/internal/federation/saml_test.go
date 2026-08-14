@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 
@@ -201,6 +202,125 @@ func TestBuildIDPMetadata_NoCert(t *testing.T) {
 	}
 	if len(meta.IDPSSODescriptors) == 0 {
 		t.Fatal("expected at least one IDPSSODescriptor")
+	}
+}
+
+// TestBuildSAMLSP_ManualFields proves BuildSAMLSP constructs a working
+// ServiceProvider from individually-configured provider fields (the
+// default path, used when no metadata URL/XML is supplied), with the ACS
+// URL and entity ID wired through correctly.
+func TestBuildSAMLSP_ManualFields(t *testing.T) {
+	p := &Provider{
+		SAMLEntityID: "https://idp.example.com",
+		SAMLSSOURI:   "https://idp.example.com/sso",
+	}
+	sp, err := BuildSAMLSP(p, "https://sin.to/saml/acs", "https://sin.to")
+	if err != nil {
+		t.Fatalf("BuildSAMLSP: %v", err)
+	}
+	if sp.EntityID != "https://sin.to" {
+		t.Errorf("EntityID = %q, want https://sin.to", sp.EntityID)
+	}
+	if sp.AcsURL.String() != "https://sin.to/saml/acs" {
+		t.Errorf("AcsURL = %q, want https://sin.to/saml/acs", sp.AcsURL.String())
+	}
+	if sp.IDPMetadata == nil {
+		t.Fatal("expected non-nil IDPMetadata")
+	}
+	if sp.IDPMetadata.EntityID != p.SAMLEntityID {
+		t.Errorf("IDPMetadata.EntityID = %q, want %q", sp.IDPMetadata.EntityID, p.SAMLEntityID)
+	}
+	// Key/Certificate are intentionally left nil (unsigned AuthnRequests).
+	if sp.Key != nil {
+		t.Error("expected sp.Key to be nil (unsigned AuthnRequests)")
+	}
+	if sp.Certificate != nil {
+		t.Error("expected sp.Certificate to be nil (unsigned AuthnRequests)")
+	}
+}
+
+// TestBuildSAMLSP_ParsesMetadataXML proves the SAMLMetadataXML path parses
+// IdP metadata directly rather than falling through to the manual-field
+// builder or a network fetch.
+func TestBuildSAMLSP_ParsesMetadataXML(t *testing.T) {
+	metadataXML := `<?xml version="1.0"?>
+<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="https://idp.example.com/metadata">
+  <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+    <SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="https://idp.example.com/sso"/>
+  </IDPSSODescriptor>
+</EntityDescriptor>`
+	p := &Provider{SAMLMetadataXML: metadataXML}
+	sp, err := BuildSAMLSP(p, "https://sin.to/saml/acs", "https://sin.to")
+	if err != nil {
+		t.Fatalf("BuildSAMLSP: %v", err)
+	}
+	if sp.IDPMetadata.EntityID != "https://idp.example.com/metadata" {
+		t.Errorf("IDPMetadata.EntityID = %q, want https://idp.example.com/metadata", sp.IDPMetadata.EntityID)
+	}
+}
+
+// TestBuildSAMLSP_InvalidACSURL proves a malformed ACS URL is rejected
+// rather than silently producing a broken ServiceProvider.
+func TestBuildSAMLSP_InvalidACSURL(t *testing.T) {
+	p := &Provider{SAMLEntityID: "https://idp.example.com", SAMLSSOURI: "https://idp.example.com/sso"}
+	_, err := BuildSAMLSP(p, "http://%zz", "https://sin.to")
+	if err == nil {
+		t.Fatal("BuildSAMLSP: expected error for malformed acsURL, got nil")
+	}
+}
+
+// TestBuildSAMLSP_InvalidCertificate proves a malformed SAML certificate on
+// the provider surfaces as an error from BuildSAMLSP rather than a panic or
+// a silently-empty KeyDescriptor (which would let responses go unverified).
+func TestBuildSAMLSP_InvalidCertificate(t *testing.T) {
+	p := &Provider{
+		SAMLEntityID:    "https://idp.example.com",
+		SAMLSSOURI:      "https://idp.example.com/sso",
+		SAMLCertificate: "not-a-cert",
+	}
+	_, err := BuildSAMLSP(p, "https://sin.to/saml/acs", "https://sin.to")
+	if err == nil {
+		t.Fatal("BuildSAMLSP: expected error for invalid certificate, got nil")
+	}
+}
+
+// TestInitiateSAMLLogin_ReturnsRedirectAndRelayState proves InitiateSAMLLogin
+// builds a redirect URL pointing at the IdP's SSO endpoint and a non-empty,
+// random relay state that isn't embedded verbatim as a query parameter
+// value collision (basic sanity, not a full protocol conformance check).
+func TestInitiateSAMLLogin_ReturnsRedirectAndRelayState(t *testing.T) {
+	p := &Provider{
+		SAMLEntityID: "https://idp.example.com",
+		SAMLSSOURI:   "https://idp.example.com/sso",
+	}
+	sp, err := BuildSAMLSP(p, "https://sin.to/saml/acs", "https://sin.to")
+	if err != nil {
+		t.Fatalf("BuildSAMLSP: %v", err)
+	}
+
+	redirectURL, relayState, err := InitiateSAMLLogin(sp)
+	if err != nil {
+		t.Fatalf("InitiateSAMLLogin: %v", err)
+	}
+	if relayState == "" {
+		t.Error("expected non-empty relay state")
+	}
+	if !strings.HasPrefix(redirectURL, "https://idp.example.com/sso?") {
+		t.Errorf("redirectURL = %q, want prefix https://idp.example.com/sso?", redirectURL)
+	}
+	if !strings.Contains(redirectURL, "SAMLRequest=") {
+		t.Errorf("redirectURL = %q, want it to contain a SAMLRequest param", redirectURL)
+	}
+
+	// Two calls must produce different relay states (each login attempt gets
+	// its own, unguessable value — reusing one would let an attacker replay
+	// or fixate a victim's SSO flow).
+	_, relayState2, err := InitiateSAMLLogin(sp)
+	if err != nil {
+		t.Fatalf("InitiateSAMLLogin (2nd call): %v", err)
+	}
+	if relayState == relayState2 {
+		t.Error("InitiateSAMLLogin produced identical relay states across calls (should be random per attempt)")
 	}
 }
 

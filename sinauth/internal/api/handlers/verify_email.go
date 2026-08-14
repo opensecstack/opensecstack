@@ -42,7 +42,14 @@ func ResendVerification(d Deps) http.HandlerFunc {
 			return
 		}
 
-		u, err := d.UserSvc.GetByID(r.Context(), claims.Sub)
+		// claims.Sub is the username, not the user ID — every token-issuing
+		// handler in this codebase (auth.go, federation.go, social.go,
+		// webauthn.go, token.go) sets the JWT "sub" claim to the username, and
+		// UserInfo (userinfo.go) reads it back the same way. This previously
+		// called GetByID(claims.Sub), which meant this endpoint 404'd for
+		// every real user (a username is never a valid user-id UUID) — found
+		// by TestResendVerification_UnverifiedUser_StoresNewToken.
+		u, err := d.UserSvc.GetByUsername(r.Context(), claims.Sub)
 		if err != nil {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
 			return

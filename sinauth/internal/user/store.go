@@ -3,6 +3,8 @@ package user
 import (
 	"context"
 	"errors"
+	"math/rand"
+	"strconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -237,21 +239,40 @@ func (s *Store) FindOrCreateBySocial(ctx context.Context, provider, socialID, em
 	}
 
 	// 3. Create new account (no password).
-	username := sanitizeUsername(email, provider)
-	err = s.pool.QueryRow(ctx,
-		`INSERT INTO users (username, email, display_name, avatar_url, email_verified, `+col+`)
-		 VALUES ($1, $2, $3, $4, true, $5)
-		 ON CONFLICT (username) DO UPDATE SET username=EXCLUDED.username||'_'||floor(random()*9000+1000)::text
-		 RETURNING id, username, email, COALESCE(email_verified,false),
-		           COALESCE(display_name,''), COALESCE(avatar_url,''),
-		           COALESCE(password_hash,''), deactivated_at::text`,
-		username, email, displayName, avatarURL, socialID,
-	).Scan(&u.ID, &u.Username, &u.Email, &u.EmailVerified,
-		&u.DisplayName, &u.AvatarURL, &u.PasswordHash, &u.DeactivatedAt)
-	if err != nil {
+	//
+	// NOTE: this used to be a single INSERT ... ON CONFLICT (username) DO
+	// UPDATE that renamed the conflicting row on a username collision. In
+	// Postgres, ON CONFLICT ... DO UPDATE applies to the *pre-existing*
+	// conflicting row, not the row being inserted — so on a username clash
+	// that statement silently renamed and returned an unrelated existing
+	// account (RETURNING gave back its id, its email, its data) as if it
+	// were the newly-created social sign-in account. That is an account-
+	// confusion bug with security impact (the social sign-in caller would
+	// be handed an unrelated user's identity). Resolve collisions with an
+	// explicit retry loop before insert instead, so a colliding username
+	// always results in a brand-new row.
+	baseUsername := sanitizeUsername(email, provider)
+	username := baseUsername
+	for attempt := 0; ; attempt++ {
+		err = s.pool.QueryRow(ctx,
+			`INSERT INTO users (username, email, display_name, avatar_url, email_verified, `+col+`)
+			 VALUES ($1, $2, $3, $4, true, $5)
+			 RETURNING id, username, email, COALESCE(email_verified,false),
+			           COALESCE(display_name,''), COALESCE(avatar_url,''),
+			           COALESCE(password_hash,''), deactivated_at::text`,
+			username, email, displayName, avatarURL, socialID,
+		).Scan(&u.ID, &u.Username, &u.Email, &u.EmailVerified,
+			&u.DisplayName, &u.AvatarURL, &u.PasswordHash, &u.DeactivatedAt)
+		if err == nil {
+			return &u, nil
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && attempt < 5 {
+			username = baseUsername + "_" + strconv.Itoa(rand.Intn(9000)+1000)
+			continue
+		}
 		return nil, err
 	}
-	return &u, nil
 }
 
 func sanitizeUsername(email, fallbackPrefix string) string {

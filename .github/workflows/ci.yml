@@ -484,7 +484,28 @@ jobs:
       - name: Go tests (race detector)
         env:
           DATABASE_URL: postgres://threatflow:threatflow@localhost:5432/threatflow_test?sslmode=disable
-        run: go test -race -count=1 ./...
+          THREATFLOW_TEST_DB_URL: postgres://threatflow:threatflow@localhost:5432/threatflow_test?sslmode=disable
+        # -p 1: internal/db/store and internal/correlate integration tests both
+        # truncate/seed the same live postgres_test database; running those
+        # packages' test binaries in parallel (Go's default) races on FK
+        # constraints. Serialize package execution to keep it deterministic.
+        run: go test -race -count=1 -tags=integration -p 1 -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Enforce 70 % coverage
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${COVERAGE}%"
+          if [ "$(echo "$COVERAGE < 70" | bc -l)" -eq 1 ]; then
+            echo "::error::Coverage ${COVERAGE}% is below the 70% threshold"
+            exit 1
+          fi
+
+      - name: Upload Go coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: threatflow-go-coverage
+          path: threatflow/coverage.out
 
   # 3d. Citadel — lint
   lint-citadel:

@@ -150,6 +150,25 @@ func TestAuthRevokeKey_NilStoreShortCircuitsBeforeIDValidation(t *testing.T) {
 	}
 }
 
+// TestAuthRevokeKey_NonNilStoreRejectsInvalidID proves ID validation runs
+// before any store touch, once a real (DB-less) store is wired — the branch
+// TestAuthRevokeKey_NilStoreShortCircuitsBeforeIDValidation documents as
+// unreachable under a nil store.
+func TestAuthRevokeKey_NonNilStoreRejectsInvalidID(t *testing.T) {
+	h := NewAuth(zerolog.Nop(), nil, store.NewAPIKeyStore(nil))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/auth/keys/not-a-uuid", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "not-a-uuid")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	h.RevokeKey(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", rec.Code)
+	}
+}
+
 func TestAuthMe_UnauthenticatedReturns401(t *testing.T) {
 	h := NewAuth(zerolog.Nop(), nil, nil)
 	rec := httptest.NewRecorder()

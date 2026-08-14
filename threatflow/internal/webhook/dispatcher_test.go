@@ -137,6 +137,21 @@ func TestDeliverOnce_NetworkErrorReturnsErrorNotPanic(t *testing.T) {
 	}
 }
 
+// TestEmit_MarshalErrorReturnsBeforeTouchingStore proves Emit bails out on
+// an unmarshalable payload before ever calling MatchingSubscribers. This is
+// the only Emit branch reachable without a live *store.WebhookStore
+// (MatchingSubscribers/RecordDelivery are concrete pgxpool-backed methods
+// with no fake/interface seam) — passing a non-nil *store.WebhookStore here
+// proves the marshal error short-circuits before the store is ever touched
+// (a nil pool would panic if Query/QueryRow were reached).
+func TestEmit_MarshalErrorReturnsBeforeTouchingStore(t *testing.T) {
+	d := NewDispatcher(store.NewWebhookStore(nil), zerolog.Nop())
+	// channels cannot be JSON-marshaled.
+	unmarshalable := make(chan int)
+	// Must not panic despite d.webhooks having a nil pool.
+	d.Emit(context.Background(), EventIOCCreated, "threatflow", 50, unmarshalable)
+}
+
 func TestDeliverOnce_InvalidURLReturnsError(t *testing.T) {
 	d := NewDispatcher(nil, zerolog.Nop())
 	sub := &store.WebhookSubscriber{URL: "://not-a-valid-url", Secret: "s"}

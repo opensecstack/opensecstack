@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 
+	"github.com/opensecstack/threatflow/internal/citadel"
 	"github.com/opensecstack/threatflow/internal/db/store"
 )
 
@@ -201,6 +202,146 @@ func TestFeedDelete_NonNilStoreRejectsInvalidID(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d", rec.Code)
+	}
+}
+
+// TestFeedGate_NilCitadelAllows proves gate is a no-op (always allows) when
+// the handler was built with no CITADEL client at all — the common case for
+// most deployments.
+func TestFeedGate_NilCitadelAllows(t *testing.T) {
+	h := NewFeed(zerolog.Nop(), nil, nil)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/feeds", nil)
+
+	if !h.gate(rec, req, citadel.ActionFeedCreate, "desc") {
+		t.Fatal("want true when citadel is nil")
+	}
+}
+
+// TestFeedGate_DisabledCitadelAllows covers the other half of the first
+// branch: a non-nil client with an empty base URL (Enabled() == false).
+func TestFeedGate_DisabledCitadelAllows(t *testing.T) {
+	c := citadel.New(citadel.Config{}, zerolog.Nop())
+	h := NewFeed(zerolog.Nop(), nil, c)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/feeds", nil)
+
+	if !h.gate(rec, req, citadel.ActionFeedCreate, "desc") {
+		t.Fatal("want true when citadel is disabled")
+	}
+}
+
+// TestFeedGate_ExecuteDecisionAllows proves an EXECUTE decision from MARSHAL
+// lets the caller proceed without writing a response.
+func TestFeedGate_ExecuteDecisionAllows(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(citadel.Decision{Outcome: citadel.OutcomeExecute})
+	}))
+	defer srv.Close()
+
+	c := citadel.New(citadel.Config{BaseURL: srv.URL, KeyID: "k", Secret: "s"}, zerolog.Nop())
+	h := NewFeed(zerolog.Nop(), nil, c)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/feeds", nil)
+
+	if !h.gate(rec, req, citadel.ActionFeedCreate, "desc") {
+		t.Fatalf("want true for EXECUTE decision, body=%s", rec.Body.String())
+	}
+}
+
+// TestFeedGate_RefuseDecisionForbids proves a REFUSE decision from MARSHAL
+// blocks the mutation with a 403 and surfaces the outcome/reasons.
+func TestFeedGate_RefuseDecisionForbids(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(citadel.Decision{
+			Outcome: citadel.OutcomeRefuse,
+			Reasons: []string{"policy violation"},
+		})
+	}))
+	defer srv.Close()
+
+	c := citadel.New(citadel.Config{BaseURL: srv.URL, KeyID: "k", Secret: "s"}, zerolog.Nop())
+	h := NewFeed(zerolog.Nop(), nil, c)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/feeds", nil)
+
+	if h.gate(rec, req, citadel.ActionFeedCreate, "desc") {
+		t.Fatal("want false for REFUSE decision")
+	}
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("want 403, got %d", rec.Code)
+	}
+	var body map[string]any
+	json.NewDecoder(rec.Body).Decode(&body)
+	if body["outcome"] != citadel.OutcomeRefuse {
+		t.Errorf("outcome = %v, want %q", body["outcome"], citadel.OutcomeRefuse)
+	}
+}
+
+// TestFeedCreate_CitadelRefuseForbids proves the MARSHAL gate blocks Create
+// with a 403 before the store is ever touched — safe with a DB-less store
+// since h.store.Create is never reached on refusal.
+func TestFeedCreate_CitadelRefuseForbids(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"outcome": "REFUSE", "reasons": []string{"blocked"}})
+	}))
+	defer srv.Close()
+
+	c := citadel.New(citadel.Config{BaseURL: srv.URL, KeyID: "k", Secret: "s"}, zerolog.Nop())
+	h := NewFeed(zerolog.Nop(), store.NewFeedStore(nil), c)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/feeds", strings.NewReader(`{"name":"x","feed_type":"csv"}`))
+
+	h.Create(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("want 403, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestFeedPatch_CitadelRefuseForbids mirrors the Create case for Patch.
+func TestFeedPatch_CitadelRefuseForbids(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"outcome": "REFUSE", "reasons": []string{"blocked"}})
+	}))
+	defer srv.Close()
+
+	validID := "11111111-1111-1111-1111-111111111111"
+	c := citadel.New(citadel.Config{BaseURL: srv.URL, KeyID: "k", Secret: "s"}, zerolog.Nop())
+	h := NewFeed(zerolog.Nop(), store.NewFeedStore(nil), c)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/feeds/"+validID, strings.NewReader(`{"enabled":true}`))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", validID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	h.Patch(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("want 403, got %d; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestFeedDelete_CitadelRefuseForbids mirrors the Create case for Delete.
+func TestFeedDelete_CitadelRefuseForbids(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"outcome": "REFUSE", "reasons": []string{"blocked"}})
+	}))
+	defer srv.Close()
+
+	validID := "11111111-1111-1111-1111-111111111111"
+	c := citadel.New(citadel.Config{BaseURL: srv.URL, KeyID: "k", Secret: "s"}, zerolog.Nop())
+	h := NewFeed(zerolog.Nop(), store.NewFeedStore(nil), c)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/feeds/"+validID, nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", validID)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+	h.Delete(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("want 403, got %d; body=%s", rec.Code, rec.Body.String())
 	}
 }
 

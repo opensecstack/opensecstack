@@ -113,6 +113,22 @@ const malwareBundle = `{
   ]
 }`
 
+// TestAsIndicator_FalseForNonIndicatorType covers AsIndicator's type-guard
+// branch: every other AsIndicator test in this file exercises the matching
+// (true) path via minimalBundle, so the mismatched-type false path was
+// previously uncovered.
+func TestAsIndicator_FalseForNonIndicatorType(t *testing.T) {
+	b, _ := ParseBundle([]byte(malwareBundle))
+	objs, _ := DecodeObjects(b)
+	_, ok, err := AsIndicator(objs[0]) // malware, not indicator
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ok {
+		t.Fatal("expected ok=false for non-indicator object")
+	}
+}
+
 func TestAsMalware_DecodesMatchingType(t *testing.T) {
 	b, err := ParseBundle([]byte(malwareBundle))
 	if err != nil {

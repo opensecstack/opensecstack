@@ -80,6 +80,7 @@ coverage_*.out
 *_coverage.out
 *_cov.out
 cov.out
+cover_*.out
 coverage*.xml
 
 # Crash artifacts (e.g. a shell crashing mid-command)

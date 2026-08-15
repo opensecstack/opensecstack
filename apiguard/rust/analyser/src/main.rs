@@ -3,7 +3,10 @@ use clap::{Parser, ValueEnum};
 use std::fs;
 
 #[derive(Parser, Debug)]
-#[command(name = "apiguard-analyser", about = "L5 Response Analyser for APIGuard")]
+#[command(
+    name = "apiguard-analyser",
+    about = "L5 Response Analyser for APIGuard"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -53,8 +56,8 @@ impl From<AnalysisTypeArg> for AnalysisType {
 }
 
 fn load_response(path: &str) -> Result<HttpResponse, String> {
-    let content = fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read file '{}': {}", path, e))?;
+    let content =
+        fs::read_to_string(path).map_err(|e| format!("Failed to read file '{}': {}", path, e))?;
     serde_json::from_str(&content)
         .map_err(|e| format!("Failed to parse response JSON from '{}': {}", path, e))
 }
@@ -63,7 +66,11 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Analyse { r#type, response, baseline } => {
+        Command::Analyse {
+            r#type,
+            response,
+            baseline,
+        } => {
             let response_obj = match load_response(&response) {
                 Ok(r) => r,
                 Err(e) => {

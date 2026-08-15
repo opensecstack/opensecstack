@@ -16,11 +16,8 @@ pub fn validate_ir(ir: &ApiGuardIR) -> Result<(), ParseError> {
     }
 
     // Collect all auth scheme names.
-    let scheme_names: std::collections::HashSet<&str> = ir
-        .auth_schemes
-        .iter()
-        .map(|s| s.name.as_str())
-        .collect();
+    let scheme_names: std::collections::HashSet<&str> =
+        ir.auth_schemes.iter().map(|s| s.name.as_str()).collect();
 
     // Verify every endpoint's security references resolve.
     for ep in &ir.endpoints {

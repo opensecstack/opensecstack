@@ -1,5 +1,5 @@
-use cvss::from_vector_string;
 use clap::Parser;
+use cvss::from_vector_string;
 
 #[derive(Parser, Debug)]
 #[command(name = "apiguard-cvss", about = "L6 CVSS 3.1 Scorer for APIGuard")]
@@ -22,27 +22,25 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Score { vector } => {
-            match from_vector_string(&vector) {
-                Ok(score) => {
-                    let output = serde_json::json!({
-                        "base_score": score.base_score,
-                        "severity": score.severity,
-                        "vector_string": score.vector_string,
-                    });
-                    match serde_json::to_string_pretty(&output) {
-                        Ok(json) => println!("{}", json),
-                        Err(e) => {
-                            eprintln!("Failed to serialise score: {}", e);
-                            std::process::exit(1);
-                        }
+        Command::Score { vector } => match from_vector_string(&vector) {
+            Ok(score) => {
+                let output = serde_json::json!({
+                    "base_score": score.base_score,
+                    "severity": score.severity,
+                    "vector_string": score.vector_string,
+                });
+                match serde_json::to_string_pretty(&output) {
+                    Ok(json) => println!("{}", json),
+                    Err(e) => {
+                        eprintln!("Failed to serialise score: {}", e);
+                        std::process::exit(1);
                     }
                 }
-                Err(e) => {
-                    eprintln!("Error: {}", e);
-                    std::process::exit(1);
-                }
             }
-        }
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        },
     }
 }

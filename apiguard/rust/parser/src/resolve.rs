@@ -29,9 +29,11 @@ pub fn resolve_ref(
     visited.insert(ref_path.to_string());
 
     let pointer = ref_to_json_pointer(ref_path)?;
-    let resolved = root.pointer(&pointer).ok_or_else(|| ParseError::InvalidSchema {
-        errors: vec![format!("unresolved $ref: {ref_path}")],
-    })?;
+    let resolved = root
+        .pointer(&pointer)
+        .ok_or_else(|| ParseError::InvalidSchema {
+            errors: vec![format!("unresolved $ref: {ref_path}")],
+        })?;
 
     // If the resolved value itself contains a $ref, keep resolving.
     if let Some(inner_ref) = resolved.get("$ref").and_then(|v| v.as_str()) {
@@ -46,11 +48,7 @@ pub fn resolve_ref(
 
 /// Resolve a `$ref` within a value, returning the resolved value if it's a ref,
 /// or the original value otherwise.
-pub fn resolve_value(
-    root: &Value,
-    value: &Value,
-    depth: usize,
-) -> Result<Value, ParseError> {
+pub fn resolve_value(root: &Value, value: &Value, depth: usize) -> Result<Value, ParseError> {
     if let Some(ref_path) = value.get("$ref").and_then(|v| v.as_str()) {
         let mut visited = HashSet::new();
         resolve_ref(root, ref_path, &mut visited, depth)

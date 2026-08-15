@@ -13,10 +13,7 @@ pub fn parse_swagger2(doc: &Value, schema_hash: String) -> Result<ApiGuardIR, Pa
 }
 
 fn validate_version(doc: &Value) -> Result<(), ParseError> {
-    let version = doc
-        .get("swagger")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let version = doc.get("swagger").and_then(|v| v.as_str()).unwrap_or("");
 
     if version == "2.0" {
         Ok(())
@@ -38,11 +35,17 @@ fn convert_to_openapi3(doc: &Value) -> Result<Value, ParseError> {
     if let Some(info) = doc.get("info") {
         result.insert("info".into(), info.clone());
     } else {
-        result.insert("info".into(), serde_json::json!({"title": "", "version": ""}));
+        result.insert(
+            "info".into(),
+            serde_json::json!({"title": "", "version": ""}),
+        );
     }
 
     // servers from host + basePath + schemes
-    let host = doc.get("host").and_then(|v| v.as_str()).unwrap_or("localhost");
+    let host = doc
+        .get("host")
+        .and_then(|v| v.as_str())
+        .unwrap_or("localhost");
     let base_path = doc.get("basePath").and_then(|v| v.as_str()).unwrap_or("/");
     let scheme = doc
         .get("schemes")
@@ -52,10 +55,7 @@ fn convert_to_openapi3(doc: &Value) -> Result<Value, ParseError> {
         .unwrap_or("https");
 
     let server_url = format!("{scheme}://{host}{base_path}");
-    result.insert(
-        "servers".into(),
-        serde_json::json!([{"url": server_url}]),
-    );
+    result.insert("servers".into(), serde_json::json!([{"url": server_url}]));
 
     // paths — convert operations
     if let Some(paths) = doc.get("paths").and_then(|v| v.as_object()) {
@@ -232,8 +232,7 @@ fn fix_definition_refs(value: &mut Value, depth: usize) {
             if let Some(ref_val) = map.get_mut("$ref") {
                 if let Some(s) = ref_val.as_str() {
                     if let Some(stripped) = s.strip_prefix("#/definitions/") {
-                        *ref_val =
-                            Value::String(format!("#/components/schemas/{stripped}"));
+                        *ref_val = Value::String(format!("#/components/schemas/{stripped}"));
                     }
                 }
             }
@@ -269,8 +268,14 @@ fn convert_security_definition(def: &Value) -> Value {
             })
         }
         "oauth2" => {
-            let flow = def.get("flow").and_then(|v| v.as_str()).unwrap_or("implicit");
-            let auth_url = def.get("authorizationUrl").and_then(|v| v.as_str()).unwrap_or("");
+            let flow = def
+                .get("flow")
+                .and_then(|v| v.as_str())
+                .unwrap_or("implicit");
+            let auth_url = def
+                .get("authorizationUrl")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             let token_url = def.get("tokenUrl").and_then(|v| v.as_str()).unwrap_or("");
             let scopes = def.get("scopes").cloned().unwrap_or(serde_json::json!({}));
 

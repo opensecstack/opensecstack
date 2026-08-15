@@ -87,10 +87,7 @@ pub fn is_id_parameter(param: &Parameter) -> bool {
         return false;
     }
     let lower = param.name.to_lowercase();
-    lower == "id"
-        || lower.ends_with("id")
-        || lower.ends_with("_id")
-        || lower.contains("uuid")
+    lower == "id" || lower.ends_with("id") || lower.ends_with("_id") || lower.contains("uuid")
 }
 
 /// Given a placeholder value for an ID parameter, produce common enumeration
@@ -148,7 +145,10 @@ fn method_str(m: &HttpMethod) -> &'static str {
 }
 
 fn is_write_method(m: &HttpMethod) -> bool {
-    matches!(m, HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch | HttpMethod::Delete)
+    matches!(
+        m,
+        HttpMethod::Post | HttpMethod::Put | HttpMethod::Patch | HttpMethod::Delete
+    )
 }
 
 fn has_body_method(m: &HttpMethod) -> bool {
@@ -251,10 +251,7 @@ fn generate_bola(
                         headers: vec![],
                         body: None,
                         auth: AuthStrategy::Valid,
-                        description: format!(
-                            "Enumerate {} with value '{}'",
-                            param.name, v
-                        ),
+                        description: format!("Enumerate {} with value '{}'", param.name, v),
                     }
                 })
                 .collect();
@@ -286,10 +283,7 @@ fn generate_bola(
                 headers: vec![],
                 body: None,
                 auth: AuthStrategy::OtherUser,
-                description: format!(
-                    "Access {} with another user's auth token",
-                    param.name
-                ),
+                description: format!("Access {} with another user's auth token", param.name),
             }];
 
             cases.push(TestCase {

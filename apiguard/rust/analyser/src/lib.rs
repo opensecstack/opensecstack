@@ -1,6 +1,6 @@
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use regex::Regex;
 
 /// A single HTTP response captured during testing.
 #[derive(Debug, Clone, Deserialize)]
@@ -61,7 +61,10 @@ fn status_class(code: u16) -> u16 {
     code / 100
 }
 
-fn analyse_auth_bypass(response: &HttpResponse, baseline: Option<&HttpResponse>) -> Vec<AnalysisFinding> {
+fn analyse_auth_bypass(
+    response: &HttpResponse,
+    baseline: Option<&HttpResponse>,
+) -> Vec<AnalysisFinding> {
     let mut findings = Vec::new();
 
     let baseline = match baseline {
@@ -75,7 +78,10 @@ fn analyse_auth_bypass(response: &HttpResponse, baseline: Option<&HttpResponse>)
     // Auth bypass: baseline was 401/403 and test is 200
     if (baseline_status == 401 || baseline_status == 403) && test_status == 200 {
         let mut evidence = HashMap::new();
-        evidence.insert("baseline_status".to_string(), serde_json::json!(baseline_status));
+        evidence.insert(
+            "baseline_status".to_string(),
+            serde_json::json!(baseline_status),
+        );
         evidence.insert("test_status".to_string(), serde_json::json!(test_status));
 
         findings.push(AnalysisFinding {
@@ -93,7 +99,10 @@ fn analyse_auth_bypass(response: &HttpResponse, baseline: Option<&HttpResponse>)
     // Status codes differ significantly (different class)
     if status_class(baseline_status) != status_class(test_status) {
         let mut evidence = HashMap::new();
-        evidence.insert("baseline_status".to_string(), serde_json::json!(baseline_status));
+        evidence.insert(
+            "baseline_status".to_string(),
+            serde_json::json!(baseline_status),
+        );
         evidence.insert("test_status".to_string(), serde_json::json!(test_status));
 
         findings.push(AnalysisFinding {
@@ -116,8 +125,14 @@ fn analyse_auth_bypass(response: &HttpResponse, baseline: Option<&HttpResponse>)
             let diff_ratio = (test_len - baseline_len).abs() / baseline_len;
             if diff_ratio >= 0.10 {
                 let mut evidence = HashMap::new();
-                evidence.insert("baseline_body_size".to_string(), serde_json::json!(baseline.body.len()));
-                evidence.insert("test_body_size".to_string(), serde_json::json!(response.body.len()));
+                evidence.insert(
+                    "baseline_body_size".to_string(),
+                    serde_json::json!(baseline.body.len()),
+                );
+                evidence.insert(
+                    "test_body_size".to_string(),
+                    serde_json::json!(response.body.len()),
+                );
                 evidence.insert("diff_ratio".to_string(), serde_json::json!(diff_ratio));
 
                 findings.push(AnalysisFinding {
@@ -141,12 +156,19 @@ fn analyse_data_leakage(response: &HttpResponse) -> Vec<AnalysisFinding> {
     let body = &response.body;
 
     // Credit card pattern
-    let cc_re = Regex::new(r"\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\b").unwrap();
+    let cc_re =
+        Regex::new(r"\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\b").unwrap();
     if cc_re.is_match(body) {
         let matches: Vec<&str> = cc_re.find_iter(body).map(|m| m.as_str()).collect();
         let mut evidence = HashMap::new();
-        evidence.insert("matches_count".to_string(), serde_json::json!(matches.len()));
-        evidence.insert("sample".to_string(), serde_json::json!(matches.first().map(|s| mask_middle(s))));
+        evidence.insert(
+            "matches_count".to_string(),
+            serde_json::json!(matches.len()),
+        );
+        evidence.insert(
+            "sample".to_string(),
+            serde_json::json!(matches.first().map(|s| mask_middle(s))),
+        );
         findings.push(AnalysisFinding {
             analysis_type: "data_leakage".to_string(),
             severity: "critical".to_string(),
@@ -159,7 +181,10 @@ fn analyse_data_leakage(response: &HttpResponse) -> Vec<AnalysisFinding> {
     let pk_re = Regex::new(r"-----BEGIN (?:RSA |EC )?PRIVATE KEY-----").unwrap();
     if pk_re.is_match(body) {
         let mut evidence = HashMap::new();
-        evidence.insert("pattern".to_string(), serde_json::json!("PRIVATE KEY header"));
+        evidence.insert(
+            "pattern".to_string(),
+            serde_json::json!("PRIVATE KEY header"),
+        );
         findings.push(AnalysisFinding {
             analysis_type: "data_leakage".to_string(),
             severity: "critical".to_string(),
@@ -173,7 +198,10 @@ fn analyse_data_leakage(response: &HttpResponse) -> Vec<AnalysisFinding> {
     if aws_re.is_match(body) {
         let matches: Vec<&str> = aws_re.find_iter(body).map(|m| m.as_str()).collect();
         let mut evidence = HashMap::new();
-        evidence.insert("matches_count".to_string(), serde_json::json!(matches.len()));
+        evidence.insert(
+            "matches_count".to_string(),
+            serde_json::json!(matches.len()),
+        );
         findings.push(AnalysisFinding {
             analysis_type: "data_leakage".to_string(),
             severity: "critical".to_string(),
@@ -186,7 +214,10 @@ fn analyse_data_leakage(response: &HttpResponse) -> Vec<AnalysisFinding> {
     let jwt_re = Regex::new(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+").unwrap();
     if jwt_re.is_match(body) {
         let mut evidence = HashMap::new();
-        evidence.insert("pattern".to_string(), serde_json::json!("JWT token pattern"));
+        evidence.insert(
+            "pattern".to_string(),
+            serde_json::json!("JWT token pattern"),
+        );
         findings.push(AnalysisFinding {
             analysis_type: "data_leakage".to_string(),
             severity: "high".to_string(),
@@ -207,7 +238,10 @@ fn analyse_data_leakage(response: &HttpResponse) -> Vec<AnalysisFinding> {
                 findings.push(AnalysisFinding {
                     analysis_type: "data_leakage".to_string(),
                     severity: "high".to_string(),
-                    description: format!("Sensitive field '{}' with non-null value found in response body", key),
+                    description: format!(
+                        "Sensitive field '{}' with non-null value found in response body",
+                        key
+                    ),
                     evidence,
                 });
             }
@@ -219,7 +253,10 @@ fn analyse_data_leakage(response: &HttpResponse) -> Vec<AnalysisFinding> {
     let email_matches: Vec<&str> = email_re.find_iter(body).map(|m| m.as_str()).collect();
     if email_matches.len() > 1 {
         let mut evidence = HashMap::new();
-        evidence.insert("email_count".to_string(), serde_json::json!(email_matches.len()));
+        evidence.insert(
+            "email_count".to_string(),
+            serde_json::json!(email_matches.len()),
+        );
         findings.push(AnalysisFinding {
             analysis_type: "data_leakage".to_string(),
             severity: "medium".to_string(),
@@ -253,7 +290,10 @@ fn analyse_error_disclosure(response: &HttpResponse) -> Vec<AnalysisFinding> {
             findings.push(AnalysisFinding {
                 analysis_type: "error_disclosure".to_string(),
                 severity: "high".to_string(),
-                description: format!("SQL error disclosure detected: pattern '{}' found in response", pattern),
+                description: format!(
+                    "SQL error disclosure detected: pattern '{}' found in response",
+                    pattern
+                ),
                 evidence,
             });
         }
@@ -268,7 +308,10 @@ fn analyse_error_disclosure(response: &HttpResponse) -> Vec<AnalysisFinding> {
             findings.push(AnalysisFinding {
                 analysis_type: "error_disclosure".to_string(),
                 severity: "high".to_string(),
-                description: format!("File system path disclosure detected: pattern '{}' found in response", pattern),
+                description: format!(
+                    "File system path disclosure detected: pattern '{}' found in response",
+                    pattern
+                ),
                 evidence,
             });
         }
@@ -289,7 +332,10 @@ fn analyse_error_disclosure(response: &HttpResponse) -> Vec<AnalysisFinding> {
             findings.push(AnalysisFinding {
                 analysis_type: "error_disclosure".to_string(),
                 severity: "medium".to_string(),
-                description: format!("Stack trace disclosure detected: pattern '{}' found in response", pattern),
+                description: format!(
+                    "Stack trace disclosure detected: pattern '{}' found in response",
+                    pattern
+                ),
                 evidence,
             });
         }
@@ -298,7 +344,10 @@ fn analyse_error_disclosure(response: &HttpResponse) -> Vec<AnalysisFinding> {
     findings
 }
 
-fn analyse_timing(response: &HttpResponse, baseline: Option<&HttpResponse>) -> Vec<AnalysisFinding> {
+fn analyse_timing(
+    response: &HttpResponse,
+    baseline: Option<&HttpResponse>,
+) -> Vec<AnalysisFinding> {
     let mut findings = Vec::new();
 
     let baseline = match baseline {
@@ -311,9 +360,15 @@ fn analyse_timing(response: &HttpResponse, baseline: Option<&HttpResponse>) -> V
 
     if baseline_ms > 0 && test_ms > baseline_ms * 3 && test_ms > 3000 {
         let mut evidence = HashMap::new();
-        evidence.insert("baseline_duration_ms".to_string(), serde_json::json!(baseline_ms));
+        evidence.insert(
+            "baseline_duration_ms".to_string(),
+            serde_json::json!(baseline_ms),
+        );
         evidence.insert("test_duration_ms".to_string(), serde_json::json!(test_ms));
-        evidence.insert("ratio".to_string(), serde_json::json!(test_ms as f64 / baseline_ms as f64));
+        evidence.insert(
+            "ratio".to_string(),
+            serde_json::json!(test_ms as f64 / baseline_ms as f64),
+        );
 
         findings.push(AnalysisFinding {
             analysis_type: "timing_anomaly".to_string(),
@@ -345,7 +400,10 @@ fn analyse_headers(response: &HttpResponse) -> Vec<AnalysisFinding> {
     match headers.get("x-content-type-options") {
         None => {
             let mut evidence = HashMap::new();
-            evidence.insert("header".to_string(), serde_json::json!("X-Content-Type-Options"));
+            evidence.insert(
+                "header".to_string(),
+                serde_json::json!("X-Content-Type-Options"),
+            );
             findings.push(AnalysisFinding {
                 analysis_type: "header_analysis".to_string(),
                 severity: "medium".to_string(),
@@ -355,12 +413,16 @@ fn analyse_headers(response: &HttpResponse) -> Vec<AnalysisFinding> {
         }
         Some(val) if !val.to_lowercase().contains("nosniff") => {
             let mut evidence = HashMap::new();
-            evidence.insert("header".to_string(), serde_json::json!("X-Content-Type-Options"));
+            evidence.insert(
+                "header".to_string(),
+                serde_json::json!("X-Content-Type-Options"),
+            );
             evidence.insert("value".to_string(), serde_json::json!(val));
             findings.push(AnalysisFinding {
                 analysis_type: "header_analysis".to_string(),
                 severity: "medium".to_string(),
-                description: "X-Content-Type-Options is present but not set to 'nosniff'".to_string(),
+                description: "X-Content-Type-Options is present but not set to 'nosniff'"
+                    .to_string(),
                 evidence,
             });
         }
@@ -372,7 +434,10 @@ fn analyse_headers(response: &HttpResponse) -> Vec<AnalysisFinding> {
     let has_csp = headers.contains_key("content-security-policy");
     if !has_xfo && !has_csp {
         let mut evidence = HashMap::new();
-        evidence.insert("missing_headers".to_string(), serde_json::json!(["X-Frame-Options", "Content-Security-Policy"]));
+        evidence.insert(
+            "missing_headers".to_string(),
+            serde_json::json!(["X-Frame-Options", "Content-Security-Policy"]),
+        );
         findings.push(AnalysisFinding {
             analysis_type: "header_analysis".to_string(),
             severity: "medium".to_string(),
@@ -435,10 +500,16 @@ fn analyse_content_type(response: &HttpResponse) -> Vec<AnalysisFinding> {
         .unwrap_or(false);
 
     if !content_type_is_json {
-        let ct_value = headers.get("content-type").cloned().unwrap_or_else(|| "<absent>".to_string());
+        let ct_value = headers
+            .get("content-type")
+            .cloned()
+            .unwrap_or_else(|| "<absent>".to_string());
         let mut evidence = HashMap::new();
         evidence.insert("content_type".to_string(), serde_json::json!(ct_value));
-        evidence.insert("body_prefix".to_string(), serde_json::json!(&body_trimmed.chars().take(20).collect::<String>()));
+        evidence.insert(
+            "body_prefix".to_string(),
+            serde_json::json!(&body_trimmed.chars().take(20).collect::<String>()),
+        );
         findings.push(AnalysisFinding {
             analysis_type: "content_type_mismatch".to_string(),
             severity: "medium".to_string(),
@@ -481,7 +552,13 @@ fn analyse_redirect(response: &HttpResponse) -> Vec<AnalysisFinding> {
         let after_scheme = location
             .trim_start_matches("http://")
             .trim_start_matches("https://");
-        let location_host = after_scheme.split('/').next().unwrap_or("").split('?').next().unwrap_or("");
+        let location_host = after_scheme
+            .split('/')
+            .next()
+            .unwrap_or("")
+            .split('?')
+            .next()
+            .unwrap_or("");
         // Strip port for comparison
         let location_host_no_port = location_host.split(':').next().unwrap_or(location_host);
         let origin_host_no_port = host_header.split(':').next().unwrap_or(&host_header);

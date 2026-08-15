@@ -37,7 +37,12 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Generate { ir, target, modules, output } => {
+        Command::Generate {
+            ir,
+            target,
+            modules,
+            output,
+        } => {
             let ir_content = match fs::read_to_string(&ir) {
                 Ok(s) => s,
                 Err(e) => {

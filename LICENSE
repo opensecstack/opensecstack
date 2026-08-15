@@ -10,12 +10,16 @@ Tool Platforms (Apache 2.0):
   - cyberpath/
   - securelab/
   - sdk/
+  - sinauth/
+  - website/
+  - community/
 
 Governance Platforms (AGPL-3.0):
   - irflow/
   - nis2compass/
   - opencsirt/
-  - .citadel/
+  - citadel/
+  - vertguard/
 
 Each platform directory contains its own LICENSE file with the full licence text.
 

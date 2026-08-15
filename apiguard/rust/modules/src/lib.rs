@@ -297,10 +297,7 @@ pub fn check_security_headers(resp: &HttpResponse, ctx: &EndpointCtx) -> Vec<Mod
                 findings.push(ModuleFinding {
                     owasp_id: "API7:2023".to_string(),
                     module_id: "a7_misconfig".to_string(),
-                    title: format!(
-                        "Security Misconfiguration — Weak header value: {}",
-                        header
-                    ),
+                    title: format!("Security Misconfiguration — Weak header value: {}", header),
                     description: format!(
                         "Endpoint {} {} returns {} with value '{}' which does not include '{}'.",
                         ctx.method, ctx.path, header, value, expected_value
@@ -309,10 +306,7 @@ pub fn check_security_headers(resp: &HttpResponse, ctx: &EndpointCtx) -> Vec<Mod
                     endpoint_path: ctx.path.clone(),
                     endpoint_method: ctx.method.clone(),
                     evidence,
-                    remediation: format!(
-                        "Set {} to '{}' or stronger.",
-                        header, expected_value
-                    ),
+                    remediation: format!("Set {} to '{}' or stronger.", header, expected_value),
                 });
             }
             _ => {}

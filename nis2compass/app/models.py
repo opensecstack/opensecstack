@@ -6,14 +6,13 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from .extensions import db
 
 # NOTE: Flask-SQLAlchemy sets `db.Model` as a dynamic instance attribute
-# (built at SQLAlchemy() construction time), so mypy cannot statically
-# resolve it as a valid base class without the (unconfigured) SQLAlchemy
-# mypy plugin. This is a known Flask-SQLAlchemy + mypy limitation, not a
-# real type-safety hole -- `db.Model` is a perfectly concrete class at
-# runtime. Each subclass below is annotated accordingly.
+# (built at SQLAlchemy() construction time). Older Flask-SQLAlchemy type
+# stubs could not statically resolve it as a valid base class, which used
+# to require a `# type: ignore[name-defined]` on each subclass below; the
+# current stubs resolve it correctly, so those suppressions were removed.
 
 
-class Organisation(db.Model):  # type: ignore[name-defined]
+class Organisation(db.Model):
     __tablename__ = "organisations"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
@@ -54,7 +53,7 @@ class Organisation(db.Model):  # type: ignore[name-defined]
         }
 
 
-class Assessment(db.Model):  # type: ignore[name-defined]
+class Assessment(db.Model):
     __tablename__ = "assessments"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
@@ -134,7 +133,7 @@ class Assessment(db.Model):  # type: ignore[name-defined]
         return d
 
 
-class Control(db.Model):  # type: ignore[name-defined]
+class Control(db.Model):
     __tablename__ = "controls"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
@@ -196,7 +195,7 @@ class Control(db.Model):  # type: ignore[name-defined]
         }
 
 
-class Artifact(db.Model):  # type: ignore[name-defined]
+class Artifact(db.Model):
     __tablename__ = "artifacts"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
@@ -250,7 +249,7 @@ class Artifact(db.Model):  # type: ignore[name-defined]
         }
 
 
-class ComplianceSnapshot(db.Model):  # type: ignore[name-defined]
+class ComplianceSnapshot(db.Model):
     __tablename__ = "compliance_snapshots"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
@@ -275,7 +274,7 @@ class ComplianceSnapshot(db.Model):  # type: ignore[name-defined]
         }
 
 
-class AuditLog(db.Model):  # type: ignore[name-defined]
+class AuditLog(db.Model):
     __tablename__ = "audit_log"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
@@ -313,7 +312,7 @@ class AuditLog(db.Model):  # type: ignore[name-defined]
         }
 
 
-class ApiKey(db.Model):  # type: ignore[name-defined]
+class ApiKey(db.Model):
     __tablename__ = "api_keys"
 
     id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
@@ -341,7 +340,7 @@ class ApiKey(db.Model):  # type: ignore[name-defined]
         }
 
 
-class RevokedToken(db.Model):  # type: ignore[name-defined]
+class RevokedToken(db.Model):
     """DB fallback store for revoked JTIs when Redis is unavailable."""
 
     __tablename__ = "revoked_tokens"
@@ -351,7 +350,7 @@ class RevokedToken(db.Model):  # type: ignore[name-defined]
     expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
 
 
-class ControlTemplate(db.Model):  # type: ignore[name-defined]
+class ControlTemplate(db.Model):
     __tablename__ = "control_templates"
 
     __table_args__ = (

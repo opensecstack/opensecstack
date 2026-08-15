@@ -121,7 +121,8 @@ def decode_jwt(token: str) -> dict | None:
     """Decode and validate a JWT. Returns payload dict or None on failure."""
     secret = current_app.config["JWT_SECRET"]
     try:
-        return jwt.decode(token, secret, algorithms=["HS256"])
+        payload: dict[str, Any] = jwt.decode(token, secret, algorithms=["HS256"])
+        return payload
     except jwt.ExpiredSignatureError:
         return None
     except jwt.InvalidTokenError as e:
@@ -181,7 +182,7 @@ def verify_token(token: str, expected_type: str) -> dict:
 
     secret = current_app.config["JWT_SECRET"]
     try:
-        payload = jwt.decode(token, secret, algorithms=["HS256"])
+        payload: dict[str, Any] = jwt.decode(token, secret, algorithms=["HS256"])
     except jwt.ExpiredSignatureError:
         raise jwt.ExpiredSignatureError("Token has expired")
     except jwt.InvalidTokenError:

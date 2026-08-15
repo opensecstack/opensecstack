@@ -23,7 +23,7 @@ def _get_config() -> dict:
     try:
         from flask import current_app
 
-        return current_app.config
+        return dict(current_app.config)
     except RuntimeError:
         return {}
 

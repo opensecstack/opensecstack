@@ -89,10 +89,7 @@ static PII_PATTERNS: Lazy<Vec<(&'static str, Regex)>> = Lazy::new(|| {
 });
 
 /// Check a response body for PII field patterns (OWASP API3:2023).
-pub fn check_excessive_data_exposure(
-    resp: &HttpResponse,
-    ctx: &EndpointCtx,
-) -> Vec<ModuleFinding> {
+pub fn check_excessive_data_exposure(resp: &HttpResponse, ctx: &EndpointCtx) -> Vec<ModuleFinding> {
     let mut findings = Vec::new();
 
     for (label, pattern) in PII_PATTERNS.iter() {
@@ -101,7 +98,10 @@ pub fn check_excessive_data_exposure(
             let mut evidence = HashMap::new();
             evidence.insert("pii_category".to_string(), serde_json::json!(label));
             evidence.insert("matched_snippet".to_string(), serde_json::json!(snippet));
-            evidence.insert("status_code".to_string(), serde_json::json!(resp.status_code));
+            evidence.insert(
+                "status_code".to_string(),
+                serde_json::json!(resp.status_code),
+            );
 
             findings.push(ModuleFinding {
                 owasp_id: "API3:2023".to_string(),
@@ -123,10 +123,9 @@ pub fn check_excessive_data_exposure(
                 endpoint_path: ctx.path.clone(),
                 endpoint_method: ctx.method.clone(),
                 evidence,
-                remediation:
-                    "Apply a response allowlist: only return the fields the client is \
+                remediation: "Apply a response allowlist: only return the fields the client is \
                      authorised to see. Do not rely on the client to discard sensitive fields."
-                        .to_string(),
+                    .to_string(),
             });
         }
     }
@@ -195,10 +194,9 @@ pub fn check_timing_anomaly(
         endpoint_path: ctx.path.clone(),
         endpoint_method: ctx.method.clone(),
         evidence,
-        remediation:
-            "Implement rate limiting (token bucket or leaky bucket) per client/IP. \
+        remediation: "Implement rate limiting (token bucket or leaky bucket) per client/IP. \
              Add query complexity limits and enforce pagination on collection endpoints."
-                .to_string(),
+            .to_string(),
     }]
 }
 
@@ -283,7 +281,10 @@ pub fn check_security_headers(resp: &HttpResponse, ctx: &EndpointCtx) -> Vec<Mod
                 });
             }
             Some(value) if !expected_value.is_empty() => {
-                if !value.to_lowercase().contains(&expected_value.to_lowercase()) {
+                if !value
+                    .to_lowercase()
+                    .contains(&expected_value.to_lowercase())
+                {
                     let mut evidence = HashMap::new();
                     evidence.insert("header".to_string(), serde_json::json!(header));
                     evidence.insert("actual_value".to_string(), serde_json::json!(value));
@@ -404,16 +405,16 @@ pub fn check_injection_indicators(resp: &HttpResponse, ctx: &EndpointCtx) -> Vec
             let mut evidence = HashMap::new();
             evidence.insert("indicator_type".to_string(), serde_json::json!(label));
             evidence.insert("matched_snippet".to_string(), serde_json::json!(snippet));
-            evidence.insert("status_code".to_string(), serde_json::json!(resp.status_code));
+            evidence.insert(
+                "status_code".to_string(),
+                serde_json::json!(resp.status_code),
+            );
 
             findings.push(ModuleFinding {
                 owasp_id: "API8:2023".to_string(),
                 module_id: "a8_injection".to_string(),
                 title: format!("Injection Indicator — {}", label),
-                description: format!(
-                    "Endpoint {} {} — {}",
-                    ctx.method, ctx.path, description
-                ),
+                description: format!("Endpoint {} {} — {}", ctx.method, ctx.path, description),
                 severity: if *label == "sql_error" || *label == "path_traversal" {
                     "critical".to_string()
                 } else {
@@ -449,10 +450,16 @@ pub fn check_inventory(resp: &HttpResponse, ctx: &EndpointCtx) -> Vec<ModuleFind
 
     if lower_headers.contains_key("sunset") || lower_headers.contains_key("deprecation") {
         let sunset = lower_headers.get("sunset").cloned().unwrap_or_default();
-        let deprecation = lower_headers.get("deprecation").cloned().unwrap_or_default();
+        let deprecation = lower_headers
+            .get("deprecation")
+            .cloned()
+            .unwrap_or_default();
         let mut evidence = HashMap::new();
         evidence.insert("sunset_header".to_string(), serde_json::json!(sunset));
-        evidence.insert("deprecation_header".to_string(), serde_json::json!(deprecation));
+        evidence.insert(
+            "deprecation_header".to_string(),
+            serde_json::json!(deprecation),
+        );
 
         findings.push(ModuleFinding {
             owasp_id: "API9:2023".to_string(),
@@ -566,14 +573,18 @@ mod tests {
     fn test_pii_email_detected() {
         let r = resp_simple(200, r#"{"user_email": "alice@example.com"}"#);
         let f = check_excessive_data_exposure(&r, &ctx("GET", "/api/v1/users/1"));
-        assert!(f.iter().any(|x| x.evidence["pii_category"] == "email_address"));
+        assert!(f
+            .iter()
+            .any(|x| x.evidence["pii_category"] == "email_address"));
     }
 
     #[test]
     fn test_pii_password_is_critical() {
         let r = resp_simple(200, r#"{"password": "s3cr3t!"}"#);
         let f = check_excessive_data_exposure(&r, &ctx("GET", "/api/v1/users/1"));
-        let pw = f.iter().find(|x| x.evidence["pii_category"] == "password_field");
+        let pw = f
+            .iter()
+            .find(|x| x.evidence["pii_category"] == "password_field");
         assert!(pw.is_some());
         assert_eq!(pw.unwrap().severity, "critical");
     }

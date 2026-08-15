@@ -106,7 +106,10 @@ pub fn to_vector_string(metrics: &CvssMetrics) -> String {
         Impact::Low => "L",
         Impact::High => "H",
     };
-    format!("CVSS:3.1/AV:{}/AC:{}/PR:{}/UI:{}/S:{}/C:{}/I:{}/A:{}", av, ac, pr, ui, sc, c, i, a)
+    format!(
+        "CVSS:3.1/AV:{}/AC:{}/PR:{}/UI:{}/S:{}/C:{}/I:{}/A:{}",
+        av, ac, pr, ui, sc, c, i, a
+    )
 }
 
 /// Calculate the CVSS 3.1 base score from metrics.
@@ -158,9 +161,7 @@ pub fn calculate(metrics: &CvssMetrics) -> CvssScore {
 
     let isc = match metrics.scope {
         Scope::Unchanged => 6.42 * isc_base,
-        Scope::Changed => {
-            7.52 * (isc_base - 0.029) - 3.25 * (isc_base - 0.02_f64).powi(15)
-        }
+        Scope::Changed => 7.52 * (isc_base - 0.029) - 3.25 * (isc_base - 0.02_f64).powi(15),
     };
 
     let base_score = if isc <= 0.0 {
@@ -199,7 +200,10 @@ fn severity_label(score: f64) -> String {
 /// Example: `"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N"`
 pub fn from_vector_string(vector: &str) -> Result<CvssScore, String> {
     if !vector.starts_with("CVSS:3.1/") {
-        return Err(format!("Vector string must start with 'CVSS:3.1/', got: {}", vector));
+        return Err(format!(
+            "Vector string must start with 'CVSS:3.1/', got: {}",
+            vector
+        ));
     }
 
     let parts: Vec<&str> = vector["CVSS:3.1/".len()..].split('/').collect();
@@ -213,7 +217,9 @@ pub fn from_vector_string(vector: &str) -> Result<CvssScore, String> {
     }
 
     let get = |key: &str| -> Result<&str, String> {
-        map.get(key).copied().ok_or_else(|| format!("Missing metric: {}", key))
+        map.get(key)
+            .copied()
+            .ok_or_else(|| format!("Missing metric: {}", key))
     };
 
     let attack_vector = match get("AV")? {

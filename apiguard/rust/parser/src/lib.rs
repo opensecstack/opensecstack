@@ -81,12 +81,11 @@ fn parse_bytes_to_value(input: &[u8]) -> Result<serde_json::Value, ParseError> {
     }
 
     // serde_yml (actively maintained fork of serde_yaml) handles both YAML and JSON.
-    let doc: serde_json::Value = serde_yml::from_str(input_str).map_err(|e| {
-        ParseError::InvalidFormat {
+    let doc: serde_json::Value =
+        serde_yml::from_str(input_str).map_err(|e| ParseError::InvalidFormat {
             line: None,
             message: e.to_string(),
-        }
-    })?;
+        })?;
 
     // Reject documents that are too deeply nested (billion-laughs / stack-overflow mitigation).
     check_value_depth(&doc, MAX_VALUE_DEPTH)?;

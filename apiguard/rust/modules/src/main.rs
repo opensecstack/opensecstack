@@ -68,9 +68,11 @@ fn run(req: Request) -> Vec<ModuleFinding> {
             };
             check_excessive_data_exposure(resp, &req.endpoint)
         }
-        "a4_rate_limit" => {
-            check_timing_anomaly(&req.endpoint, &req.baseline_samples_ms, req.test_duration_ms)
-        }
+        "a4_rate_limit" => check_timing_anomaly(
+            &req.endpoint,
+            &req.baseline_samples_ms,
+            req.test_duration_ms,
+        ),
         "a7_misconfig" => {
             let resp = match &req.response {
                 Some(r) => r,

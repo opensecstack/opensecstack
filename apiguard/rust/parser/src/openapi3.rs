@@ -22,10 +22,7 @@ pub fn parse_openapi3(doc: &Value, schema_hash: String) -> Result<ApiGuardIR, Pa
 
 /// Ensure the document declares a supported openapi version.
 fn validate_version(doc: &Value) -> Result<(), ParseError> {
-    let version = doc
-        .get("openapi")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let version = doc.get("openapi").and_then(|v| v.as_str()).unwrap_or("");
 
     if version.starts_with("3.0.") || version.starts_with("3.1.") {
         Ok(())
@@ -66,7 +63,10 @@ fn extract_endpoints(doc: &Value) -> Result<Vec<Endpoint>, ParseError> {
                 // Operation-level parameters override/extend path-level.
                 let op_params = extract_parameters(doc, operation.get("parameters"));
                 for op_p in op_params {
-                    if !params.iter().any(|p| p.name == op_p.name && p.location == op_p.location) {
+                    if !params
+                        .iter()
+                        .any(|p| p.name == op_p.name && p.location == op_p.location)
+                    {
                         params.push(op_p);
                     }
                 }
@@ -114,8 +114,13 @@ fn extract_parameters(doc: &Value, params: Option<&Value>) -> Vec<Parameter> {
                 "cookie" => ParameterLocation::Cookie,
                 _ => return None,
             };
-            let required = resolved.get("required").and_then(|v| v.as_bool()).unwrap_or(false);
-            let schema = resolved.get("schema").and_then(|s| parse_schema_type(doc, s, 0));
+            let required = resolved
+                .get("required")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let schema = resolved
+                .get("schema")
+                .and_then(|s| parse_schema_type(doc, s, 0));
 
             Some(Parameter {
                 name,
@@ -130,7 +135,10 @@ fn extract_parameters(doc: &Value, params: Option<&Value>) -> Vec<Parameter> {
 fn extract_request_body(doc: &Value, operation: &Value) -> Option<RequestBody> {
     let rb = operation.get("requestBody")?;
     let rb = resolve::resolve_value(doc, rb, 0).unwrap_or_else(|_| rb.clone());
-    let required = rb.get("required").and_then(|v| v.as_bool()).unwrap_or(false);
+    let required = rb
+        .get("required")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let content = rb.get("content")?.as_object()?;
 
     let mut content_types = Vec::new();
@@ -174,7 +182,13 @@ fn extract_responses(doc: &Value, operation: &Value) -> HashMap<String, Response
             .and_then(|media| media.get("schema"))
             .and_then(|s| parse_schema_type(doc, s, 0));
 
-        result.insert(code.clone(), Response { description, schema });
+        result.insert(
+            code.clone(),
+            Response {
+                description,
+                schema,
+            },
+        );
     }
     result
 }
@@ -185,10 +199,7 @@ fn extract_security(operation: &Value) -> Vec<String> {
         .and_then(|v| v.as_array())
         .map(|arr| {
             arr.iter()
-                .filter_map(|item| {
-                    item.as_object()
-                        .and_then(|m| m.keys().next().cloned())
-                })
+                .filter_map(|item| item.as_object().and_then(|m| m.keys().next().cloned()))
                 .collect()
         })
         .unwrap_or_default()
@@ -242,11 +253,23 @@ fn extract_auth_schemes(doc: &Value) -> Vec<AuthScheme> {
                             if bearer_format == Some("JWT") {
                                 (AuthSchemeType::Jwt, None, Some("Authorization".to_string()))
                             } else {
-                                (AuthSchemeType::Bearer, None, Some("Authorization".to_string()))
+                                (
+                                    AuthSchemeType::Bearer,
+                                    None,
+                                    Some("Authorization".to_string()),
+                                )
                             }
                         }
-                        "basic" => (AuthSchemeType::Basic, None, Some("Authorization".to_string())),
-                        _ => (AuthSchemeType::Bearer, None, Some("Authorization".to_string())),
+                        "basic" => (
+                            AuthSchemeType::Basic,
+                            None,
+                            Some("Authorization".to_string()),
+                        ),
+                        _ => (
+                            AuthSchemeType::Bearer,
+                            None,
+                            Some("Authorization".to_string()),
+                        ),
                     }
                 }
                 "apiKey" => {

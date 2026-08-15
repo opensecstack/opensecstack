@@ -1,7 +1,5 @@
 use parser::error::ParseError;
-use parser::ir::{
-    AuthSchemeType, HttpMethod, InputFormat, ParameterLocation, SchemaType,
-};
+use parser::ir::{AuthSchemeType, HttpMethod, InputFormat, ParameterLocation, SchemaType};
 use std::path::PathBuf;
 
 fn testdata(name: &str) -> PathBuf {
@@ -41,7 +39,10 @@ fn test_parse_openapi3_petstore() {
         .iter()
         .find(|e| e.path == "/pets" && e.method == HttpMethod::Post)
         .expect("POST /pets not found");
-    let rb = post_pets.request_body.as_ref().expect("request body missing");
+    let rb = post_pets
+        .request_body
+        .as_ref()
+        .expect("request body missing");
     assert!(rb.required);
     assert!(rb.content_types.contains(&"application/json".to_string()));
     // Schema should be resolved to an Object (NewPet)
@@ -84,10 +85,7 @@ fn test_parse_openapi3_petstore() {
 fn test_parse_swagger2() {
     let ir = parser::parse_file(&testdata("petstore-swagger2.yaml")).unwrap();
 
-    assert_eq!(
-        ir.metadata.base_url,
-        "https://petstore.example.com/api/v1"
-    );
+    assert_eq!(ir.metadata.base_url, "https://petstore.example.com/api/v1");
     assert_eq!(ir.metadata.api_version, "1.0.0");
 
     // 3 endpoints: GET /pets, POST /pets, GET /pets/{petId}

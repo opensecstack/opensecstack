@@ -3,15 +3,19 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 
 	"github.com/opensecstack/apiguard/internal/api/middleware"
@@ -183,6 +187,121 @@ func TestApprove_InvalidUUID(t *testing.T) {
 // a real CITADEL deployment or network access for the scan itself.
 // ---------------------------------------------------------------------------
 
+// handlersMigrationsOnce/handlersMigrationsErr guard a single application of
+// migrations/*.up.sql against the target database for the lifetime of this
+// package's test binary. `go test ./...` runs each package's tests in its
+// own process against the same CI Postgres service container, and there is
+// no guarantee that internal/db's own test binary (which applies migrations
+// via its own ensureSchema helper) runs — let alone finishes — before this
+// package's binary connects. Relying on that cross-process ordering was the
+// root cause of "relation \"scans\" does not exist" failures in CI: this
+// package must ensure its own schema instead of assuming another package's
+// test run already created it.
+var (
+	handlersMigrationsOnce sync.Once
+	handlersMigrationsErr  error
+)
+
+// ensureHandlersTestSchema applies every pending migration under
+// ../../../migrations to connString, mirroring cmd/migrate's up logic and
+// internal/db's db_test.go helper of the same shape. It is intentionally
+// duplicated (rather than shared) because that logic lives in a _test.go
+// file in package db, which is not importable from here.
+func ensureHandlersTestSchema(t *testing.T, connString string) {
+	t.Helper()
+	handlersMigrationsOnce.Do(func() {
+		handlersMigrationsErr = applyHandlersTestMigrations(connString)
+	})
+	if handlersMigrationsErr != nil {
+		t.Fatalf("applying migrations: %v", handlersMigrationsErr)
+	}
+}
+
+func applyHandlersTestMigrations(connString string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.New(ctx, connString)
+	if err != nil {
+		return fmt.Errorf("connecting to database: %w", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		return fmt.Errorf("pinging database: %w", err)
+	}
+
+	if _, err := pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			version    TEXT PRIMARY KEY,
+			applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)
+	`); err != nil {
+		return fmt.Errorf("creating schema_migrations table: %w", err)
+	}
+
+	migrationsDir := filepath.Join("..", "..", "..", "migrations")
+	entries, err := os.ReadDir(migrationsDir)
+	if err != nil {
+		return fmt.Errorf("reading %s: %w", migrationsDir, err)
+	}
+	var files []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".up.sql") {
+			files = append(files, e.Name())
+		}
+	}
+	sort.Strings(files)
+
+	applied := make(map[string]bool)
+	rows, err := pool.Query(ctx, `SELECT version FROM schema_migrations`)
+	if err != nil {
+		return fmt.Errorf("reading applied versions: %w", err)
+	}
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			rows.Close()
+			return fmt.Errorf("scanning applied version: %w", err)
+		}
+		applied[v] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterating applied versions: %w", err)
+	}
+
+	for _, f := range files {
+		version := strings.TrimSuffix(f, ".up.sql")
+		if applied[version] {
+			continue
+		}
+
+		sqlBytes, err := os.ReadFile(filepath.Join(migrationsDir, f)) //nolint:gosec // path built from a fixed local migrations dir + filenames just listed via os.ReadDir above, not user input
+		if err != nil {
+			return fmt.Errorf("reading %s: %w", f, err)
+		}
+
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("starting transaction for %s: %w", f, err)
+		}
+		if _, err := tx.Exec(ctx, string(sqlBytes)); err != nil {
+			_ = tx.Rollback(ctx) //nolint:errcheck // best-effort cleanup; original error is what we report
+			return fmt.Errorf("applying %s: %w", f, err)
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO schema_migrations (version) VALUES ($1)`, version); err != nil {
+			_ = tx.Rollback(ctx) //nolint:errcheck // best-effort cleanup; original error is what we report
+			return fmt.Errorf("recording %s: %w", f, err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("committing %s: %w", f, err)
+		}
+	}
+
+	return nil
+}
+
 func approvalTestDB(t *testing.T) *db.DB {
 	t.Helper()
 	u := os.Getenv("DATABASE_URL")
@@ -192,6 +311,7 @@ func approvalTestDB(t *testing.T) *db.DB {
 	if u == "" {
 		t.Skip("DATABASE_URL/TEST_DB_URL not set — skipping DB integration test")
 	}
+	ensureHandlersTestSchema(t, u)
 	d, err := db.New(context.Background(), u)
 	if err != nil {
 		t.Fatalf("db.New: %v", err)

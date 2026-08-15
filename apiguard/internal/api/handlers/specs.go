@@ -103,13 +103,24 @@ func (s *Specs) Upload(w http.ResponseWriter, r *http.Request) {
 	filename := fmt.Sprintf("apiguard-spec-%s%s", hashHex[:16], ext)
 	destPath := filepath.Join(s.uploadDir, filename)
 
-	// Write only if not already present (content-addressed dedup).
-	if _, err := os.Stat(destPath); os.IsNotExist(err) {
+	// Write only if not already present (content-addressed dedup). A Stat
+	// error other than "does not exist" (e.g. ENOTDIR because uploadDir
+	// itself, or a path component of it, is not a directory; permission
+	// errors; I/O errors) must not be silently treated as "already exists" —
+	// that previously let the handler skip straight to a 201 response with a
+	// spec_path that was never actually written to disk.
+	if _, err := os.Stat(destPath); err == nil {
+		// Already present — dedup hit, nothing to write.
+	} else if os.IsNotExist(err) {
 		if err := os.WriteFile(destPath, content, 0600); err != nil {
 			s.logger.Error().Err(err).Str("path", destPath).Msg("writing spec file")
 			writeError(w, http.StatusInternalServerError, "failed to store spec")
 			return
 		}
+	} else {
+		s.logger.Error().Err(err).Str("path", destPath).Msg("checking spec file")
+		writeError(w, http.StatusInternalServerError, "failed to store spec")
+		return
 	}
 
 	s.logger.Info().

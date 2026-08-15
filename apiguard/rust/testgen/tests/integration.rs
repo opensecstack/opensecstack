@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use testgen::{generate, TestCategory, AuthStrategy};
+use testgen::{generate, AuthStrategy, TestCategory};
 
 fn petstore_ir() -> parser::ir::ApiGuardIR {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -16,7 +16,10 @@ fn test_generate_bola_tests() {
     let modules = vec!["a1_bola".to_string()];
     let suite = generate(&ir, "https://petstore.example.com/api/v1", &modules);
 
-    assert!(!suite.test_cases.is_empty(), "should generate BOLA test cases");
+    assert!(
+        !suite.test_cases.is_empty(),
+        "should generate BOLA test cases"
+    );
     assert_eq!(suite.spec_hash, ir.metadata.schema_hash);
 
     // There should be BolaIdEnum cases for /pets/{petId}
@@ -47,7 +50,9 @@ fn test_generate_bola_tests() {
     let cross_user_cases: Vec<_> = suite
         .test_cases
         .iter()
-        .filter(|tc| tc.category == TestCategory::BolaCrossUser && tc.endpoint_path == "/pets/{petId}")
+        .filter(|tc| {
+            tc.category == TestCategory::BolaCrossUser && tc.endpoint_path == "/pets/{petId}"
+        })
         .collect();
     assert!(
         !cross_user_cases.is_empty(),
@@ -77,7 +82,10 @@ fn test_generate_auth_tests() {
     let modules = vec!["a2_auth".to_string()];
     let suite = generate(&ir, "https://petstore.example.com/api/v1", &modules);
 
-    assert!(!suite.test_cases.is_empty(), "should generate A2 auth test cases");
+    assert!(
+        !suite.test_cases.is_empty(),
+        "should generate A2 auth test cases"
+    );
 
     // All secured endpoints should have AuthRemoval cases
     let auth_removal_cases: Vec<_> = suite
@@ -106,7 +114,10 @@ fn test_generate_auth_tests() {
         .iter()
         .filter(|tc| tc.category == TestCategory::AuthTokenExpired)
         .collect();
-    assert!(!expired_cases.is_empty(), "should have AuthTokenExpired cases");
+    assert!(
+        !expired_cases.is_empty(),
+        "should have AuthTokenExpired cases"
+    );
     for tc in &expired_cases {
         assert_eq!(tc.requests[0].auth, AuthStrategy::Expired);
     }
@@ -117,7 +128,10 @@ fn test_generate_auth_tests() {
         .iter()
         .filter(|tc| tc.category == TestCategory::AuthTokenReplay)
         .collect();
-    assert!(!replay_cases.is_empty(), "should have AuthTokenReplay cases");
+    assert!(
+        !replay_cases.is_empty(),
+        "should have AuthTokenReplay cases"
+    );
 
     // All cases should expect failure (401/403)
     for tc in &suite.test_cases {
@@ -156,10 +170,22 @@ fn test_generate_mass_assignment() {
 
     // Verify the extra-fields body contains injection fields
     for tc in &extra_field_cases {
-        let body = tc.requests[0].body.as_ref().expect("body should be present");
-        assert!(body.get("admin").is_some(), "body should contain 'admin' field");
-        assert!(body.get("role").is_some(), "body should contain 'role' field");
-        assert!(body.get("is_admin").is_some(), "body should contain 'is_admin' field");
+        let body = tc.requests[0]
+            .body
+            .as_ref()
+            .expect("body should be present");
+        assert!(
+            body.get("admin").is_some(),
+            "body should contain 'admin' field"
+        );
+        assert!(
+            body.get("role").is_some(),
+            "body should contain 'role' field"
+        );
+        assert!(
+            body.get("is_admin").is_some(),
+            "body should contain 'is_admin' field"
+        );
     }
 
     // POST /pets should also have MassAssignReadOnly case
@@ -177,9 +203,18 @@ fn test_generate_mass_assignment() {
         "POST /pets should have MassAssignReadOnly case"
     );
     for tc in &readonly_cases {
-        let body = tc.requests[0].body.as_ref().expect("body should be present");
-        assert!(body.get("id").is_some(), "readonly body should contain 'id'");
-        assert!(body.get("created_at").is_some(), "readonly body should contain 'created_at'");
+        let body = tc.requests[0]
+            .body
+            .as_ref()
+            .expect("body should be present");
+        assert!(
+            body.get("id").is_some(),
+            "readonly body should contain 'id'"
+        );
+        assert!(
+            body.get("created_at").is_some(),
+            "readonly body should contain 'created_at'"
+        );
     }
 
     // GET endpoints should NOT have mass assignment cases

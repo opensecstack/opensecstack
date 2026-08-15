@@ -3,6 +3,7 @@ package playbook
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,9 +12,15 @@ import (
 
 // ---------------------------------------------------------------------------
 // In-memory mock store implementing playbook.Store.
+//
+// Execute() runs playbook steps in a background goroutine that calls
+// UpdateExecution as it progresses, while tests poll GetExecution from the
+// main goroutine — mu guards the maps against that concurrent access, the
+// same way a real DB-backed store's connection pool would serialize it.
 // ---------------------------------------------------------------------------
 
 type mockStore struct {
+	mu         sync.Mutex
 	playbooks  map[string]*Playbook
 	executions map[string]*Execution
 }
@@ -26,12 +33,16 @@ func newMockStore() *mockStore {
 }
 
 func (m *mockStore) Create(_ context.Context, pb *Playbook) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	cp := *pb
 	m.playbooks[pb.ID] = &cp
 	return nil
 }
 
 func (m *mockStore) Get(_ context.Context, id string) (*Playbook, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	pb, ok := m.playbooks[id]
 	if !ok {
 		return nil, ErrNotFound
@@ -41,6 +52,8 @@ func (m *mockStore) Get(_ context.Context, id string) (*Playbook, error) {
 }
 
 func (m *mockStore) List(_ context.Context, opts ListOptions) ([]Playbook, int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	var all []Playbook
 	for _, pb := range m.playbooks {
 		if opts.Status != "" && string(pb.Status) != opts.Status {
@@ -64,6 +77,8 @@ func (m *mockStore) List(_ context.Context, opts ListOptions) ([]Playbook, int, 
 }
 
 func (m *mockStore) Update(_ context.Context, pb *Playbook) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if _, ok := m.playbooks[pb.ID]; !ok {
 		return ErrNotFound
 	}
@@ -73,6 +88,8 @@ func (m *mockStore) Update(_ context.Context, pb *Playbook) error {
 }
 
 func (m *mockStore) Delete(_ context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if _, ok := m.playbooks[id]; !ok {
 		return ErrNotFound
 	}
@@ -81,12 +98,16 @@ func (m *mockStore) Delete(_ context.Context, id string) error {
 }
 
 func (m *mockStore) CreateExecution(_ context.Context, exec *Execution) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	cp := *exec
 	m.executions[exec.ID] = &cp
 	return nil
 }
 
 func (m *mockStore) GetExecution(_ context.Context, id string) (*Execution, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	exec, ok := m.executions[id]
 	if !ok {
 		return nil, ErrNotFound
@@ -96,6 +117,8 @@ func (m *mockStore) GetExecution(_ context.Context, id string) (*Execution, erro
 }
 
 func (m *mockStore) ListExecutions(_ context.Context, playbookID string) ([]Execution, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	var out []Execution
 	for _, e := range m.executions {
 		if e.PlaybookID == playbookID {
@@ -106,6 +129,8 @@ func (m *mockStore) ListExecutions(_ context.Context, playbookID string) ([]Exec
 }
 
 func (m *mockStore) UpdateExecution(_ context.Context, exec *Execution) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if _, ok := m.executions[exec.ID]; !ok {
 		return ErrNotFound
 	}

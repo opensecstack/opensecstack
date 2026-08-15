@@ -186,7 +186,7 @@ pub fn calculate(metrics: &CvssMetrics) -> CvssScore {
 
 fn severity_label(score: f64) -> String {
     match score {
-        s if s == 0.0 => "None",
+        0.0 => "None",
         s if s < 4.0 => "Low",
         s if s < 7.0 => "Medium",
         s if s < 9.0 => "High",

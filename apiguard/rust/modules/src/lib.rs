@@ -280,40 +280,40 @@ pub fn check_security_headers(resp: &HttpResponse, ctx: &EndpointCtx) -> Vec<Mod
                     ),
                 });
             }
-            Some(value) if !expected_value.is_empty() => {
-                if !value
-                    .to_lowercase()
-                    .contains(&expected_value.to_lowercase())
-                {
-                    let mut evidence = HashMap::new();
-                    evidence.insert("header".to_string(), serde_json::json!(header));
-                    evidence.insert("actual_value".to_string(), serde_json::json!(value));
-                    evidence.insert(
-                        "expected_to_contain".to_string(),
-                        serde_json::json!(expected_value),
-                    );
+            Some(value)
+                if !expected_value.is_empty()
+                    && !value
+                        .to_lowercase()
+                        .contains(&expected_value.to_lowercase()) =>
+            {
+                let mut evidence = HashMap::new();
+                evidence.insert("header".to_string(), serde_json::json!(header));
+                evidence.insert("actual_value".to_string(), serde_json::json!(value));
+                evidence.insert(
+                    "expected_to_contain".to_string(),
+                    serde_json::json!(expected_value),
+                );
 
-                    findings.push(ModuleFinding {
-                        owasp_id: "API7:2023".to_string(),
-                        module_id: "a7_misconfig".to_string(),
-                        title: format!(
-                            "Security Misconfiguration — Weak header value: {}",
-                            header
-                        ),
-                        description: format!(
-                            "Endpoint {} {} returns {} with value '{}' which does not include '{}'.",
-                            ctx.method, ctx.path, header, value, expected_value
-                        ),
-                        severity: "low".to_string(),
-                        endpoint_path: ctx.path.clone(),
-                        endpoint_method: ctx.method.clone(),
-                        evidence,
-                        remediation: format!(
-                            "Set {} to '{}' or stronger.",
-                            header, expected_value
-                        ),
-                    });
-                }
+                findings.push(ModuleFinding {
+                    owasp_id: "API7:2023".to_string(),
+                    module_id: "a7_misconfig".to_string(),
+                    title: format!(
+                        "Security Misconfiguration — Weak header value: {}",
+                        header
+                    ),
+                    description: format!(
+                        "Endpoint {} {} returns {} with value '{}' which does not include '{}'.",
+                        ctx.method, ctx.path, header, value, expected_value
+                    ),
+                    severity: "low".to_string(),
+                    endpoint_path: ctx.path.clone(),
+                    endpoint_method: ctx.method.clone(),
+                    evidence,
+                    remediation: format!(
+                        "Set {} to '{}' or stronger.",
+                        header, expected_value
+                    ),
+                });
             }
             _ => {}
         }

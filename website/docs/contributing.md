@@ -27,7 +27,7 @@ and is reachable via the navbar's anchor links.
 |---|---|---|
 | Hero | `HeroSection.tsx` | Marketing wording — update when ecosystem positioning shifts |
 | Platforms overview | `PlatformsSection.tsx` | Reads from [`src/data/platforms.ts`](../src/data/platforms.ts) — update there, not in JSX |
-| Per-platform deep-dives (APIGuard, NIS2 Compass, CITADEL, ThreatFlow, IRFlow, CitadelOS, OpenScrub, CyberPath, SecureLab, OpenCSIRT) | `<Platform>Section.tsx` | Each platform's maintainers |
+| Per-platform deep-dives (APIGuard, NIS2 Compass, CITADEL, ThreatFlow, IRFlow, Runix, OpenScrub, CyberPath, SecureLab, OpenCSIRT) | `<Platform>Section.tsx` | Each platform's maintainers |
 | SDKs | `SDKSection.tsx` | Reads from the SDK repos — update the code samples when the real SDK API changes |
 | Roadmap | `RoadmapSection.tsx` | Update when phases complete or new ones land |
 
@@ -35,21 +35,21 @@ Two additional routes exist:
 
 | Route | Component |
 |---|---|
-| `/citadelos` | [`src/pages/CitadelOSPage.tsx`](../src/pages/CitadelOSPage.tsx) |
-| `/citadelos/mobile` | [`src/pages/CitadelOSMobilePage.tsx`](../src/pages/CitadelOSMobilePage.tsx) |
+| `/runix` | [`src/pages/RunixPage.tsx`](../src/pages/RunixPage.tsx) |
+| `/runix/mobile` | [`src/pages/RunixMobilePage.tsx`](../src/pages/RunixMobilePage.tsx) |
 
 And the SPA 404 catch-all at [`src/pages/NotFoundPage.tsx`](../src/pages/NotFoundPage.tsx).
 
 ## Data-driven content
 
-Whenever a section lists entities (platforms, SDK targets, CitadelOS
+Whenever a section lists entities (platforms, SDK targets, Runix
 layers, NIS2 measures), the data lives in `src/data/`:
 
 | File | Purpose |
 |---|---|
 | `platforms.ts` | Canonical list of platforms shown in the Platforms section, search index, and navbar |
-| `citadelOS.ts` | Desktop OS layers, sandbox tiers, phases |
-| `citadelOSMobile.ts` | Mobile-specific variant |
+| `runix.ts` | Desktop OS layers, sandbox tiers, phases |
+| `runixMobile.ts` | Mobile-specific variant |
 | `nis2Measures.ts` | Article 21(2) measure catalogue |
 | `marshalGates.ts` | MARSHAL 5-gate definitions |
 

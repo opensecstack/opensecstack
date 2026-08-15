@@ -41,6 +41,34 @@ type stubPinger struct{}
 
 func (stubPinger) Ping(context.Context) error { return nil }
 
+// dbConfigured reports whether enough DB configuration is present to
+// attempt a connection — a non-empty URL or a non-empty password (the two
+// ways cfg.DB can be populated). Extracted from main() so the gating logic
+// is independently testable.
+func dbConfigured(url, password string) bool {
+	return url != "" || password != ""
+}
+
+// effectiveSinauthURL returns the configured sinauth base URL, falling
+// back to the local dev default when unset. Extracted from main() so the
+// fallback logic is independently testable.
+func effectiveSinauthURL(configured string) string {
+	if configured == "" {
+		return "http://localhost:8100"
+	}
+	return configured
+}
+
+// effectiveDrainGrace returns the configured shutdown drain grace period,
+// falling back to a 5-second default when unset or non-positive.
+// Extracted from main() so the fallback logic is independently testable.
+func effectiveDrainGrace(configured time.Duration) time.Duration {
+	if configured <= 0 {
+		return 5 * time.Second
+	}
+	return configured
+}
+
 func main() {
 	logger := zerolog.New(os.Stdout).With().
 		Timestamp().
@@ -63,6 +91,61 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	srv, worker, closeDB := buildApp(ctx, cfg, logger)
+	defer closeDB()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	errCh := make(chan error, 1)
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+		}
+	}()
+	logger.Info().Str("addr", cfg.Server.HTTPAddr).Msg("cyberpath started")
+
+	select {
+	case sig := <-sigCh:
+		logger.Info().Str("signal", sig.String()).Msg("shutdown signal received")
+	case err := <-errCh:
+		logger.Error().Err(err).Msg("server error")
+	}
+
+	handlers.Ready.Store(false)
+	drain := effectiveDrainGrace(cfg.Server.DrainGrace)
+	time.Sleep(drain)
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Error().Err(err).Msg("shutdown error")
+		os.Exit(1)
+	}
+
+	// Stop the outbox worker — cancel ctx then wait for goroutines to drain.
+	cancel()
+	if worker != nil {
+		worker.Wait()
+		logger.Info().Msg("outbox worker stopped")
+	}
+	logger.Info().Msg("cyberpath stopped cleanly")
+}
+
+// buildApp performs the full dependency wire-up (DB connection attempt,
+// auth/IRFlow/CITADEL wiring when a DB is available, Docker provisioner,
+// content service, and the HTTP router) and returns the constructed
+// *http.Server plus the CITADEL outbox worker (nil if not wired) and a
+// closeDB cleanup func (a no-op if no DB connected).
+//
+// Extracted from main() so the wiring logic — including the fully
+// DB-less "degraded mode" path described in this file's package comment
+// — can run under `go test` without starting a real listener or signal
+// handler. Fatal misconfiguration (e.g. cert signer init failure) still
+// calls logger.Fatal() internally, exactly as it did inline in main(),
+// so behaviour for those paths is unchanged: the process exits, it does
+// not return an error to the caller.
+func buildApp(ctx context.Context, cfg *config.Config, logger zerolog.Logger) (*http.Server, *citadel.Worker, func()) {
 	// DB (optional in dev — falls back to stub pinger).
 	var (
 		pinger        handlers.Pinger = stubPinger{}
@@ -72,24 +155,22 @@ func main() {
 		irflowWebhook *handlers.IRFlowWebhookHandler
 		worker        *citadel.Worker
 	)
-	if cfg.DB.URL != "" || cfg.DB.Password != "" {
+	closeDB := func() {}
+	if dbConfigured(cfg.DB.URL, cfg.DB.Password) {
 		d, err := db.New(ctx, cfg.DB.EffectiveURL(), int32(cfg.DB.MaxOpenConns))
 		if err != nil {
 			logger.Warn().Err(err).Msg("DB unavailable — continuing with stub pinger")
 		} else {
 			pinger = d
 			dbHandle = d
-			defer d.Close()
+			closeDB = d.Close
 			logger.Info().Msg("DB connected")
 		}
 	}
 
 	mreg := metrics.New()
 	hs256Verifier := auth.NewHS256Verifier(cfg.Auth.ActiveSecrets(), cfg.Auth.Issuer)
-	sinauthURL := cfg.Auth.SinauthURL
-	if sinauthURL == "" {
-		sinauthURL = "http://localhost:8100"
-	}
+	sinauthURL := effectiveSinauthURL(cfg.Auth.SinauthURL)
 	verifier := auth.NewDualVerifier(hs256Verifier, sinauthURL)
 
 	// ── Outbound integration clients ─────────────────────────────────
@@ -344,43 +425,5 @@ func main() {
 		WriteTimeout: cfg.Server.WriteTimeout,
 	}
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-
-	errCh := make(chan error, 1)
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
-		}
-	}()
-	logger.Info().Str("addr", cfg.Server.HTTPAddr).Msg("cyberpath started")
-
-	select {
-	case sig := <-sigCh:
-		logger.Info().Str("signal", sig.String()).Msg("shutdown signal received")
-	case err := <-errCh:
-		logger.Error().Err(err).Msg("server error")
-	}
-
-	handlers.Ready.Store(false)
-	drain := cfg.Server.DrainGrace
-	if drain <= 0 {
-		drain = 5 * time.Second
-	}
-	time.Sleep(drain)
-
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer shutdownCancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		logger.Error().Err(err).Msg("shutdown error")
-		os.Exit(1)
-	}
-
-	// Stop the outbox worker — cancel ctx then wait for goroutines to drain.
-	cancel()
-	if worker != nil {
-		worker.Wait()
-		logger.Info().Msg("outbox worker stopped")
-	}
-	logger.Info().Msg("cyberpath stopped cleanly")
+	return srv, worker, closeDB
 }

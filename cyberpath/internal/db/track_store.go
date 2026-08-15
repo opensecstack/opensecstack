@@ -145,7 +145,9 @@ func (s *TrackStore) ListPublished(ctx context.Context) ([]Track, error) {
 func (s *TrackStore) GetByModule(ctx context.Context, moduleID uuid.UUID) (*Track, error) {
 	const op = "db/track_store/GetByModule"
 	row := s.Pool.QueryRow(ctx, `
-		SELECT `+trackColumns+` FROM tracks t
+		SELECT t.id, t.slug, t.title, t.description, t.locale, t.difficulty,
+		       t.tags, t.nis2_refs, t.published, t.created_at, t.updated_at
+		FROM tracks t
 		JOIN modules m ON m.track_id = t.id
 		WHERE m.id = $1`, moduleID)
 	t, err := scanTrack(row)

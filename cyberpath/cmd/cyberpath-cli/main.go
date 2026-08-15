@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/google/uuid"
@@ -75,17 +76,27 @@ func cmdSecretsGenerate(args []string) {
 	length := fs.Int("length", 32, "number of random bytes to generate (default 32 → 64 hex chars)")
 	_ = fs.Parse(args)
 
-	if *length <= 0 {
-		fmt.Fprintln(os.Stderr, "error: --length must be > 0")
+	secret, err := generateSecretHex(rand.Reader, *length)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Print(secret)
+}
 
-	buf := make([]byte, *length)
-	if _, err := rand.Read(buf); err != nil {
-		fmt.Fprintf(os.Stderr, "error: crypto/rand: %v\n", err)
-		os.Exit(1)
+// generateSecretHex reads length random bytes from randReader and returns
+// their hex encoding. Pure aside from the injected reader, so tests can
+// exercise both the happy path and error propagation without depending on
+// the global crypto/rand.Reader.
+func generateSecretHex(randReader io.Reader, length int) (string, error) {
+	if length <= 0 {
+		return "", fmt.Errorf("--length must be > 0")
 	}
-	fmt.Print(hex.EncodeToString(buf))
+	buf := make([]byte, length)
+	if _, err := io.ReadFull(randReader, buf); err != nil {
+		return "", fmt.Errorf("crypto/rand: %w", err)
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 // ── content ───────────────────────────────────────────────────────────────────
@@ -105,34 +116,68 @@ func cmdContent(args []string) {
 }
 
 func cmdContentLint(args []string) {
-	fs := flag.NewFlagSet("content lint", flag.ExitOnError)
-	trackSlug := fs.String("track", "", "lint only this track slug")
-	_ = fs.Parse(args)
-
-	if fs.NArg() < 1 {
+	// The path is parsed as a leading positional argument before flag
+	// parsing, not left to flag.FlagSet.Parse — Go's flag package stops
+	// parsing at the first non-flag argument, so with the documented
+	// invocation order (`content lint <path> [--track <slug>]`) a
+	// FlagSet.Parse(args) call would treat <path> as the parse-stop point
+	// and silently ignore --track entirely.
+	if len(args) < 1 {
 		fmt.Fprintf(os.Stderr, "usage: cyberpath-cli content lint <path> [--track <slug>]\n")
 		os.Exit(2)
 	}
-	rootDir := fs.Arg(0)
+	rootDir := args[0]
 
+	fs := flag.NewFlagSet("content lint", flag.ExitOnError)
+	trackSlug := fs.String("track", "", "lint only this track slug")
+	_ = fs.Parse(args[1:])
+
+	res := lintTracks(rootDir, *trackSlug)
+	if res.LoadErr != "" {
+		fmt.Fprint(os.Stderr, res.LoadErr)
+		os.Exit(1)
+	}
+	fmt.Print(res.Report)
+	if res.HasErrors {
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
+// lintResult is the outcome of lintTracks: LoadErr is non-empty only when
+// loading the track(s) from disk failed (destined for stderr, exit 1);
+// otherwise Report holds the rendered [WARN]/[ERROR] diagnostic lines
+// (destined for stdout) and HasErrors reports whether any diagnostic was
+// "error" severity (exit 1) as opposed to only warnings (exit 0).
+type lintResult struct {
+	LoadErr   string
+	Report    string
+	HasErrors bool
+}
+
+// lintTracks loads either a single track (trackSlug non-empty) or every
+// track under rootDir, validates each, and renders a report identical to
+// the CLI's original inline output — extracted from cmdContentLint so the
+// loading/validation/reporting logic can be tested without going through
+// os.Exit.
+func lintTracks(rootDir, trackSlug string) lintResult {
 	var tracks []*content.TrackYAML
 
-	if *trackSlug != "" {
-		t, err := content.LoadTrack(rootDir, *trackSlug)
+	if trackSlug != "" {
+		t, err := content.LoadTrack(rootDir, trackSlug)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[ERROR] %s: %v\n", *trackSlug, err)
-			os.Exit(1)
+			return lintResult{LoadErr: fmt.Sprintf("[ERROR] %s: %v\n", trackSlug, err)}
 		}
 		tracks = []*content.TrackYAML{t}
 	} else {
 		var err error
 		tracks, err = content.LoadAllTracks(rootDir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "[ERROR] %s: %v\n", rootDir, err)
-			os.Exit(1)
+			return lintResult{LoadErr: fmt.Sprintf("[ERROR] %s: %v\n", rootDir, err)}
 		}
 	}
 
+	var out string
 	hasErrors := false
 	for _, t := range tracks {
 		diags := content.ValidateTrackWithRoot(t, rootDir)
@@ -142,14 +187,11 @@ func cmdContentLint(args []string) {
 				sev = "ERROR"
 				hasErrors = true
 			}
-			fmt.Printf("[%s] %s: %s\n", sev, d.Path, d.Message)
+			out += fmt.Sprintf("[%s] %s: %s\n", sev, d.Path, d.Message)
 		}
 	}
 
-	if hasErrors {
-		os.Exit(1)
-	}
-	os.Exit(0)
+	return lintResult{Report: out, HasErrors: hasErrors}
 }
 
 // ── track ─────────────────────────────────────────────────────────────────────
@@ -169,31 +211,33 @@ func cmdTrack(args []string) {
 }
 
 func cmdTrackImport(args []string) {
+	// See cmdContentLint for why the path is peeled off as a leading
+	// positional argument before flag parsing rather than relying on
+	// flag.FlagSet.Parse to find it via NArg()/Arg(0): with the documented
+	// invocation order (`track import <path> --db-url <url> ...`),
+	// FlagSet.Parse(args) stops at the first non-flag argument (<path>)
+	// and never sees --db-url/--track/--published-by at all.
+	if len(args) < 1 {
+		fmt.Fprintf(os.Stderr, "usage: cyberpath-cli track import <path> --db-url <url> [--track <slug>] [--published-by <uuid>]\n")
+		os.Exit(2)
+	}
+	rootDir := args[0]
+
 	fs := flag.NewFlagSet("track import", flag.ExitOnError)
 	dbURL := fs.String("db-url", "", "PostgreSQL connection string (required)")
 	trackSlug := fs.String("track", "", "import only this track slug")
 	publishedByStr := fs.String("published-by", "", "UUID of the publishing user (default: system/nil)")
-	_ = fs.Parse(args)
+	_ = fs.Parse(args[1:])
 
-	if fs.NArg() < 1 {
-		fmt.Fprintf(os.Stderr, "usage: cyberpath-cli track import <path> --db-url <url> [--track <slug>] [--published-by <uuid>]\n")
-		os.Exit(2)
-	}
 	if *dbURL == "" {
 		fmt.Fprintln(os.Stderr, "error: --db-url is required")
 		os.Exit(2)
 	}
 
-	rootDir := fs.Arg(0)
-
-	publishedBy := uuid.Nil
-	if *publishedByStr != "" {
-		var err error
-		publishedBy, err = uuid.Parse(*publishedByStr)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: --published-by: invalid UUID: %v\n", err)
-			os.Exit(2)
-		}
+	publishedBy, err := parsePublishedBy(*publishedByStr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: --published-by: invalid UUID: %v\n", err)
+		os.Exit(2)
 	}
 
 	ctx := context.Background()
@@ -207,38 +251,81 @@ func cmdTrackImport(args []string) {
 
 	publisher := content.NewPublisher(pool, nil, nil)
 
-	var tracks []*content.TrackYAML
-
-	if *trackSlug != "" {
-		t, err := content.LoadTrack(rootDir, *trackSlug)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "importing track %s... FAILED: %v\n", *trackSlug, err)
-			os.Exit(1)
-		}
-		tracks = []*content.TrackYAML{t}
-	} else {
-		tracks, err = content.LoadAllTracks(rootDir)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: load tracks: %v\n", err)
-			os.Exit(1)
-		}
+	res := importTracks(ctx, publisher, rootDir, *trackSlug, publishedBy)
+	if res.LoadErr != "" {
+		fmt.Fprint(os.Stderr, res.LoadErr)
+		os.Exit(1)
 	}
-
-	failed := false
-	for _, t := range tracks {
-		fmt.Printf("importing track %s... ", t.ID)
-		if err := publisher.Publish(ctx, t, publishedBy); err != nil {
-			fmt.Printf("FAILED: %v\n", err)
-			failed = true
-		} else {
-			fmt.Println("ok")
-		}
-	}
-
-	if failed {
+	fmt.Print(res.Report)
+	if res.Failed {
 		os.Exit(1)
 	}
 	os.Exit(0)
+}
+
+// parsePublishedBy parses the --published-by flag value, defaulting to
+// uuid.Nil (the "system" publisher) when the flag is unset.
+func parsePublishedBy(s string) (uuid.UUID, error) {
+	if s == "" {
+		return uuid.Nil, nil
+	}
+	return uuid.Parse(s)
+}
+
+// trackPublisher is the narrow slice of *content.Publisher that
+// importTracks needs, extracted here (not in internal/content) so tests
+// can supply a fake without a live database connection.
+type trackPublisher interface {
+	Publish(ctx context.Context, t *content.TrackYAML, publishedBy uuid.UUID) error
+}
+
+// importResult is the outcome of importTracks: LoadErr is non-empty only
+// when loading the track(s) from disk failed (destined for stderr, exit 1,
+// before any Publish call is attempted); otherwise Report holds the
+// per-track "importing track X... ok/FAILED" progress lines (destined for
+// stdout) and Failed reports whether any individual track's Publish call
+// returned an error.
+type importResult struct {
+	LoadErr string
+	Report  string
+	Failed  bool
+}
+
+// importTracks loads either a single track (trackSlug non-empty) or every
+// track under rootDir and publishes each via pub, rendering a progress
+// report identical to the CLI's original inline output — extracted from
+// cmdTrackImport so the load/publish/reporting logic can be tested with a
+// fake trackPublisher instead of a live database connection.
+func importTracks(ctx context.Context, pub trackPublisher, rootDir, trackSlug string, publishedBy uuid.UUID) importResult {
+	var tracks []*content.TrackYAML
+
+	if trackSlug != "" {
+		t, err := content.LoadTrack(rootDir, trackSlug)
+		if err != nil {
+			return importResult{LoadErr: fmt.Sprintf("importing track %s... FAILED: %v\n", trackSlug, err)}
+		}
+		tracks = []*content.TrackYAML{t}
+	} else {
+		var err error
+		tracks, err = content.LoadAllTracks(rootDir)
+		if err != nil {
+			return importResult{LoadErr: fmt.Sprintf("error: load tracks: %v\n", err)}
+		}
+	}
+
+	var out string
+	failed := false
+	for _, t := range tracks {
+		out += fmt.Sprintf("importing track %s... ", t.ID)
+		if err := pub.Publish(ctx, t, publishedBy); err != nil {
+			out += fmt.Sprintf("FAILED: %v\n", err)
+			failed = true
+		} else {
+			out += "ok\n"
+		}
+	}
+
+	return importResult{Report: out, Failed: failed}
 }
 
 // ── lab ───────────────────────────────────────────────────────────────────────

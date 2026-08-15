@@ -155,10 +155,16 @@ VERTGUARD_THREATFLOW_KEY_SECRET=<hmac secret>
 
 ## License
 
-AGPL-3.0. VertGuard is a governance-adjacent platform; copyleft
-prevents closed-source forks of AI-attack defence infrastructure.
-Tool platforms (APIGuard, ThreatFlow, SDKs) remain Apache-2.0. See
-[LICENSE](LICENSE) for the rationale.
+**AGPL-3.0-or-later** — see [LICENSE](LICENSE). VertGuard is a
+governance-adjacent platform: its detections become evidence in the
+CITADEL WORM audit chain and feed compliance reporting through NIS2
+Compass. AGPL-3.0 ensures that any modified version operated as a network
+service must publish its source to its users, preventing a closed-source
+fork of a trust-critical AI-defence component from diverging silently from
+the reference implementation. Tool platforms in this monorepo (APIGuard,
+ThreatFlow, SDKs) remain Apache-2.0 — the copyleft obligation is scoped to
+governance-critical platforms by design. See the
+[monorepo ECOSYSTEM.md — Licensing Model](https://github.com/opensecstack/opensecstack/blob/main/ECOSYSTEM.md#licensing-model).
 
 ## Development status
 

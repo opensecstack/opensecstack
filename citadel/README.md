@@ -118,3 +118,16 @@ go test ./internal/marshal/... ./internal/db/... -v
 # BenchmarkWORM_ChainStep           — ~0.1-0.2ms/op
 # BenchmarkWORM_FullEntry           — ~0.4-0.7ms/op
 ```
+
+## License
+
+**AGPL-3.0-or-later** — see [LICENSE](LICENSE). CITADEL is the trust root
+of the OpenSecStack ecosystem: its WORM audit chain and MARSHAL governance
+gates are what downstream platforms — and ultimately regulators — rely on
+for tamper-evident evidence. AGPL-3.0 ensures that any modified version
+operated as a network service must publish its source to its users,
+preventing a closed-source fork of the governance layer from diverging
+silently from the upstream audit semantics. Tool platforms in this
+monorepo (APIGuard, ThreatFlow, SDKs) remain Apache-2.0 — the copyleft
+obligation is scoped to the governance core by design. See the
+[monorepo ECOSYSTEM.md — Licensing Model](https://github.com/opensecstack/opensecstack/blob/main/ECOSYSTEM.md#licensing-model).

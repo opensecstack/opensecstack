@@ -231,7 +231,9 @@ opensecstack/                       ← monorepo (current, 2026)
 └── adrs/               ← Architecture Decision Records
 ```
 
-**Future repositories** (Phase 5, 2028-2036): `vantage-hash`, `pyramid-registry`, `pyramid-mvno`, `runix` (single repo, desktop + mobile editions) — extracted from the monorepo when their independent lifecycle justifies the split. See [docs/release-process.md](docs/release-process.md) for the split criteria.
+**Future repositories** (Phase 5, 2028-2036): `vantage-hash`, `pyramid-registry`, `runix-mvno` — extracted from the monorepo when their independent lifecycle justifies the split. See [docs/release-process.md](docs/release-process.md) for the split criteria.
+
+**Already split: [opensecstack/runix](https://github.com/opensecstack/runix)** (desktop + mobile editions, single repo). Not a future extraction — it exists today, with Alpha kernel bring-up (boot, GDT/IDT, paging + heap, interrupts, cooperative scheduler, syscall ABI, ring 0 → ring 3 transition), a capability manager (Ed25519 tokens), and a real Wasm engine (`wasmi`) implemented and CI-tested. See its own README for current status — treat this monorepo's Phase 5 Tier C entries (below, in [ROADMAP.md](ROADMAP.md)) as the target for a *shipped, production* desktop/mobile OS, not as "no work has started."
 
 ## Deployment Topology
 

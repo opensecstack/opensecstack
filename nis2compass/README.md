@@ -234,3 +234,16 @@ Detailed documentation lives in the `docs/` directory. The table below lists eve
 | [troubleshooting.md](docs/troubleshooting.md) | Common failure modes with symptoms, diagnosis steps, and resolutions |
 | [versioning.md](docs/versioning.md) | Versioning policy, backwards compatibility guarantees, deprecation process, and SDK compatibility |
 | [faq.md](docs/faq.md) | Frequently asked questions about NIS2 Compass, compliance scope, and operational concerns |
+
+## License
+
+**AGPL-3.0-or-later** — see [LICENSE](LICENSE). NIS2 Compass is a
+governance platform: it tracks regulatory compliance against NIS2 Article
+21(2) measures and produces evidence artefacts that enter the CITADEL WORM
+audit chain. AGPL-3.0 ensures that any modified version operated as a
+network service must publish its source to its users, preventing a
+closed-source fork of compliance tooling from diverging silently from the
+reference implementation regulators and auditors rely on. Tool platforms
+in this monorepo (APIGuard, ThreatFlow, SDKs) remain Apache-2.0; the
+copyleft obligation is scoped to governance-critical platforms by design.
+See the [monorepo ECOSYSTEM.md — Licensing Model](https://github.com/opensecstack/opensecstack/blob/main/ECOSYSTEM.md#licensing-model).

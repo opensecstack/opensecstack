@@ -171,9 +171,18 @@ func (s *Service) Execute(ctx context.Context, playbookID, incidentID string) (*
 		return nil, fmt.Errorf("recording execution: %w", err)
 	}
 
-	// Run asynchronously. Detach the request context so cancellation of the
-	// HTTP request does not kill the playbook run.
-	go s.runExecution(pb, exec)
+	// Run asynchronously on an independent copy of exec. The executor and
+	// runExecution mutate the execution's fields in place as the run
+	// progresses (Status, CurrentStep, StepResults, ...); if the goroutine
+	// mutated the same *Execution we hand back to the caller, any concurrent
+	// read of the returned value (e.g. exec.Status right after Execute
+	// returns) would race with those writes. All state changes are surfaced
+	// to callers exclusively through Store.UpdateExecution/GetExecution, so
+	// the background goroutine gets its own copy to work on. Detach the
+	// request context so cancellation of the HTTP request does not kill the
+	// playbook run.
+	execCopy := *exec
+	go s.runExecution(pb, &execCopy)
 
 	return exec, nil
 }

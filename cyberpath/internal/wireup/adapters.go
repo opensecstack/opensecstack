@@ -281,6 +281,10 @@ func (a *WorkerMetricsAdapter) ObserveDeliveryDuration(destination, eventType st
 type IRFlowCohortAdapter struct {
 	Cohorts     *db.CohortStore
 	Enrollments *db.EnrollmentStore
+	// Users resolves the system actor Create attributes cohorts to
+	// (cohorts.created_by is NOT NULL REFERENCES users(id), and this
+	// adapter has no authenticated human caller — see systemUserID).
+	Users *db.UserStore
 	// Tenant is the fallback tenant UUID used when the handler passes
 	// an empty tenant string (the IRFlowWebhookOptions.Tenant field is
 	// optional and may be unset). uuid.Nil disables the fallback.
@@ -290,8 +294,62 @@ type IRFlowCohortAdapter struct {
 // IRFlowCohorts is a convenience constructor. tenantOverride may be
 // uuid.Nil; when non-nil it is used whenever the handler passes an
 // empty tenant string.
-func IRFlowCohorts(cohorts *db.CohortStore, enrollments *db.EnrollmentStore, tenantOverride uuid.UUID) *IRFlowCohortAdapter {
-	return &IRFlowCohortAdapter{Cohorts: cohorts, Enrollments: enrollments, Tenant: tenantOverride}
+func IRFlowCohorts(cohorts *db.CohortStore, enrollments *db.EnrollmentStore, users *db.UserStore, tenantOverride uuid.UUID) *IRFlowCohortAdapter {
+	return &IRFlowCohortAdapter{Cohorts: cohorts, Enrollments: enrollments, Users: users, Tenant: tenantOverride}
+}
+
+// systemUserEmail identifies the per-tenant service account cohorts
+// created via the IRFlow incident-trigger webhook are attributed to.
+// There is no authenticated human caller on this path (see Create).
+const systemUserEmail = "irflow-system@cyberpath.internal"
+
+// systemUserID finds or lazily creates the per-tenant IRFlow system user
+// and returns its id. cohorts.created_by is NOT NULL REFERENCES
+// users(id) and users.email is UNIQUE per (tenant_id, email), so this is
+// idempotent and safe under concurrent callers within the same tenant —
+// a duplicate-key race on Create is treated as "someone else created it
+// first" and resolved with a follow-up lookup.
+//
+// This looks up by (tenant_id, email) directly against a.Users.Pool
+// rather than through UserStore.FindByEmail, which matches by email
+// alone with no tenant filter — since the same system-user email is
+// reused across every tenant, that lookup could return an arbitrary
+// tenant's row instead of this one.
+func (a *IRFlowCohortAdapter) systemUserID(ctx context.Context, tenantID uuid.UUID) (uuid.UUID, error) {
+	if a.Users == nil || a.Users.Pool == nil {
+		return uuid.Nil, fmt.Errorf("wireup/cohort: no UserStore configured for system-user resolution")
+	}
+	find := func() (uuid.UUID, error) {
+		var id uuid.UUID
+		err := a.Users.Pool.QueryRow(ctx,
+			`SELECT id FROM users WHERE tenant_id = $1 AND LOWER(email) = LOWER($2) AND deleted_at IS NULL LIMIT 1`,
+			tenantID, systemUserEmail,
+		).Scan(&id)
+		return id, err
+	}
+
+	if id, err := find(); err == nil {
+		return id, nil
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, fmt.Errorf("wireup/cohort: lookup system user: %w", err)
+	}
+
+	created := &db.User{
+		TenantID:    tenantID,
+		Email:       systemUserEmail,
+		DisplayName: "IRFlow (system)",
+		Role:        "system",
+	}
+	if cerr := a.Users.Create(ctx, created); cerr != nil {
+		// Lost a create race against another concurrent webhook call for
+		// the same tenant — the row now exists, so look it up instead
+		// of failing.
+		if id, ferr := find(); ferr == nil {
+			return id, nil
+		}
+		return uuid.Nil, fmt.Errorf("wireup/cohort: create system user: %w", cerr)
+	}
+	return created.ID, nil
 }
 
 func (a *IRFlowCohortAdapter) tenantUUID(tenant string) (uuid.UUID, error) {
@@ -332,11 +390,15 @@ func (a *IRFlowCohortAdapter) Create(ctx context.Context, tenant, name string, t
 	if err != nil {
 		return "", err
 	}
+	createdBy, err := a.systemUserID(ctx, tid)
+	if err != nil {
+		return "", err
+	}
 	c := &db.Cohort{
 		TenantID:  tid,
 		Name:      name,
 		Status:    "active",
-		CreatedBy: uuid.Nil,
+		CreatedBy: createdBy,
 		Metadata:  json.RawMessage(`{"source":"irflow"}`),
 		// TrackID intentionally left nil — multi-track refs live in
 		// cohort_tracks (migration 0007).
@@ -379,6 +441,14 @@ func (a *IRFlowCohortAdapter) Enroll(ctx context.Context, cohortID string, userI
 	if err != nil {
 		return 0, fmt.Errorf("wireup/cohort: bad cohort id: %w", err)
 	}
+	cohort, err := a.Cohorts.Get(ctx, cid)
+	if err != nil {
+		return 0, fmt.Errorf("wireup/cohort: resolve cohort for enroll: %w", err)
+	}
+	byUserID, err := a.systemUserID(ctx, cohort.TenantID)
+	if err != nil {
+		return 0, err
+	}
 	enrolled := 0
 	for _, raw := range userIDs {
 		uid, perr := uuid.Parse(raw)
@@ -386,7 +456,7 @@ func (a *IRFlowCohortAdapter) Enroll(ctx context.Context, cohortID string, userI
 			// Non-UUID user reference — count as unknown user.
 			return enrolled, apihandlers.ErrUnknownUser
 		}
-		if _, err := a.Enrollments.Enroll(ctx, cid, uid, uuid.Nil); err != nil {
+		if _, err := a.Enrollments.Enroll(ctx, cid, uid, byUserID); err != nil {
 			// Duplicate active enrollment violates the partial unique
 			// index — skip silently. Other errors propagate.
 			continue

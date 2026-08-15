@@ -266,7 +266,7 @@ func buildApp(ctx context.Context, cfg *config.Config, logger zerolog.Logger) (*
 		if cfg.IRFlow.WebhookSecret != "" {
 			irflowWebhook = handlers.NewIRFlowWebhookHandler(handlers.IRFlowWebhookOptions{
 				HMACSecret: cfg.IRFlow.WebhookSecret,
-				Cohorts:    wireup.IRFlowCohorts(cohortStore, enrollmentStore, uuid.Nil),
+				Cohorts:    wireup.IRFlowCohorts(cohortStore, enrollmentStore, userStore, uuid.Nil),
 				Audit:      wireup.IRFlowAudit(auditStore),
 				Outbox:     wireup.IRFlowOutbox(outboxStore),
 				Logger:     logger,

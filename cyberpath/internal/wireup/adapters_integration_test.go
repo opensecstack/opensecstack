@@ -56,30 +56,6 @@ func seedTenant(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 	return tenantID
 }
 
-// seedSystemUser inserts a user row with id = uuid.Nil. This exists only
-// to work around a real bug in IRFlowCohortAdapter.Create (adapters.go):
-// it hardcodes Cohort.CreatedBy = uuid.Nil, but cohorts.created_by is
-// `NOT NULL REFERENCES users(id)` (migration 0002) — so in a real
-// database, any cohort created via the IRFlow webhook path fails with a
-// foreign-key violation unless a user literally has id
-// 00000000-0000-0000-0000-000000000000. No such "system user" convention
-// exists anywhere else in this codebase. Seeding one here lets the test
-// exercise the rest of Create/FindByName/Enroll; it does not mean the
-// adapter is production-safe.
-func seedSystemUser(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID) {
-	t.Helper()
-	ctx := context.Background()
-	if _, err := pool.Exec(ctx, `
-		INSERT INTO users (id, tenant_id, email, role_id) VALUES ($1, $2, $3, 'learner')
-		ON CONFLICT (id) DO NOTHING`,
-		uuid.Nil, tenantID, "system-wireup-test@wireup-test.local"); err != nil {
-		t.Fatalf("seed system user: %v", err)
-	}
-	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, uuid.Nil)
-	})
-}
-
 func seedUser(t *testing.T, pool *pgxpool.Pool, tenantID uuid.UUID, role string) uuid.UUID {
 	t.Helper()
 	ctx := context.Background()
@@ -394,12 +370,11 @@ func TestIRFlowCohortAdapter_CreateFindByNameEnroll(t *testing.T) {
 	pool := testPool(t)
 	tenantID := seedTenant(t, pool)
 	learner := seedUser(t, pool, tenantID, "learner")
-	seedSystemUser(t, pool, tenantID)
 	ctx := context.Background()
 
 	cohorts := db.NewCohortStore(pool)
 	enrollments := db.NewEnrollmentStore(pool)
-	adapter := IRFlowCohorts(cohorts, enrollments, uuid.Nil)
+	adapter := IRFlowCohorts(cohorts, enrollments, db.NewUserStore(pool), uuid.Nil)
 
 	trackUUID := uuid.New()
 	cohortID, err := adapter.Create(ctx, tenantID.String(), "wireup-irflow-cohort", []string{trackUUID.String(), "some-slug"})
@@ -454,7 +429,7 @@ func TestIRFlowCohortAdapter_CreateFindByNameEnroll(t *testing.T) {
 
 func TestIRFlowCohortAdapter_Enroll_BadCohortID(t *testing.T) {
 	pool := testPool(t)
-	adapter := IRFlowCohorts(db.NewCohortStore(pool), db.NewEnrollmentStore(pool), uuid.Nil)
+	adapter := IRFlowCohorts(db.NewCohortStore(pool), db.NewEnrollmentStore(pool), db.NewUserStore(pool), uuid.Nil)
 
 	_, err := adapter.Enroll(context.Background(), "not-a-uuid", []string{uuid.New().String()})
 	if err == nil {
@@ -465,11 +440,10 @@ func TestIRFlowCohortAdapter_Enroll_BadCohortID(t *testing.T) {
 func TestIRFlowCohortAdapter_Enroll_UnknownUser(t *testing.T) {
 	pool := testPool(t)
 	tenantID := seedTenant(t, pool)
-	seedSystemUser(t, pool, tenantID)
 	ctx := context.Background()
 
 	cohorts := db.NewCohortStore(pool)
-	adapter := IRFlowCohorts(cohorts, db.NewEnrollmentStore(pool), uuid.Nil)
+	adapter := IRFlowCohorts(cohorts, db.NewEnrollmentStore(pool), db.NewUserStore(pool), uuid.Nil)
 
 	cohortID, err := adapter.Create(ctx, tenantID.String(), "wireup-irflow-cohort-2", nil)
 	if err != nil {
@@ -487,7 +461,7 @@ func TestIRFlowCohortAdapter_Enroll_UnknownUser(t *testing.T) {
 
 func TestIRFlowCohortAdapter_Create_EmptyTenant_NoOverride(t *testing.T) {
 	pool := testPool(t)
-	adapter := IRFlowCohorts(db.NewCohortStore(pool), db.NewEnrollmentStore(pool), uuid.Nil)
+	adapter := IRFlowCohorts(db.NewCohortStore(pool), db.NewEnrollmentStore(pool), db.NewUserStore(pool), uuid.Nil)
 
 	_, err := adapter.Create(context.Background(), "", "should-fail", nil)
 	if err == nil {

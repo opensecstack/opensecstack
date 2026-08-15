@@ -5,6 +5,7 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"time"
 
@@ -58,30 +59,21 @@ func (p *Provisioner) StartContainer(ctx context.Context, def *db.LabDefinition,
 	}
 
 	// Choose network mode: isolated by default, bridge when egress is configured.
-	netMode := container.NetworkMode("none")
-	if len(def.EgressWhitelist) > 0 && string(def.EgressWhitelist) != "null" && string(def.EgressWhitelist) != "[]" {
-		netMode = container.NetworkMode("bridge")
-	}
+	netMode := networkModeFor(def.EgressWhitelist)
 
 	// Build the container command. Use the definition's EntryCommand if set,
 	// otherwise fall back to /bin/sh.
-	cmd := []string{"/bin/sh"}
-	if def.EntryCommand != "" {
-		cmd = []string{"/bin/sh", "-c", def.EntryCommand}
-	}
+	cmd := containerCommand(def.EntryCommand)
 
 	timeout := stopTimeout
 	cfg := &container.Config{
-		Image:        def.Image,
-		Cmd:          cmd,
-		Tty:          true,
-		OpenStdin:    true,
-		StdinOnce:    false,
-		StopTimeout:  &timeout,
-		Labels: map[string]string{
-			"cyberpath.session_id": sessionID,
-			"cyberpath.lab_id":     def.ID,
-		},
+		Image:       def.Image,
+		Cmd:         cmd,
+		Tty:         true,
+		OpenStdin:   true,
+		StdinOnce:   false,
+		StopTimeout: &timeout,
+		Labels:      containerLabels(sessionID, def.ID),
 	}
 
 	hostCfg := &container.HostConfig{
@@ -112,6 +104,11 @@ func (p *Provisioner) StartContainer(ctx context.Context, def *db.LabDefinition,
 func (p *Provisioner) StopContainer(ctx context.Context, containerID string) error {
 	timeout := stopTimeout
 	stopErr := p.client.ContainerStop(ctx, containerID, container.StopOptions{Timeout: &timeout})
+	if stopErr != nil && dockerclient.IsErrNotFound(stopErr) {
+		// Container already gone (e.g. a repeated call after a prior
+		// StopContainer already removed it) — not a real failure.
+		stopErr = nil
+	}
 
 	// Always attempt removal, even if stop returned an error (e.g. container
 	// already exited). Ignore "not found" so idempotent calls are safe.
@@ -141,6 +138,37 @@ func (p *Provisioner) ExecStream(ctx context.Context, containerID string) (docke
 	return p.client.ContainerExecAttach(ctx, execID.ID, container.ExecAttachOptions{
 		Tty: true,
 	})
+}
+
+// networkModeFor returns the Docker network mode a lab container should be
+// created with: isolated ("none") by default, "bridge" when the lab
+// definition configures a non-empty egress whitelist. Treats a JSON "null"
+// or empty-array whitelist the same as no whitelist at all.
+func networkModeFor(egressWhitelist json.RawMessage) container.NetworkMode {
+	trimmed := string(egressWhitelist)
+	if len(trimmed) > 0 && trimmed != "null" && trimmed != "[]" {
+		return container.NetworkMode("bridge")
+	}
+	return container.NetworkMode("none")
+}
+
+// containerCommand returns the shell command a lab container should run:
+// the definition's EntryCommand executed via `/bin/sh -c` when set,
+// otherwise a bare `/bin/sh` for an interactive session.
+func containerCommand(entryCommand string) []string {
+	if entryCommand != "" {
+		return []string{"/bin/sh", "-c", entryCommand}
+	}
+	return []string{"/bin/sh"}
+}
+
+// containerLabels returns the Docker labels applied to every lab container,
+// used to identify and later clean up containers by session and lab ID.
+func containerLabels(sessionID, labID string) map[string]string {
+	return map[string]string{
+		"cyberpath.session_id": sessionID,
+		"cyberpath.lab_id":     labID,
+	}
 }
 
 // ensureImage pulls the image if it is not available locally. It discards

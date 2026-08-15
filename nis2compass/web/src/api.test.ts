@@ -32,14 +32,14 @@ afterEach(() => {
 
 describe('api.auth.login', () => {
   it('returns the token on success', async () => {
-    global.fetch = mockFetch(200, { access_token: 'tok-nis2' })
+    globalThis.fetch = mockFetch(200, { access_token: 'tok-nis2' })
     const token = await api.auth.login('nis2_apk_test')
     expect(token).toBe('tok-nis2')
   })
 
   it('POSTs to /api/v1/auth/token with api_key in body', async () => {
     const fetchMock = mockFetch(200, { access_token: 'tok' })
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     await api.auth.login('mykey')
     const [url, opts] = fetchMock.mock.calls[0]
     expect(url).toContain('/auth/token')
@@ -48,7 +48,7 @@ describe('api.auth.login', () => {
   })
 
   it('throws on 401', async () => {
-    global.fetch = mockFetch(401, { error: 'Unauthorized' })
+    globalThis.fetch = mockFetch(401, { error: 'Unauthorized' })
     await expect(api.auth.login('bad-key')).rejects.toThrow()
   })
 })
@@ -62,7 +62,7 @@ describe('api.organisations.list', () => {
 
   it('calls /api/v1/organisations', async () => {
     const fetchMock = mockFetch(200, { data: [] })
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     await api.organisations.list()
     const [url] = fetchMock.mock.calls[0]
     expect(url).toContain('/organisations')
@@ -70,7 +70,7 @@ describe('api.organisations.list', () => {
 
   it('includes Bearer auth header', async () => {
     const fetchMock = mockFetch(200, { data: [] })
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     await api.organisations.list()
     const [, opts] = fetchMock.mock.calls[0]
     expect(opts.headers.Authorization).toBe('Bearer test-token')
@@ -78,7 +78,7 @@ describe('api.organisations.list', () => {
 
   it('supports page and per_page params', async () => {
     const fetchMock = mockFetch(200, { data: [] })
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     await api.organisations.list(2, 10)
     const [url] = fetchMock.mock.calls[0]
     expect(url).toContain('page=2')
@@ -87,7 +87,7 @@ describe('api.organisations.list', () => {
 
   it('returns the array from the response', async () => {
     const orgs = [{ id: 'o1', name: 'Acme' }]
-    global.fetch = mockFetch(200, { data: orgs })
+    globalThis.fetch = mockFetch(200, { data: orgs })
     const result = await api.organisations.list()
     expect(result).toEqual(orgs)
   })
@@ -96,7 +96,7 @@ describe('api.organisations.list', () => {
 describe('api.organisations.get', () => {
   it('calls /organisations/:id', async () => {
     const fetchMock = mockFetch(200, { id: 'org-abc' })
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     await api.organisations.get('org-abc')
     const [url] = fetchMock.mock.calls[0]
     expect(url).toContain('/organisations/org-abc')
@@ -106,7 +106,7 @@ describe('api.organisations.get', () => {
 describe('api.organisations.create', () => {
   it('POSTs to /organisations', async () => {
     const fetchMock = mockFetch(201, { id: 'org-1', name: 'Acme' })
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     const result = await api.organisations.create({
       name: 'Acme',
       country: 'DE',
@@ -128,7 +128,7 @@ describe('api.organisations.create', () => {
 describe('api.assessments.list', () => {
   it('builds path /organisations/:orgId/assessments', async () => {
     const fetchMock = mockFetch(200, [])
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     await api.assessments.list('org-123')
     const [url] = fetchMock.mock.calls[0]
     expect(url).toContain('/organisations/org-123/assessments')
@@ -136,7 +136,7 @@ describe('api.assessments.list', () => {
 
   it('supports page and perPage params', async () => {
     const fetchMock = mockFetch(200, [])
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     await api.assessments.list('org-1', 2, 25)
     const [url] = fetchMock.mock.calls[0]
     expect(url).toContain('page=2')
@@ -147,7 +147,7 @@ describe('api.assessments.list', () => {
 describe('api.assessments.create', () => {
   it('POSTs to /organisations/:orgId/assessments', async () => {
     const fetchMock = mockFetch(201, { id: 'a-1' })
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     await api.assessments.create('org-1', { title: 'Q1 2026', framework_version: '2.0' })
     const [url, opts] = fetchMock.mock.calls[0]
     expect(url).toContain('/organisations/org-1/assessments')
@@ -160,7 +160,7 @@ describe('api.assessments.create', () => {
 describe('api.assessments.get', () => {
   it('calls /assessments/:id', async () => {
     const fetchMock = mockFetch(200, { id: 'a-abc' })
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     await api.assessments.get('a-abc')
     const [url] = fetchMock.mock.calls[0]
     expect(url).toContain('/assessments/a-abc')
@@ -170,7 +170,7 @@ describe('api.assessments.get', () => {
 describe('api.assessments.patch', () => {
   it('sends PATCH to /assessments/:id', async () => {
     const fetchMock = mockFetch(200, { id: 'a-1', status: 'in_progress' })
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     await api.assessments.patch('a-1', { status: 'in_progress' })
     const [url, opts] = fetchMock.mock.calls[0]
     expect(url).toContain('/assessments/a-1')
@@ -185,7 +185,7 @@ describe('api.assessments.patch', () => {
 describe('api.controls.list', () => {
   it('calls /assessments/:id/controls', async () => {
     const fetchMock = mockFetch(200, [])
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     await api.controls.list('assess-1')
     const [url] = fetchMock.mock.calls[0]
     expect(url).toContain('/assessments/assess-1/controls')
@@ -195,7 +195,7 @@ describe('api.controls.list', () => {
 describe('api.controls.get', () => {
   it('calls /assessments/:id/controls/:measureRef', async () => {
     const fetchMock = mockFetch(200, { id: 'ctrl-a' })
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     await api.controls.get('assess-1', 'a')
     const [url] = fetchMock.mock.calls[0]
     expect(url).toContain('/assessments/assess-1/controls/a')
@@ -205,7 +205,7 @@ describe('api.controls.get', () => {
 describe('api.controls.patch', () => {
   it('sends PATCH to /assessments/:id/controls/:measureRef', async () => {
     const fetchMock = mockFetch(200, { id: 'ctrl-a' })
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     await api.controls.patch('assess-1', 'a', { status: 'compliant' })
     const [url, opts] = fetchMock.mock.calls[0]
     expect(url).toContain('/assessments/assess-1/controls/a')
@@ -228,7 +228,7 @@ describe('api.reports.generate', () => {
       blob: () => Promise.resolve(new Blob(['pdf'], { type: 'application/pdf' })),
       json: () => Promise.resolve({}),
     })
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     await api.reports.generate('assess-1')
     const [url, opts] = fetchMock.mock.calls[0]
     expect(url).toContain('/assessments/assess-1/report')
@@ -236,7 +236,7 @@ describe('api.reports.generate', () => {
   })
 
   it('returns a Blob', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
       headers: new Headers(),
@@ -255,7 +255,7 @@ describe('api.reports.generate', () => {
 describe('api.audit.list', () => {
   it('reads X-Total-Count header', async () => {
     const entries = [{ id: 'e1', chain_hash: 'abc' }]
-    global.fetch = mockFetch(200, { data: entries }, { 'x-total-count': '55' })
+    globalThis.fetch = mockFetch(200, { data: entries }, { 'x-total-count': '55' })
     const result = await api.audit.list()
     expect(result.total).toBe(55)
     expect(result.entries).toEqual(entries)
@@ -263,7 +263,7 @@ describe('api.audit.list', () => {
 
   it('filters by risk_class', async () => {
     const fetchMock = mockFetch(200, { data: [] }, { 'x-total-count': '0' })
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     await api.audit.list({ risk_class: 'CRITICAL' })
     const [url] = fetchMock.mock.calls[0]
     expect(url).toContain('risk_class=CRITICAL')
@@ -271,7 +271,7 @@ describe('api.audit.list', () => {
 
   it('supports actor and action filters', async () => {
     const fetchMock = mockFetch(200, { data: [] }, { 'x-total-count': '0' })
-    global.fetch = fetchMock
+    globalThis.fetch = fetchMock
     await api.audit.list({ actor: 'alice', action: 'assessment.created' })
     const [url] = fetchMock.mock.calls[0]
     expect(url).toContain('actor=alice')
@@ -291,7 +291,7 @@ describe('401 handling', () => {
       writable: true,
       value: { reload: reloadSpy },
     })
-    global.fetch = mockFetch(401, { error: 'Unauthorized' })
+    globalThis.fetch = mockFetch(401, { error: 'Unauthorized' })
     await expect(api.organisations.list()).rejects.toThrow()
     expect(localStorage.getItem(TOKEN_KEY)).toBeNull()
   })

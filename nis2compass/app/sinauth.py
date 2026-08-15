@@ -84,7 +84,7 @@ def verify_sinauth_token(token: str, sinauth_url: str, issuer: str) -> Optional[
 
         import jwt as _jwt
 
-        payload = _jwt.decode(
+        payload: dict[str, Any] = _jwt.decode(
             token,
             public_key,
             algorithms=["RS256"],

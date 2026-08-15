@@ -52,7 +52,7 @@ const ORGS = [
 function renderPage() {
   return render(
     <MemoryRouter>
-      <OrganisationList />
+      <OrganisationList role="admin" />
     </MemoryRouter>,
   )
 }

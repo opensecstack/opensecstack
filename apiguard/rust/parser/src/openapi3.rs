@@ -322,7 +322,7 @@ pub fn parse_schema_type(doc: &Value, schema: &Value, depth: usize) -> Option<Sc
     }
 
     // Handle $ref
-    if let Some(ref_path) = schema.get("$ref").and_then(|v| v.as_str()) {
+    if schema.get("$ref").and_then(|v| v.as_str()).is_some() {
         let resolved = resolve::resolve_value(doc, schema, depth).ok()?;
         return parse_schema_type(doc, &resolved, depth + 1);
     }

@@ -353,7 +353,7 @@ func (c *Client) do(ctx context.Context, method, path string, body []byte) (*htt
 
 		// 5xx — server error, retryable. Drain and close the body before retrying.
 		_, _ = io.Copy(io.Discard, resp.Body) //nolint:errcheck // best-effort drain to allow connection reuse
-		resp.Body.Close()
+		_ = resp.Body.Close()                 //nolint:errcheck // best-effort close before retry
 		lastErr = fmt.Errorf("citadel: %s %s: server returned %d", method, path, resp.StatusCode)
 	}
 

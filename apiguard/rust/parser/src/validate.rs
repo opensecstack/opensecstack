@@ -33,13 +33,14 @@ pub fn validate_ir(ir: &ApiGuardIR) -> Result<(), ParseError> {
     }
 
     // Validate base_url is parseable (allow relative paths like "/api/v1").
-    if !ir.metadata.base_url.is_empty() && !ir.metadata.base_url.starts_with('/') {
-        if url::Url::parse(&ir.metadata.base_url).is_err() {
-            errors.push(format!(
-                "base_url `{}` is not a valid URL",
-                ir.metadata.base_url
-            ));
-        }
+    if !ir.metadata.base_url.is_empty()
+        && !ir.metadata.base_url.starts_with('/')
+        && url::Url::parse(&ir.metadata.base_url).is_err()
+    {
+        errors.push(format!(
+            "base_url `{}` is not a valid URL",
+            ir.metadata.base_url
+        ));
     }
 
     if errors.is_empty() {

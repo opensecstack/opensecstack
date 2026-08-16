@@ -304,6 +304,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)] // 3.14 is an arbitrary rounding fixture, not an approximation of PI
     fn test_roundup() {
         assert_eq!(roundup(9.05), 9.1);
         assert_eq!(roundup(4.0), 4.0);

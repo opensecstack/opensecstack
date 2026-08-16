@@ -2,7 +2,6 @@ use crate::error::ParseError;
 use crate::ir::*;
 use crate::openapi3;
 use serde_json::Value;
-use std::collections::HashMap;
 
 /// Parse a Swagger 2.0 document by converting it to OpenAPI 3.x-like JSON
 /// and then delegating to the OpenAPI 3 parser.

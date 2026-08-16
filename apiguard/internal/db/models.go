@@ -143,7 +143,7 @@ const (
 	AuditActionAPIKeyUsed            AuditAction = "api_key_used"
 	AuditActionUserLogin             AuditAction = "user_login"
 	AuditActionUserLogout            AuditAction = "user_logout"
-	AuditActionJWTSecretRotated      AuditAction = "jwt_secret_rotated" //nolint:gosec // audit-event enum tag, not a credential
+	AuditActionJWTSecretRotated      AuditAction = "jwt_secret_rotated" // #nosec G101 -- audit-event enum tag, not a credential
 	AuditActionScanApprovalRequested AuditAction = "scan_approval_requested"
 	AuditActionScanApprovalApproved  AuditAction = "scan_approval_approved"
 	AuditActionScanApprovalRejected  AuditAction = "scan_approval_rejected"

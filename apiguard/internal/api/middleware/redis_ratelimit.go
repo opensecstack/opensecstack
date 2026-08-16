@@ -84,7 +84,7 @@ func NewRedisRateLimiter(redisURL, password string, db int, rate int, keyPrefix 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if err := client.Ping(ctx).Err(); err != nil {
-		client.Close()
+		_ = client.Close() // #nosec G104 -- best-effort close; the Ping error above is what we report
 		return nil, err
 	}
 

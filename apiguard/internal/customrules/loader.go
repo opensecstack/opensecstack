@@ -50,7 +50,10 @@ func LoadRulesFromDir(dir string) ([]CustomRule, error) {
 // LoadRulesFromFile loads all rules declared in a single YAML file.
 // The file must use the top-level "rules:" key (see RuleFile).
 func LoadRulesFromFile(path string) ([]CustomRule, error) {
-	data, err := os.ReadFile(path)
+	// path is either passed directly by the operator (CLI/config) or built
+	// from LoadRulesFromDir's own os.ReadDir listing of that operator-
+	// configured directory; not user- or network-controlled.
+	data, err := os.ReadFile(path) // #nosec G304 -- trusted operator config, see comment above
 	if err != nil {
 		return nil, fmt.Errorf("customrules: cannot read file %q: %w", path, err)
 	}

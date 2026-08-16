@@ -131,7 +131,7 @@ func NewInsecureExecutor(timeout time.Duration) *DefaultExecutor {
 	return &DefaultExecutor{
 		client: &http.Client{
 			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // explicit user opt-in
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // #nosec G402 -- explicit user opt-in via --tls-skip-verify
 			},
 			Timeout: timeout,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {

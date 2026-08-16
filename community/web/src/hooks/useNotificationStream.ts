@@ -21,7 +21,7 @@ export function useNotificationStream(): number {
     }
 
     const fetchCount = () => {
-      listNotifications(1, 0)
+      listNotifications(1)
         .then((r) => setUnreadCount(r.unread_count ?? 0))
         .catch(() => {});
     };

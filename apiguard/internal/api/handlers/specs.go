@@ -57,7 +57,7 @@ func (s *Specs) Upload(w http.ResponseWriter, r *http.Request) {
 
 	if strings.HasPrefix(ct, "multipart/form-data") {
 		// Parse multipart upload; limit parse to maxSpecUploadBytes.
-		if err := r.ParseMultipartForm(maxSpecUploadBytes); err != nil {
+		if err := r.ParseMultipartForm(maxSpecUploadBytes); err != nil { // #nosec G120 -- parse size is bounded by maxSpecUploadBytes above
 			writeError(w, http.StatusBadRequest, "invalid multipart form: "+err.Error())
 			return
 		}

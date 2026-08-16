@@ -12,5 +12,5 @@ var openapiSpec []byte
 func OpenAPI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(openapiSpec) //nolint:errcheck
+	_, _ = w.Write(openapiSpec) // #nosec G104 -- best-effort write of an embedded constant, nothing else to report on failure
 }

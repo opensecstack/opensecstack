@@ -1,18 +1,28 @@
 # syntax=docker/dockerfile:1
 
+# Build context is the repo root, not community/, because go.mod's
+# `replace` directive for sdk/go/citadel points outside this directory —
+# it only resolves if sdk/ is present alongside community/ in the build
+# context.
+
 # ─── Stage 1: Go builder ────────────────────────────────────────────────────
 FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates tzdata
 
-WORKDIR /build
+WORKDIR /src
 
 # Download dependencies first (cached layer)
-COPY go.mod go.sum ./
+COPY community/go.mod community/go.sum ./community/
+COPY sdk/go/citadel/go.mod sdk/go/citadel/go.sum ./sdk/go/citadel/
+WORKDIR /src/community
 RUN go mod download
 
 # Copy source and build
-COPY . .
+WORKDIR /src
+COPY community/ ./community/
+COPY sdk/go/citadel/ ./sdk/go/citadel/
+WORKDIR /src/community
 
 ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux go build \
@@ -26,11 +36,11 @@ FROM node:20-alpine AS frontend
 WORKDIR /build
 
 # Install dependencies first (cached layer)
-COPY web/package*.json ./
+COPY community/web/package*.json ./
 RUN npm ci
 
 # Build the SPA
-COPY web/ ./
+COPY community/web/ ./
 RUN npm run build
 
 # ─── Stage 3: Final image ───────────────────────────────────────────────────

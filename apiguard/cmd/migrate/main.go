@@ -93,7 +93,10 @@ func migrateUp(ctx context.Context, pool *pgxpool.Pool) error {
 			continue
 		}
 
-		sql, err := os.ReadFile(filepath.Join(migrationsDir, f))
+		// f comes from listMigrationFiles, which only ever returns filenames of
+		// *.sql files it found inside migrationsDir itself; not user- or
+		// network-controlled.
+		sql, err := os.ReadFile(filepath.Join(migrationsDir, f)) // #nosec G304 -- filename from trusted local directory listing, see comment above
 		if err != nil {
 			return fmt.Errorf("reading %s: %w", f, err)
 		}
@@ -144,7 +147,7 @@ func migrateDown(ctx context.Context, pool *pgxpool.Pool) error {
 	// `last` comes from schema_migrations, which only ever contains versions this
 	// same tool previously wrote after parsing them from local migration filenames
 	// (see migrationVersion/listMigrationFiles); it is not user- or network-controlled.
-	sql, err := os.ReadFile(path) //nolint:gosec // path derived from trusted local migration filenames, see comment above
+	sql, err := os.ReadFile(path) // #nosec G304 G703 -- path derived from trusted local migration filenames, see comment above
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", path, err)
 	}

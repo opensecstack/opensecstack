@@ -13,8 +13,9 @@ import (
 // generateNative creates test cases using pure Go logic.
 // This is the fallback when the Rust testgen binary is not available.
 func (g *Generator) generateNative(ctx context.Context, irPath string) (*TestSuite, error) {
-	// Read the IR JSON.
-	data, err := os.ReadFile(irPath)
+	// Read the IR JSON. irPath is an internally generated temp path from the
+	// scanner (see internal/scanner/scanner.go), not user- or network-controlled.
+	data, err := os.ReadFile(irPath) // #nosec G304 -- trusted internal temp path, see comment above
 	if err != nil {
 		return nil, fmt.Errorf("cannot read IR file: %w", err)
 	}

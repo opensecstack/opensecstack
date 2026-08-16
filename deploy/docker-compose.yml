@@ -149,8 +149,11 @@ services:
   community-api:
     image: ghcr.io/opensecstack/community:latest
     build:
-      context: ../community
-      dockerfile: Dockerfile
+      # Repo root, not ../community: go.mod's replace directive for
+      # sdk/go/citadel points outside community/, so it only resolves if
+      # sdk/ is present in the build context too.
+      context: ..
+      dockerfile: community/Dockerfile
     ports:
       - "8089:8090"
     environment:

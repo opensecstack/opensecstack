@@ -178,7 +178,7 @@ func CreatePinnedTransport(validatedHost string, validatedIPs []net.IP, tlsSkipV
 			}
 			return (&net.Dialer{Timeout: 30 * time.Second}).DialContext(ctx, network, addr)
 		},
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: tlsSkipVerify}, //nolint:gosec // explicit caller opt-in for scanning targets with self-signed/internal certs, same convention as internal/modules/module.go
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: tlsSkipVerify}, // #nosec G402 -- explicit caller opt-in for scanning targets with self-signed/internal certs, same convention as internal/modules/module.go
 	}
 }
 
@@ -316,7 +316,7 @@ func validateParserBin(binPath string) error {
 		// operator-configured APIGUARD_PARSER_BIN env var (trusted process
 		// config, not request input), and shell metacharacters were already
 		// rejected above.
-		info, err := os.Stat(binPath) //nolint:gosec // trusted operator config, see comment above
+		info, err := os.Stat(binPath) // #nosec G703 -- trusted operator config, see comment above
 		if err != nil {
 			return fmt.Errorf("parser binary not found at %q: %w", binPath, err)
 		}
@@ -605,7 +605,7 @@ func (s *Scanner) parseSpec(ctx context.Context, specPath string) (*ParsedSpec, 
 	// operator config); specPath was already sanitized by validateSpecPath and
 	// outputPath is an internally generated temp path. Args are passed as a
 	// structured exec.Cmd argument list, so there is no shell to inject into.
-	cmd := exec.CommandContext(ctx, parserBin, "parse", "--input", specPath, "--output", outputPath) //nolint:gosec // args are structured/validated, see comment above
+	cmd := exec.CommandContext(ctx, parserBin, "parse", "--input", specPath, "--output", outputPath) // #nosec G204 G702 -- args are structured/validated, see comment above
 	cmd.Stderr = os.Stderr
 
 	s.logger.Debug().
@@ -618,8 +618,9 @@ func (s *Scanner) parseSpec(ctx context.Context, specPath string) (*ParsedSpec, 
 		return nil, fmt.Errorf("parser execution failed: %w", err)
 	}
 
-	// Read the parser output.
-	irData, err := os.ReadFile(outputPath)
+	// Read the parser output. outputPath is an internally generated temp
+	// path (see above), not user- or network-controlled.
+	irData, err := os.ReadFile(outputPath) // #nosec G304 -- trusted internal temp path, see comment above
 	if err != nil {
 		return nil, fmt.Errorf("failed to read parser output: %w", err)
 	}

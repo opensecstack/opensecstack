@@ -3,20 +3,20 @@ package config
 import "time"
 
 type Config struct {
-	HTTPAddr      string
-	Node          string
-	DevMode       bool
-	DBURL         string
-	DBMaxConns    int32
-	JWTSecret     string
-	JWTIssuer     string
-	TokenTTL      time.Duration
-	Users         []UserEntry
-	Pepper        string
-	CitadelURL         string
-	CitadelHMAC        []string
-	CitadelKeyID       string
-	CitadelDryRun      bool
+	HTTPAddr            string
+	Node                string
+	DevMode             bool
+	DBURL               string
+	DBMaxConns          int32
+	JWTSecret           string
+	JWTIssuer           string
+	TokenTTL            time.Duration
+	Users               []UserEntry
+	Pepper              string
+	CitadelURL          string
+	CitadelHMAC         []string
+	CitadelKeyID        string
+	CitadelDryRun       bool
 	InviteOnly          bool
 	NativeAuthEnabled   bool // when false, native email/password endpoints are disabled and SIN SSO is the only login
 	AllowedEmailDomains []string
@@ -29,12 +29,12 @@ type Config struct {
 	S3SecretKey         string
 	S3PublicURL         string
 	S3Region            string
-	GitHubClientID     string
-	GitHubClientSecret string
-	GitHubCallbackURL  string
-	GoogleClientID     string
-	GoogleClientSecret string
-	GoogleRedirectURI  string
+	GitHubClientID      string
+	GitHubClientSecret  string
+	GitHubCallbackURL   string
+	GoogleClientID      string
+	GoogleClientSecret  string
+	GoogleRedirectURI   string
 	SinauthURL          string // sinauth base URL for SERVER-side calls (token, userinfo), e.g. "http://sinauth-api:8100"
 	SinauthPublicURL    string // sinauth base URL the BROWSER is redirected to for /oauth/authorize, e.g. "http://localhost:8100". Falls back to SinauthURL when unset.
 	SinauthClientID     string
@@ -46,12 +46,12 @@ type Config struct {
 	SMTPPassword        string
 	SMTPFrom            string
 	SiteURL             string
-	DigestEnabled   bool
-	VAPIDPublicKey  string
-	VAPIDPrivateKey string
-	VAPIDEmail      string
-	TrustedProxies []string
-	AllowedOrigins []string
+	DigestEnabled       bool
+	VAPIDPublicKey      string
+	VAPIDPrivateKey     string
+	VAPIDEmail          string
+	TrustedProxies      []string
+	AllowedOrigins      []string
 }
 
 type UserEntry struct {

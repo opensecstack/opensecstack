@@ -9,8 +9,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/community/internal/citadel"
 	"github.com/opensecstack/community/internal/config"
+	"github.com/opensecstack/community/internal/db"
 	"github.com/opensecstack/community/internal/email"
 )
 
@@ -36,11 +38,28 @@ func Start(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			publishDue(ctx, pool, cit, cfg)
-			processDeletions(ctx, pool, cit, gov, cfg)
-			go sendDigests(ctx, pool, mailer, cfg)
+			safeRun("publishDue", func() { publishDue(ctx, pool, cit, cfg) })
+			safeRun("processDeletions", func() { processDeletions(ctx, pool, cit, gov, cfg) })
+			go safeRun("sendDigests", func() { sendDigests(ctx, pool, mailer, cfg) })
 		}
 	}
+}
+
+// safeRun invokes fn with panic recovery so a bug in one scheduler task
+// (a bad row, an unexpected nil, a downstream client panicking) can never
+// take down the whole server process. Start previously called
+// publishDue/processDeletions/sendDigests with no recover() anywhere in
+// their call chain, on both the synchronous ticker loop and a bare `go`
+// goroutine — an unrecovered panic in a goroutine crashes the entire Go
+// process, not just that tick, so a single malformed post or deletion
+// request could take the whole app down.
+func safeRun(name string, fn func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("scheduler: task panicked, recovered", "task", name, "panic", r)
+		}
+	}()
+	fn()
 }
 
 // processDeletions executes GDPR account deletions whose 30-day grace
@@ -125,11 +144,25 @@ func processDeletions(ctx context.Context, pool *pgxpool.Pool, cit *citadel.Clie
 			slog.Error("scheduler: delete user failed", "user_id", d.userID, "err", err)
 			continue
 		}
-		if _, err := pool.Exec(ctx,
-			`UPDATE deletion_requests SET status='processed', processed_at=now() WHERE id=$1`, d.reqID,
-		); err != nil {
-			slog.Error("scheduler: failed to mark deletion request processed", "request_id", d.reqID, "err", err)
+		// deletion_requests.user_id is ON DELETE CASCADE, so the row just
+		// deleted above by the DELETE FROM users statement is gone the
+		// instant that statement commits — a subsequent
+		// "UPDATE deletion_requests SET status='processed' ... WHERE id=$1"
+		// would always affect 0 rows with no error, silently discarding the
+		// intended completion record. audit_log survives instead:
+		// actor_id is ON DELETE SET NULL and target_id is plain TEXT (no
+		// FK), so the row is durable even though the deleted user (the
+		// target, not the actor) no longer exists to reference. The actor
+		// is the approving admin when known — d.userID itself can't be
+		// used as actor_id, it was just deleted and no longer satisfies
+		// the FK for a fresh INSERT (unlike an existing row, which SET
+		// NULL would handle).
+		auditActor := ""
+		if d.approvedBy.Valid {
+			auditActor = d.approvedBy.String
 		}
+		db.LogAudit(ctx, pool, auditActor, "gdpr_deletion_processed", "user", d.userID,
+			fmt.Sprintf("request_id=%s via=gdpr_scheduler", d.reqID))
 		_ = cit.Emit(ctx, citadel.Event{
 			Kind:      "community.user.deleted",
 			NodeID:    cfg.Node,

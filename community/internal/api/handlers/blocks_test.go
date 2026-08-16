@@ -36,7 +36,7 @@ func TestBlockUser_BlockerNotFound_Returns404(t *testing.T) {
 		t.Fatalf("expected 404, got %d", w.Code)
 	}
 	var resp map[string]string
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp["error"] != "blocker user not found" {
 		t.Errorf("unexpected error message: %q", resp["error"])
 	}

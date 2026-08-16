@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/community/internal/config"
 	"github.com/opensecstack/community/internal/email"
 )
@@ -129,4 +130,3 @@ func SendReactionEmail(ctx context.Context, pool *pgxpool.Pool, mailer Mailer, c
 	}
 	return nil
 }
-

@@ -4,6 +4,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/opensecstack/community/internal/api/middleware"
 )
@@ -44,14 +45,28 @@ func ChangePassword(d Deps) http.HandlerFunc {
 			return
 		}
 
-		// Verify current password using the same sha256+pepper scheme used by Login and Register.
-		if sha256Hash(d.Cfg.Pepper+":"+req.CurrentPassword) != storedHash {
+		// Verify current password. Modern accounts (Register, and Login after its
+		// lazy-migration) store a bcrypt hash; older accounts may still carry the
+		// legacy sha256(pepper+password) hash. Accept either, matching Login's logic,
+		// so this check is never stricter than the one that let the user log in.
+		var currentOK bool
+		if strings.HasPrefix(storedHash, "$2") {
+			currentOK = bcryptVerify(req.CurrentPassword, storedHash)
+		} else {
+			currentOK = sha256Hash(d.Cfg.Pepper+":"+req.CurrentPassword) == storedHash
+		}
+		if !currentOK {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "current password is incorrect"})
 			return
 		}
 
-		// Hash and store the new password.
-		newHash := sha256Hash(d.Cfg.Pepper + ":" + req.NewPassword)
+		// Hash and store the new password using bcrypt (the modern scheme — never
+		// write the new password back in the legacy sha256+pepper format).
+		newHash, err := bcryptHash(req.NewPassword)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update password"})
+			return
+		}
 		_, err = d.Pool.Exec(r.Context(),
 			`UPDATE users SET password_hash = $1 WHERE username = $2`,
 			newHash, claims.Sub,

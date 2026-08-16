@@ -38,7 +38,7 @@ func TestSetUserBadge_UnknownBadge_Returns422(t *testing.T) {
 		t.Fatalf("expected 422 for unknown badge, got %d", w.Code)
 	}
 	var resp map[string]string
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp["error"] != "unknown badge value" {
 		t.Errorf("unexpected error message: %q", resp["error"])
 	}

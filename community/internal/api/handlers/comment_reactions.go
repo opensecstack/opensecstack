@@ -82,16 +82,16 @@ func ToggleCommentReaction(d Deps) http.HandlerFunc {
 		}
 
 		var exists bool
-		d.Pool.QueryRow(r.Context(),
+		_ = d.Pool.QueryRow(r.Context(),
 			`SELECT EXISTS(SELECT 1 FROM comment_reactions WHERE comment_id=$1 AND user_id=$2 AND kind=$3)`,
 			commentID, userID, req.Kind).Scan(&exists)
 
 		if exists {
-			d.Pool.Exec(r.Context(),
+			_, _ = d.Pool.Exec(r.Context(),
 				`DELETE FROM comment_reactions WHERE comment_id=$1 AND user_id=$2 AND kind=$3`,
 				commentID, userID, req.Kind)
 		} else {
-			d.Pool.Exec(r.Context(),
+			_, _ = d.Pool.Exec(r.Context(),
 				`INSERT INTO comment_reactions (comment_id, user_id, kind) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
 				commentID, userID, req.Kind)
 		}
@@ -108,14 +108,16 @@ func ToggleCommentReaction(d Deps) http.HandlerFunc {
 		for rows.Next() {
 			var kind string
 			var cnt int
-			rows.Scan(&kind, &cnt)
+			if err := rows.Scan(&kind, &cnt); err != nil {
+				continue
+			}
 			counts[kind] = cnt
 		}
 		// Include whether current user has each reaction
 		userReactions := map[string]bool{}
 		for _, k := range []string{"heart", "unicorn", "fire"} {
 			var has bool
-			d.Pool.QueryRow(r.Context(),
+			_ = d.Pool.QueryRow(r.Context(),
 				`SELECT EXISTS(SELECT 1 FROM comment_reactions WHERE comment_id=$1 AND user_id=$2 AND kind=$3)`,
 				commentID, userID, k).Scan(&has)
 			userReactions[k] = has
@@ -138,7 +140,9 @@ func GetCommentReactions(d Deps) http.HandlerFunc {
 		for rows.Next() {
 			var kind string
 			var cnt int
-			rows.Scan(&kind, &cnt)
+			if err := rows.Scan(&kind, &cnt); err != nil {
+				continue
+			}
 			counts[kind] = cnt
 		}
 
@@ -149,7 +153,7 @@ func GetCommentReactions(d Deps) http.HandlerFunc {
 			if err2 := d.Pool.QueryRow(r.Context(), `SELECT id FROM users WHERE username=$1`, claims.Sub).Scan(&userID); err2 == nil {
 				for _, k := range []string{"heart", "unicorn", "fire"} {
 					var has bool
-					d.Pool.QueryRow(r.Context(),
+					_ = d.Pool.QueryRow(r.Context(),
 						`SELECT EXISTS(SELECT 1 FROM comment_reactions WHERE comment_id=$1 AND user_id=$2 AND kind=$3)`,
 						commentID, userID, k).Scan(&has)
 					userReactions[k] = has

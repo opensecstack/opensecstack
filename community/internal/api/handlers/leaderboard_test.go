@@ -38,7 +38,7 @@ func TestGetLeaderboard_DefaultPeriodIsWeek(t *testing.T) {
 		t.Fatalf("expected 500 on db error for period=month, got %d", w.Code)
 	}
 	var resp map[string]string
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp["error"] == "" {
 		t.Error("expected non-empty error message")
 	}

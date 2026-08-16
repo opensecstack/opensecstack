@@ -1,0 +1,44 @@
+version: "2"
+linters:
+  enable:
+    - bodyclose
+    - misspell
+    - noctx
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # httptest.NewRequest already wraps context.Background() internally and
+      # never performs real network I/O — it builds an in-memory *http.Request
+      # for handing straight to an http.Handler under test. Unlike http.Get/
+      # http.Post/http.NewRequest (which noctx should keep flagging, since
+      # those do make real outbound calls with no cancellation), there is no
+      # context to propagate here, so the warning is a pure false positive.
+      - path: _test\.go
+        linters:
+          - noctx
+        text: "httptest.NewRequest"
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - node_modules$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/opensecstack/community
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - node_modules$

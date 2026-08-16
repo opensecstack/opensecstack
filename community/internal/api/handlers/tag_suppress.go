@@ -86,6 +86,6 @@ func GetTagSuppressionStatus(d Deps) http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]bool{"suppressed": exists})
+		_ = json.NewEncoder(w).Encode(map[string]bool{"suppressed": exists})
 	}
 }

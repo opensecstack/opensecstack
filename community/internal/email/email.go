@@ -74,8 +74,8 @@ func (m *Mailer) SendMention(toAddr, toUsername, actorUsername, postTitle, postS
 		log.Printf("[email] mention: to=%s actor=%s post=%q", toAddr, actorUsername, postTitle)
 		return nil
 	}
-	subject, body := RenderCommentEmail(actorUsername, postTitle, postSlug, "", toUsername, m.cfg.SiteURL)
-	subject = fmt.Sprintf("%s mentioned you in a comment on \"%s\"", actorUsername, postTitle)
+	_, body := RenderCommentEmail(actorUsername, postTitle, postSlug, "", toUsername, m.cfg.SiteURL)
+	subject := fmt.Sprintf("%s mentioned you in a comment on \"%s\"", actorUsername, postTitle)
 	return m.SendHTML(toAddr, subject, body)
 }
 

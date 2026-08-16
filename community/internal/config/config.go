@@ -42,31 +42,31 @@ func Load() (*Config, error) {
 	cfg.MeilisearchKey = env("MEILISEARCH_KEY", "")
 	cfg.UploadDir = env("UPLOAD_DIR", "./uploads")
 
-	cfg.GitHubClientID     = env("GITHUB_CLIENT_ID", "")
+	cfg.GitHubClientID = env("GITHUB_CLIENT_ID", "")
 	cfg.GitHubClientSecret = env("GITHUB_CLIENT_SECRET", "")
-	cfg.GitHubCallbackURL  = env("GITHUB_CALLBACK_URL", "https://sin.to/api/v1/auth/github/callback")
+	cfg.GitHubCallbackURL = env("GITHUB_CALLBACK_URL", "https://sin.to/api/v1/auth/github/callback")
 
-	cfg.GoogleClientID     = env("GOOGLE_CLIENT_ID", "")
+	cfg.GoogleClientID = env("GOOGLE_CLIENT_ID", "")
 	cfg.GoogleClientSecret = env("GOOGLE_CLIENT_SECRET", "")
-	cfg.GoogleRedirectURI  = env("GOOGLE_REDIRECT_URI", "https://sin.to/api/v1/auth/google/callback")
+	cfg.GoogleRedirectURI = env("GOOGLE_REDIRECT_URI", "https://sin.to/api/v1/auth/google/callback")
 
-	cfg.SinauthURL          = env("SINAUTH_URL", "http://localhost:8100")
+	cfg.SinauthURL = env("SINAUTH_URL", "http://localhost:8100")
 	// SinauthPublicURL is the browser-facing sinauth origin used for the
 	// /oauth/authorize redirect. In Docker the server reaches sinauth via an
 	// in-network name (e.g. http://sinauth-api:8100 or http://host.docker.internal:8100)
 	// that a user's browser cannot resolve, so the authorize redirect must use a
 	// host-reachable URL. Defaults to SinauthURL for single-host deployments.
-	cfg.SinauthPublicURL    = env("SINAUTH_PUBLIC_URL", cfg.SinauthURL)
-	cfg.SinauthClientID     = env("SINAUTH_CLIENT_ID", "")
+	cfg.SinauthPublicURL = env("SINAUTH_PUBLIC_URL", cfg.SinauthURL)
+	cfg.SinauthClientID = env("SINAUTH_CLIENT_ID", "")
 	cfg.SinauthClientSecret = env("SINAUTH_CLIENT_SECRET", "")
-	cfg.SinauthCallbackURL  = env("SINAUTH_CALLBACK_URL", "https://sin.to/api/v1/auth/sinauth/callback")
+	cfg.SinauthCallbackURL = env("SINAUTH_CALLBACK_URL", "https://sin.to/api/v1/auth/sinauth/callback")
 
-	cfg.SMTPHost     = env("SMTP_HOST", "")
-	cfg.SMTPPort     = envInt("SMTP_PORT", 587)
+	cfg.SMTPHost = env("SMTP_HOST", "")
+	cfg.SMTPPort = envInt("SMTP_PORT", 587)
 	cfg.SMTPUsername = env("SMTP_USERNAME", "")
 	cfg.SMTPPassword = env("SMTP_PASSWORD", "")
-	cfg.SMTPFrom     = env("SMTP_FROM", "noreply@sin.to")
-	cfg.SiteURL      = env("SITE_URL", "http://localhost:5173")
+	cfg.SMTPFrom = env("SMTP_FROM", "noreply@sin.to")
+	cfg.SiteURL = env("SITE_URL", "http://localhost:5173")
 	cfg.DigestEnabled = envBool("DIGEST_ENABLED", true)
 
 	if raw := env("COMMUNITY_TRUSTED_PROXIES", ""); raw != "" {

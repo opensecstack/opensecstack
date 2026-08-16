@@ -8,9 +8,9 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	_ "image/gif" // register GIF decoder
 	"image/jpeg"
-	_ "image/gif"  // register GIF decoder
-	_ "image/png"  // register PNG decoder
+	_ "image/png" // register PNG decoder
 	"io"
 	"net/http"
 	"os"
@@ -44,7 +44,7 @@ func processImage(data []byte) ([]byte, error) {
 	origW := bounds.Max.X - bounds.Min.X
 	origH := bounds.Max.Y - bounds.Min.Y
 
-	var dst image.Image = img
+	var dst = img
 	if origW > 1200 {
 		newW := 1200
 		newH := origH * newW / origW
@@ -68,7 +68,7 @@ func UploadImage(d Deps) http.HandlerFunc {
 			return
 		}
 
-		file, header, err := r.FormFile("file")
+		file, _, err := r.FormFile("file")
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing file field"})
 			return
@@ -90,23 +90,19 @@ func UploadImage(d Deps) http.HandlerFunc {
 		}
 		detected := http.DetectContentType(sniff)
 
-		// Also accept the declared content-type from the browser, but validate against detected.
-		declared := header.Header.Get("Content-Type")
-		ct := detected
-		if declared != "" {
-			ct = declared
-		}
-
-		ext, ok := allowedMIME[ct]
+		// The extension (and therefore whether the upload is accepted at all) is
+		// decided solely from the sniffed content-type (detected from the actual
+		// bytes), never from the client-supplied Content-Type header. The header
+		// is fully attacker-controlled — trusting it would let a client label
+		// arbitrary bytes (HTML/SVG/script content) as e.g. "image/png" and have
+		// them saved to disk unprocessed, since processImage falls back to saving
+		// the original bytes verbatim whenever decoding fails.
+		ext, ok := allowedMIME[detected]
 		if !ok {
-			// Fall back to detected if declared was not in the allowed set.
-			ext, ok = allowedMIME[detected]
-			if !ok {
-				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
-					"error": fmt.Sprintf("unsupported image type: %s", ct),
-				})
-				return
-			}
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{
+				"error": fmt.Sprintf("unsupported image type: %s", detected),
+			})
+			return
 		}
 
 		// Attempt image optimization: resize to max 1200px wide and re-encode

@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -13,12 +14,11 @@ import (
 
 	"github.com/opensecstack/community/internal/api/middleware"
 	"github.com/opensecstack/community/internal/auth"
-	"github.com/pquerna/otp/totp"
 )
 
 // loginMu guards loginFailures.
 var (
-	loginMu      sync.Mutex
+	loginMu       sync.Mutex
 	loginFailures = map[string][]time.Time{} // username -> timestamps of recent failed attempts
 )
 
@@ -79,12 +79,14 @@ func recordSession(r *http.Request, d Deps, userID, rawToken string, expiresAt t
 
 	hash := tokenHash(rawToken)
 
-	d.Pool.Exec(r.Context(),
+	if _, err := d.Pool.Exec(r.Context(),
 		`INSERT INTO user_sessions (user_id, token_hash, device_info, ip_address, expires_at)
 		 VALUES ($1, $2, $3, $4, $5)
 		 ON CONFLICT (token_hash) DO NOTHING`,
 		userID, hash, ua, ip, expiresAt,
-	)
+	); err != nil {
+		slog.Error("recordSession: insert failed", "user_id", userID, "err", err)
+	}
 }
 
 func Login(d Deps) http.HandlerFunc {
@@ -111,11 +113,13 @@ func Login(d Deps) http.HandlerFunc {
 		}
 		if matchedRole != "" {
 			// Ensure config users have a DB row so profile pages and user lookups work.
-			d.Pool.Exec(r.Context(),
+			if _, err := d.Pool.Exec(r.Context(),
 				`INSERT INTO users (username, display_name, role)
 				 VALUES ($1, $1, $2)
 				 ON CONFLICT (username) DO UPDATE SET role = EXCLUDED.role`,
-				req.Username, matchedRole)
+				req.Username, matchedRole); err != nil {
+				slog.Error("Login: upsert config user failed", "username", req.Username, "err", err)
+			}
 
 			tok, claims, err := auth.Issue(d.Cfg.JWTSecret, d.Cfg.JWTIssuer, req.Username, matchedRole, d.Cfg.TokenTTL)
 			if err != nil {
@@ -125,7 +129,9 @@ func Login(d Deps) http.HandlerFunc {
 
 			// Look up the user's UUID for the session record.
 			var userID string
-			d.Pool.QueryRow(r.Context(), `SELECT id FROM users WHERE username = $1`, req.Username).Scan(&userID)
+			if err := d.Pool.QueryRow(r.Context(), `SELECT id FROM users WHERE username = $1`, req.Username).Scan(&userID); err != nil {
+				slog.Error("Login: user id lookup failed", "username", req.Username, "err", err)
+			}
 			if userID != "" {
 				recordSession(r, d, userID, tok, claims.ExpiresAt.Time)
 			}
@@ -134,7 +140,7 @@ func Login(d Deps) http.HandlerFunc {
 				"token":          tok,
 				"role":           claims.Role,
 				"sub":            claims.Sub,
-				"expires_at":     claims.ExpiresAt.Time.Format(time.RFC3339),
+				"expires_at":     claims.ExpiresAt.Format(time.RFC3339),
 				"email_verified": false,
 			})
 			return
@@ -176,10 +182,12 @@ func Login(d Deps) http.HandlerFunc {
 				passwordOK = true
 				// Migrate: re-hash with bcrypt and update DB.
 				if newHash, err := bcryptHash(req.Password); err == nil {
-					d.Pool.Exec(r.Context(),
+					if _, err := d.Pool.Exec(r.Context(),
 						`UPDATE users SET password_hash=$1 WHERE username=$2`,
 						newHash, req.Username,
-					)
+					); err != nil {
+						slog.Error("Login: bcrypt migration update failed", "username", req.Username, "err", err)
+					}
 				}
 			}
 		}
@@ -202,7 +210,7 @@ func Login(d Deps) http.HandlerFunc {
 				writeJSON(w, http.StatusOK, map[string]any{"require_totp": true})
 				return
 			}
-			if !totp.Validate(req.TOTPCode, dbTOTPSecret) {
+			if !ConsumeTOTPCode(r.Context(), d.Pool, req.Username, req.TOTPCode, dbTOTPSecret) {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid 2FA code"})
 				return
 			}
@@ -219,7 +227,9 @@ func Login(d Deps) http.HandlerFunc {
 
 		// Record the new session.
 		var userID string
-		d.Pool.QueryRow(r.Context(), `SELECT id FROM users WHERE username = $1`, req.Username).Scan(&userID)
+		if err := d.Pool.QueryRow(r.Context(), `SELECT id FROM users WHERE username = $1`, req.Username).Scan(&userID); err != nil {
+			slog.Error("Login: user id lookup failed", "username", req.Username, "err", err)
+		}
 		if userID != "" {
 			recordSession(r, d, userID, tok, claims.ExpiresAt.Time)
 		}
@@ -228,7 +238,7 @@ func Login(d Deps) http.HandlerFunc {
 			"token":          tok,
 			"role":           claims.Role,
 			"sub":            claims.Sub,
-			"expires_at":     claims.ExpiresAt.Time.Format(time.RFC3339),
+			"expires_at":     claims.ExpiresAt.Format(time.RFC3339),
 			"email_verified": dbEmailVerified,
 		})
 	}

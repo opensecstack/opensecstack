@@ -68,13 +68,13 @@ func ListInvites(d Deps) http.HandlerFunc {
 		defer rows.Close()
 
 		type inviteRow struct {
-			ID                  string  `json:"id"`
-			Code                string  `json:"code"`
-			CreatedByUsername   string  `json:"created_by_username"`
-			UsedByUsername      *string `json:"used_by_username"`
-			UsedAt              *string `json:"used_at"`
-			ExpiresAt           string  `json:"expires_at"`
-			CreatedAt           string  `json:"created_at"`
+			ID                string  `json:"id"`
+			Code              string  `json:"code"`
+			CreatedByUsername string  `json:"created_by_username"`
+			UsedByUsername    *string `json:"used_by_username"`
+			UsedAt            *string `json:"used_at"`
+			ExpiresAt         string  `json:"expires_at"`
+			CreatedAt         string  `json:"created_at"`
 		}
 
 		invites := make([]inviteRow, 0)

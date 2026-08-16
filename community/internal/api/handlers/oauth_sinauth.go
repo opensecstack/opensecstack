@@ -107,12 +107,12 @@ func SinauthOAuthCallback(d Deps) http.HandlerFunc {
 			redirectError("missing state")
 			return
 		}
-		if r.URL.Query().Get("state") != stateCookie.Value {
-			redirectError("state mismatch")
-			return
-		}
 
-		// Clear state cookie immediately.
+		// Clear state cookie immediately, before validating it, so the
+		// state token is single-use regardless of whether validation
+		// succeeds or fails — a failed CSRF check must not leave a
+		// still-valid state cookie sitting in the browser for the rest of
+		// its MaxAge window.
 		http.SetCookie(w, &http.Cookie{
 			Name:     "sinauth_oauth_state",
 			Value:    "",
@@ -123,15 +123,16 @@ func SinauthOAuthCallback(d Deps) http.HandlerFunc {
 			Secure:   !d.Cfg.DevMode,
 		})
 
-		// 2. Retrieve the PKCE code_verifier.
-		pkceCookie, err := r.Cookie("sinauth_pkce")
-		if err != nil || pkceCookie.Value == "" {
-			redirectError("missing pkce")
+		if r.URL.Query().Get("state") != stateCookie.Value {
+			redirectError("state mismatch")
 			return
 		}
-		codeVerifier := pkceCookie.Value
 
-		// Clear PKCE cookie immediately.
+		// 2. Retrieve the PKCE code_verifier.
+		pkceCookie, err := r.Cookie("sinauth_pkce")
+
+		// Clear PKCE cookie immediately, before checking it, for the same
+		// single-use reasoning as the state cookie above.
 		http.SetCookie(w, &http.Cookie{
 			Name:     "sinauth_pkce",
 			Value:    "",
@@ -141,6 +142,12 @@ func SinauthOAuthCallback(d Deps) http.HandlerFunc {
 			SameSite: http.SameSiteLaxMode,
 			Secure:   !d.Cfg.DevMode,
 		})
+
+		if err != nil || pkceCookie.Value == "" {
+			redirectError("missing pkce")
+			return
+		}
+		codeVerifier := pkceCookie.Value
 
 		code := r.URL.Query().Get("code")
 		if code == "" {

@@ -11,6 +11,6 @@ import (
 // which preserves the same silent-failure behaviour found across the handlers.
 func resolveUserID(ctx context.Context, pool *pgxpool.Pool, username string) string {
 	var id string
-	pool.QueryRow(ctx, `SELECT id FROM users WHERE username=$1`, username).Scan(&id)
+	_ = pool.QueryRow(ctx, `SELECT id FROM users WHERE username=$1`, username).Scan(&id)
 	return id
 }

@@ -28,48 +28,49 @@ type ipEntry struct {
 	timestamps []time.Time
 }
 
-// rateLimiter holds the per-IP state map and the cleanup trigger.
+// rateLimiter holds the per-IP state map for one RateLimit(...) instance.
+//
+// Each call to RateLimit must get its own rateLimiter. A single shared
+// package-level instance keyed only by IP previously meant every
+// RateLimit(...) call site — e.g. the strict 5-req/min auth limiter and
+// the general 120-req/min whole-app limiter — wrote into the same
+// timestamp list per IP, so a client's general API traffic counted
+// against the auth limit and vice versa: a user who'd made 100 normal
+// requests in the last minute could get 429'd on their very first login
+// attempt. Each limiter now owns an isolated map and cleanup goroutine.
 type rateLimiter struct {
 	entries sync.Map // map[string]*ipEntry
 }
 
-// package-level singleton for the background cleanup goroutine.
-var (
-	cleanupOnce sync.Once
-	globalRL    = &rateLimiter{}
-)
-
-// startCleanup launches a single background goroutine that evicts stale entries
-// from the shared map every minute. It is started at most once per process.
-func startCleanup(window time.Duration) {
-	cleanupOnce.Do(func() {
-		go func() {
-			ticker := time.NewTicker(time.Minute)
-			defer ticker.Stop()
-			for range ticker.C {
-				cutoff := time.Now().Add(-window)
-				globalRL.entries.Range(func(key, val any) bool {
-					e := val.(*ipEntry)
-					e.mu.Lock()
-					// Drop all timestamps older than the window.
-					n := 0
-					for _, t := range e.timestamps {
-						if t.After(cutoff) {
-							e.timestamps[n] = t
-							n++
-						}
+// startCleanup launches a background goroutine that evicts stale entries
+// from this limiter's map every minute, for as long as the process runs.
+func (rl *rateLimiter) startCleanup(window time.Duration) {
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			cutoff := time.Now().Add(-window)
+			rl.entries.Range(func(key, val any) bool {
+				e := val.(*ipEntry)
+				e.mu.Lock()
+				// Drop all timestamps older than the window.
+				n := 0
+				for _, t := range e.timestamps {
+					if t.After(cutoff) {
+						e.timestamps[n] = t
+						n++
 					}
-					e.timestamps = e.timestamps[:n]
-					empty := len(e.timestamps) == 0
-					e.mu.Unlock()
-					if empty {
-						globalRL.entries.Delete(key)
-					}
-					return true
-				})
-			}
-		}()
-	})
+				}
+				e.timestamps = e.timestamps[:n]
+				empty := len(e.timestamps) == 0
+				e.mu.Unlock()
+				if empty {
+					rl.entries.Delete(key)
+				}
+				return true
+			})
+		}
+	}()
 }
 
 // clientIPWithTrust extracts the real client IP from the request.
@@ -89,12 +90,6 @@ func clientIPWithTrust(r *http.Request, trustedSet map[string]struct{}) string {
 	return host
 }
 
-// clientIP extracts the real client IP from the request without trusting any
-// proxy headers. Kept for backward compatibility with other callers.
-func clientIP(r *http.Request) string {
-	return clientIPWithTrust(r, map[string]struct{}{})
-}
-
 // RateLimit returns middleware that allows at most limit requests per window
 // duration per IP. When the limit is exceeded it responds 429 with JSON
 // {"error":"too many requests"}.
@@ -104,7 +99,8 @@ func clientIP(r *http.Request) string {
 // X-Forwarded-For header arriving from an address not in this list is ignored,
 // preventing IP spoofing to bypass per-IP rate limits.
 func RateLimit(limit int, window time.Duration, trustedProxies ...string) func(http.Handler) http.Handler {
-	startCleanup(window)
+	rl := &rateLimiter{}
+	rl.startCleanup(window)
 
 	trustedSet := make(map[string]struct{}, len(trustedProxies))
 	for _, p := range trustedProxies {
@@ -118,7 +114,7 @@ func RateLimit(limit int, window time.Duration, trustedProxies ...string) func(h
 			cutoff := now.Add(-window)
 
 			// Load or create the entry for this IP.
-			val, _ := globalRL.entries.LoadOrStore(ip, &ipEntry{})
+			val, _ := rl.entries.LoadOrStore(ip, &ipEntry{})
 			e := val.(*ipEntry)
 
 			e.mu.Lock()

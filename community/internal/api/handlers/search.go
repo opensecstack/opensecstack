@@ -116,9 +116,9 @@ func buildSearchQuery(q, tag, author, from, to string, limit, offset int) (strin
 	if tag != "" {
 		args = append(args, slugify(tag))
 		n := len(args)
-		sb.WriteString(fmt.Sprintf(`
+		fmt.Fprintf(&sb, `
 		JOIN post_tags pt_f ON pt_f.post_id = p.id
-		JOIN tags t_f ON t_f.id = pt_f.tag_id AND t_f.slug = $%d`, n))
+		JOIN tags t_f ON t_f.id = pt_f.tag_id AND t_f.slug = $%d`, n)
 	}
 
 	sb.WriteString("\n\t\tWHERE p.state = 'published'")
@@ -127,26 +127,26 @@ func buildSearchQuery(q, tag, author, from, to string, limit, offset int) (strin
 	if q != "" {
 		args = append(args, q)
 		n := len(args)
-		sb.WriteString(fmt.Sprintf(` AND p.search_vector @@ plainto_tsquery('english', $%d)`, n))
+		fmt.Fprintf(&sb, ` AND p.search_vector @@ plainto_tsquery('english', $%d)`, n)
 	}
 
 	// Author filter.
 	if author != "" {
 		args = append(args, strings.TrimSpace(author))
 		n := len(args)
-		sb.WriteString(fmt.Sprintf(` AND u.username = $%d`, n))
+		fmt.Fprintf(&sb, ` AND u.username = $%d`, n)
 	}
 
 	// Date-range filters.
 	if from != "" {
 		args = append(args, from)
 		n := len(args)
-		sb.WriteString(fmt.Sprintf(` AND p.published_at >= $%d::date`, n))
+		fmt.Fprintf(&sb, ` AND p.published_at >= $%d::date`, n)
 	}
 	if to != "" {
 		args = append(args, to)
 		n := len(args)
-		sb.WriteString(fmt.Sprintf(` AND p.published_at <= ($%d::date + interval '1 day')`, n))
+		fmt.Fprintf(&sb, ` AND p.published_at <= ($%d::date + interval '1 day')`, n)
 	}
 
 	sb.WriteString("\n\t\tGROUP BY p.id, u.id")
@@ -155,8 +155,8 @@ func buildSearchQuery(q, tag, author, from, to string, limit, offset int) (strin
 	if q != "" {
 		args = append(args, q)
 		n := len(args)
-		sb.WriteString(fmt.Sprintf(`
-		ORDER BY ts_rank(p.search_vector, plainto_tsquery('english', $%d)) DESC`, n))
+		fmt.Fprintf(&sb, `
+		ORDER BY ts_rank(p.search_vector, plainto_tsquery('english', $%d)) DESC`, n)
 	} else {
 		sb.WriteString(`
 		ORDER BY p.pinned DESC, p.published_at DESC`)
@@ -165,8 +165,8 @@ func buildSearchQuery(q, tag, author, from, to string, limit, offset int) (strin
 	args = append(args, limit, offset)
 	limitN := len(args) - 1
 	offsetN := len(args)
-	sb.WriteString(fmt.Sprintf(`
-		LIMIT $%d OFFSET $%d`, limitN, offsetN))
+	fmt.Fprintf(&sb, `
+		LIMIT $%d OFFSET $%d`, limitN, offsetN)
 
 	return sb.String(), args
 }
@@ -195,9 +195,9 @@ func buildListByIDsQuery(ids []string, tag, author, from, to string) (string, []
 	if tag != "" {
 		args = append(args, slugify(tag))
 		n := len(args)
-		sb.WriteString(fmt.Sprintf(`
+		fmt.Fprintf(&sb, `
 		JOIN post_tags pt_f ON pt_f.post_id = p.id
-		JOIN tags t_f ON t_f.id = pt_f.tag_id AND t_f.slug = $%d`, n))
+		JOIN tags t_f ON t_f.id = pt_f.tag_id AND t_f.slug = $%d`, n)
 	}
 
 	sb.WriteString("\n\t\tWHERE p.state = 'published' AND p.id = ANY($1)")
@@ -205,19 +205,19 @@ func buildListByIDsQuery(ids []string, tag, author, from, to string) (string, []
 	if author != "" {
 		args = append(args, strings.TrimSpace(author))
 		n := len(args)
-		sb.WriteString(fmt.Sprintf(` AND u.username = $%d`, n))
+		fmt.Fprintf(&sb, ` AND u.username = $%d`, n)
 	}
 
 	// Date-range filters.
 	if from != "" {
 		args = append(args, from)
 		n := len(args)
-		sb.WriteString(fmt.Sprintf(` AND p.published_at >= $%d::date`, n))
+		fmt.Fprintf(&sb, ` AND p.published_at >= $%d::date`, n)
 	}
 	if to != "" {
 		args = append(args, to)
 		n := len(args)
-		sb.WriteString(fmt.Sprintf(` AND p.published_at <= ($%d::date + interval '1 day')`, n))
+		fmt.Fprintf(&sb, ` AND p.published_at <= ($%d::date + interval '1 day')`, n)
 	}
 
 	sb.WriteString("\n\t\tGROUP BY p.id, u.id")

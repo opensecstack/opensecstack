@@ -2,13 +2,52 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"image/png"
 	"net/http"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/pquerna/otp/totp"
 
 	"github.com/opensecstack/community/internal/api/middleware"
-	"github.com/pquerna/otp/totp"
 )
+
+// totpStepPeriod matches pquerna/otp's default Period (30s, RFC 6238).
+const totpStepPeriod = 30 * time.Second
+
+// ConsumeTOTPCode validates code against secret and, only on success,
+// atomically claims the current time-step for username so the same code
+// can never be accepted twice. totp.Validate alone has no anti-replay —
+// with the library's default Skew:1 a valid code is accepted across a
+// ~90-second sliding window with nothing to stop it being submitted
+// repeatedly within that window (e.g. to disable 2FA twice, or log in
+// twice, with a single captured code). The claim is a single
+// UPDATE ... WHERE totp_last_step IS NULL OR totp_last_step < $step
+// RETURNING id, so two concurrent requests racing the same code can only
+// ever have one of them succeed — mirroring the single-use pattern this
+// codebase already uses for password-reset tokens.
+//
+// Used by ConfirmTOTP, DisableTOTP (this file), and Login (auth.go) — the
+// three places that ever check a live TOTP code.
+func ConsumeTOTPCode(ctx context.Context, pool *pgxpool.Pool, username, code, secret string) bool {
+	if !totp.Validate(code, secret) {
+		return false
+	}
+	step := time.Now().Unix() / int64(totpStepPeriod/time.Second)
+	var id string
+	err := pool.QueryRow(ctx, `
+		UPDATE users SET totp_last_step = $2
+		WHERE username = $1 AND (totp_last_step IS NULL OR totp_last_step < $2)
+		RETURNING id`,
+		username, step,
+	).Scan(&id)
+	// Any error — including pgx.ErrNoRows, meaning this step was already
+	// claimed by an earlier use of the same code — fails closed. An
+	// unexpected DB error must not silently disable replay protection.
+	return err == nil
+}
 
 // SetupTOTP generates a new TOTP secret, stores it server-side in totp_setup_sessions,
 // and returns only a setup_id and a base64-encoded QR image. The secret never leaves
@@ -103,7 +142,7 @@ func ConfirmTOTP(d Deps) http.HandlerFunc {
 			return
 		}
 
-		if !totp.Validate(req.Code, secret) {
+		if !ConsumeTOTPCode(r.Context(), d.Pool, claims.Sub, req.Code, secret) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid code"})
 			return
 		}
@@ -150,7 +189,7 @@ func DisableTOTP(d Deps) http.HandlerFunc {
 			return
 		}
 
-		if !totp.Validate(req.Code, secret) {
+		if !ConsumeTOTPCode(r.Context(), d.Pool, claims.Sub, req.Code, secret) {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid 2FA code"})
 			return
 		}

@@ -308,27 +308,6 @@ func RenderVerificationEmail(verifyURL, recipientName, siteURL string) (subject,
 
 // --- Digest email ---
 
-// digestBodyTmpl renders the weekly digest post list.
-var digestBodyTmpl = bodyTmpl(`<p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 16px">Hi {{.RecipientName}},</p>
-<p style="font-size:15px;color:#374151;line-height:1.6;margin:0 0 20px">
-  Here are this week&rsquo;s top posts on SIN:
-</p>
-{{range $i, $p := .Posts}}<table cellpadding="0" cellspacing="0" style="width:100%;margin-bottom:16px">
-  <tr>
-    <td style="width:32px;vertical-align:top;padding-top:2px">
-      <span style="display:inline-block;width:24px;height:24px;background:#6366f1;border-radius:50%;color:#ffffff;font-size:12px;font-weight:700;text-align:center;line-height:24px">{{inc $i}}</span>
-    </td>
-    <td style="padding-left:10px">
-      <a href="{{$.SiteURL}}/posts/{{$p.Slug}}" style="font-size:15px;font-weight:600;color:#111827;text-decoration:none;line-height:1.4">{{$p.Title}}</a>
-      <p style="font-size:13px;color:#6b7280;margin:4px 0 0">by <strong>@{{$p.AuthorUsername}}</strong> &nbsp;&bull;&nbsp; {{$p.ReactionCount}} reactions &nbsp;&bull;&nbsp; {{$p.ViewCount}} views</p>
-    </td>
-  </tr>
-</table>
-{{end}}<hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
-<p style="margin:0">
-  <a href="{{.SiteURL}}" style="display:inline-block;background:#6366f1;color:#ffffff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px">Read more on SIN &rarr;</a>
-</p>`)
-
 // RenderDigestEmail returns the subject and full HTML body for the weekly digest email.
 // It uses the existing DigestPost type defined in email.go.
 func RenderDigestEmail(posts []DigestPost, recipientName, siteURL string) (subject, html string) {

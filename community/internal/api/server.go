@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/community/internal/api/handlers"
 	"github.com/opensecstack/community/internal/api/middleware"
 	"github.com/opensecstack/community/internal/citadel"
@@ -48,13 +49,13 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool, version string) http.Hand
 
 	mux := http.NewServeMux()
 
-	auth    := middleware.Auth(cfg.JWTSecret, pool)
+	auth := middleware.Auth(cfg.JWTSecret, pool)
 	optAuth := middleware.OptionalAuth(cfg.JWTSecret)
-	authRL  := middleware.RateLimit(5, time.Minute)
+	authRL := middleware.RateLimit(5, time.Minute)
 
 	// health
 	mux.HandleFunc("GET /api/v1/health", handlers.HealthCheck(d, serverStartTime))
-	mux.HandleFunc("GET /api/v1/ready",  handlers.ReadinessCheck(d))
+	mux.HandleFunc("GET /api/v1/ready", handlers.ReadinessCheck(d))
 
 	// nativeGate disables native email/password endpoints when
 	// COMMUNITY_NATIVE_AUTH=false, so sinauth SSO is the only way in.
@@ -73,17 +74,17 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool, version string) http.Hand
 	mux.HandleFunc("GET /api/v1/auth/methods", handlers.AuthMethods(d))
 
 	// auth (rate-limited: 5 req/min per IP)
-	mux.Handle("POST /api/v1/auth/login",            nativeGate(authRL(http.HandlerFunc(handlers.Login(d)))))
-	mux.Handle("POST /api/v1/auth/register",          nativeGate(authRL(http.HandlerFunc(handlers.Register(d)))))
-	mux.Handle("POST /api/v1/auth/forgot-password",   nativeGate(authRL(http.HandlerFunc(handlers.ForgotPassword(d)))))
-	mux.Handle("POST /api/v1/auth/reset-password",    nativeGate(authRL(http.HandlerFunc(handlers.ResetPassword(d)))))
-	mux.Handle("GET /api/v1/auth/verify-email",       nativeGate(http.HandlerFunc(handlers.VerifyEmail(d))))
+	mux.Handle("POST /api/v1/auth/login", nativeGate(authRL(http.HandlerFunc(handlers.Login(d)))))
+	mux.Handle("POST /api/v1/auth/register", nativeGate(authRL(http.HandlerFunc(handlers.Register(d)))))
+	mux.Handle("POST /api/v1/auth/forgot-password", nativeGate(authRL(http.HandlerFunc(handlers.ForgotPassword(d)))))
+	mux.Handle("POST /api/v1/auth/reset-password", nativeGate(authRL(http.HandlerFunc(handlers.ResetPassword(d)))))
+	mux.Handle("GET /api/v1/auth/verify-email", nativeGate(http.HandlerFunc(handlers.VerifyEmail(d))))
 	mux.Handle("POST /api/v1/auth/resend-verification", nativeGate(auth(http.HandlerFunc(handlers.ResendVerification(d)))))
-	mux.HandleFunc("GET /api/v1/auth/github",           handlers.GitHubOAuthStart(d))
-	mux.HandleFunc("GET /api/v1/auth/github/callback",  handlers.GitHubOAuthCallback(d))
-	mux.HandleFunc("GET /api/v1/auth/google",           handlers.GoogleOAuthStart(d))
-	mux.HandleFunc("GET /api/v1/auth/google/callback",  handlers.GoogleOAuthCallback(d))
-	mux.HandleFunc("GET /api/v1/auth/sinauth",          handlers.SinauthOAuthStart(d))
+	mux.HandleFunc("GET /api/v1/auth/github", handlers.GitHubOAuthStart(d))
+	mux.HandleFunc("GET /api/v1/auth/github/callback", handlers.GitHubOAuthCallback(d))
+	mux.HandleFunc("GET /api/v1/auth/google", handlers.GoogleOAuthStart(d))
+	mux.HandleFunc("GET /api/v1/auth/google/callback", handlers.GoogleOAuthCallback(d))
+	mux.HandleFunc("GET /api/v1/auth/sinauth", handlers.SinauthOAuthStart(d))
 	mux.HandleFunc("GET /api/v1/auth/sinauth/callback", handlers.SinauthOAuthCallback(d))
 
 	// invites
@@ -251,9 +252,9 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool, version string) http.Hand
 	mux.Handle("DELETE /api/v1/me/push-subscription", auth(http.HandlerFunc(handlers.UnsubscribePush(d))))
 
 	// sessions
-	mux.Handle("GET /api/v1/me/sessions",         auth(http.HandlerFunc(handlers.ListSessions(d))))
-	mux.Handle("DELETE /api/v1/me/sessions/{id}",  auth(http.HandlerFunc(handlers.RevokeSession(d))))
-	mux.Handle("DELETE /api/v1/me/sessions",       auth(http.HandlerFunc(handlers.RevokeAllSessions(d))))
+	mux.Handle("GET /api/v1/me/sessions", auth(http.HandlerFunc(handlers.ListSessions(d))))
+	mux.Handle("DELETE /api/v1/me/sessions/{id}", auth(http.HandlerFunc(handlers.RevokeSession(d))))
+	mux.Handle("DELETE /api/v1/me/sessions", auth(http.HandlerFunc(handlers.RevokeAllSessions(d))))
 
 	// totp / 2fa
 	mux.Handle("GET /api/v1/me/totp", auth(http.HandlerFunc(handlers.GetTOTPStatus(d))))
@@ -326,30 +327,30 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool, version string) http.Hand
 	mux.HandleFunc("GET /api/v1/posts/{id}/context-note", handlers.GetContextNote(d))
 
 	// spaces + channels
-	mux.Handle("GET /api/v1/spaces",                                                    optAuth(http.HandlerFunc(handlers.ListSpaces(d))))
-	mux.Handle("POST /api/v1/spaces",                                                   auth(http.HandlerFunc(handlers.CreateSpace(d))))
-	mux.Handle("GET /api/v1/spaces/{slug}",                                             optAuth(http.HandlerFunc(handlers.GetSpace(d))))
-	mux.Handle("PUT /api/v1/spaces/{slug}",                                             auth(http.HandlerFunc(handlers.UpdateSpace(d))))
-	mux.Handle("DELETE /api/v1/spaces/{slug}",                                          auth(http.HandlerFunc(handlers.DeleteSpace(d))))
-	mux.Handle("POST /api/v1/spaces/{slug}/join",                                       auth(http.HandlerFunc(handlers.JoinSpace(d))))
-	mux.Handle("DELETE /api/v1/spaces/{slug}/leave",                                    auth(http.HandlerFunc(handlers.LeaveSpace(d))))
-	mux.Handle("POST /api/v1/spaces/{slug}/channels",                                          auth(http.HandlerFunc(handlers.CreateChannel(d))))
-	mux.Handle("DELETE /api/v1/spaces/{slug}/channels/{channel_slug}",                        auth(http.HandlerFunc(handlers.DeleteChannel(d))))
-	mux.Handle("GET /api/v1/spaces/{slug}/channels/{channel_slug}/posts",                     optAuth(http.HandlerFunc(handlers.GetChannelPosts(d))))
-	mux.Handle("POST /api/v1/spaces/{slug}/channels/{channel_slug}/posts",                    auth(http.HandlerFunc(handlers.CreateChannelPost(d))))
-	mux.Handle("POST /api/v1/spaces/{slug}/invites",                                          auth(http.HandlerFunc(handlers.CreateSpaceInvite(d))))
-	mux.Handle("POST /api/v1/space-invites/{code}/join",                                      auth(http.HandlerFunc(handlers.JoinSpaceByInvite(d))))
+	mux.Handle("GET /api/v1/spaces", optAuth(http.HandlerFunc(handlers.ListSpaces(d))))
+	mux.Handle("POST /api/v1/spaces", auth(http.HandlerFunc(handlers.CreateSpace(d))))
+	mux.Handle("GET /api/v1/spaces/{slug}", optAuth(http.HandlerFunc(handlers.GetSpace(d))))
+	mux.Handle("PUT /api/v1/spaces/{slug}", auth(http.HandlerFunc(handlers.UpdateSpace(d))))
+	mux.Handle("DELETE /api/v1/spaces/{slug}", auth(http.HandlerFunc(handlers.DeleteSpace(d))))
+	mux.Handle("POST /api/v1/spaces/{slug}/join", auth(http.HandlerFunc(handlers.JoinSpace(d))))
+	mux.Handle("DELETE /api/v1/spaces/{slug}/leave", auth(http.HandlerFunc(handlers.LeaveSpace(d))))
+	mux.Handle("POST /api/v1/spaces/{slug}/channels", auth(http.HandlerFunc(handlers.CreateChannel(d))))
+	mux.Handle("DELETE /api/v1/spaces/{slug}/channels/{channel_slug}", auth(http.HandlerFunc(handlers.DeleteChannel(d))))
+	mux.Handle("GET /api/v1/spaces/{slug}/channels/{channel_slug}/posts", optAuth(http.HandlerFunc(handlers.GetChannelPosts(d))))
+	mux.Handle("POST /api/v1/spaces/{slug}/channels/{channel_slug}/posts", auth(http.HandlerFunc(handlers.CreateChannelPost(d))))
+	mux.Handle("POST /api/v1/spaces/{slug}/invites", auth(http.HandlerFunc(handlers.CreateSpaceInvite(d))))
+	mux.Handle("POST /api/v1/space-invites/{code}/join", auth(http.HandlerFunc(handlers.JoinSpaceByInvite(d))))
 	// channel chat messages
-	mux.Handle("GET /api/v1/spaces/{slug}/channels/{channel}/messages",                       optAuth(http.HandlerFunc(handlers.ListChannelMessages(d))))
-	mux.Handle("POST /api/v1/spaces/{slug}/channels/{channel}/messages",                      auth(http.HandlerFunc(handlers.CreateChannelMessage(d))))
-	mux.Handle("PUT /api/v1/spaces/{slug}/channels/{channel}/messages/{id}",                  auth(http.HandlerFunc(handlers.EditChannelMessage(d))))
-	mux.Handle("DELETE /api/v1/spaces/{slug}/channels/{channel}/messages/{id}",               auth(http.HandlerFunc(handlers.DeleteChannelMessage(d))))
-	mux.Handle("POST /api/v1/spaces/{slug}/channels/{channel}/messages/{id}/reactions",       auth(http.HandlerFunc(handlers.ToggleMessageReaction(d))))
+	mux.Handle("GET /api/v1/spaces/{slug}/channels/{channel}/messages", optAuth(http.HandlerFunc(handlers.ListChannelMessages(d))))
+	mux.Handle("POST /api/v1/spaces/{slug}/channels/{channel}/messages", auth(http.HandlerFunc(handlers.CreateChannelMessage(d))))
+	mux.Handle("PUT /api/v1/spaces/{slug}/channels/{channel}/messages/{id}", auth(http.HandlerFunc(handlers.EditChannelMessage(d))))
+	mux.Handle("DELETE /api/v1/spaces/{slug}/channels/{channel}/messages/{id}", auth(http.HandlerFunc(handlers.DeleteChannelMessage(d))))
+	mux.Handle("POST /api/v1/spaces/{slug}/channels/{channel}/messages/{id}/reactions", auth(http.HandlerFunc(handlers.ToggleMessageReaction(d))))
 	mux.Handle("DELETE /api/v1/spaces/{slug}/channels/{channel}/messages/{id}/reactions/{emoji}", auth(http.HandlerFunc(handlers.RemoveMessageReaction(d))))
-	mux.Handle("GET /api/v1/spaces/{slug}/channels/{channel}/stream",                         optAuth(http.HandlerFunc(handlers.StreamChannelMessages(d))))
+	mux.Handle("GET /api/v1/spaces/{slug}/channels/{channel}/stream", optAuth(http.HandlerFunc(handlers.StreamChannelMessages(d))))
 	// channel unread counts
-	mux.Handle("GET /api/v1/spaces/{slug}/unread",                                            auth(http.HandlerFunc(handlers.GetSpaceUnreadCounts(d))))
-	mux.Handle("POST /api/v1/spaces/{slug}/channels/{channel}/read",                          auth(http.HandlerFunc(handlers.MarkChannelRead(d))))
+	mux.Handle("GET /api/v1/spaces/{slug}/unread", auth(http.HandlerFunc(handlers.GetSpaceUnreadCounts(d))))
+	mux.Handle("POST /api/v1/spaces/{slug}/channels/{channel}/read", auth(http.HandlerFunc(handlers.MarkChannelRead(d))))
 
 	// SPA catch-all with per-post OpenGraph tag injection
 	indexHTML, err := os.ReadFile("web/dist/index.html")

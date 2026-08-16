@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/community/internal/config"
 	"github.com/opensecstack/community/internal/push"
 )
@@ -16,11 +18,13 @@ func createNotification(ctx context.Context, pool *pgxpool.Pool, cfg *config.Con
 	if userID == actorID {
 		return
 	}
-	pool.Exec(ctx, `
+	if _, err := pool.Exec(ctx, `
 		INSERT INTO notifications (user_id, actor_id, type, post_id, comment_id)
 		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT DO NOTHING`,
-		userID, actorID, notifType, postID, commentID)
+		userID, actorID, notifType, postID, commentID); err != nil {
+		slog.Error("createNotification: insert failed", "user_id", userID, "err", err)
+	}
 
 	notifySSE(pool, ctx, userID)
 
@@ -34,11 +38,13 @@ func createNotification(ctx context.Context, pool *pgxpool.Pool, cfg *config.Con
 // createSystemNotification inserts a self-triggered notification (e.g. password changed,
 // space joined). Bypasses the self-notification guard since the actor is the user.
 func createSystemNotification(ctx context.Context, pool *pgxpool.Pool, userID, notifType string, spaceID *string) {
-	pool.Exec(ctx, `
+	if _, err := pool.Exec(ctx, `
 		INSERT INTO notifications (user_id, actor_id, type, space_id)
 		VALUES ($1, $1, $2, $3)
 		ON CONFLICT DO NOTHING`,
-		userID, notifType, spaceID)
+		userID, notifType, spaceID); err != nil {
+		slog.Error("createSystemNotification: insert failed", "user_id", userID, "err", err)
+	}
 
 	notifySSE(pool, ctx, userID)
 }
@@ -49,11 +55,13 @@ func createSpaceNotification(ctx context.Context, pool *pgxpool.Pool, cfg *confi
 	if userID == actorID {
 		return
 	}
-	pool.Exec(ctx, `
+	if _, err := pool.Exec(ctx, `
 		INSERT INTO notifications (user_id, actor_id, type, space_id)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT DO NOTHING`,
-		userID, actorID, notifType, spaceID)
+		userID, actorID, notifType, spaceID); err != nil {
+		slog.Error("createSpaceNotification: insert failed", "user_id", userID, "err", err)
+	}
 
 	notifySSE(pool, ctx, userID)
 
@@ -67,7 +75,7 @@ func createSpaceNotification(ctx context.Context, pool *pgxpool.Pool, cfg *confi
 // notifySSE wakes the user's active SSE stream via PostgreSQL LISTEN/NOTIFY.
 func notifySSE(pool *pgxpool.Pool, ctx context.Context, userID string) {
 	channel := "notif_" + strings.ReplaceAll(userID, "-", "")
-	pool.Exec(ctx, "SELECT pg_notify($1, 'new')", channel)
+	_, _ = pool.Exec(ctx, "SELECT pg_notify($1, 'new')", channel)
 }
 
 // notifPayload builds the human-readable Web Push payload for a notification type.

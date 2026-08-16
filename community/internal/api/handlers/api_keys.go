@@ -30,7 +30,7 @@ func ListAPIKeys(d Deps) http.HandlerFunc {
 			return
 		}
 		rows, err := d.Pool.Query(r.Context(),
-			`SELECT ak.id, ak.name, ak.key_prefix, ak.last_used_at, ak.created_at
+			`SELECT ak.id, ak.name, ak.key_prefix, ak.last_used_at::text, ak.created_at::text
 			 FROM api_keys ak JOIN users u ON u.id = ak.user_id
 			 WHERE u.username = $1 ORDER BY ak.created_at DESC`, claims.Sub)
 		if err != nil {
@@ -48,7 +48,9 @@ func ListAPIKeys(d Deps) http.HandlerFunc {
 		var keys []keyItem
 		for rows.Next() {
 			var k keyItem
-			rows.Scan(&k.ID, &k.Name, &k.KeyPrefix, &k.LastUsedAt, &k.CreatedAt)
+			if err := rows.Scan(&k.ID, &k.Name, &k.KeyPrefix, &k.LastUsedAt, &k.CreatedAt); err != nil {
+				continue
+			}
 			keys = append(keys, k)
 		}
 		if keys == nil {

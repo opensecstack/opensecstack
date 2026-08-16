@@ -27,8 +27,11 @@ type GovernanceClient struct {
 
 // NewGovernanceClient creates a GovernanceClient targeting the CITADEL
 // instance at apiURL. An empty apiURL is valid — EvaluateDeletion fails
-// open (proceed=true, non-nil err) in that case, same as an unreachable
-// CITADEL, so callers should log the error rather than treat it as fatal.
+// closed (proceed=false, HARD_STOP, non-nil err) in that case, same as an
+// unreachable CITADEL, because sdkcitadel.Client's FailMode defaults to
+// FailClosed (the zero value — see sdk/go/citadel/client.go). Callers
+// should still log the error for visibility, but must not treat proceed
+// as safe to assume true just because err is non-nil.
 func NewGovernanceClient(apiURL string) *GovernanceClient {
 	return &GovernanceClient{sdk: sdkcitadel.NewClient(apiURL, nil)}
 }

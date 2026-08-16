@@ -3,10 +3,12 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/community/internal/api/middleware"
 	"github.com/opensecstack/community/internal/auth"
 	"github.com/opensecstack/community/internal/email"
@@ -185,7 +187,9 @@ func CreateComment(d Deps) http.HandlerFunc {
 						sendCommentEmail(d.Pool, d.Mailer, recipientID, claims.Sub, pid)
 						var slug, title string
 						if err := d.Pool.QueryRow(context.Background(), `SELECT slug, title FROM posts WHERE id=$1`, pid).Scan(&slug, &title); err == nil {
-							notifications.SendCommentEmail(context.Background(), d.Pool, d.Mailer, d.Cfg, claims.Sub, recipientID, slug, title, strings.TrimSpace(req.Body))
+							if err := notifications.SendCommentEmail(context.Background(), d.Pool, d.Mailer, d.Cfg, claims.Sub, recipientID, slug, title, strings.TrimSpace(req.Body)); err != nil {
+								slog.Error("CreateComment: send comment email failed", "recipient_id", recipientID, "err", err)
+							}
 						}
 					}
 				}(postAuthorID, postID)
@@ -209,10 +213,12 @@ func CreateComment(d Deps) http.HandlerFunc {
 				if subUserID == postAuthorID {
 					continue
 				}
-				d.Pool.Exec(r.Context(), `
+				if _, err := d.Pool.Exec(r.Context(), `
 					INSERT INTO notifications (user_id, actor_id, type, post_id, comment_id)
 					VALUES ($1, $2, 'comment_on_post', $3, $4)`,
-					subUserID, userID, postID, id)
+					subUserID, userID, postID, id); err != nil {
+					slog.Error("CreateComment: subscriber notification insert failed", "user_id", subUserID, "err", err)
+				}
 			}
 		}
 
@@ -220,7 +226,9 @@ func CreateComment(d Deps) http.HandlerFunc {
 		go func() {
 			usernames := mentions.Extract(strings.TrimSpace(req.Body))
 			if len(usernames) > 0 {
-				mentions.NotifyMentions(context.Background(), d.Pool, userID, usernames, postID, id)
+				if err := mentions.NotifyMentions(context.Background(), d.Pool, userID, usernames, postID, id); err != nil {
+					slog.Error("CreateComment: notify mentions failed", "post_id", postID, "comment_id", id, "err", err)
+				}
 			}
 		}()
 

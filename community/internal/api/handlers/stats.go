@@ -35,14 +35,14 @@ func GetAdminStats(d Deps) http.HandlerFunc {
 		var s stats
 
 		// Totals
-		d.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE deactivated_at IS NULL`).Scan(&s.TotalUsers)
-		d.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM posts WHERE state = 'published'`).Scan(&s.TotalPosts)
-		d.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM comments`).Scan(&s.TotalComments)
-		d.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM reactions`).Scan(&s.TotalReactions)
+		_ = d.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE deactivated_at IS NULL`).Scan(&s.TotalUsers)
+		_ = d.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM posts WHERE state = 'published'`).Scan(&s.TotalPosts)
+		_ = d.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM comments`).Scan(&s.TotalComments)
+		_ = d.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM reactions`).Scan(&s.TotalReactions)
 
 		// Weekly
-		d.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE created_at > now() - INTERVAL '7 days'`).Scan(&s.NewUsersThisWeek)
-		d.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM posts WHERE state = 'published' AND published_at > now() - INTERVAL '7 days'`).Scan(&s.NewPostsThisWeek)
+		_ = d.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM users WHERE created_at > now() - INTERVAL '7 days'`).Scan(&s.NewUsersThisWeek)
+		_ = d.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM posts WHERE state = 'published' AND published_at > now() - INTERVAL '7 days'`).Scan(&s.NewPostsThisWeek)
 
 		// Top tags by post count
 		rows, err := d.Pool.Query(ctx, `
@@ -54,7 +54,9 @@ func GetAdminStats(d Deps) http.HandlerFunc {
 			defer rows.Close()
 			for rows.Next() {
 				var ts tagStat
-				rows.Scan(&ts.Name, &ts.Slug, &ts.Count)
+				if err := rows.Scan(&ts.Name, &ts.Slug, &ts.Count); err != nil {
+					continue
+				}
 				s.TopTags = append(s.TopTags, ts)
 			}
 		}
@@ -69,7 +71,9 @@ func GetAdminStats(d Deps) http.HandlerFunc {
 			defer rows2.Close()
 			for rows2.Next() {
 				var us userStat
-				rows2.Scan(&us.Username, &us.DisplayName, &us.PostCount)
+				if err := rows2.Scan(&us.Username, &us.DisplayName, &us.PostCount); err != nil {
+					continue
+				}
 				s.TopAuthors = append(s.TopAuthors, us)
 			}
 		}

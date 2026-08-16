@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/meilisearch/meilisearch-go"
+
 	"github.com/opensecstack/community/internal/config"
 )
 

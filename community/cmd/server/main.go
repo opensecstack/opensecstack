@@ -17,6 +17,29 @@ import (
 
 var version = "dev"
 
+// newHTTPServer builds the *http.Server that wraps the given handler with
+// this service's fixed timeouts. Extracted from main() so the wiring
+// (addr/timeouts) is testable without binding a real listener.
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:         addr,
+		Handler:      handler,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+}
+
+// shutdownServer gracefully shuts the server down, bounding the wait with
+// the given timeout. Extracted from main() so the context/timeout plumbing
+// is testable against an httptest-style *http.Server without needing a real
+// OS signal.
+func shutdownServer(srv *http.Server, timeout time.Duration) error {
+	shutCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return srv.Shutdown(shutCtx)
+}
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -38,13 +61,7 @@ func main() {
 
 	srv := api.NewServer(cfg, pool, version)
 
-	httpSrv := &http.Server{
-		Addr:         cfg.HTTPAddr,
-		Handler:      srv,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
+	httpSrv := newHTTPServer(cfg.HTTPAddr, srv)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -61,7 +78,5 @@ func main() {
 
 	<-ctx.Done()
 	slog.Info("shutting down")
-	shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_ = httpSrv.Shutdown(shutCtx)
+	_ = shutdownServer(httpSrv, 10*time.Second)
 }

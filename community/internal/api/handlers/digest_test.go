@@ -36,7 +36,7 @@ func TestTriggerDigest_Admin_Returns202Immediately(t *testing.T) {
 		t.Fatalf("expected 202, got %d — body: %s", w.Code, w.Body.String())
 	}
 	var resp map[string]string
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp["status"] != "digest sending in background" {
 		t.Errorf("unexpected status message: %q", resp["status"])
 	}

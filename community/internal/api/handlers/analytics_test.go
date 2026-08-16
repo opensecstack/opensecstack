@@ -36,7 +36,7 @@ func TestGetPostAnalytics_PostNotFound_Returns404(t *testing.T) {
 		t.Fatalf("expected 404 when post lookup fails, got %d — body: %s", w.Code, w.Body.String())
 	}
 	var resp map[string]string
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp["error"] != "post not found" {
 		t.Errorf("unexpected error message: %q", resp["error"])
 	}

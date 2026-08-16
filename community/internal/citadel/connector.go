@@ -49,15 +49,6 @@ type wormEmitRequest struct {
 	Payload   json.RawMessage `json:"payload"`
 }
 
-// wormEmitResponse mirrors CITADEL's emitResponse — unused by callers today,
-// decoded only to validate the shape during tests/debugging.
-type wormEmitResponse struct {
-	WORMEntryID string `json:"worm_entry_id"`
-	ChainHash   string `json:"chain_hash"`
-	PrevHash    string `json:"prev_hash"`
-	SequenceNum int64  `json:"sequence_num"`
-}
-
 // Emit appends an audit-only event to CITADEL's WORM chain via
 // POST /api/v1/worm/emit. This is a plain immutable-log append — no
 // authorization decision is made — distinct from a MARSHAL governance

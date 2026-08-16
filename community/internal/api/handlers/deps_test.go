@@ -9,9 +9,63 @@ package handlers
 // to observe it through an HTTP handler.
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+func TestWriteJSON_SetsContentTypeStatusAndBody(t *testing.T) {
+	w := httptest.NewRecorder()
+	writeJSON(w, http.StatusTeapot, map[string]string{"foo": "bar"})
+
+	if w.Code != http.StatusTeapot {
+		t.Errorf("expected status %d, got %d", http.StatusTeapot, w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("expected Content-Type application/json, got %q", ct)
+	}
+	var body map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["foo"] != "bar" {
+		t.Errorf("expected body foo=bar, got %+v", body)
+	}
+}
+
+func TestDecodeJSON_ValidBody_PopulatesStruct(t *testing.T) {
+	req := httptest.NewRequest("POST", "/x", bytes.NewReader([]byte(`{"name":"alice"}`)))
+	var v struct {
+		Name string `json:"name"`
+	}
+	if err := decodeJSON(req, &v); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if v.Name != "alice" {
+		t.Errorf("expected name=alice, got %q", v.Name)
+	}
+}
+
+func TestDecodeJSON_UnknownField_ReturnsError(t *testing.T) {
+	req := httptest.NewRequest("POST", "/x", bytes.NewReader([]byte(`{"name":"alice","extra":"nope"}`)))
+	var v struct {
+		Name string `json:"name"`
+	}
+	if err := decodeJSON(req, &v); err == nil {
+		t.Error("expected error for unknown field (DisallowUnknownFields), got nil")
+	}
+}
+
+func TestDecodeJSON_MalformedBody_ReturnsError(t *testing.T) {
+	req := httptest.NewRequest("POST", "/x", strings.NewReader(`{not json`))
+	var v map[string]any
+	if err := decodeJSON(req, &v); err == nil {
+		t.Error("expected error for malformed JSON, got nil")
+	}
+}
 
 func TestQueryInt_MissingParam_ReturnsDefault(t *testing.T) {
 	r := httptest.NewRequest("GET", "/x", nil)

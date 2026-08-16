@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -99,7 +100,9 @@ func PublishPost(d Deps) http.HandlerFunc {
 			}
 			usernames := mentions.Extract(postBody)
 			if len(usernames) > 0 {
-				mentions.NotifyMentions(context.Background(), d.Pool, authorID, usernames, id, "")
+				if err := mentions.NotifyMentions(context.Background(), d.Pool, authorID, usernames, id, ""); err != nil {
+					slog.Error("PublishPost: notify mentions failed", "post_id", id, "err", err)
+				}
 			}
 		}()
 

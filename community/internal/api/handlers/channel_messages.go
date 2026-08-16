@@ -13,19 +13,19 @@ import (
 
 // messageRow is the JSON shape returned for a single channel message.
 type messageRow struct {
-	ID                string            `json:"id"`
-	ChannelID         string            `json:"channel_id"`
-	AuthorID          string            `json:"author_id"`
-	AuthorUsername    string            `json:"author_username"`
-	AuthorDisplayName string            `json:"author_display_name"`
-	AuthorAvatarURL   *string           `json:"author_avatar_url"`
-	Content           string            `json:"content"`
-	EditedAt          *string           `json:"edited_at"`
-	ParentID          *string           `json:"parent_id"`
-	CreatedAt         string            `json:"created_at"`
-	Reactions         map[string]int    `json:"reactions"`
-	ViewerReacted     []string          `json:"viewer_reacted"`
-	Attachments       []attachmentRow   `json:"attachments"`
+	ID                string          `json:"id"`
+	ChannelID         string          `json:"channel_id"`
+	AuthorID          string          `json:"author_id"`
+	AuthorUsername    string          `json:"author_username"`
+	AuthorDisplayName string          `json:"author_display_name"`
+	AuthorAvatarURL   *string         `json:"author_avatar_url"`
+	Content           string          `json:"content"`
+	EditedAt          *string         `json:"edited_at"`
+	ParentID          *string         `json:"parent_id"`
+	CreatedAt         string          `json:"created_at"`
+	Reactions         map[string]int  `json:"reactions"`
+	ViewerReacted     []string        `json:"viewer_reacted"`
+	Attachments       []attachmentRow `json:"attachments"`
 }
 
 type attachmentRow struct {

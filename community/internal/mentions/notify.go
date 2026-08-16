@@ -8,9 +8,10 @@ import (
 
 // NotifyMentions looks up each username in the DB, skips the actor (actorID),
 // skips non-existent users, and creates a notification of type
-// "mentioned_in_comment" for each mentioned user. It returns without error if
-// any individual lookup fails. postID and commentID may be empty strings to
-// represent NULL.
+// "mentioned_in_comment" for each mentioned user. A failed lookup is skipped
+// silently (unknown/misspelled @mention), but a failed insert is reported via
+// the returned error (the last one seen, if several inserts fail) so callers
+// can log it. postID and commentID may be empty strings to represent NULL.
 func NotifyMentions(ctx context.Context, pool *pgxpool.Pool, actorID string, mentionedUsernames []string, postID string, commentID string) error {
 	var postIDParam interface{}
 	if postID != "" {
@@ -22,6 +23,7 @@ func NotifyMentions(ctx context.Context, pool *pgxpool.Pool, actorID string, men
 		commentIDParam = commentID
 	}
 
+	var lastErr error
 	for _, username := range mentionedUsernames {
 		var mentionedUserID string
 		if err := pool.QueryRow(ctx,
@@ -36,12 +38,14 @@ func NotifyMentions(ctx context.Context, pool *pgxpool.Pool, actorID string, men
 			continue
 		}
 
-		pool.Exec(ctx, `
+		if _, err := pool.Exec(ctx, `
 			INSERT INTO notifications (user_id, actor_id, type, post_id, comment_id)
 			VALUES ($1, $2, 'mentioned_in_comment', $3, $4)
 			ON CONFLICT DO NOTHING`,
-			mentionedUserID, actorID, postIDParam, commentIDParam)
+			mentionedUserID, actorID, postIDParam, commentIDParam); err != nil {
+			lastErr = err
+		}
 	}
 
-	return nil
+	return lastErr
 }

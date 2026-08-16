@@ -170,16 +170,18 @@ func Register(d Deps) http.HandlerFunc {
 		recordSession(r, d, newUserID, tok, claims.ExpiresAt.Time)
 
 		// Send a welcome notification.
-		d.Pool.Exec(r.Context(),
+		if _, err := d.Pool.Exec(r.Context(),
 			`INSERT INTO notifications (user_id, type) VALUES ($1, 'welcome')`,
 			newUserID,
-		)
+		); err != nil {
+			log.Printf("Register: welcome notification insert failed user_id=%s: %v", newUserID, err)
+		}
 
 		writeJSON(w, http.StatusCreated, map[string]any{
 			"token":          tok,
 			"role":           "author",
 			"sub":            req.Username,
-			"expires_at":     claims.ExpiresAt.Time.Format(time.RFC3339),
+			"expires_at":     claims.ExpiresAt.Format(time.RFC3339),
 			"email_verified": false,
 		})
 	}

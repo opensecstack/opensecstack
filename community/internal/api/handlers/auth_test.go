@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/opensecstack/community/internal/api/handlers"
@@ -135,114 +134,5 @@ func TestLogin_BadJSON_Returns400(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Register — validation-only cases (no DB required)
-// ---------------------------------------------------------------------------
-
-func TestRegister_MissingFields_Returns400(t *testing.T) {
-	cases := []struct {
-		name    string
-		payload map[string]string
-	}{
-		{"empty username", map[string]string{"username": "", "email": "a@b.com", "password": "longenough"}},
-		{"short username", map[string]string{"username": "ab", "email": "a@b.com", "password": "longenough"}},
-		{"invalid email", map[string]string{"username": "validuser", "email": "notanemail", "password": "longenough"}},
-		{"short password", map[string]string{"username": "validuser", "email": "a@b.com", "password": "short"}},
-	}
-
-	d := newDepsWithBadDB(t)
-	d.Cfg = &config.Config{
-		JWTSecret: "unit-test-secret",
-		JWTIssuer: "test",
-		TokenTTL:  3_600_000_000_000,
-		Pepper:    "pepper",
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			body, _ := json.Marshal(tc.payload)
-			req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
-			req.Header.Set("Content-Type", "application/json")
-			w := httptest.NewRecorder()
-
-			handlers.Register(d)(w, req)
-
-			if w.Code != http.StatusBadRequest {
-				t.Errorf("expected 400, got %d — body: %s", w.Code, w.Body.String())
-			}
-		})
-	}
-}
-
-func TestRegister_InviteOnlyWithoutCode_Returns400(t *testing.T) {
-	d := newDepsWithBadDB(t)
-	d.Cfg = &config.Config{
-		JWTSecret:  "unit-test-secret",
-		JWTIssuer:  "test",
-		TokenTTL:   3_600_000_000_000,
-		Pepper:     "pepper",
-		InviteOnly: true,
-	}
-
-	body, _ := json.Marshal(map[string]string{
-		"username": "newuser",
-		"email":    "new@example.com",
-		"password": "strongpassword",
-	})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	handlers.Register(d)(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected 400 for missing invite code, got %d", w.Code)
-	}
-	var resp map[string]string
-	_ = json.NewDecoder(w.Body).Decode(&resp)
-	if !strings.Contains(resp["error"], "invite") {
-		t.Errorf("expected invite-related error, got %q", resp["error"])
-	}
-}
-
-func TestRegister_BadJSON_Returns400(t *testing.T) {
-	d := handlers.Deps{
-		Cfg: &config.Config{},
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader([]byte(`not json`)))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	handlers.Register(d)(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Errorf("expected 400 for bad JSON, got %d", w.Code)
-	}
-}
-
-func TestRegister_AllowedEmailDomains_Rejected_Returns403(t *testing.T) {
-	d := newDepsWithBadDB(t)
-	d.Cfg = &config.Config{
-		JWTSecret:           "unit-test-secret",
-		JWTIssuer:           "test",
-		TokenTTL:            3_600_000_000_000,
-		Pepper:              "pepper",
-		AllowedEmailDomains: []string{"company.internal"},
-	}
-
-	body, _ := json.Marshal(map[string]string{
-		"username": "outsider",
-		"email":    "user@gmail.com",
-		"password": "strongpassword",
-	})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/register", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	handlers.Register(d)(w, req)
-
-	if w.Code != http.StatusForbidden {
-		t.Errorf("expected 403 for disallowed email domain, got %d", w.Code)
-	}
-}
+// Register handler tests live in register_test.go (register.go is outside
+// this pass's scope: oauth.go, oauth_sinauth.go, oauth_google.go, auth.go).

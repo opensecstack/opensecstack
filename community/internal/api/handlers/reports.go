@@ -7,11 +7,11 @@ import (
 )
 
 var validReasons = map[string]bool{
-	"spam":          true,
-	"harassment":    true,
-	"off_topic":     true,
+	"spam":           true,
+	"harassment":     true,
+	"off_topic":      true,
 	"misinformation": true,
-	"other":         true,
+	"other":          true,
 }
 
 // ReportPost handles POST /api/v1/posts/{id}/report
@@ -129,18 +129,18 @@ func ReportComment(d Deps) http.HandlerFunc {
 }
 
 type reportRow struct {
-	ID                   string  `json:"id"`
-	Reason               string  `json:"reason"`
-	Note                 string  `json:"note"`
-	Status               string  `json:"status"`
-	CreatedAt            string  `json:"created_at"`
-	ReporterUsername     string  `json:"reporter_username"`
-	PostID               *string `json:"post_id"`
-	PostTitle            *string `json:"post_title"`
-	PostSlug             *string `json:"post_slug"`
-	CommentID            *string `json:"comment_id"`
-	CommentBody          *string `json:"comment_body"`
-	PostAuthorUsername   *string `json:"post_author_username"`
+	ID                    string  `json:"id"`
+	Reason                string  `json:"reason"`
+	Note                  string  `json:"note"`
+	Status                string  `json:"status"`
+	CreatedAt             string  `json:"created_at"`
+	ReporterUsername      string  `json:"reporter_username"`
+	PostID                *string `json:"post_id"`
+	PostTitle             *string `json:"post_title"`
+	PostSlug              *string `json:"post_slug"`
+	CommentID             *string `json:"comment_id"`
+	CommentBody           *string `json:"comment_body"`
+	PostAuthorUsername    *string `json:"post_author_username"`
 	CommentAuthorUsername *string `json:"comment_author_username"`
 }
 

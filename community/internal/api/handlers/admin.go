@@ -108,7 +108,7 @@ func SetUserRole(d Deps) http.HandlerFunc {
 		}
 
 		var actorID string
-		d.Pool.QueryRow(r.Context(), `SELECT id FROM users WHERE username=$1`, claims.Sub).Scan(&actorID)
+		_ = d.Pool.QueryRow(r.Context(), `SELECT id FROM users WHERE username=$1`, claims.Sub).Scan(&actorID)
 		recordAudit(r.Context(), d.Pool, actorID, "set_role", "user", targetUsername, req.Role)
 		w.WriteHeader(http.StatusNoContent)
 	}

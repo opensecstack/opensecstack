@@ -41,7 +41,9 @@ func AdminListTagAliases(d Deps) http.HandlerFunc {
 		aliases := []tagAliasItem{}
 		for rows.Next() {
 			var a tagAliasItem
-			rows.Scan(&a.Alias)
+			if err := rows.Scan(&a.Alias); err != nil {
+				continue
+			}
 			a.TagSlug = slug
 			aliases = append(aliases, a)
 		}
@@ -82,7 +84,7 @@ func AdminDeleteTagAlias(d Deps) http.HandlerFunc {
 			return
 		}
 		alias := r.PathValue("alias")
-		d.Pool.Exec(r.Context(), `DELETE FROM tag_aliases WHERE alias = $1`, alias)
+		_, _ = d.Pool.Exec(r.Context(), `DELETE FROM tag_aliases WHERE alias = $1`, alias)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

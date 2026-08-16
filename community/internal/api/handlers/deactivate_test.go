@@ -1,6 +1,7 @@
 package handlers_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -9,6 +10,96 @@ import (
 	"github.com/opensecstack/community/internal/auth"
 	"github.com/opensecstack/community/internal/config"
 )
+
+func TestDeactivateUser_Success_SetsDeactivatedAt(t *testing.T) {
+	d := dbDeps(t)
+	_, targetUsername := createTestUser(t, d.Pool, "author")
+	_, adminUsername := createTestUser(t, d.Pool, "admin")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/"+targetUsername+"/deactivate", nil)
+	req.SetPathValue("username", targetUsername)
+	req = withClaims(req, &auth.Claims{Sub: adminUsername, Role: "admin"})
+	w := httptest.NewRecorder()
+
+	handlers.DeactivateUser(d)(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d — body: %s", w.Code, w.Body.String())
+	}
+	var deactivated bool
+	_ = d.Pool.QueryRow(context.Background(),
+		`SELECT deactivated_at IS NOT NULL FROM users WHERE username=$1`, targetUsername).Scan(&deactivated)
+	if !deactivated {
+		t.Error("expected deactivated_at to be set")
+	}
+}
+
+func TestDeactivateUser_AlreadyDeactivated_Returns404(t *testing.T) {
+	d := dbDeps(t)
+	_, targetUsername := createTestUser(t, d.Pool, "author")
+	_, adminUsername := createTestUser(t, d.Pool, "admin")
+
+	if _, err := d.Pool.Exec(context.Background(),
+		`UPDATE users SET deactivated_at = now() WHERE username=$1`, targetUsername); err != nil {
+		t.Fatalf("pre-deactivate: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/"+targetUsername+"/deactivate", nil)
+	req.SetPathValue("username", targetUsername)
+	req = withClaims(req, &auth.Claims{Sub: adminUsername, Role: "admin"})
+	w := httptest.NewRecorder()
+
+	handlers.DeactivateUser(d)(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for already-deactivated user, got %d", w.Code)
+	}
+}
+
+func TestReactivateUser_Success_ClearsDeactivatedAt(t *testing.T) {
+	d := dbDeps(t)
+	_, targetUsername := createTestUser(t, d.Pool, "author")
+	_, adminUsername := createTestUser(t, d.Pool, "admin")
+
+	if _, err := d.Pool.Exec(context.Background(),
+		`UPDATE users SET deactivated_at = now() WHERE username=$1`, targetUsername); err != nil {
+		t.Fatalf("pre-deactivate: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/"+targetUsername+"/reactivate", nil)
+	req.SetPathValue("username", targetUsername)
+	req = withClaims(req, &auth.Claims{Sub: adminUsername, Role: "admin"})
+	w := httptest.NewRecorder()
+
+	handlers.ReactivateUser(d)(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d — body: %s", w.Code, w.Body.String())
+	}
+	var deactivated bool
+	_ = d.Pool.QueryRow(context.Background(),
+		`SELECT deactivated_at IS NOT NULL FROM users WHERE username=$1`, targetUsername).Scan(&deactivated)
+	if deactivated {
+		t.Error("expected deactivated_at to be cleared")
+	}
+}
+
+func TestReactivateUser_NotDeactivated_Returns404(t *testing.T) {
+	d := dbDeps(t)
+	_, targetUsername := createTestUser(t, d.Pool, "author")
+	_, adminUsername := createTestUser(t, d.Pool, "admin")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users/"+targetUsername+"/reactivate", nil)
+	req.SetPathValue("username", targetUsername)
+	req = withClaims(req, &auth.Claims{Sub: adminUsername, Role: "admin"})
+	w := httptest.NewRecorder()
+
+	handlers.ReactivateUser(d)(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for user that is not deactivated, got %d", w.Code)
+	}
+}
 
 func TestDeactivateUser_NonAdmin_Returns403(t *testing.T) {
 	d := handlers.Deps{Cfg: &config.Config{}}

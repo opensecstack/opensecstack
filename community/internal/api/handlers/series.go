@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
 	"github.com/opensecstack/community/internal/api/middleware"
 	"github.com/opensecstack/community/internal/auth"
 )
@@ -108,9 +109,9 @@ func GetSeries(d Deps) http.HandlerFunc {
 		for rows.Next() {
 			var (
 				sID, sTitle, sSlug, sDesc, sCreatedAt string
-				uUsername, uDisplayName                string
-				pID, pTitle, pSlug                     *string
-				pPosition                              *int
+				uUsername, uDisplayName               string
+				pID, pTitle, pSlug                    *string
+				pPosition                             *int
 			)
 			if err := rows.Scan(
 				&sID, &sTitle, &sSlug, &sDesc, &sCreatedAt,

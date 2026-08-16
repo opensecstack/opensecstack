@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/community/internal/api/middleware"
 	"github.com/opensecstack/community/internal/email"
 	"github.com/opensecstack/community/internal/notifications"
@@ -117,7 +119,9 @@ func AddReaction(d Deps) http.HandlerFunc {
 						sendReactionEmail(d.Pool, d.Mailer, recipientID, claims.Sub, kind, pid)
 						var slug, title string
 						if err := d.Pool.QueryRow(context.Background(), `SELECT slug, title FROM posts WHERE id=$1`, pid).Scan(&slug, &title); err == nil {
-							notifications.SendReactionEmail(context.Background(), d.Pool, d.Mailer, d.Cfg, claims.Sub, recipientID, slug, title, kind)
+							if err := notifications.SendReactionEmail(context.Background(), d.Pool, d.Mailer, d.Cfg, claims.Sub, recipientID, slug, title, kind); err != nil {
+								slog.Error("React: send reaction email failed", "recipient_id", recipientID, "err", err)
+							}
 						}
 					}
 				}(postAuthorID, postID, req.Kind)

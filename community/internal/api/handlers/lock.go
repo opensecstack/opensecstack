@@ -36,7 +36,7 @@ func LockPost(d Deps) http.HandlerFunc {
 		}
 
 		var actorID string
-		d.Pool.QueryRow(r.Context(), `SELECT id FROM users WHERE username=$1`, claims.Sub).Scan(&actorID)
+		_ = d.Pool.QueryRow(r.Context(), `SELECT id FROM users WHERE username=$1`, claims.Sub).Scan(&actorID)
 		recordAudit(r.Context(), d.Pool, actorID, "lock_post", "post", id, "")
 		w.WriteHeader(http.StatusNoContent)
 	}
@@ -71,7 +71,7 @@ func UnlockPost(d Deps) http.HandlerFunc {
 		}
 
 		var actorID string
-		d.Pool.QueryRow(r.Context(), `SELECT id FROM users WHERE username=$1`, claims.Sub).Scan(&actorID)
+		_ = d.Pool.QueryRow(r.Context(), `SELECT id FROM users WHERE username=$1`, claims.Sub).Scan(&actorID)
 		recordAudit(r.Context(), d.Pool, actorID, "unlock_post", "post", id, "")
 		w.WriteHeader(http.StatusNoContent)
 	}

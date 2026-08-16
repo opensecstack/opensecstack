@@ -82,11 +82,15 @@ func ListPostsByTag(d Deps) http.HandlerFunc {
 		for rows.Next() {
 			var p postRow
 			var tags []string
-			if err := rows.Scan(
-				&p.ID, &p.AuthorID, &p.AuthorUsername, &p.AuthorName, &p.AuthorAvatar, &p.AuthorBadge,
-				&p.Title, &p.Slug, &p.CoverImage, &p.State, &p.PublishedAt, &p.CreatedAt, &p.UpdatedAt,
-				&tags, &p.ReactionCount, &p.CommentCount, &p.Views, &p.Locked,
-			); err != nil {
+			// NOTE: SortedListPostsByTagQuery selects 22 columns (it includes
+			// scheduled_at, edited_at, pinned, and sensitive in addition to the
+			// 18 fields scanned here previously). The stale 18-destination Scan
+			// call caused pgx to return a "number of field descriptions must
+			// equal number of destinations" error on every single row, which was
+			// silently swallowed by `continue` below — so this endpoint always
+			// returned an empty list. Use the shared scanPost helper so the
+			// destination list always tracks the query's column list.
+			if err := rows.Scan(scanPost(&p, &tags)...); err != nil {
 				continue
 			}
 			p.Tags = tags
@@ -126,7 +130,9 @@ func GetPopularTags(d Deps) http.HandlerFunc {
 		var tags []tagItem
 		for rows.Next() {
 			var t tagItem
-			rows.Scan(&t.ID, &t.Name, &t.Slug, &t.Color, &t.PostCount)
+			if err := rows.Scan(&t.ID, &t.Name, &t.Slug, &t.Color, &t.PostCount); err != nil {
+				continue
+			}
 			tags = append(tags, t)
 		}
 		if tags == nil {

@@ -70,12 +70,12 @@ func GoogleOAuthCallback(d Deps) http.HandlerFunc {
 			redirectError("missing state")
 			return
 		}
-		if r.URL.Query().Get("state") != stateCookie.Value {
-			redirectError("state mismatch")
-			return
-		}
 
-		// Clear the state cookie immediately.
+		// Clear the state cookie immediately, before validating it, so the
+		// state token is single-use regardless of whether validation
+		// succeeds or fails — a failed CSRF check must not leave a
+		// still-valid state cookie sitting in the browser for the rest of
+		// its MaxAge window.
 		http.SetCookie(w, &http.Cookie{
 			Name:     "google_oauth_state",
 			Value:    "",
@@ -85,6 +85,11 @@ func GoogleOAuthCallback(d Deps) http.HandlerFunc {
 			SameSite: http.SameSiteLaxMode,
 			Secure:   !d.Cfg.DevMode,
 		})
+
+		if r.URL.Query().Get("state") != stateCookie.Value {
+			redirectError("state mismatch")
+			return
+		}
 
 		code := r.URL.Query().Get("code")
 		if code == "" {

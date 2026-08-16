@@ -9,6 +9,7 @@ import (
 
 	webpush "github.com/SherClockHolmes/webpush-go"
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/community/internal/config"
 )
 
@@ -76,7 +77,9 @@ func SendToUser(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, use
 
 			// 410 Gone or 404 Not Found → subscription is expired/invalid; remove it.
 			if resp.StatusCode == http.StatusGone || resp.StatusCode == http.StatusNotFound {
-				pool.Exec(sendCtx, `DELETE FROM push_subscriptions WHERE endpoint=$1`, s.endpoint)
+				if _, err := pool.Exec(sendCtx, `DELETE FROM push_subscriptions WHERE endpoint=$1`, s.endpoint); err != nil {
+					log.Printf("push: failed to remove expired subscription endpoint=%s: %v", s.endpoint, err)
+				}
 			}
 		}()
 	}

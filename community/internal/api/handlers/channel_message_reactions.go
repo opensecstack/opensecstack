@@ -61,7 +61,7 @@ func ToggleMessageReaction(d Deps) http.HandlerFunc {
 
 		// Confirm the message belongs to the resolved channel.
 		var exists bool
-		d.Pool.QueryRow(r.Context(),
+		_ = d.Pool.QueryRow(r.Context(),
 			`SELECT EXISTS(SELECT 1 FROM channel_messages WHERE id=$1 AND channel_id=$2)`,
 			msgID, channelID).Scan(&exists)
 		if !exists {
@@ -72,7 +72,7 @@ func ToggleMessageReaction(d Deps) http.HandlerFunc {
 		// Toggle: try insert first; if it already exists, delete it.
 		var added bool
 		var existing bool
-		d.Pool.QueryRow(r.Context(),
+		_ = d.Pool.QueryRow(r.Context(),
 			`SELECT EXISTS(SELECT 1 FROM channel_message_reactions WHERE message_id=$1 AND user_id=$2 AND emoji=$3)`,
 			msgID, userID, req.Emoji).Scan(&existing)
 

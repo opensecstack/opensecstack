@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/community/internal/auth"
 )
 
@@ -62,7 +63,7 @@ func Auth(secret string, pool ...*pgxpool.Pool) func(http.Handler) http.Handler 
 				// Update last_seen_at in the background — don't block the request.
 				go func() {
 					ctx := context.Background()
-					db.Exec(ctx, `UPDATE user_sessions SET last_seen_at = NOW() WHERE token_hash = $1`, hash)
+					_, _ = db.Exec(ctx, `UPDATE user_sessions SET last_seen_at = NOW() WHERE token_hash = $1`, hash)
 				}()
 			}
 

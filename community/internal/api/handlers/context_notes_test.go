@@ -106,7 +106,7 @@ func TestGetContextNote_NotFound_ReturnsNullNote(t *testing.T) {
 		t.Fatalf("expected 200, got %d", w.Code)
 	}
 	var resp map[string]any
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp["note"] != nil {
 		t.Errorf("expected note=nil, got %v", resp["note"])
 	}

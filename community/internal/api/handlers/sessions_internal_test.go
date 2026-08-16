@@ -54,3 +54,11 @@ func TestRawTokenFromRequest_WrongScheme_ReturnsEmpty(t *testing.T) {
 		t.Errorf("expected empty string for non-Bearer scheme, got %q", got)
 	}
 }
+
+// TokenHashForTest exposes the unexported tokenHash helper to the external
+// handlers_test package (sessions_test.go), which needs to pre-compute the
+// same hash the handler derives from a raw bearer token when seeding
+// user_sessions rows for live-DB tests.
+func TokenHashForTest(raw string) string {
+	return tokenHash(raw)
+}

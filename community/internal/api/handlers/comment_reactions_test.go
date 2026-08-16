@@ -64,7 +64,7 @@ func TestRemoveCommentReaction_UserNotFound_StillReturnsOK(t *testing.T) {
 		t.Fatalf("expected 200 (fail-open), got %d", w.Code)
 	}
 	var resp map[string]bool
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if !resp["ok"] {
 		t.Error("expected ok=true")
 	}

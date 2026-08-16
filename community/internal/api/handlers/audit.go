@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -57,8 +58,10 @@ LIMIT $1 OFFSET $2`, limit, offset)
 }
 
 func recordAudit(ctx context.Context, pool *pgxpool.Pool, actorID, action, targetType, targetID, note string) {
-	pool.Exec(ctx,
+	if _, err := pool.Exec(ctx,
 		`INSERT INTO audit_log (actor_id, action, target_type, target_id, note) VALUES ($1,$2,$3,$4,$5)`,
 		actorID, action, targetType, targetID, note,
-	)
+	); err != nil {
+		slog.Error("recordAudit: insert failed", "action", action, "target_type", targetType, "target_id", targetID, "err", err)
+	}
 }

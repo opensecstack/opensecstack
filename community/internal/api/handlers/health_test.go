@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/community/internal/api/handlers"
 	"github.com/opensecstack/community/internal/config"
 )
@@ -37,6 +38,54 @@ func newDepsWithBadDB(t *testing.T) handlers.Deps {
 	return handlers.Deps{
 		Pool: pool,
 		Cfg:  &config.Config{},
+	}
+}
+
+func TestHealthCheck_ReachableDB_Returns200(t *testing.T) {
+	d := dbDeps(t)
+	startTime := time.Now().Add(-2 * time.Second)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/health", nil)
+	w := httptest.NewRecorder()
+
+	handlers.HealthCheck(d, startTime)(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 when DB reachable, got %d — body: %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if ok, _ := body["ok"].(bool); !ok {
+		t.Error("expected ok=true when DB is reachable")
+	}
+	db, _ := body["db"].(map[string]any)
+	if db == nil {
+		t.Fatal("expected a db object in the response")
+	}
+	if dbOK, _ := db["ok"].(bool); !dbOK {
+		t.Error("expected db.ok=true when DB is reachable")
+	}
+}
+
+func TestReadinessCheck_ReachableDB_Returns200(t *testing.T) {
+	d := dbDeps(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/ready", nil)
+	w := httptest.NewRecorder()
+
+	handlers.ReadinessCheck(d)(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 when DB reachable, got %d — body: %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if ready, _ := body["ready"].(bool); !ready {
+		t.Error("expected ready=true when DB is reachable")
 	}
 }
 

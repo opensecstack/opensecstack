@@ -66,6 +66,7 @@ var migrations = []string{
 	ddlSpaceInvites,
 	ddlPostChannelRef,
 	ddlDeletionApproval,
+	ddlTOTPLastStep,
 }
 
 const ddlCanonicalUrl = `

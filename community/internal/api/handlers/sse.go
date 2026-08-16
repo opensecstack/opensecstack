@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/community/internal/api/middleware"
 )
 
@@ -129,7 +130,7 @@ func NotificationStream(d Deps) http.HandlerFunc {
 
 		sendCount := func() {
 			var c int
-			d.Pool.QueryRow(r.Context(),
+			_ = d.Pool.QueryRow(r.Context(),
 				`SELECT COUNT(*) FROM notifications WHERE user_id=$1 AND read=false`,
 				userID).Scan(&c)
 			fmt.Fprintf(w, "event: unread_count\ndata: %d\n\n", c)

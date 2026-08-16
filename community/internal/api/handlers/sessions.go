@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/community/internal/api/middleware"
 )
 
@@ -32,14 +33,14 @@ func rawTokenFromRequest(r *http.Request) string {
 func UpdateLastSeen(pool *pgxpool.Pool, hash string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	pool.Exec(ctx, `UPDATE user_sessions SET last_seen_at = NOW() WHERE token_hash = $1`, hash)
+	_, _ = pool.Exec(ctx, `UPDATE user_sessions SET last_seen_at = NOW() WHERE token_hash = $1`, hash)
 }
 
 // SessionExists returns true when there is a non-expired session row for the
 // given token hash. Used by the auth middleware to enforce revocation.
 func SessionExists(ctx context.Context, pool *pgxpool.Pool, hash string) bool {
 	var exists bool
-	pool.QueryRow(ctx,
+	_ = pool.QueryRow(ctx,
 		`SELECT EXISTS(SELECT 1 FROM user_sessions WHERE token_hash = $1 AND expires_at > NOW())`,
 		hash,
 	).Scan(&exists)
@@ -47,12 +48,12 @@ func SessionExists(ctx context.Context, pool *pgxpool.Pool, hash string) bool {
 }
 
 type sessionRow struct {
-	ID          string    `json:"id"`
-	DeviceInfo  string    `json:"device_info"`
-	IPAddress   string    `json:"ip_address"`
-	CreatedAt   time.Time `json:"created_at"`
-	LastSeenAt  time.Time `json:"last_seen_at"`
-	IsCurrent   bool      `json:"is_current"`
+	ID         string    `json:"id"`
+	DeviceInfo string    `json:"device_info"`
+	IPAddress  string    `json:"ip_address"`
+	CreatedAt  time.Time `json:"created_at"`
+	LastSeenAt time.Time `json:"last_seen_at"`
+	IsCurrent  bool      `json:"is_current"`
 }
 
 // ListSessions returns all active sessions for the authenticated user.
@@ -103,7 +104,7 @@ func ListSessions(d Deps) http.HandlerFunc {
 			// To check is_current we need the token_hash of the stored row.
 			// We query it separately to avoid exposing it in the list.
 			var storedHash string
-			d.Pool.QueryRow(r.Context(),
+			_ = d.Pool.QueryRow(r.Context(),
 				`SELECT token_hash FROM user_sessions WHERE id = $1`, dbID,
 			).Scan(&storedHash)
 			s.IsCurrent = storedHash == currentHash
@@ -194,7 +195,12 @@ func RevokeAllSessions(d Deps) http.HandlerFunc {
 			return
 		}
 
-		// Find the current session ID so we can keep it.
+		// Find the current session ID so we can keep it. If the caller's
+		// bearer token has no matching session row (e.g. it was already
+		// revoked/expired elsewhere while the JWT itself is still valid),
+		// currentSessionID stays empty and every session for this user is
+		// deleted — an empty string must never be bound as the UUID
+		// exclusion param below, or Postgres rejects it as invalid input.
 		currentHash := tokenHash(rawTokenFromRequest(r))
 		var currentSessionID string
 		_ = d.Pool.QueryRow(r.Context(),
@@ -202,10 +208,17 @@ func RevokeAllSessions(d Deps) http.HandlerFunc {
 			currentHash,
 		).Scan(&currentSessionID)
 
-		_, err = d.Pool.Exec(r.Context(),
-			`DELETE FROM user_sessions WHERE user_id = $1 AND id != $2`,
-			userID, currentSessionID,
-		)
+		if currentSessionID == "" {
+			_, err = d.Pool.Exec(r.Context(),
+				`DELETE FROM user_sessions WHERE user_id = $1`,
+				userID,
+			)
+		} else {
+			_, err = d.Pool.Exec(r.Context(),
+				`DELETE FROM user_sessions WHERE user_id = $1 AND id != $2`,
+				userID, currentSessionID,
+			)
+		}
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database error"})
 			return

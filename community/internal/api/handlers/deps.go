@@ -2,11 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/community/internal/citadel"
 	"github.com/opensecstack/community/internal/config"
 	"github.com/opensecstack/community/internal/email"
@@ -57,6 +57,3 @@ func queryInt(r *http.Request, key string, def int) int {
 	}
 	return n
 }
-
-var errNotFound = errors.New("not found")
-var errForbidden = errors.New("forbidden")

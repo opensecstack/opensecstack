@@ -24,9 +24,9 @@ func TestStreamChannelMessages_NoHub_Returns503(t *testing.T) {
 // stubHub is a minimal ChannelHubIface implementation for handler tests.
 type stubHub struct{}
 
-func (stubHub) Publish(channelID string, payload []byte)         {}
-func (stubHub) Subscribe(channelID string) chan []byte           { return make(chan []byte) }
-func (stubHub) Unsubscribe(channelID string, ch chan []byte)      {}
+func (stubHub) Publish(channelID string, payload []byte)     {}
+func (stubHub) Subscribe(channelID string) chan []byte       { return make(chan []byte) }
+func (stubHub) Unsubscribe(channelID string, ch chan []byte) {}
 
 func TestStreamChannelMessages_NoAuth_Returns401(t *testing.T) {
 	d := handlers.Deps{Cfg: &config.Config{}, ChannelHub: stubHub{}}

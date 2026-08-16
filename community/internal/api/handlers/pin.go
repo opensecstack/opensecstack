@@ -30,7 +30,7 @@ func PinPost(d Deps) http.HandlerFunc {
 
 		claims := middleware.ClaimsFrom(r.Context())
 		var actorID string
-		d.Pool.QueryRow(r.Context(), `SELECT id FROM users WHERE username=$1`, claims.Sub).Scan(&actorID)
+		_ = d.Pool.QueryRow(r.Context(), `SELECT id FROM users WHERE username=$1`, claims.Sub).Scan(&actorID)
 		recordAudit(r.Context(), d.Pool, actorID, "pin_post", "post", id, "")
 		w.WriteHeader(http.StatusNoContent)
 	}

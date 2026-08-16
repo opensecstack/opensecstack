@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+
 	"github.com/opensecstack/community/internal/api/middleware"
 	"github.com/opensecstack/community/internal/auth"
 	"github.com/opensecstack/community/internal/db"

@@ -82,6 +82,6 @@ func GetPostSubscriptionStatus(d Deps) http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]bool{"subscribed": subscribed})
+		_ = json.NewEncoder(w).Encode(map[string]bool{"subscribed": subscribed})
 	}
 }

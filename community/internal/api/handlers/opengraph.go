@@ -50,9 +50,9 @@ func fetchOGPost(ctx context.Context, d Deps, slug string) (*ogPost, error) {
 	const q = `
 		SELECT p.title, COALESCE(p.body, ''), p.cover_image_url, u.username
 		FROM   posts p
-		JOIN   users u ON u.id = p.user_id
+		JOIN   users u ON u.id = p.author_id
 		WHERE  p.slug = $1
-		AND    p.published = true
+		AND    p.state = 'published'
 		LIMIT  1`
 
 	row := d.Pool.QueryRow(ctx, q, slug)

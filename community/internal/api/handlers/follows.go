@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/community/internal/api/middleware"
 	"github.com/opensecstack/community/internal/email"
 	"github.com/opensecstack/community/internal/notifications"
@@ -61,7 +63,9 @@ func FollowUser(d Deps) http.HandlerFunc {
 		go func(recipientID string) {
 			if d.Mailer != nil {
 				sendFollowerEmail(d.Pool, d.Mailer, recipientID, claims.Sub)
-				notifications.SendFollowEmail(context.Background(), d.Pool, d.Mailer, d.Cfg, claims.Sub, recipientID)
+				if err := notifications.SendFollowEmail(context.Background(), d.Pool, d.Mailer, d.Cfg, claims.Sub, recipientID); err != nil {
+					slog.Error("Follow: send follow email failed", "recipient_id", recipientID, "err", err)
+				}
 			}
 		}(followingID)
 
@@ -185,8 +189,8 @@ func GetFollowCounts(d Deps) http.HandlerFunc {
 			return
 		}
 		var followers, following int
-		d.Pool.QueryRow(r.Context(), `SELECT count(*) FROM follows WHERE following_id=$1`, userID).Scan(&followers)
-		d.Pool.QueryRow(r.Context(), `SELECT count(*) FROM follows WHERE follower_id=$1`, userID).Scan(&following)
+		_ = d.Pool.QueryRow(r.Context(), `SELECT count(*) FROM follows WHERE following_id=$1`, userID).Scan(&followers)
+		_ = d.Pool.QueryRow(r.Context(), `SELECT count(*) FROM follows WHERE follower_id=$1`, userID).Scan(&following)
 		writeJSON(w, http.StatusOK, map[string]int{"followers": followers, "following": following})
 	}
 }

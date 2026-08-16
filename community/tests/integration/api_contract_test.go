@@ -2,6 +2,7 @@ package integration
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,13 +17,37 @@ var baseURL = func() string {
 	return "http://localhost:8090"
 }()
 
+func getURL(t *testing.T, url string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("build GET %s: %v", url, err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	return resp
+}
+
+func postURL(t *testing.T, url, contentType string, body []byte) *http.Response {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build POST %s: %v", url, err)
+	}
+	req.Header.Set("Content-Type", contentType)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	return resp
+}
+
 func login(t *testing.T, username, password string) string {
 	t.Helper()
 	body, _ := json.Marshal(map[string]string{"username": username, "password": password})
-	resp, err := http.Post(baseURL+"/api/v1/auth/login", "application/json", bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("login: %v", err)
-	}
+	resp := postURL(t, baseURL+"/api/v1/auth/login", "application/json", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("login status: %d", resp.StatusCode)
@@ -43,7 +68,10 @@ func authed(t *testing.T, token, method, path string, body any) *http.Response {
 	} else {
 		b = bytes.NewReader(nil)
 	}
-	req, _ := http.NewRequest(method, baseURL+path, b)
+	req, err := http.NewRequestWithContext(context.Background(), method, baseURL+path, b)
+	if err != nil {
+		t.Fatalf("build %s %s: %v", method, path, err)
+	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
@@ -54,10 +82,7 @@ func authed(t *testing.T, token, method, path string, body any) *http.Response {
 }
 
 func TestHealth(t *testing.T) {
-	resp, err := http.Get(baseURL + "/api/v1/health")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := getURL(t, baseURL+"/api/v1/health")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("health: got %d", resp.StatusCode)
@@ -87,10 +112,7 @@ func TestHealth(t *testing.T) {
 }
 
 func TestReadiness(t *testing.T) {
-	resp, err := http.Get(baseURL + "/api/v1/ready")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := getURL(t, baseURL+"/api/v1/ready")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("ready: got %d", resp.StatusCode)
@@ -113,10 +135,7 @@ func TestAuthLogin(t *testing.T) {
 
 func TestAuthLoginBadCreds(t *testing.T) {
 	body, _ := json.Marshal(map[string]string{"username": "admin", "password": "wrong"})
-	resp, err := http.Post(baseURL+"/api/v1/auth/login", "application/json", bytes.NewReader(body))
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := postURL(t, baseURL+"/api/v1/auth/login", "application/json", body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", resp.StatusCode)
@@ -153,10 +172,7 @@ func TestPostLifecycle(t *testing.T) {
 	}
 
 	// get by slug
-	resp3, err := http.Get(baseURL + "/api/v1/posts/" + created.Slug)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp3 := getURL(t, baseURL+"/api/v1/posts/"+created.Slug)
 	defer resp3.Body.Close()
 	if resp3.StatusCode != http.StatusOK {
 		t.Fatalf("get post: %d", resp3.StatusCode)
@@ -185,10 +201,7 @@ func TestPostLifecycle(t *testing.T) {
 }
 
 func TestListFeed(t *testing.T) {
-	resp, err := http.Get(baseURL + "/api/v1/feed")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := getURL(t, baseURL+"/api/v1/feed")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("feed: %d", resp.StatusCode)
@@ -203,19 +216,13 @@ func TestListFeed(t *testing.T) {
 }
 
 func TestTagsAndSearch(t *testing.T) {
-	resp, err := http.Get(baseURL + "/api/v1/tags")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp := getURL(t, baseURL+"/api/v1/tags")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("tags: %d", resp.StatusCode)
 	}
 
-	resp2, err := http.Get(baseURL + "/api/v1/search?q=opencsirt")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp2 := getURL(t, baseURL+"/api/v1/search?q=opencsirt")
 	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusOK {
 		t.Errorf("search: %d", resp2.StatusCode)

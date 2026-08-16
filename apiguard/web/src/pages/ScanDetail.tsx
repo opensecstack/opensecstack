@@ -449,7 +449,7 @@ function JsonReportRenderer({ report }: JsonReportRendererProps) {
                       {(f.cvss_score as number) > 0 && (
                         <div className="meta">CVSS: <strong>{(f.cvss_score as number).toFixed(1)}</strong></div>
                       )}
-                      {f.remediation && (
+                      {(f.remediation as string) && (
                         <div className="remediation"><strong>Remediation:</strong> {f.remediation as string}</div>
                       )}
                     </div>

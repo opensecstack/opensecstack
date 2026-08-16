@@ -147,7 +147,7 @@ func migrateDown(ctx context.Context, pool *pgxpool.Pool) error {
 	// `last` comes from schema_migrations, which only ever contains versions this
 	// same tool previously wrote after parsing them from local migration filenames
 	// (see migrationVersion/listMigrationFiles); it is not user- or network-controlled.
-	sql, err := os.ReadFile(path) // #nosec G304 G703 -- path derived from trusted local migration filenames, see comment above
+	sql, err := os.ReadFile(path) // #nosec G304,G703 -- path derived from trusted local migration filenames, see comment above
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", path, err)
 	}

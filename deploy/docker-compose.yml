@@ -112,8 +112,11 @@ services:
   threatflow-api:
     image: ghcr.io/opensecstack/threatflow:latest
     build:
-      context: ../threatflow
-      dockerfile: Dockerfile
+      # Repo root, not ../threatflow: go.mod's replace directive for
+      # sdk/go/sinauth points outside threatflow/, so it only resolves if
+      # sdk/ is present in the build context too.
+      context: ..
+      dockerfile: threatflow/Dockerfile
     ports:
       - "8091:8091"
     environment:
@@ -199,10 +202,12 @@ services:
     restart: on-failure
 
   sinauth-migrate:
+    # No `build:` here: sinauth-api below builds this exact image (same
+    # Dockerfile/context) under the same tag. Declaring build here too made
+    # `docker compose build --parallel` bake both as separate targets that
+    # then raced to tag ghcr.io/opensecstack/sinauth:latest, failing with
+    # "image already exists".
     image: ghcr.io/opensecstack/sinauth:latest
-    build:
-      context: ../sinauth
-      dockerfile: Dockerfile
     command: ["migrate", "--dir", "/migrations"]
     volumes:
       - ../sinauth/migrations:/migrations:ro

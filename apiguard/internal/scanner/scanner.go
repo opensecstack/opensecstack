@@ -605,7 +605,7 @@ func (s *Scanner) parseSpec(ctx context.Context, specPath string) (*ParsedSpec, 
 	// operator config); specPath was already sanitized by validateSpecPath and
 	// outputPath is an internally generated temp path. Args are passed as a
 	// structured exec.Cmd argument list, so there is no shell to inject into.
-	cmd := exec.CommandContext(ctx, parserBin, "parse", "--input", specPath, "--output", outputPath) // #nosec G204 G702 -- args are structured/validated, see comment above
+	cmd := exec.CommandContext(ctx, parserBin, "parse", "--input", specPath, "--output", outputPath) // #nosec G204,G702 -- args are structured/validated, see comment above
 	cmd.Stderr = os.Stderr
 
 	s.logger.Debug().

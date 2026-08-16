@@ -16,7 +16,7 @@ type Constituency struct {
 	Name                  string    `json:"name"`
 	Sector                string    `json:"sector"`
 	Country               string    `json:"country"`
-	NIS2Status            string    `json:"kind"`            // web calls this "kind"
+	NIS2Status            string    `json:"kind"` // web calls this "kind"
 	TLPDefault            string    `json:"tlp_default"`
 	PrimaryContactEmail   string    `json:"primary_contact"` // web calls this "primary_contact"
 	SecondaryContactEmail *string   `json:"secondary_contact_email,omitempty"`
@@ -26,7 +26,9 @@ type Constituency struct {
 
 type ConstituencyStore struct{ pool *pgxpool.Pool }
 
-func NewConstituencyStore(pool *pgxpool.Pool) *ConstituencyStore { return &ConstituencyStore{pool: pool} }
+func NewConstituencyStore(pool *pgxpool.Pool) *ConstituencyStore {
+	return &ConstituencyStore{pool: pool}
+}
 
 func (s *ConstituencyStore) Insert(ctx context.Context, c *Constituency) error {
 	if c.ID == uuid.Nil {

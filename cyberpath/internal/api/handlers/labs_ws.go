@@ -12,8 +12,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	dockertypes "github.com/docker/docker/api/types"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog"

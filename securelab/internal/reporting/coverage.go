@@ -13,7 +13,7 @@ import (
 // TechniqueRow holds per-technique detection statistics for a coverage report.
 type TechniqueRow struct {
 	AttackKind    string
-	TechniqueID   string  // MITRE ATT&CK ID
+	TechniqueID   string // MITRE ATT&CK ID
 	TechniqueName string
 	TotalRuns     int
 	DetectedRuns  int

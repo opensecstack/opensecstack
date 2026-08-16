@@ -30,9 +30,13 @@ import (
 // their 500 branches, which a MemoryRepo-backed service can never do.
 type erroringRepo struct{ err error }
 
-func (r *erroringRepo) Insert(context.Context, rules.Rule) (rules.Rule, error) { return rules.Rule{}, r.err }
-func (r *erroringRepo) Get(context.Context, uuid.UUID) (rules.Rule, error)     { return rules.Rule{}, r.err }
-func (r *erroringRepo) Delete(context.Context, uuid.UUID) error                { return r.err }
+func (r *erroringRepo) Insert(context.Context, rules.Rule) (rules.Rule, error) {
+	return rules.Rule{}, r.err
+}
+func (r *erroringRepo) Get(context.Context, uuid.UUID) (rules.Rule, error) {
+	return rules.Rule{}, r.err
+}
+func (r *erroringRepo) Delete(context.Context, uuid.UUID) error { return r.err }
 func (r *erroringRepo) List(context.Context, rules.Type, int, int) ([]rules.Rule, error) {
 	return nil, r.err
 }
@@ -43,7 +47,7 @@ func (r *erroringRepo) Count(context.Context) (int, error) { return 0, r.err }
 
 func newErroringRulesHandler() *handlers.Rules {
 	svc := rules.New(rules.Deps{
-		Repo: &erroringRepo{err: errors.New("connection refused")},
+		Repo:  &erroringRepo{err: errors.New("connection refused")},
 		Plane: dataplane.NewNoopClient(), NodeName: "test", Logger: zerolog.Nop(),
 	})
 	return &handlers.Rules{Service: svc, Logger: zerolog.Nop()}

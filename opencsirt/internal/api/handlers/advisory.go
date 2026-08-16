@@ -8,10 +8,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
+
 	"github.com/opensecstack/opencsirt/internal/advisory"
 	"github.com/opensecstack/opencsirt/internal/auth"
 	"github.com/opensecstack/opencsirt/internal/db"
-	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
 )
 
 type Advisory struct {

@@ -189,11 +189,11 @@ func UserProgress() http.HandlerFunc {
 		id := chi.URLParam(r, "id")
 		log.Info().Str("event", "users.progress").Str("user_id", id).Msg("get progress")
 		writeJSON(w, http.StatusOK, map[string]any{
-			"user_id":  id,
-			"tracks":   []any{},
-			"lessons":  []any{},
-			"quizzes":  []any{},
-			"summary":  map[string]any{"completed": 0, "in_progress": 0},
+			"user_id": id,
+			"tracks":  []any{},
+			"lessons": []any{},
+			"quizzes": []any{},
+			"summary": map[string]any{"completed": 0, "in_progress": 0},
 		})
 	}
 }

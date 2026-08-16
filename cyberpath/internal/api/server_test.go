@@ -127,16 +127,18 @@ func (fakeUserStore) FindByEmail(ctx context.Context, email string) (*handlers.U
 func (fakeUserStore) FindByID(ctx context.Context, id string) (*handlers.User, error) {
 	return nil, handlers.ErrUserNotFound
 }
-func (fakeUserStore) UpdatePasswordHash(ctx context.Context, userID, newHash string) error { return nil }
+func (fakeUserStore) UpdatePasswordHash(ctx context.Context, userID, newHash string) error {
+	return nil
+}
 
 type fakeSessionStore struct{}
 
-func (fakeSessionStore) Create(s auth.Session) error                        { return nil }
+func (fakeSessionStore) Create(s auth.Session) error { return nil }
 func (fakeSessionStore) GetByRefreshToken(refreshToken string) (*auth.Session, error) {
 	return nil, auth.ErrSessionNotFound
 }
-func (fakeSessionStore) Revoke(sessionID string) error    { return nil }
-func (fakeSessionStore) RevokeAll(userID string) error    { return nil }
+func (fakeSessionStore) Revoke(sessionID string) error { return nil }
+func (fakeSessionStore) RevokeAll(userID string) error { return nil }
 func (fakeSessionStore) Validate(refreshToken string) (*auth.Session, error) {
 	return nil, auth.ErrSessionNotFound
 }

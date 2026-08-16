@@ -128,8 +128,8 @@ func (m *fakeMetrics) IncDLQ() {
 	defer m.mu.Unlock()
 	m.dlq++
 }
-func (m *fakeMetrics) IncInFlight()                                     { m.inFlightDelta.Add(1) }
-func (m *fakeMetrics) DecInFlight()                                     { m.inFlightDelta.Add(-1) }
+func (m *fakeMetrics) IncInFlight()                                    { m.inFlightDelta.Add(1) }
+func (m *fakeMetrics) DecInFlight()                                    { m.inFlightDelta.Add(-1) }
 func (m *fakeMetrics) ObserveDeliveryDuration(string, string, float64) {}
 
 // ── helpers ───────────────────────────────────────────────────────
@@ -376,4 +376,3 @@ func (f *fakeWebhookStore) GetWebhook(_ context.Context, id string) (*WebhookRec
 	}
 	return r, nil
 }
-

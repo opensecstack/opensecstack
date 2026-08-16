@@ -48,15 +48,15 @@ type ServerConfig struct {
 
 // DBConfig — PostgreSQL connection settings.
 type DBConfig struct {
-	URL            string `mapstructure:"url"`
-	Host           string `mapstructure:"host"`
-	Port           int    `mapstructure:"port"`
-	Name           string `mapstructure:"name"`
-	User           string `mapstructure:"user"`
-	Password       string `mapstructure:"password"`
-	SSLMode        string `mapstructure:"ssl_mode"`
-	MaxOpenConns   int    `mapstructure:"max_open_conns"`
-	MigrateOnBoot  bool   `mapstructure:"migrate_on_boot"`
+	URL           string `mapstructure:"url"`
+	Host          string `mapstructure:"host"`
+	Port          int    `mapstructure:"port"`
+	Name          string `mapstructure:"name"`
+	User          string `mapstructure:"user"`
+	Password      string `mapstructure:"password"`
+	SSLMode       string `mapstructure:"ssl_mode"`
+	MaxOpenConns  int    `mapstructure:"max_open_conns"`
+	MigrateOnBoot bool   `mapstructure:"migrate_on_boot"`
 }
 
 // EffectiveURL prefers DB.URL when set, otherwise builds from parts.

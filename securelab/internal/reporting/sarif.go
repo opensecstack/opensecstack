@@ -23,11 +23,11 @@ func GenerateSARIF(report CoverageReport) ([]byte, error) {
 			{
 				Tool: sarifTool{
 					Driver: sarifDriver{
-						Name:            "SecureLab",
-						Version:         "1.0.0",
-						InformationURI:  "https://github.com/opensecstack/securelab",
-						Organization:    "opensecstack",
-						Rules:           rules,
+						Name:           "SecureLab",
+						Version:        "1.0.0",
+						InformationURI: "https://github.com/opensecstack/securelab",
+						Organization:   "opensecstack",
+						Rules:          rules,
 					},
 				},
 				Results: results,
@@ -72,8 +72,8 @@ func buildSARIFRules(report CoverageReport) []sarifRule {
 					row.MissedRuns, row.TotalRuns, row.DetectionRate*100,
 				),
 			},
-			HelpURI:          helpURI,
-			DefaultLevel:     sarifDefaultLevel(row.DetectionRate),
+			HelpURI:      helpURI,
+			DefaultLevel: sarifDefaultLevel(row.DetectionRate),
 			Properties: sarifProperties{
 				Tags:             []string{"security", "detection", "mitre-attack", entry.TechniqueID},
 				DetectionRate:    row.DetectionRate,
@@ -172,9 +172,9 @@ type sarifProperties struct {
 }
 
 type sarifResult struct {
-	RuleID    string         `json:"ruleId"`
-	Level     string         `json:"level"`
-	Message   sarifMessage   `json:"message"`
+	RuleID    string          `json:"ruleId"`
+	Level     string          `json:"level"`
+	Message   sarifMessage    `json:"message"`
 	Locations []sarifLocation `json:"locations,omitempty"`
 }
 

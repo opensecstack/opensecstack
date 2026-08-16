@@ -7,20 +7,20 @@ import (
 
 // MockAttackResult represents the outcome of a single attack step.
 type MockAttackResult struct {
-	ScenarioName  string
-	StepKind      string
+	ScenarioName   string
+	StepKind       string
 	MITRETechnique string
-	StartedAt     time.Time
-	CompletedAt   time.Time
-	Success       bool
+	StartedAt      time.Time
+	CompletedAt    time.Time
+	Success        bool
 }
 
 // MockAlert represents a detection alert from a detection platform.
 type MockAlert struct {
-	Platform      string
+	Platform       string
 	MITRETechnique string
-	ReceivedAt    time.Time
-	EnvironmentID string
+	ReceivedAt     time.Time
+	EnvironmentID  string
 }
 
 // DetectionSummary is the output of Verify.

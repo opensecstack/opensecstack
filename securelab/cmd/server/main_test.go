@@ -106,9 +106,9 @@ func TestMigrationsFS_ContainsSortedSQLFiles(t *testing.T) {
 // fakeExecer implements sqlExecer, recording every SQL statement it is asked
 // to execute and optionally failing on a configured statement index.
 type fakeExecer struct {
-	execs     []string
-	failAt    int // -1 disables failure injection
-	failErr   error
+	execs   []string
+	failAt  int // -1 disables failure injection
+	failErr error
 }
 
 func (f *fakeExecer) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {

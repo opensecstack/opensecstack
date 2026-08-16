@@ -30,9 +30,10 @@ type CitadelEmitter interface {
 // rule repository, the data plane, and CITADEL.
 //
 // Lifecycle:
-//   Create  → repo.Insert → dataplane.AddBlocklist/SetRatelimit → citadel.RuleChange(insert)
-//   Delete  → dataplane.Remove…/Clear… → repo.Delete            → citadel.RuleChange(withdraw)
-//   Sweep   → repo.DeleteExpired → dataplane.Remove…/Clear…     → citadel.RuleChange(expire)
+//
+//	Create  → repo.Insert → dataplane.AddBlocklist/SetRatelimit → citadel.RuleChange(insert)
+//	Delete  → dataplane.Remove…/Clear… → repo.Delete            → citadel.RuleChange(withdraw)
+//	Sweep   → repo.DeleteExpired → dataplane.Remove…/Clear…     → citadel.RuleChange(expire)
 //
 // Order matters: on Delete we yank from the data plane *before*
 // deleting the row so a crash mid-call leaves a stale row (recoverable

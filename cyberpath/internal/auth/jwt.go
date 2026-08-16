@@ -142,8 +142,8 @@ type DualVerifier struct {
 	hs256      Verifier // existing HS256 path
 	sinauthURL string   // e.g. "http://localhost:8100"
 
-	once   sync.Once
-	rs256  *sinauth.Client
+	once    sync.Once
+	rs256   *sinauth.Client
 	initErr error
 }
 

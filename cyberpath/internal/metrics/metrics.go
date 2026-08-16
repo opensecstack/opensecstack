@@ -12,10 +12,10 @@ import (
 type Registry struct {
 	prom *prometheus.Registry
 
-	HTTPRequestsTotal      *prometheus.CounterVec
-	HTTPRequestDuration    *prometheus.HistogramVec
-	CompletionsTotal       *prometheus.CounterVec
-	LabSessionsActive      prometheus.Gauge
+	HTTPRequestsTotal       *prometheus.CounterVec
+	HTTPRequestDuration     *prometheus.HistogramVec
+	CompletionsTotal        *prometheus.CounterVec
+	LabSessionsActive       prometheus.Gauge
 	CitadelSubmissionsTotal *prometheus.CounterVec
 
 	// Outbox / CITADEL worker collectors.

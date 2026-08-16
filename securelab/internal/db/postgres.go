@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/securelab/internal/config"
 )
 

@@ -1,10 +1,11 @@
 // Package citadel emits openscrub.* WORM events to CITADEL.
 //
 // Wire format:
-//   POST {BaseURL}/api/v1/worm/emit
-//   Content-Type: application/json
-//   body: {"source":"openscrub","event_type":<event's "type">,
-//          "project_id":<Config.ProjectID>,"payload":<the marshalled event>}
+//
+//	POST {BaseURL}/api/v1/worm/emit
+//	Content-Type: application/json
+//	body: {"source":"openscrub","event_type":<event's "type">,
+//	       "project_id":<Config.ProjectID>,"payload":<the marshalled event>}
 //
 // This is CITADEL's actual WORM ingest endpoint — see
 // citadel/internal/api/handlers/worm.go (emitRequest/emitResponse) for the

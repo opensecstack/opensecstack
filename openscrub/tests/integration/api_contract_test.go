@@ -4,9 +4,10 @@
 // against a running stack. Run with: go test -tags=integration ./tests/integration/...
 //
 // Requires:
-//   OPENSCRUB_API_BASE     — default http://localhost:8087
-//   OPENSCRUB_JWT_SECRET   — must match the secret the server is running with
-//   OPENSCRUB_JWT_ISSUER   — default "openscrub"
+//
+//	OPENSCRUB_API_BASE     — default http://localhost:8087
+//	OPENSCRUB_JWT_SECRET   — must match the secret the server is running with
+//	OPENSCRUB_JWT_ISSUER   — default "openscrub"
 //
 // There is no /api/v1/auth/login endpoint — operator JWTs are minted by
 // the operator's IDP (or by hand for local dev) and supplied via env.

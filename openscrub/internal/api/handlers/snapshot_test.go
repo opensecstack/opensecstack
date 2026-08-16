@@ -16,8 +16,8 @@ import (
 )
 
 type fakeRulesSource struct {
-	bl, rl, sc     int
-	v4, v6         int
+	bl, rl, sc         int
+	v4, v6             int
 	countErr, splitErr error
 }
 

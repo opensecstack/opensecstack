@@ -13,14 +13,15 @@ import (
 
 // Watcher polls the citadel_outbox table for pending events and submits
 // them through the Client. State transitions:
-//   pending → sending (MarkSending before submit)
-//   sending → sent     (MarkSent on Confirmation{Delivered})
-//   sending → failed   (MarkFailed on Confirmation{Dropped} after retries)
+//
+//	pending → sending (MarkSending before submit)
+//	sending → sent     (MarkSent on Confirmation{Delivered})
+//	sending → failed   (MarkFailed on Confirmation{Dropped} after retries)
 type Watcher struct {
-	store    *db.OutboxStore
-	client   *Client
-	tick     time.Duration
-	logger   zerolog.Logger
+	store  *db.OutboxStore
+	client *Client
+	tick   time.Duration
+	logger zerolog.Logger
 
 	mu       sync.Mutex
 	inFlight map[string]uuid.UUID // event_id → outbox row id

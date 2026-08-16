@@ -9,10 +9,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
+
 	"github.com/opensecstack/opencsirt/internal/db"
 	"github.com/opensecstack/opencsirt/internal/incident"
 	"github.com/opensecstack/opencsirt/internal/integrations"
-	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
 )
 
 type Incident struct {

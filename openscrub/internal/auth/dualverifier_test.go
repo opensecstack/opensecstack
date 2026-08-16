@@ -47,7 +47,7 @@ func newFakeSinauthIssuer(t *testing.T) *fakeSinauthIssuer {
 		})
 	})
 	mux.HandleFunc("/.well-known/jwks.json", func(w http.ResponseWriter, r *http.Request) {
-		n := base64.RawURLEncoding.EncodeToString(key.PublicKey.N.Bytes())
+		n := base64.RawURLEncoding.EncodeToString(key.N.Bytes())
 		e := base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.PublicKey.E)).Bytes())
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -114,8 +114,8 @@ func TestDualVerifierRS256DelegatesToSinauthAndMapsRole(t *testing.T) {
 func TestDualVerifierRS256FallsBackToClientRolesWhenRoleEmpty(t *testing.T) {
 	iss := newFakeSinauthIssuer(t)
 	tok := iss.mintRS256(t, map[string]any{
-		"sub":           "sin-user-2",
-		"client_roles":  []string{"analyst", "readonly"},
+		"sub":          "sin-user-2",
+		"client_roles": []string{"analyst", "readonly"},
 	})
 
 	dv := NewDualVerifier(NewHS256Verifier(nil, ""), iss.srv.URL)

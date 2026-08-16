@@ -60,7 +60,7 @@ type Stats struct {
 	// SynCookiesSent — count of XDP-generated SYN-cookie SYN/ACKs since
 	// loader start. Source of truth is rust/dataplane/src/stats.rs;
 	// older loaders that predate the field send 0 (decode is tolerant).
-	SynCookiesSent     uint64 `json:"syn_cookies_sent"`
+	SynCookiesSent uint64 `json:"syn_cookies_sent"`
 }
 
 // NoopClient is a cap-less implementation safe to use in tests.

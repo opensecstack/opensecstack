@@ -34,13 +34,13 @@ func NewMassAssignmentAttack() *MassAssignmentAttack {
 
 // extraFields are the over-privileged fields injected into every request body.
 var extraFields = map[string]any{
-	"role":          "admin",
-	"is_admin":      true,
-	"price":         0,
-	"discount":      100,
-	"balance":       999999,
-	"credits":       999999,
-	"verified":      true,
+	"role":           "admin",
+	"is_admin":       true,
+	"price":          0,
+	"discount":       100,
+	"balance":        999999,
+	"credits":        999999,
+	"verified":       true,
 	"email_verified": true,
 }
 

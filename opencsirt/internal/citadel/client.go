@@ -123,9 +123,9 @@ type Client struct {
 	logger      zerolog.Logger
 
 	// Async retry buffer
-	queue       chan *Envelope
-	confirms    chan Confirmation
-	maxRetries  int
+	queue      chan *Envelope
+	confirms   chan Confirmation
+	maxRetries int
 }
 
 type Envelope struct {

@@ -31,10 +31,10 @@ const (
 	userC3 = "cccccccc-0003-0003-0003-cccccccccccc"
 
 	// placeholder resource IDs seeded for tenantB
-	trackBID   = "dddddddd-b001-b001-b001-bbbbbbbbbbbb"
-	lessonBID  = "dddddddd-b002-b002-b002-bbbbbbbbbbbb"
-	certBID    = "dddddddd-b003-b003-b003-bbbbbbbbbbbb"
-	enrollBID  = "dddddddd-b004-b004-b004-bbbbbbbbbbbb"
+	trackBID  = "dddddddd-b001-b001-b001-bbbbbbbbbbbb"
+	lessonBID = "dddddddd-b002-b002-b002-bbbbbbbbbbbb"
+	certBID   = "dddddddd-b003-b003-b003-bbbbbbbbbbbb"
+	enrollBID = "dddddddd-b004-b004-b004-bbbbbbbbbbbb"
 )
 
 func baseURL() string {

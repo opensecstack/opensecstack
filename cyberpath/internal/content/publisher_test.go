@@ -17,14 +17,14 @@ import (
 
 func TestParseVersionMajor(t *testing.T) {
 	cases := map[string]int{
-		"":        1,
-		"1.4.0":   1,
-		"2":       2,
-		"10.0.0":  10,
-		"0.9.0":   1,
-		"abc":     1,
-		"3.x.y":   3,
-		"-1.0.0":  1,
+		"":       1,
+		"1.4.0":  1,
+		"2":      2,
+		"10.0.0": 10,
+		"0.9.0":  1,
+		"abc":    1,
+		"3.x.y":  3,
+		"-1.0.0": 1,
 	}
 	for in, want := range cases {
 		if got := parseVersionMajor(in); got != want {

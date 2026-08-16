@@ -49,7 +49,7 @@ func newFakeSinauthServer(t *testing.T, key *rsa.PrivateKey, kid string) *httpte
 						"kid": kid,
 						"kty": "RSA",
 						"alg": "RS256",
-						"n":   base64.RawURLEncoding.EncodeToString(key.PublicKey.N.Bytes()),
+						"n":   base64.RawURLEncoding.EncodeToString(key.N.Bytes()),
 						"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.PublicKey.E)).Bytes()),
 					},
 				},
@@ -242,10 +242,10 @@ func TestAuthenticate_RS256_EmptyRoleAllowedForServiceAccounts(t *testing.T) {
 	h := mw(next)
 
 	tok := mintRS256JWT(t, key, "key-1", jwt.MapClaims{
-		"sub":  "service-account-1",
-		"iss":  server.URL,
-		"exp":  time.Now().Add(time.Hour).Unix(),
-		"iat":  time.Now().Unix(),
+		"sub": "service-account-1",
+		"iss": server.URL,
+		"exp": time.Now().Add(time.Hour).Unix(),
+		"iat": time.Now().Unix(),
 		// no "role"
 	})
 

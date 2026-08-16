@@ -42,8 +42,8 @@ func TestGenerateSARIF_ValidJSONWithSchemaAndVersion(t *testing.T) {
 func TestGenerateSARIF_OneRulePerMissedTechnique(t *testing.T) {
 	report := reporting.CoverageReport{
 		Rows: []reporting.TechniqueRow{
-			{AttackKind: "bola", TechniqueID: "T1078", TotalRuns: 4, DetectedRuns: 4, MissedRuns: 0, DetectionRate: 1.0},   // fully detected -> no rule
-			{AttackKind: "ssrf", TechniqueID: "T1090", TotalRuns: 4, DetectedRuns: 0, MissedRuns: 4, DetectionRate: 0},    // never detected -> rule, error level
+			{AttackKind: "bola", TechniqueID: "T1078", TotalRuns: 4, DetectedRuns: 4, MissedRuns: 0, DetectionRate: 1.0},          // fully detected -> no rule
+			{AttackKind: "ssrf", TechniqueID: "T1090", TotalRuns: 4, DetectedRuns: 0, MissedRuns: 4, DetectionRate: 0},            // never detected -> rule, error level
 			{AttackKind: "udpflood", TechniqueID: "T1498.001", TotalRuns: 4, DetectedRuns: 3, MissedRuns: 1, DetectionRate: 0.75}, // partially missed -> rule, note level
 		},
 	}

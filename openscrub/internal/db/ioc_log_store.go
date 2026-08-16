@@ -42,7 +42,7 @@ func (s *IOCIngestLogStore) Insert(ctx context.Context, source, sha string, coun
 	           VALUES ($1, $2, $3)
 	           RETURNING id, ingested_at`
 	var (
-		id        uuid.UUID
+		id         uuid.UUID
 		ingestedAt time.Time
 	)
 	err := s.pool.QueryRow(ctx, q, source, sha, count).Scan(&id, &ingestedAt)

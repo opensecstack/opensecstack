@@ -14,21 +14,21 @@ import (
 
 // ValidStepKinds is the exhaustive set of recognised attack primitive kinds.
 var ValidStepKinds = map[string]struct{}{
-	"bola":             {},
-	"auth_bypass":      {},
-	"mass_assignment":  {},
+	"bola":              {},
+	"auth_bypass":       {},
+	"mass_assignment":   {},
 	"rate_limit_bypass": {},
-	"ssrf":             {},
-	"misconfig":        {},
-	"syn_flood":        {},
-	"udp_flood":        {},
-	"http_flood":       {},
-	"slowloris":        {},
-	"port_scan":        {},
-	"endpoint_enum":    {},
-	"version_detect":   {},
-	"data_exfil":       {},
-	"dns_tunnel":       {},
+	"ssrf":              {},
+	"misconfig":         {},
+	"syn_flood":         {},
+	"udp_flood":         {},
+	"http_flood":        {},
+	"slowloris":         {},
+	"port_scan":         {},
+	"endpoint_enum":     {},
+	"version_detect":    {},
+	"data_exfil":        {},
+	"dns_tunnel":        {},
 }
 
 // productionBlocklist is the set of hostname patterns that must never be

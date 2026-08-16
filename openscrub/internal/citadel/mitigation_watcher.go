@@ -101,7 +101,7 @@ func NewWatcher(c *Client, store MitigationStore, cfg WatcherConfig, logger zero
 		tickEvery:   cfg.TickEvery,
 		nodeName:    cfg.NodeName,
 		logger:      logger.With().Str("component", "citadel-watcher").Logger(),
-		inFlight:   make(map[string]uuid.UUID),
+		inFlight:    make(map[string]uuid.UUID),
 	}
 }
 
@@ -200,13 +200,13 @@ func (w *Watcher) applyConfirmation(ctx context.Context, d DeliveryConfirmation)
 // Tick performs one sweep. Public so unit tests can drive it directly.
 //
 // Contract:
-//   * SubmitDelivered  → MarkSent immediately (durable receipt).
-//   * SubmitDryRun     → MarkSent (no real CITADEL endpoint to wait on).
-//   * SubmitQueued     → leave row 'pending' + record in_flight binding;
-//                        the confirmation drainer flips state on the
-//                        async outcome.
-//   * SubmitDropped    → MarkFailed immediately; ops surface metric.
-//   * permanent error  → MarkFailed; row remains for triage.
+//   - SubmitDelivered  → MarkSent immediately (durable receipt).
+//   - SubmitDryRun     → MarkSent (no real CITADEL endpoint to wait on).
+//   - SubmitQueued     → leave row 'pending' + record in_flight binding;
+//     the confirmation drainer flips state on the
+//     async outcome.
+//   - SubmitDropped    → MarkFailed immediately; ops surface metric.
+//   - permanent error  → MarkFailed; row remains for triage.
 func (w *Watcher) Tick(ctx context.Context) error {
 	pending, err := w.store.PendingForEmit(ctx, w.minDuration, 100)
 	if err != nil {

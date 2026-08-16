@@ -13,15 +13,15 @@ import (
 
 // Certification mirrors a row in `certifications`.
 type Certification struct {
-	ID         uuid.UUID  `json:"id"`
-	UserID     uuid.UUID  `json:"user_id"`
-	TrackID    uuid.UUID  `json:"track_id"`
-	Serial     string     `json:"serial"`
-	IssuedAt   time.Time  `json:"issued_at"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	PDFPath    string     `json:"pdf_path,omitempty"`
-	Signature  string     `json:"signature,omitempty"`
-	Revoked    bool       `json:"revoked"`
+	ID        uuid.UUID  `json:"id"`
+	UserID    uuid.UUID  `json:"user_id"`
+	TrackID   uuid.UUID  `json:"track_id"`
+	Serial    string     `json:"serial"`
+	IssuedAt  time.Time  `json:"issued_at"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	PDFPath   string     `json:"pdf_path,omitempty"`
+	Signature string     `json:"signature,omitempty"`
+	Revoked   bool       `json:"revoked"`
 }
 
 // CertificationStore wraps a pgx pool for `certifications`.

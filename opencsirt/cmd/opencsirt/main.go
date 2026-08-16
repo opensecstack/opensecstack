@@ -14,6 +14,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
+
 	"github.com/opensecstack/opencsirt/internal/advisory"
 	"github.com/opensecstack/opencsirt/internal/api"
 	"github.com/opensecstack/opencsirt/internal/api/handlers"
@@ -25,7 +27,6 @@ import (
 	"github.com/opensecstack/opencsirt/internal/incident"
 	"github.com/opensecstack/opencsirt/internal/integrations"
 	"github.com/opensecstack/opencsirt/internal/version"
-	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
 )
 
 func main() {
@@ -280,4 +281,3 @@ func vertGuardIncidentInput(advisoryID string, payload map[string]any) incident.
 		Metadata:    map[string]any{"vertguard_advisory_id": advisoryID, "payload": payload},
 	}
 }
-

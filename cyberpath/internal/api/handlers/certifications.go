@@ -20,11 +20,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog"
 
+	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
+
 	"github.com/opensecstack/cyberpath/internal/auth"
 	"github.com/opensecstack/cyberpath/internal/cert"
 	"github.com/opensecstack/cyberpath/internal/citadel"
 	"github.com/opensecstack/cyberpath/internal/db"
-	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
 )
 
 // ── interfaces ─────────────────────────────────────────────────────────────────
@@ -421,7 +422,7 @@ func (h *CertificationsHandler) enqueueIssuedEvent(ctx context.Context, c *db.Ce
 		CertificationLevel: "track-cert",
 		IssuedAt:           c.IssuedAt,
 		ExpiresAt:          c.ExpiresAt,
-		SignedBy:            "ed25519:" + h.Signer.KeyID(),
+		SignedBy:           "ed25519:" + h.Signer.KeyID(),
 		CorrelationID:      uuid.NewString(),
 	}
 	if _, err := citadel.EnqueueCertificationIssued(ctx, h.Outbox, ev); err != nil {

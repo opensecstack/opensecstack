@@ -48,9 +48,9 @@ func (s *fakeMitStore) OpenRuleIDs(context.Context) (map[uuid.UUID]struct{}, err
 // past the 5s assertion.
 type slowStatsClient struct {
 	*dataplane.NoopClient
-	delay  time.Duration
-	drops  uint64
-	calls  int64
+	delay   time.Duration
+	drops   uint64
+	calls   int64
 	failAll bool
 }
 

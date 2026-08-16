@@ -22,23 +22,23 @@ import "encoding/json"
 // IDs (e.g. "art21.g") — see docs/nis2-integration.md for the full
 // allowlist; validator.go enforces it.
 type TrackYAML struct {
-	ID              string             `yaml:"id" json:"id"`
-	Version         string             `yaml:"version" json:"version"`
-	TitleSQ         string             `yaml:"-" json:"title_sq"`
-	TitleEN         string             `yaml:"-" json:"title_en"`
-	Title           BilingualText      `yaml:"title" json:"-"`
-	DescriptionSQ   string             `yaml:"-" json:"description_sq"`
-	DescriptionEN   string             `yaml:"-" json:"description_en"`
-	Description     BilingualText      `yaml:"description" json:"-"`
-	Audience        []string           `yaml:"audience" json:"audience"`
-	NIS2Mappings    []string           `yaml:"-" json:"nis2_mappings"`
-	NIS2Raw         NIS2MappingsYAML   `yaml:"nis2_mappings" json:"-"`
-	Prerequisites   []string           `yaml:"prerequisites" json:"prerequisites"`
-	DurationMinutes int                `yaml:"duration_minutes" json:"duration_minutes"`
-	LanguageSource  string             `yaml:"language_source" json:"language_source"`
-	Modules         []ModuleYAML       `yaml:"modules" json:"modules"`
-	Certification   CertificationSpec  `yaml:"certification" json:"certification"`
-	ContentHash     string             `yaml:"content_hash" json:"content_hash"`
+	ID              string               `yaml:"id" json:"id"`
+	Version         string               `yaml:"version" json:"version"`
+	TitleSQ         string               `yaml:"-" json:"title_sq"`
+	TitleEN         string               `yaml:"-" json:"title_en"`
+	Title           BilingualText        `yaml:"title" json:"-"`
+	DescriptionSQ   string               `yaml:"-" json:"description_sq"`
+	DescriptionEN   string               `yaml:"-" json:"description_en"`
+	Description     BilingualText        `yaml:"description" json:"-"`
+	Audience        []string             `yaml:"audience" json:"audience"`
+	NIS2Mappings    []string             `yaml:"-" json:"nis2_mappings"`
+	NIS2Raw         NIS2MappingsYAML     `yaml:"nis2_mappings" json:"-"`
+	Prerequisites   []string             `yaml:"prerequisites" json:"prerequisites"`
+	DurationMinutes int                  `yaml:"duration_minutes" json:"duration_minutes"`
+	LanguageSource  string               `yaml:"language_source" json:"language_source"`
+	Modules         []ModuleYAML         `yaml:"modules" json:"modules"`
+	Certification   CertificationSpec    `yaml:"certification" json:"certification"`
+	ContentHash     string               `yaml:"content_hash" json:"content_hash"`
 	Changelog       []ChangelogEntryYAML `yaml:"changelog" json:"changelog,omitempty"`
 }
 
@@ -74,17 +74,17 @@ type ChangelogEntryYAML struct {
 // and the resulting body markdown is folded into LessonYAML.BodyMarkdown.
 // Quiz / Lab are referenced by slug; loader.LoadTrack resolves them.
 type ModuleYAML struct {
-	ID         string       `yaml:"id" json:"id"`
-	Order      int          `yaml:"order" json:"order"`
-	TitleSQ    string       `yaml:"-" json:"title_sq"`
-	TitleEN    string       `yaml:"-" json:"title_en"`
+	ID         string        `yaml:"id" json:"id"`
+	Order      int           `yaml:"order" json:"order"`
+	TitleSQ    string        `yaml:"-" json:"title_sq"`
+	TitleEN    string        `yaml:"-" json:"title_en"`
 	Title      BilingualText `yaml:"title" json:"-"`
-	LessonRefs []string     `yaml:"lessons" json:"-"`
-	Lessons    []LessonYAML `yaml:"-" json:"lessons"`
-	QuizRef    string       `yaml:"quiz" json:"-"`
-	Quiz       *QuizYAML    `yaml:"-" json:"quiz,omitempty"`
-	LabRef     string       `yaml:"lab" json:"-"`
-	Lab        *LabRef      `yaml:"-" json:"lab,omitempty"`
+	LessonRefs []string      `yaml:"lessons" json:"-"`
+	Lessons    []LessonYAML  `yaml:"-" json:"lessons"`
+	QuizRef    string        `yaml:"quiz" json:"-"`
+	Quiz       *QuizYAML     `yaml:"-" json:"quiz,omitempty"`
+	LabRef     string        `yaml:"lab" json:"-"`
+	Lab        *LabRef       `yaml:"-" json:"lab,omitempty"`
 }
 
 // LessonYAML is the parsed lesson markdown frontmatter + body.
@@ -118,12 +118,12 @@ type LessonFrontmatter struct {
 
 // QuizYAML is the parsed `quizzes/<id>.yaml`.
 type QuizYAML struct {
-	ID               string         `yaml:"id" json:"id"`
-	TitleSQ          string         `yaml:"-" json:"title_sq"`
-	TitleEN          string         `yaml:"-" json:"title_en"`
-	Title            BilingualText  `yaml:"title" json:"-"`
-	Randomise        bool           `yaml:"randomise" json:"randomise"`
-	RandomiseChoices bool           `yaml:"randomise_choices" json:"randomise_choices"`
+	ID               string        `yaml:"id" json:"id"`
+	TitleSQ          string        `yaml:"-" json:"title_sq"`
+	TitleEN          string        `yaml:"-" json:"title_en"`
+	Title            BilingualText `yaml:"title" json:"-"`
+	Randomise        bool          `yaml:"randomise" json:"randomise"`
+	RandomiseChoices bool          `yaml:"randomise_choices" json:"randomise_choices"`
 	// PassThreshold accepts either an integer percentage (0..100) or a
 	// fractional 0..1 form per docs/track-content-guide.md. Loader
 	// normalises it to integer-percentage on the way in.
@@ -155,17 +155,17 @@ type QuestionYAML struct {
 
 // Choice is one option inside a multiple-choice / scenario question.
 type Choice struct {
-	ID      string        `yaml:"id" json:"id"`
-	TextSQ  string        `yaml:"-" json:"text_sq"`
-	TextEN  string        `yaml:"-" json:"text_en"`
-	Text    BilingualText `yaml:"text" json:"-"`
+	ID     string        `yaml:"id" json:"id"`
+	TextSQ string        `yaml:"-" json:"text_sq"`
+	TextEN string        `yaml:"-" json:"text_en"`
+	Text   BilingualText `yaml:"text" json:"-"`
 }
 
 // CertificationSpec is the `track.yaml.certification` block.
 type CertificationSpec struct {
-	Offered             bool   `yaml:"offered" json:"offered"`
-	Level               string `yaml:"level" json:"level"`
-	ExpiresAfterMonths  int    `yaml:"expires_after_months" json:"expires_after_months"`
+	Offered            bool   `yaml:"offered" json:"offered"`
+	Level              string `yaml:"level" json:"level"`
+	ExpiresAfterMonths int    `yaml:"expires_after_months" json:"expires_after_months"`
 }
 
 // LabRef is the in-track reference to a lab. The actual lab body lives

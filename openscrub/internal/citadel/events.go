@@ -40,10 +40,10 @@ type MitigationEvent struct {
 
 // RuleChangeOperation values per docs/citadel-integration.md.
 const (
-	OpInsert        = "insert"
-	OpWithdraw      = "withdraw"
-	OpExpire        = "expire"
-	OpIOCPullApply  = "ioc_pull_apply"
+	OpInsert       = "insert"
+	OpWithdraw     = "withdraw"
+	OpExpire       = "expire"
+	OpIOCPullApply = "ioc_pull_apply"
 )
 
 // RuleChangeEvent — emitted on every rule lifecycle transition.

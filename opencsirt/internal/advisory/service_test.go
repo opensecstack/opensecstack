@@ -212,14 +212,14 @@ func TestNewServiceReturnsUsableService(t *testing.T) {
 // that the DB-error-only tests above (using unreachablePool) can never
 // reach, without touching internal/db or requiring a live Postgres.
 type fakeAdvisoryStore struct {
-	insertErr  error
-	getErr     error
-	publishErr error
+	insertErr   error
+	getErr      error
+	publishErr  error
 	withdrawErr error
-	listErr    error
+	listErr     error
 
-	inserted *db.Advisory
-	advisory *db.Advisory // returned by Get, and mutated by Publish/Withdraw if non-nil
+	inserted  *db.Advisory
+	advisory  *db.Advisory // returned by Get, and mutated by Publish/Withdraw if non-nil
 	listItems []*db.Advisory
 	listTotal int
 

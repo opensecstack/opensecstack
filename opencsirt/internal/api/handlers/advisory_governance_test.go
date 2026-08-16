@@ -12,8 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
-	"github.com/opensecstack/opencsirt/internal/auth"
 	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
+
+	"github.com/opensecstack/opencsirt/internal/auth"
 )
 
 // TestAdvisoryPublish_CitadelRefuseBlocksAndSurfacesReason proves two

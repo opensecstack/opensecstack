@@ -18,39 +18,39 @@ type Config struct {
 	DevMode  bool
 
 	// DB
-	DBURL       string
-	DBMaxConns  int
+	DBURL      string
+	DBMaxConns int
 
 	// Auth
-	JWTSecret       []byte
-	JWTIssuer       string
-	TokenTTL        time.Duration
-	Users           string // user:role:sha256hex,...
-	PasswordPepper  string
+	JWTSecret      []byte
+	JWTIssuer      string
+	TokenTTL       time.Duration
+	Users          string // user:role:sha256hex,...
+	PasswordPepper string
 	// SinauthURL is the sinauth issuer URL for RS256 SSO token verification.
 	// When a bearer token carries alg=RS256, it is verified against this endpoint.
 	// Env var: OPENCSIRT_SINAUTH_URL (default http://localhost:8100).
 	SinauthURL string
 
 	// CITADEL
-	CitadelAPIURL     string
+	CitadelAPIURL      string
 	CitadelHMACSecrets [][]byte
-	CitadelKeyID      string
+	CitadelKeyID       string
 	// CitadelProjectID is forwarded as project_id on every WORM emit and on
 	// every Kerkese governance evaluation submitted to MARSHAL.
 	CitadelProjectID string
 	CitadelDryRun    bool
 
 	// ThreatFlow
-	ThreatFlowAPIURL    string
-	ThreatFlowAPIKey    string
-	ThreatFlowInterval  time.Duration
+	ThreatFlowAPIURL   string
+	ThreatFlowAPIKey   string
+	ThreatFlowInterval time.Duration
 
 	// NIS2 Compass
 	NIS2CompassAPIURL string
 
 	// IRFlow webhook
-	IRFlowWebhookSecret string
+	IRFlowWebhookSecret  string
 	IRFlowStrictSeverity bool // reject rather than coerce unknown severity values
 
 	// VertGuard
@@ -64,10 +64,10 @@ type Config struct {
 	TaranisInterval   time.Duration
 
 	// Python advisory subsystem
-	AdvisoryServiceURL  string
-	AdvisoryServiceJWT  string
-	AdvisoryPyHost      string
-	AdvisoryPyPort      string
+	AdvisoryServiceURL string
+	AdvisoryServiceJWT string
+	AdvisoryPyHost     string
+	AdvisoryPyPort     string
 
 	// Mitigation/incident timing
 	OutboxTickInterval time.Duration
@@ -75,26 +75,26 @@ type Config struct {
 
 func FromEnv() (*Config, error) {
 	c := &Config{
-		HTTPAddr:           env("OPENCSIRT_HTTP_ADDR", ":8088"),
-		Node:               env("OPENCSIRT_NODE", "opencsirt-0"),
-		DevMode:            envBool("OPENCSIRT_DEV_MODE", false),
-		DBURL:              env("OPENCSIRT_DB_URL", ""),
-		DBMaxConns:         envInt("OPENCSIRT_DB_MAX_CONNS", 16),
-		JWTSecret:          []byte(env("OPENCSIRT_JWT_SECRET", "")),
-		JWTIssuer:          env("OPENCSIRT_JWT_ISSUER", "opencsirt"),
-		TokenTTL:           envDuration("OPENCSIRT_TOKEN_TTL", 12*time.Hour),
-		Users:              env("OPENCSIRT_USERS", ""),
-		PasswordPepper:     env("OPENCSIRT_PASSWORD_PEPPER", ""),
-		SinauthURL:         env("OPENCSIRT_SINAUTH_URL", "http://localhost:8100"),
-		CitadelAPIURL:      env("OPENCSIRT_CITADEL_API_URL", ""),
-		CitadelHMACSecrets: parseSecrets(env("OPENCSIRT_CITADEL_HMAC_SECRETS", "")),
-		CitadelKeyID:       env("OPENCSIRT_CITADEL_KEY_ID", "opencsirt-1"),
-		CitadelProjectID:   env("OPENCSIRT_CITADEL_PROJECT_ID", "opencsirt"),
-		CitadelDryRun:      envBool("OPENCSIRT_CITADEL_DRY_RUN", true),
-		ThreatFlowAPIURL:   env("OPENCSIRT_THREATFLOW_API_URL", ""),
-		ThreatFlowAPIKey:   env("OPENCSIRT_THREATFLOW_API_KEY", ""),
-		ThreatFlowInterval: envDuration("OPENCSIRT_THREATFLOW_INTERVAL", 15*time.Minute),
-		NIS2CompassAPIURL:  env("OPENCSIRT_NIS2COMPASS_API_URL", ""),
+		HTTPAddr:             env("OPENCSIRT_HTTP_ADDR", ":8088"),
+		Node:                 env("OPENCSIRT_NODE", "opencsirt-0"),
+		DevMode:              envBool("OPENCSIRT_DEV_MODE", false),
+		DBURL:                env("OPENCSIRT_DB_URL", ""),
+		DBMaxConns:           envInt("OPENCSIRT_DB_MAX_CONNS", 16),
+		JWTSecret:            []byte(env("OPENCSIRT_JWT_SECRET", "")),
+		JWTIssuer:            env("OPENCSIRT_JWT_ISSUER", "opencsirt"),
+		TokenTTL:             envDuration("OPENCSIRT_TOKEN_TTL", 12*time.Hour),
+		Users:                env("OPENCSIRT_USERS", ""),
+		PasswordPepper:       env("OPENCSIRT_PASSWORD_PEPPER", ""),
+		SinauthURL:           env("OPENCSIRT_SINAUTH_URL", "http://localhost:8100"),
+		CitadelAPIURL:        env("OPENCSIRT_CITADEL_API_URL", ""),
+		CitadelHMACSecrets:   parseSecrets(env("OPENCSIRT_CITADEL_HMAC_SECRETS", "")),
+		CitadelKeyID:         env("OPENCSIRT_CITADEL_KEY_ID", "opencsirt-1"),
+		CitadelProjectID:     env("OPENCSIRT_CITADEL_PROJECT_ID", "opencsirt"),
+		CitadelDryRun:        envBool("OPENCSIRT_CITADEL_DRY_RUN", true),
+		ThreatFlowAPIURL:     env("OPENCSIRT_THREATFLOW_API_URL", ""),
+		ThreatFlowAPIKey:     env("OPENCSIRT_THREATFLOW_API_KEY", ""),
+		ThreatFlowInterval:   envDuration("OPENCSIRT_THREATFLOW_INTERVAL", 15*time.Minute),
+		NIS2CompassAPIURL:    env("OPENCSIRT_NIS2COMPASS_API_URL", ""),
 		IRFlowWebhookSecret:  env("OPENCSIRT_IRFLOW_WEBHOOK_SECRET", ""),
 		IRFlowStrictSeverity: envBool("OPENCSIRT_IRFLOW_STRICT_SEVERITY", false),
 		VertGuardAPIURL:      env("OPENCSIRT_VERTGUARD_API_URL", ""),
@@ -107,7 +107,7 @@ func FromEnv() (*Config, error) {
 		AdvisoryServiceJWT:   env("OPENCSIRT_ADVISORY_SERVICE_JWT", ""),
 		AdvisoryPyHost:       env("OPENCSIRT_PY_HOST", "localhost"),
 		AdvisoryPyPort:       env("OPENCSIRT_PY_PORT", "8089"),
-		OutboxTickInterval: envDuration("OPENCSIRT_OUTBOX_TICK", 10*time.Second),
+		OutboxTickInterval:   envDuration("OPENCSIRT_OUTBOX_TICK", 10*time.Second),
 	}
 	return c, c.Validate()
 }

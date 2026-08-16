@@ -195,8 +195,8 @@ func TestValidate_ProductionRequiresDBURL(t *testing.T) {
 
 func TestValidate_CitadelRequiresSecretsWhenNotDryRun(t *testing.T) {
 	c := &Config{
-		DevMode:        true,
-		CitadelDryRun:  false,
+		DevMode:            true,
+		CitadelDryRun:      false,
 		CitadelHMACSecrets: nil,
 	}
 	if err := c.Validate(); err == nil {

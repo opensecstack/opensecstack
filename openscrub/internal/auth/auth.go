@@ -138,8 +138,8 @@ type DualVerifier struct {
 	hs256      *HS256Verifier
 	sinauthURL string
 
-	once   sync.Once
-	client *sinauth.Client
+	once    sync.Once
+	client  *sinauth.Client
 	initErr error
 }
 

@@ -17,11 +17,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
+
 	"github.com/opensecstack/cyberpath/internal/auth"
 	"github.com/opensecstack/cyberpath/internal/cert"
 	"github.com/opensecstack/cyberpath/internal/citadel"
 	"github.com/opensecstack/cyberpath/internal/db"
-	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
 )
 
 // ── context helpers ───────────────────────────────────────────────────────────
@@ -48,10 +49,10 @@ type fakeCertStore struct {
 	userTrack  map[string]*db.Certification // key: userID+"|"+trackID
 	listResult []db.Certification
 
-	issueErr        error
-	setSignatureErr error
-	listByUserErr   error
-	revokeErr       error
+	issueErr          error
+	setSignatureErr   error
+	listByUserErr     error
+	revokeErr         error
 	getByUserTrackErr error
 }
 

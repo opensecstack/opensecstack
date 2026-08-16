@@ -10,28 +10,28 @@ import (
 
 // Snapshot is the JSON metrics endpoint that the dashboard polls.
 type Snapshot struct {
-	Incidents     *db.IncidentStore
-	Advisories    *db.AdvisoryStore
-	Outbox        *db.OutboxStore
-	IOCIngest     *db.IOCIngestStore
-	QueueDepth    func() int
-	HealthCheck   func(context.Context) bool
-	NodeName      string
-	Version       string
+	Incidents   *db.IncidentStore
+	Advisories  *db.AdvisoryStore
+	Outbox      *db.OutboxStore
+	IOCIngest   *db.IOCIngestStore
+	QueueDepth  func() int
+	HealthCheck func(context.Context) bool
+	NodeName    string
+	Version     string
 }
 
 type snapshotResponse struct {
-	IncidentsByStatus    map[string]int `json:"incidents_by_status"`
-	AdvisoriesByState    map[string]int `json:"advisories_by_state"`
-	OutboxPending        int            `json:"outbox_pending"`
-	OutboxFailed         int            `json:"outbox_failed"`
-	CitadelQueueDepth    int            `json:"citadel_queue_depth"`
-	IOCsLastIngestedAt   *time.Time     `json:"iocs_last_ingested_at,omitempty"`
-	IOCsLastBundleSize   int            `json:"iocs_last_bundle_size"`
-	AdvisoryServiceUp    bool           `json:"advisory_service_up"`
-	Node                 string         `json:"node"`
-	Version              string         `json:"version"`
-	SnapshotAt           time.Time      `json:"snapshot_at"`
+	IncidentsByStatus  map[string]int `json:"incidents_by_status"`
+	AdvisoriesByState  map[string]int `json:"advisories_by_state"`
+	OutboxPending      int            `json:"outbox_pending"`
+	OutboxFailed       int            `json:"outbox_failed"`
+	CitadelQueueDepth  int            `json:"citadel_queue_depth"`
+	IOCsLastIngestedAt *time.Time     `json:"iocs_last_ingested_at,omitempty"`
+	IOCsLastBundleSize int            `json:"iocs_last_bundle_size"`
+	AdvisoryServiceUp  bool           `json:"advisory_service_up"`
+	Node               string         `json:"node"`
+	Version            string         `json:"version"`
+	SnapshotAt         time.Time      `json:"snapshot_at"`
 }
 
 func (h *Snapshot) Get(w http.ResponseWriter, r *http.Request) {

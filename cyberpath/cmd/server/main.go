@@ -20,6 +20,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
+	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
+
 	"github.com/opensecstack/cyberpath/internal/api"
 	"github.com/opensecstack/cyberpath/internal/api/handlers"
 	"github.com/opensecstack/cyberpath/internal/auth"
@@ -34,7 +36,6 @@ import (
 	"github.com/opensecstack/cyberpath/internal/nis2"
 	"github.com/opensecstack/cyberpath/internal/version"
 	"github.com/opensecstack/cyberpath/internal/wireup"
-	sdkcitadel "github.com/opensecstack/sdk/go/citadel"
 )
 
 type stubPinger struct{}
@@ -196,13 +197,13 @@ func buildApp(ctx context.Context, cfg *config.Config, logger zerolog.Logger) (*
 
 	// ── DB-backed wire-up (auth + IRFlow + outbox worker) ────────────
 	var (
-		tracksHandler         *handlers.TracksHandler
-		lessonsHandler        *handlers.LessonsHandler
-		quizzesHandler        *handlers.QuizHandler
-		labsHandler           *handlers.LabsHandler
-		usersHandler          *handlers.UsersHandler
-		enrollmentHandler     *handlers.EnrollmentHandler
-		certificationsHandler *handlers.CertificationsHandler
+		tracksHandler          *handlers.TracksHandler
+		lessonsHandler         *handlers.LessonsHandler
+		quizzesHandler         *handlers.QuizHandler
+		labsHandler            *handlers.LabsHandler
+		usersHandler           *handlers.UsersHandler
+		enrollmentHandler      *handlers.EnrollmentHandler
+		certificationsHandler  *handlers.CertificationsHandler
 		contentVersionsHandler *handlers.ContentVersionsHandler
 
 		// Kept in outer scope so coverageHandler can call WithProgress after
@@ -348,7 +349,6 @@ func buildApp(ctx context.Context, cfg *config.Config, logger zerolog.Logger) (*
 		logger.Info().Msg("learning handlers wired")
 	}
 
-
 	// Docker provisioner — optional; disabled gracefully when Docker is
 	// unavailable (e.g. CI environments without a daemon socket).
 	var terminalHandler *handlers.TerminalHandler
@@ -397,16 +397,16 @@ func buildApp(ctx context.Context, cfg *config.Config, logger zerolog.Logger) (*
 	}
 
 	router := api.NewRouter(api.Options{
-		Config:        cfg,
-		Logger:        &logger,
-		Pinger:        pinger,
-		Metrics:       mreg,
-		Verifier:      verifier,
-		NIS2:          nis2Checker,
-		Auth:          authHandlers,
-		IRFlowWebhook: irflowWebhook,
-		Coverage:      coverageHandler,
-		ContentAdmin:  contentAdmin,
+		Config:          cfg,
+		Logger:          &logger,
+		Pinger:          pinger,
+		Metrics:         mreg,
+		Verifier:        verifier,
+		NIS2:            nis2Checker,
+		Auth:            authHandlers,
+		IRFlowWebhook:   irflowWebhook,
+		Coverage:        coverageHandler,
+		ContentAdmin:    contentAdmin,
 		Tracks:          tracksHandler,
 		Lessons:         lessonsHandler,
 		Quizzes:         quizzesHandler,

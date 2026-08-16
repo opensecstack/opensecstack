@@ -41,21 +41,21 @@ type IncidentType string
 // Empty list means "no training mapped" — the trigger is recorded
 // but no enrolment happens.
 var defaultIncidentTrackMap = map[IncidentType][]string{
-	"phishing":                    {"phishing-recognition", "nis2-art21-awareness"},
-	"business_email_compromise":   {"phishing-recognition"},
-	"credential_compromise":       {"phishing-recognition", "nis2-art21-awareness"},
-	"privilege_escalation":        {"linux-hardening", "secure-coding"},
-	"web_app_compromise":          {"secure-coding", "api-security"},
-	"api_abuse":                   {"api-security"},
-	"malware_outbreak":            {"network-forensics", "incident-response-basics"},
-	"supply_chain":                {"secure-coding"},
-	"policy_violation":            {"nis2-art21-awareness"},
-	"insider_threat":              {"nis2-art21-awareness"},
-	"data_exfiltration":           {"network-forensics", "incident-response-basics"},
-	"ransomware":                  {"incident-response-basics", "network-forensics", "linux-hardening"},
-	"ddos":                        {},
-	"physical_security":           {},
-	"unknown":                     {"nis2-art21-awareness"},
+	"phishing":                  {"phishing-recognition", "nis2-art21-awareness"},
+	"business_email_compromise": {"phishing-recognition"},
+	"credential_compromise":     {"phishing-recognition", "nis2-art21-awareness"},
+	"privilege_escalation":      {"linux-hardening", "secure-coding"},
+	"web_app_compromise":        {"secure-coding", "api-security"},
+	"api_abuse":                 {"api-security"},
+	"malware_outbreak":          {"network-forensics", "incident-response-basics"},
+	"supply_chain":              {"secure-coding"},
+	"policy_violation":          {"nis2-art21-awareness"},
+	"insider_threat":            {"nis2-art21-awareness"},
+	"data_exfiltration":         {"network-forensics", "incident-response-basics"},
+	"ransomware":                {"incident-response-basics", "network-forensics", "linux-hardening"},
+	"ddos":                      {},
+	"physical_security":         {},
+	"unknown":                   {"nis2-art21-awareness"},
 }
 
 // CohortStore is the minimal interface the IRFlow webhook handler
@@ -87,16 +87,16 @@ type OutboxEnqueuer interface {
 
 // IRFlowWebhookOptions configures the webhook handler.
 type IRFlowWebhookOptions struct {
-	HMACSecret     string
-	SkewTolerance  time.Duration
-	Tenant         string // tenant to attribute incident cohorts to
-	RetrainingSLA  time.Duration
-	IncidentMap    map[IncidentType][]string
-	Cohorts        CohortStore
-	Audit          AuditEmitter
-	Outbox         OutboxEnqueuer
-	Logger         zerolog.Logger
-	Now            func() time.Time
+	HMACSecret    string
+	SkewTolerance time.Duration
+	Tenant        string // tenant to attribute incident cohorts to
+	RetrainingSLA time.Duration
+	IncidentMap   map[IncidentType][]string
+	Cohorts       CohortStore
+	Audit         AuditEmitter
+	Outbox        OutboxEnqueuer
+	Logger        zerolog.Logger
+	Now           func() time.Time
 }
 
 // IRFlowWebhookHandler is the registrable handler bundle.
@@ -129,13 +129,13 @@ func (h *IRFlowWebhookHandler) Register(r chi.Router) {
 
 // incidentTriggerBody is the IRFlow→CyberPath wire shape.
 type incidentTriggerBody struct {
-	IncidentID       string       `json:"incident_id"`
-	Type             IncidentType `json:"type"`
-	Severity         string       `json:"severity"`
-	AffectedUsers    []string     `json:"affected_users"`
-	SuggestedTracks  []string     `json:"suggested_tracks"`
-	OccurredAt       time.Time    `json:"occurred_at"`
-	CorrelationID    string       `json:"correlation_id"`
+	IncidentID      string       `json:"incident_id"`
+	Type            IncidentType `json:"type"`
+	Severity        string       `json:"severity"`
+	AffectedUsers   []string     `json:"affected_users"`
+	SuggestedTracks []string     `json:"suggested_tracks"`
+	OccurredAt      time.Time    `json:"occurred_at"`
+	CorrelationID   string       `json:"correlation_id"`
 }
 
 func (h *IRFlowWebhookHandler) handleIncidentTrigger() http.HandlerFunc {
@@ -218,13 +218,13 @@ func (h *IRFlowWebhookHandler) handleIncidentTrigger() http.HandlerFunc {
 			}
 
 			payload := map[string]any{
-				"incident_id":          body.IncidentID,
-				"incident_type":        string(body.Type),
-				"incident_severity":    body.Severity,
-				"cohort_id":            cohortID,
-				"tracks_assigned":      tracks,
-				"enrolled_user_count":  enrolled,
-				"correlation_id":       body.CorrelationID,
+				"incident_id":         body.IncidentID,
+				"incident_type":       string(body.Type),
+				"incident_severity":   body.Severity,
+				"cohort_id":           cohortID,
+				"tracks_assigned":     tracks,
+				"enrolled_user_count": enrolled,
+				"correlation_id":      body.CorrelationID,
 			}
 			if h.opts.Audit != nil {
 				if err := h.opts.Audit.Emit(ctx, "cyberpath.incident_triggered_enrollment", payload); err != nil {
@@ -240,10 +240,10 @@ func (h *IRFlowWebhookHandler) handleIncidentTrigger() http.HandlerFunc {
 
 		recommendedBy := h.opts.Now().Add(h.opts.RetrainingSLA).UTC()
 		writeJSON(w, http.StatusOK, map[string]any{
-			"cohort_id":                  cohortID,
-			"enrolled_user_count":        enrolled,
-			"recommended_completion_by":  recommendedBy.Format(time.RFC3339),
-			"tracks_assigned":            tracks,
+			"cohort_id":                 cohortID,
+			"enrolled_user_count":       enrolled,
+			"recommended_completion_by": recommendedBy.Format(time.RFC3339),
+			"tracks_assigned":           tracks,
 		})
 	}
 }

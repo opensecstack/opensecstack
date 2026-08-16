@@ -20,10 +20,10 @@ import (
 
 // fakeCohortStore is an in-memory CohortStore for tests.
 type fakeCohortStore struct {
-	mu       sync.Mutex
-	cohorts  map[string]string // tenant|name -> cohortID
-	enroll   map[string]int    // cohortID -> count
-	nextID   int
+	mu      sync.Mutex
+	cohorts map[string]string // tenant|name -> cohortID
+	enroll  map[string]int    // cohortID -> count
+	nextID  int
 }
 
 func newFakeStore() *fakeCohortStore {
@@ -98,13 +98,13 @@ func makeSignedRequest(t *testing.T, body []byte, ts int64, secret string) *http
 func newRouter(t *testing.T, store CohortStore, audit AuditEmitter, outbox OutboxEnqueuer, now func() time.Time) *chi.Mux {
 	t.Helper()
 	h := NewIRFlowWebhookHandler(IRFlowWebhookOptions{
-		HMACSecret:    testSecret,
-		Tenant:        "tenant-x",
-		Cohorts:       store,
-		Audit:         audit,
-		Outbox:        outbox,
-		Logger:        zerolog.Nop(),
-		Now:           now,
+		HMACSecret: testSecret,
+		Tenant:     "tenant-x",
+		Cohorts:    store,
+		Audit:      audit,
+		Outbox:     outbox,
+		Logger:     zerolog.Nop(),
+		Now:        now,
 	})
 	r := chi.NewRouter()
 	h.Register(r)

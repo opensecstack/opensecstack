@@ -71,8 +71,8 @@ func TestEndpointEnumerator_Run_ExtraPaths(t *testing.T) {
 
 	e := NewEndpointEnumerator()
 	_, err := e.Run(context.Background(), server.URL, map[string]any{
-		"concurrency":  5,
-		"extra_paths":  []string{"/my-custom-secret-path"},
+		"concurrency": 5,
+		"extra_paths": []string{"/my-custom-secret-path"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

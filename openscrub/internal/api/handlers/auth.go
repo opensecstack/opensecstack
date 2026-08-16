@@ -40,15 +40,17 @@ func (a *Auth) Enabled() bool {
 //
 // Request:  {"username": "...", "password": "..."}
 // Response: {"access_token": "...", "token_type": "Bearer",
-//            "expires_at": "RFC3339", "role": "...", "sub": "..."}
+//
+//	"expires_at": "RFC3339", "role": "...", "sub": "..."}
 //
 // `sub` echoes the verified username so the frontend can render
 // "logged in as …" without re-decoding the JWT body.
 //
 // Failure modes:
-//   400 bad_json         malformed request body
-//   401 invalid_creds    username/password wrong (constant-time compare)
-//   503 issuer_disabled  no credentials seeded → operator must mint OOB
+//
+//	400 bad_json         malformed request body
+//	401 invalid_creds    username/password wrong (constant-time compare)
+//	503 issuer_disabled  no credentials seeded → operator must mint OOB
 func (a *Auth) Login(w http.ResponseWriter, r *http.Request) {
 	if !a.Enabled() {
 		writeError(w, http.StatusServiceUnavailable, "issuer_disabled",

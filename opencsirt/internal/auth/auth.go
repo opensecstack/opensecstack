@@ -2,7 +2,8 @@
 // authorization for OpenCSIRT.
 //
 // Roles (most → least privileged):
-//   admin · csirt_lead · operator · analyst · external_peer · viewer
+//
+//	admin · csirt_lead · operator · analyst · external_peer · viewer
 //
 // `csirt_lead` may publish advisories and escalate to peers.
 // `external_peer` may only read advisories tagged TLP:CLEAR/GREEN
@@ -85,7 +86,7 @@ type Authenticator struct {
 	ttl        time.Duration
 	pepper     string
 	users      map[string]userRecord // username → record
-	sinauthURL string               // issuer URL for RS256 sinauth tokens
+	sinauthURL string                // issuer URL for RS256 sinauth tokens
 
 	// sinauth client is initialised lazily so startup does not hard-depend
 	// on sinauth being reachable.

@@ -16,13 +16,13 @@ import (
 
 // taranisItem is a single OSINT item as delivered by TARANIS-NG.
 type taranisItem struct {
-	ID          string            `json:"id"`
-	Title       string            `json:"title"`
-	Description string            `json:"description"`
-	Source      string            `json:"source"`
-	Published   string            `json:"published"`
-	Attributes  []taranisAttr     `json:"attributes"`
-	Tags        []string          `json:"tags"`
+	ID          string        `json:"id"`
+	Title       string        `json:"title"`
+	Description string        `json:"description"`
+	Source      string        `json:"source"`
+	Published   string        `json:"published"`
+	Attributes  []taranisAttr `json:"attributes"`
+	Tags        []string      `json:"tags"`
 }
 
 type taranisAttr struct {

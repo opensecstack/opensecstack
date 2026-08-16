@@ -35,13 +35,13 @@ type Dispatcher struct {
 	slowloris *network.Slowloris
 
 	// Recon modules
-	portScanner      *recon.PortScanner
-	endpointEnum     *recon.EndpointEnumerator
-	versionDetect    *recon.VersionDetector
+	portScanner   *recon.PortScanner
+	endpointEnum  *recon.EndpointEnumerator
+	versionDetect *recon.VersionDetector
 
 	// Exfil modules
-	dataExfil  *exfil.DataExfilAttack
-	dnsTunnel  *exfil.DNSTunnelAttack
+	dataExfil *exfil.DataExfilAttack
+	dnsTunnel *exfil.DNSTunnelAttack
 }
 
 // NewDispatcher instantiates all attack modules and returns a ready Dispatcher.

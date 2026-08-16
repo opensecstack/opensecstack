@@ -51,16 +51,16 @@ type AuditSink interface {
 
 // AuditEvent is one row destined for audit_events.
 type AuditEvent struct {
-	TenantID     string
-	ActorUserID  string
-	ActorRole    string
-	Action       string
-	TargetType   string
-	TargetID     string
-	Outcome      string // "success" | "failure" | "denied"
-	Metadata     map[string]any
-	IPAddress    string
-	UserAgent    string
+	TenantID      string
+	ActorUserID   string
+	ActorRole     string
+	Action        string
+	TargetType    string
+	TargetID      string
+	Outcome       string // "success" | "failure" | "denied"
+	Metadata      map[string]any
+	IPAddress     string
+	UserAgent     string
 	CorrelationID string
 }
 
@@ -69,15 +69,15 @@ var ErrUserNotFound = errors.New("auth: user not found")
 
 // AuthDeps bundles the auth handler's collaborators.
 type AuthDeps struct {
-	Users     UserStore
-	Sessions  auth.SessionStore
-	Issuer    *auth.Issuer
-	Audit     AuditSink
-	Logger    *zerolog.Logger
-	Pepper          []byte
-	PepperPrevious  []byte // optional fallback pepper used during rotation
-	LoginPad        time.Duration // padding floor for login responses; 0 disables
-	Throttle        *LoginThrottle
+	Users          UserStore
+	Sessions       auth.SessionStore
+	Issuer         *auth.Issuer
+	Audit          AuditSink
+	Logger         *zerolog.Logger
+	Pepper         []byte
+	PepperPrevious []byte        // optional fallback pepper used during rotation
+	LoginPad       time.Duration // padding floor for login responses; 0 disables
+	Throttle       *LoginThrottle
 }
 
 // AuthHandlers groups the auth endpoints around a shared AuthDeps.
@@ -123,11 +123,11 @@ type loginRequest struct {
 }
 
 type tokenResponse struct {
-	AccessToken  string         `json:"access_token"`
-	RefreshToken string         `json:"refresh_token,omitempty"`
-	TokenType    string         `json:"token_type"`
-	ExpiresIn    int            `json:"expires_in"`
-	User         *userPayload   `json:"user,omitempty"`
+	AccessToken  string       `json:"access_token"`
+	RefreshToken string       `json:"refresh_token,omitempty"`
+	TokenType    string       `json:"token_type"`
+	ExpiresIn    int          `json:"expires_in"`
+	User         *userPayload `json:"user,omitempty"`
 }
 
 type userPayload struct {
@@ -180,10 +180,10 @@ func (h *AuthHandlers) Login() http.HandlerFunc {
 		// Run a verification regardless of whether the user exists or
 		// is soft-deleted, so timing does not leak existence.
 		var (
-			ok          bool
-			vErr        error
+			ok           bool
+			vErr         error
 			pepperRehash bool
-			isLive      = u != nil && u.DeletedAt == nil
+			isLive       = u != nil && u.DeletedAt == nil
 		)
 		if isLive {
 			ok, pepperRehash, vErr = auth.VerifyPasswordWithFallback(

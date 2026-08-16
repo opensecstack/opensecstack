@@ -14,11 +14,11 @@ import (
 
 func TestSubmitOutcome_String(t *testing.T) {
 	cases := map[SubmitOutcome]string{
-		SubmitDelivered:      "delivered",
-		SubmitQueued:         "queued",
-		SubmitDropped:        "dropped",
-		SubmitDryRun:         "dry_run",
-		SubmitOutcome(99):    "unknown",
+		SubmitDelivered:   "delivered",
+		SubmitQueued:      "queued",
+		SubmitDropped:     "dropped",
+		SubmitDryRun:      "dry_run",
+		SubmitOutcome(99): "unknown",
 	}
 	for outcome, want := range cases {
 		if got := outcome.String(); got != want {

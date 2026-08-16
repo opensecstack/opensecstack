@@ -170,5 +170,3 @@ func runMigrations(ctx context.Context, pool sqlExecer, log *zap.Logger) error {
 	}
 	return nil
 }
-
-

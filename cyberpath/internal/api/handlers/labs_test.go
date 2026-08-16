@@ -35,7 +35,7 @@ type fakeLabSessionManager struct {
 	metaErr error
 
 	// Call tracking.
-	endSessionCalls    []string   // status values passed to EndSession
+	endSessionCalls    []string // status values passed to EndSession
 	updateMetaCalls    []uuid.UUID
 	updateMetaPayloads []json.RawMessage
 }
@@ -105,10 +105,10 @@ func (m *fakeLabSessionManager) UpdateMetadata(_ context.Context, sessionID uuid
 type fakeDockerProvisioner struct {
 	mu sync.Mutex
 
-	containerID    string
-	startErr       error
-	stopErr        error
-	stopCalls      []string // container IDs passed to StopContainer
+	containerID string
+	startErr    error
+	stopErr     error
+	stopCalls   []string // container IDs passed to StopContainer
 }
 
 func newFakeDockerProvisioner() *fakeDockerProvisioner {

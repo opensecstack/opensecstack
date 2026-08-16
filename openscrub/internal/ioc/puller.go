@@ -3,7 +3,7 @@
 //
 // Loop semantics:
 //   - Every cfg.Interval (default 15min) the puller GETs
-//       {ThreatFlowURL}/api/v1/iocs?type=ip
+//     {ThreatFlowURL}/api/v1/iocs?type=ip
 //     hashing the response body to deduplicate against the
 //     ioc_ingest_log audit table.
 //   - For each IP not already covered by an active rule, Service.Create
@@ -34,10 +34,10 @@ import (
 
 // Config carries puller tunables.
 type Config struct {
-	BaseURL    string
-	Token      string
-	Interval   time.Duration
-	RuleTTL    time.Duration
+	BaseURL     string
+	Token       string
+	Interval    time.Duration
+	RuleTTL     time.Duration
 	HTTPTimeout time.Duration
 }
 
@@ -48,11 +48,11 @@ type IOCLoggerCompat func(ctx context.Context, source, sha string, count int) er
 
 // Puller orchestrates the periodic ThreatFlow pull.
 type Puller struct {
-	cfg     Config
-	svc     *rules.Service
-	logger  zerolog.Logger
-	http    *http.Client
-	logFn   IOCLoggerCompat
+	cfg    Config
+	svc    *rules.Service
+	logger zerolog.Logger
+	http   *http.Client
+	logFn  IOCLoggerCompat
 }
 
 // New builds a Puller. logFn may be nil — in that case ingest events

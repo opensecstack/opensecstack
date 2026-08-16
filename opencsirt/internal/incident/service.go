@@ -99,8 +99,8 @@ func (s *Service) Create(ctx context.Context, in CreateInput, actor uuid.UUID, r
 
 	// Enqueue CITADEL event.
 	entry := &db.OutboxEntry{
-		EventType:  citadel.EventIncidentOpened,
-		EventID:    "incident-open-" + inc.ID.String(),
+		EventType: citadel.EventIncidentOpened,
+		EventID:   "incident-open-" + inc.ID.String(),
 		Payload: map[string]any{
 			"incident_id":     inc.ID.String(),
 			"constituency_id": inc.ConstituencyID,

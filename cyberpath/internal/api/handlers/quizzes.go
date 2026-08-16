@@ -60,12 +60,12 @@ type quizResponse struct {
 // questionResponse is a single question in the GET /quizzes/{id} response.
 // The correct answer is NOT included — it is server-side only.
 type questionResponse struct {
-	ID        string          `json:"id"`
-	Kind      string          `json:"kind"`
-	PromptEN  string          `json:"prompt_en"`
-	PromptSQ  string          `json:"prompt_sq"`
-	Choices   json.RawMessage `json:"choices,omitempty"`
-	Points    int             `json:"points"`
+	ID       string          `json:"id"`
+	Kind     string          `json:"kind"`
+	PromptEN string          `json:"prompt_en"`
+	PromptSQ string          `json:"prompt_sq"`
+	Choices  json.RawMessage `json:"choices,omitempty"`
+	Points   int             `json:"points"`
 }
 
 // Get handles GET /quizzes/{id}.

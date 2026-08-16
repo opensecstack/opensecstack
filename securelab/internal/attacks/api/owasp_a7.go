@@ -32,8 +32,8 @@ func NewSSRFAttack() *SSRFAttack {
 
 // ssrfPayloads lists internal/metadata addresses used as SSRF bait values.
 var ssrfPayloads = []string{
-	"http://169.254.169.254/latest/meta-data/",       // AWS IMDS
-	"http://169.254.169.254/metadata/instance",        // Azure IMDS
+	"http://169.254.169.254/latest/meta-data/",            // AWS IMDS
+	"http://169.254.169.254/metadata/instance",            // Azure IMDS
 	"http://metadata.google.internal/computeMetadata/v1/", // GCP
 	"http://localhost/",
 	"http://127.0.0.1/",
@@ -136,11 +136,11 @@ func (a *SSRFAttack) Run(ctx context.Context, targetURL string, params map[strin
 // of cloud metadata or internal service responses.
 func containsSSRFSignal(body string) bool {
 	signals := []string{
-		"ami-id", "instance-id", "local-ipv4",   // AWS IMDS
-		"computeMetadata", "serviceAccounts",      // GCP
-		"azureProfile", "subscriptionId",          // Azure
-		"root:x:", "/bin/bash",                    // /etc/passwd
-		"VERSION", "STORED",                       // memcached
+		"ami-id", "instance-id", "local-ipv4", // AWS IMDS
+		"computeMetadata", "serviceAccounts", // GCP
+		"azureProfile", "subscriptionId", // Azure
+		"root:x:", "/bin/bash", // /etc/passwd
+		"VERSION", "STORED", // memcached
 	}
 	lower := strings.ToLower(body)
 	for _, s := range signals {

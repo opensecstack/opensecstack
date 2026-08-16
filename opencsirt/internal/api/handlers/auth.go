@@ -40,6 +40,6 @@ func (h *Auth) Login(w http.ResponseWriter, r *http.Request) {
 		"token":      tok,
 		"role":       claims.Role,
 		"sub":        claims.Sub,
-		"expires_at": claims.ExpiresAt.Time.Format(time.RFC3339),
+		"expires_at": claims.ExpiresAt.Format(time.RFC3339),
 	})
 }

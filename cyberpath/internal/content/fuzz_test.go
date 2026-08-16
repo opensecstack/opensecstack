@@ -6,8 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/opensecstack/cyberpath/internal/content"
 	"gopkg.in/yaml.v3"
+
+	"github.com/opensecstack/cyberpath/internal/content"
 )
 
 const trackID = "fuzz-track"

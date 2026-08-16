@@ -95,8 +95,8 @@ func (e *Executor) Execute(ctx context.Context, runID string, spec *ScenarioSpec
 
 	now := time.Now().UTC()
 	run := &db.ScenarioRun{
-		ID:     runID,
-		Status: "running",
+		ID:        runID,
+		Status:    "running",
 		StartedAt: &now,
 	}
 	if err := db.UpdateRunStatus(execCtx, e.pool, run); err != nil {

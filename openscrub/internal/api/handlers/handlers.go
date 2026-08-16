@@ -31,9 +31,9 @@ type Pinger interface {
 
 // Health is the handler set for /api/v1/health.
 type Health struct {
-	DB                 Pinger
-	Plane              dataplane.Client
-	DataplaneAttached  func() bool
+	DB                Pinger
+	Plane             dataplane.Client
+	DataplaneAttached func() bool
 }
 
 // Get returns the liveness document. /health answers "the process

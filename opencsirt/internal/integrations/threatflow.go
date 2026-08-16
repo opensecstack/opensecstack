@@ -20,12 +20,12 @@ import (
 // ThreatFlowClient pulls IOC bundles from ThreatFlow and pushes
 // published advisories back to ThreatFlow's ingest endpoint.
 type ThreatFlowClient struct {
-	apiURL    string
-	apiKey    string
-	interval  time.Duration
-	http      *http.Client
-	store     *db.IOCIngestStore
-	logger    zerolog.Logger
+	apiURL   string
+	apiKey   string
+	interval time.Duration
+	http     *http.Client
+	store    *db.IOCIngestStore
+	logger   zerolog.Logger
 }
 
 func NewThreatFlowClient(apiURL, apiKey string, interval time.Duration, store *db.IOCIngestStore, logger zerolog.Logger) *ThreatFlowClient {

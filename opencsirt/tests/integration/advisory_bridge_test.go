@@ -46,9 +46,9 @@ var cannedGenerate = map[string]any{
 				"namespace": "https://opencsirt.example.org",
 			},
 			"tracking": map[string]any{
-				"id":                  "OPENCSIRT-20260510-abcd1234",
-				"status":              "draft",
-				"version":             "1",
+				"id":                   "OPENCSIRT-20260510-abcd1234",
+				"status":               "draft",
+				"version":              "1",
 				"initial_release_date": "2026-05-10T00:00:00Z",
 				"current_release_date": "2026-05-10T00:00:00Z",
 				"revision_history": []map[string]any{

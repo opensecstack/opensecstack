@@ -49,13 +49,13 @@ type ScenarioSpec struct {
 // scenarioYAML is an intermediate representation used during unmarshalling so
 // that Timeout can be parsed as a string (e.g. "5m") before conversion.
 type scenarioYAML struct {
-	Name               string     `yaml:"name"`
-	Description        string     `yaml:"description"`
-	MitreTechniqueIDs  []string   `yaml:"mitre_technique_ids"`
-	Tags               []string   `yaml:"tags"`
-	Severity           string     `yaml:"severity"`
-	Timeout            string     `yaml:"timeout"`
-	Steps              []StepSpec `yaml:"steps"`
+	Name              string     `yaml:"name"`
+	Description       string     `yaml:"description"`
+	MitreTechniqueIDs []string   `yaml:"mitre_technique_ids"`
+	Tags              []string   `yaml:"tags"`
+	Severity          string     `yaml:"severity"`
+	Timeout           string     `yaml:"timeout"`
+	Steps             []StepSpec `yaml:"steps"`
 }
 
 // LoadFromYAML parses a YAML-encoded scenario definition and returns a

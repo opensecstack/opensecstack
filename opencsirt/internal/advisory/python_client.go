@@ -54,31 +54,31 @@ type PythonClient interface {
 }
 
 type GenerateRequest struct {
-	IncidentID    string                 `json:"incident_id,omitempty"`
-	Title         string                 `json:"title"`
-	Summary       string                 `json:"summary"`
-	TLP           string                 `json:"tlp"`
-	IOCs          []IOC                  `json:"iocs,omitempty"`
-	Vulnerability map[string]any         `json:"vulnerability,omitempty"`
-	Extras        map[string]any         `json:"extras,omitempty"`
+	IncidentID    string         `json:"incident_id,omitempty"`
+	Title         string         `json:"title"`
+	Summary       string         `json:"summary"`
+	TLP           string         `json:"tlp"`
+	IOCs          []IOC          `json:"iocs,omitempty"`
+	Vulnerability map[string]any `json:"vulnerability,omitempty"`
+	Extras        map[string]any `json:"extras,omitempty"`
 }
 
 type GenerateResponse struct {
-	CSAFID  string                 `json:"csaf_id"`
-	Doc     map[string]any         `json:"csaf_doc"`
+	CSAFID string         `json:"csaf_id"`
+	Doc    map[string]any `json:"csaf_doc"`
 }
 
 type IOC struct {
-	Type  string `json:"type"`  // ip|domain|url|hash
+	Type  string `json:"type"` // ip|domain|url|hash
 	Value string `json:"value"`
 }
 
 type EnrichedIOC struct {
 	IOC
-	Reputation int                    `json:"reputation"` // 0-100
-	Tags       []string               `json:"tags"`
-	Sources    []string               `json:"sources"`
-	Extra      map[string]any         `json:"extra,omitempty"`
+	Reputation int            `json:"reputation"` // 0-100
+	Tags       []string       `json:"tags"`
+	Sources    []string       `json:"sources"`
+	Extra      map[string]any `json:"extra,omitempty"`
 }
 
 type TriageResult struct {
@@ -217,10 +217,10 @@ func (NoopClient) Generate(_ context.Context, req GenerateRequest) (GenerateResp
 				"name":     "OpenCSIRT (stub)",
 			},
 			"tracking": map[string]any{
-				"id":              csafID,
-				"current_release": "1",
+				"id":                   csafID,
+				"current_release":      "1",
 				"initial_release_date": time.Now().UTC().Format(time.RFC3339),
-				"status":          "draft",
+				"status":               "draft",
 			},
 			"distribution": map[string]any{
 				"tlp": map[string]any{"label": req.TLP},

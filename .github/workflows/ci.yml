@@ -711,12 +711,12 @@ jobs:
       - name: Health check — NIS2 Compass
         run: |
           curl -sf --retry 10 --retry-delay 3 --retry-connrefused \
-            http://localhost:5000/api/v1/health \
+            http://localhost:8090/health \
             | grep -q '"status"'
       - name: Health check — Citadel
         run: |
           curl -sf --retry 10 --retry-delay 3 --retry-connrefused \
-            http://localhost:9000/health \
+            http://localhost:8099/api/v1/health \
             | grep -q '"status"'
       - name: Collect container logs on failure
         if: failure()

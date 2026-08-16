@@ -38,7 +38,7 @@ func NewUDPFlood() *UDPFlood { return &UDPFlood{} }
 //   - "pps"       int    — datagrams per second (default 1000, max 10000)
 //   - "duration"  string — how long to run, e.g. "5s" (default "5s", max "30s")
 func (u *UDPFlood) Run(ctx context.Context, targetIP, targetPort string, params map[string]any) (*AttackResult, error) {
-	if err := checkNetworkTarget(targetIP); err != nil {
+	if err := checkNetworkTarget(ctx, targetIP); err != nil {
 		return nil, err
 	}
 
@@ -49,7 +49,7 @@ func (u *UDPFlood) Run(ctx context.Context, targetIP, targetPort string, params 
 	result := &AttackResult{Technique: "UDPFlood"}
 
 	addr := net.JoinHostPort(targetIP, targetPort)
-	conn, err := net.Dial("udp", addr)
+	conn, err := (&net.Dialer{}).DialContext(ctx, "udp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("udp_flood: dial %s: %w", addr, err)
 	}

@@ -20,7 +20,7 @@ import (
 func TestMonitorAdapter_WaitForDetection_ReturnsFirstAlert(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`[{"alert_id":"a1","technique":"bola","timestamp":"2024-01-01T00:00:00Z"}]`))
+		_, _ = w.Write([]byte(`[{"alert_id":"a1","technique":"bola","timestamp":"2024-01-01T00:00:00Z"}]`))
 	}))
 	defer server.Close()
 

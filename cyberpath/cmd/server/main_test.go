@@ -132,7 +132,9 @@ const liveTestDBURL = "postgres://apiguard@localhost:5434/cyberpath_test?sslmode
 // so this suite still passes in environments without that shared instance.
 func requireLiveDB(t *testing.T) {
 	t.Helper()
-	conn, err := net.DialTimeout("tcp", "localhost:5434", 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", "localhost:5434")
 	if err != nil {
 		t.Skipf("shared test Postgres unreachable, skipping: %v", err)
 	}
@@ -208,7 +210,7 @@ func TestMain_ListenErrorTriggersCleanShutdown(t *testing.T) {
 	if dir := os.Getenv("GOCOVERDIR"); dir != "" {
 		testArgs = append(testArgs, "-test.gocoverdir="+dir)
 	}
-	cmd := exec.Command(os.Args[0], testArgs...)
+	cmd := exec.CommandContext(context.Background(), os.Args[0], testArgs...)
 	cmd.Env = append(os.Environ(),
 		"GO_WANT_SERVER_HELPER=1",
 		// Port 999999 is out of range (max 65535), so net.Listen fails

@@ -9,11 +9,12 @@ import (
 	"io"
 	"time"
 
-	dockerclient "github.com/docker/docker/client"
+	cerrdefs "github.com/containerd/errdefs"
 	dockertypes "github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
+	dockerclient "github.com/docker/docker/client"
 
 	"github.com/opensecstack/cyberpath/internal/db"
 )
@@ -104,7 +105,7 @@ func (p *Provisioner) StartContainer(ctx context.Context, def *db.LabDefinition,
 func (p *Provisioner) StopContainer(ctx context.Context, containerID string) error {
 	timeout := stopTimeout
 	stopErr := p.client.ContainerStop(ctx, containerID, container.StopOptions{Timeout: &timeout})
-	if stopErr != nil && dockerclient.IsErrNotFound(stopErr) {
+	if stopErr != nil && cerrdefs.IsNotFound(stopErr) {
 		// Container already gone (e.g. a repeated call after a prior
 		// StopContainer already removed it) — not a real failure.
 		stopErr = nil
@@ -113,7 +114,7 @@ func (p *Provisioner) StopContainer(ctx context.Context, containerID string) err
 	// Always attempt removal, even if stop returned an error (e.g. container
 	// already exited). Ignore "not found" so idempotent calls are safe.
 	rmErr := p.client.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
-	if rmErr != nil && !dockerclient.IsErrNotFound(rmErr) {
+	if rmErr != nil && !cerrdefs.IsNotFound(rmErr) {
 		return rmErr
 	}
 
@@ -179,7 +180,7 @@ func (p *Provisioner) ensureImage(ctx context.Context, imageName string) error {
 	if err == nil {
 		return nil // already present
 	}
-	if !dockerclient.IsErrNotFound(err) {
+	if !cerrdefs.IsNotFound(err) {
 		return err
 	}
 

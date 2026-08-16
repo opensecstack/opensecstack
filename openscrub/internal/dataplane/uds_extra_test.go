@@ -65,7 +65,7 @@ func shortSockDir(t *testing.T) string {
 
 func newFakeLoaderAt(t *testing.T, sock string) *fakeLoader {
 	t.Helper()
-	ln, err := net.Listen("unix", sock)
+	ln, err := new(net.ListenConfig).Listen(context.Background(), "unix", sock)
 	if err != nil {
 		t.Fatalf("listen unix %s: %v", sock, err)
 	}

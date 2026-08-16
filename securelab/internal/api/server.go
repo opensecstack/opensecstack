@@ -33,7 +33,13 @@ func NewRouter(
 
 	// Global middleware.
 	r.Use(chimiddleware.RequestID)
-	r.Use(chimiddleware.RealIP)
+	// chimiddleware.RealIP is deliberately NOT used: it blindly trusts the
+	// leftmost X-Forwarded-For / X-Real-IP / True-Client-IP header from any
+	// client, letting a spoofed header override r.RemoteAddr with no
+	// trusted-proxy allowlist to validate against (GHSA-3fxj-6jh8-hvhx).
+	// Nothing in this service currently keys a security decision off the
+	// client IP, so the safer default is the raw TCP peer address chi/
+	// net/http already set.
 	r.Use(chimiddleware.Recoverer)
 
 	// Unauthenticated routes.

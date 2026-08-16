@@ -84,7 +84,7 @@ func NewVersionDetector() *VersionDetector {
 // Recognised params keys:
 //   - "jwt"  string — optional Bearer token
 func (v *VersionDetector) Run(ctx context.Context, targetURL string, params map[string]any) (*VersionDetectResult, error) {
-	if err := checkTarget(extractHost(targetURL)); err != nil {
+	if err := checkTarget(ctx, extractHost(targetURL)); err != nil {
 		return nil, err
 	}
 
@@ -102,8 +102,8 @@ func (v *VersionDetector) Run(ctx context.Context, targetURL string, params map[
 			val := resp.Header.Get(hdr)
 			if val != "" {
 				info := VersionInfo{
-					Source:  "header:" + hdr,
-					Raw:     val,
+					Source: "header:" + hdr,
+					Raw:    val,
 				}
 				parseSoftwareVersion(val, &info)
 				result.Versions = append(result.Versions, info)

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
 	"github.com/opensecstack/cyberpath/internal/content"
 )
 
@@ -294,7 +295,7 @@ func runCLI(t *testing.T, args ...string) (string, int) {
 	}
 	cmdArgs := append(testFlags, "--")
 	cmdArgs = append(cmdArgs, args...)
-	cmd := exec.Command(os.Args[0], cmdArgs...)
+	cmd := exec.CommandContext(context.Background(), os.Args[0], cmdArgs...)
 	cmd.Env = append(os.Environ(), "GO_WANT_HELPER_PROCESS=1")
 	out, err := cmd.CombinedOutput()
 	exitCode := 0

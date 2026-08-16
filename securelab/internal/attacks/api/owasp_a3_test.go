@@ -24,7 +24,7 @@ func TestMassAssignmentAttack_Run_DetectsReflectedFields(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		// Echo back one of the injected privileged fields.
-		w.Write([]byte(`{"name":"attacker","role":"admin"}`))
+		_, _ = w.Write([]byte(`{"name":"attacker","role":"admin"}`))
 	}))
 	defer server.Close()
 
@@ -56,7 +56,7 @@ func TestMassAssignmentAttack_Run_AcceptedWithoutReflection(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"ok":true}`))
+		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
 	defer server.Close()
 

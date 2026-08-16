@@ -108,21 +108,6 @@ func doRequest(handler http.Handler, method, path string, body any) *httptest.Re
 	return w
 }
 
-func doRequestWithAuth(handler http.Handler, method, path string, body any, userID uuid.UUID) *httptest.ResponseRecorder {
-	var req *http.Request
-	if body != nil {
-		b, _ := json.Marshal(body)
-		req = httptest.NewRequest(method, path, bytes.NewReader(b))
-		req.Header.Set("Content-Type", "application/json")
-	} else {
-		req = httptest.NewRequest(method, path, nil)
-	}
-	req = withUserCtx(req, userID)
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-	return w
-}
-
 // ── Get tests ─────────────────────────────────────────────────────────────────
 
 func TestQuizGet_Success(t *testing.T) {
@@ -279,8 +264,8 @@ func TestQuizSubmit_SomeWrong(t *testing.T) {
 
 	// Correct answer for q1 only; wrong for q2.
 	answers := map[string]any{
-		q1.ID.String(): "a",  // correct
-		q2.ID.String(): "a",  // wrong (correct is "b")
+		q1.ID.String(): "a", // correct
+		q2.ID.String(): "a", // wrong (correct is "b")
 	}
 	body := map[string]any{"answers": answers}
 
@@ -347,11 +332,11 @@ func TestQuizSubmit_NoAnswers(t *testing.T) {
 func TestQuizSubmit_MultiSelect_Correct(t *testing.T) {
 	correctJSON, _ := json.Marshal([]string{"a", "b"})
 	q1 := db.QuizQuestion{
-		ID:      uuid.New(),
-		Kind:    "multi_select",
+		ID:       uuid.New(),
+		Kind:     "multi_select",
 		PromptEN: "Choose all correct",
-		Correct: correctJSON,
-		Points:  2,
+		Correct:  correctJSON,
+		Points:   2,
 	}
 	q, qs := testQuiz(60, []db.QuizQuestion{q1})
 
@@ -390,11 +375,11 @@ func TestQuizSubmit_MultiSelect_Correct(t *testing.T) {
 func TestQuizSubmit_MultiSelect_Wrong(t *testing.T) {
 	correctJSON, _ := json.Marshal([]string{"a", "b"})
 	q1 := db.QuizQuestion{
-		ID:      uuid.New(),
-		Kind:    "multi_select",
+		ID:       uuid.New(),
+		Kind:     "multi_select",
 		PromptEN: "Choose all correct",
-		Correct: correctJSON,
-		Points:  2,
+		Correct:  correctJSON,
+		Points:   2,
 	}
 	q, qs := testQuiz(60, []db.QuizQuestion{q1})
 

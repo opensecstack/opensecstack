@@ -103,7 +103,7 @@ func makeTestEnv(t *testing.T, pool *pgxpool.Pool) *db.Environment {
 	t.Helper()
 	env := &db.Environment{
 		Name:      "test-env-" + t.Name(),
-		Kind:      "lab",
+		Kind:      "docker",
 		TargetURL: "http://192.168.99.99:8080",
 		NetworkID: "net-test",
 		Status:    "ready",
@@ -120,9 +120,11 @@ func makeTestEnv(t *testing.T, pool *pgxpool.Pool) *db.Environment {
 func makeTestScenario(t *testing.T, pool *pgxpool.Pool) string {
 	t.Helper()
 	row := &db.Scenario{
-		Name:           "exec-test-" + t.Name(),
-		Severity:       "low",
-		TimeoutSeconds: 60,
+		Name:              "exec-test-" + t.Name(),
+		Severity:          "low",
+		TimeoutSeconds:    60,
+		MitreTechniqueIDs: []string{},
+		Tags:              []string{},
 		YAMLContent: `
 name: exec-test
 severity: low

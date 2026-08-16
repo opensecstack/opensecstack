@@ -19,7 +19,7 @@ func TestSlowloris_Run_BlocksPublicTarget(t *testing.T) {
 }
 
 func TestSlowloris_Run_OpensConnectionsToLoopback(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := new(net.ListenConfig).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestSlowloris_Run_OpensConnectionsToLoopback(t *testing.T) {
 
 func TestSlowloris_Run_NoListenerNoSuccess(t *testing.T) {
 	// Bind then close to obtain a loopback port nothing is listening on.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := new(net.ListenConfig).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}

@@ -6,6 +6,7 @@
 package network
 
 import (
+	"context"
 	"errors"
 	"net"
 	"time"
@@ -21,11 +22,11 @@ type AttackResult struct {
 
 // checkNetworkTarget enforces that the target is a loopback or RFC 1918 address.
 // This prevents accidental flood attacks against production or third-party hosts.
-func checkNetworkTarget(host string) error {
+func checkNetworkTarget(ctx context.Context, host string) error {
 	ip := net.ParseIP(host)
 	if ip == nil {
 		// Try resolving a hostname — must resolve to a private address.
-		addrs, err := net.LookupHost(host)
+		addrs, err := new(net.Resolver).LookupHost(ctx, host)
 		if err != nil || len(addrs) == 0 {
 			return errors.New("safety: cannot resolve target host")
 		}

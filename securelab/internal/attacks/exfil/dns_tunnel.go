@@ -59,7 +59,7 @@ func (d *DNSTunnelAttack) Run(ctx context.Context, params map[string]any) (*DNST
 		host = dnsServer
 		dnsServer = net.JoinHostPort(dnsServer, "53")
 	}
-	if err := checkDNSServer(host); err != nil {
+	if err := checkDNSServer(ctx, host); err != nil {
 		return nil, err
 	}
 
@@ -109,7 +109,7 @@ func (d *DNSTunnelAttack) Run(ctx context.Context, params map[string]any) (*DNST
 
 		// Send a minimal raw DNS query for the FQDN.
 		query := buildDNSQuery(fqdn, uint16(i+1))
-		conn.SetDeadline(time.Now().Add(2 * time.Second))
+		_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
 		_, writeErr := conn.Write(query)
 		if writeErr != nil {
 			conn.Close()
@@ -182,10 +182,10 @@ func buildDNSQuery(fqdn string, txID uint16) []byte {
 }
 
 // checkDNSServer ensures the DNS server host is private/loopback.
-func checkDNSServer(host string) error {
+func checkDNSServer(ctx context.Context, host string) error {
 	ip := net.ParseIP(host)
 	if ip == nil {
-		addrs, err := net.LookupHost(host)
+		addrs, err := new(net.Resolver).LookupHost(ctx, host)
 		if err != nil || len(addrs) == 0 {
 			return fmt.Errorf("safety: cannot resolve dns_server host %q", host)
 		}

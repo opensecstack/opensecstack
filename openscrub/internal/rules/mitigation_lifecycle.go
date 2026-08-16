@@ -116,9 +116,9 @@ type MitigationInsert struct {
 // pairs.
 type NoopLifecycle struct{}
 
-func (NoopLifecycle) OnRuleCreated(context.Context, Rule)           {}
-func (NoopLifecycle) OnRuleDeleted(context.Context, Rule)           {}
-func (NoopLifecycle) RecoverActive(context.Context, []Rule)         {}
+func (NoopLifecycle) OnRuleCreated(context.Context, Rule)   {}
+func (NoopLifecycle) OnRuleDeleted(context.Context, Rule)   {}
+func (NoopLifecycle) RecoverActive(context.Context, []Rule) {}
 
 // LifecycleDeps wires a real lifecycle.
 type LifecycleDeps struct {
@@ -130,10 +130,10 @@ type LifecycleDeps struct {
 
 // Lifecycle is the production implementation.
 type Lifecycle struct {
-	store  MitigationStore
-	plane  dataplane.Client
-	log    zerolog.Logger
-	now    func() time.Time
+	store MitigationStore
+	plane dataplane.Client
+	log   zerolog.Logger
+	now   func() time.Time
 }
 
 // NewLifecycle builds a Lifecycle from its deps.
@@ -159,7 +159,9 @@ func (l *Lifecycle) OnRuleCreated(ctx context.Context, r Rule) {
 		return
 	}
 	startPackets, startBytes := l.readDrops(ctx)
-	l.insertWithSnapshot(ctx, r, startPackets, startBytes)
+	// insertWithSnapshot already logs the failure internally (see below) —
+	// the returned error is for RecoverActive's caller, not this one.
+	_ = l.insertWithSnapshot(ctx, r, startPackets, startBytes)
 }
 
 // insertWithSnapshot writes the mitigation row using a caller-supplied
@@ -230,9 +232,9 @@ func (l *Lifecycle) RecoverActive(ctx context.Context, active []Rule) {
 	startPackets, startBytes := l.readDrops(ctx)
 
 	var (
-		recovered    int
-		alreadyOpen  int
-		failed       int
+		recovered   int
+		alreadyOpen int
+		failed      int
 	)
 	for _, r := range active {
 		if _, ok := open[r.ID]; ok {

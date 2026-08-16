@@ -31,7 +31,7 @@ func TestBOLAAttack_Run_DetectsUnauthorizedAccess(t *testing.T) {
 		// Only ID "3" is "vulnerable" and returns 200; everything else 404.
 		if r.URL.Path == "/api/users/3" {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"id":3,"secret":"leaked"}`))
+			_, _ = w.Write([]byte(`{"id":3,"secret":"leaked"}`))
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)

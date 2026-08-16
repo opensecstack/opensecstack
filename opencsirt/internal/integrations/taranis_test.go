@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -51,7 +52,10 @@ type taranisWebhookHandlerStub struct {
 
 func (h *taranisWebhookHandlerStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body := make([]byte, r.ContentLength)
-	r.Body.Read(body)
+	if _, err := io.ReadFull(r.Body, body); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
 
 	if len(h.secret) > 0 {
 		ts := r.Header.Get("X-Timestamp")

@@ -19,7 +19,7 @@ func TestPortScanner_Run_BlocksPublicTarget(t *testing.T) {
 }
 
 func TestPortScanner_Run_FindsOpenPort(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := new(net.ListenConfig).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}
@@ -57,7 +57,7 @@ func TestPortScanner_Run_FindsOpenPort(t *testing.T) {
 
 func TestPortScanner_Run_NoOpenPortsInRange(t *testing.T) {
 	// Reserve a port and close the listener so nothing is bound.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := new(net.ListenConfig).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestPortScanner_Run_NoOpenPortsInRange(t *testing.T) {
 }
 
 func TestPortScanner_Run_SwapsInvertedRange(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := new(net.ListenConfig).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}

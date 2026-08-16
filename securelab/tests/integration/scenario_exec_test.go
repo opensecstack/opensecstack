@@ -30,7 +30,13 @@ func TestScenarioExecBolaBasic(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
-		downCmd := exec.Command("docker", "compose",
+		// A fresh context, not the test's own ctx/cancel — that one is
+		// already canceled by the time Cleanup funcs run (its `defer
+		// cancel()` fires as TestScenarioExecBolaBasic returns, which
+		// happens before Cleanup callbacks execute).
+		downCtx, downCancel := context.WithTimeout(context.Background(), time.Minute)
+		defer downCancel()
+		downCmd := exec.CommandContext(downCtx, "docker", "compose",
 			"-f", "../../docker-compose.test.yml", "down", "-v")
 		downCmd.Dir = testDataDir(t)
 		_ = downCmd.Run()
@@ -60,7 +66,9 @@ func TestScenarioExecBolaBasic(t *testing.T) {
 }
 
 func dockerAvailable() bool {
-	cmd := exec.Command("docker", "info")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "docker", "info")
 	return cmd.Run() == nil
 }
 

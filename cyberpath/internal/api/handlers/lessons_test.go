@@ -88,25 +88,6 @@ func (r *fakeTrackForLessonReader) GetByModule(_ context.Context, moduleID uuid.
 	}, nil
 }
 
-// fakeContentVersionReader implements ContentVersionReader.
-type fakeContentVersionReader struct {
-	version *db.ContentVersion
-	err     error
-}
-
-func (r *fakeContentVersionReader) GetLatest(_ context.Context, _, _ string) (*db.ContentVersion, error) {
-	if r.err != nil {
-		return nil, r.err
-	}
-	if r.version != nil {
-		return r.version, nil
-	}
-	return &db.ContentVersion{
-		ID:      uuid.New(),
-		Version: 1,
-	}, nil
-}
-
 // fakeCompletionCreator implements CompletionCreator.
 type fakeCompletionCreator struct {
 	completion *db.Completion

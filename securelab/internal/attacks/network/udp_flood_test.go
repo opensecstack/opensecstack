@@ -11,7 +11,7 @@ import (
 
 func localUDPListener(t *testing.T) string {
 	t.Helper()
-	conn, err := net.ListenPacket("udp", "127.0.0.1:0")
+	conn, err := new(net.ListenConfig).ListenPacket(context.Background(), "udp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to start UDP listener: %v", err)
 	}

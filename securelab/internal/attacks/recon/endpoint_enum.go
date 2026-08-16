@@ -80,7 +80,7 @@ func NewEndpointEnumerator() *EndpointEnumerator {
 //   - "concurrency"   int      — parallel probes (default 10, max 50)
 //   - "jwt"           string   — optional Bearer token
 func (e *EndpointEnumerator) Run(ctx context.Context, targetURL string, params map[string]any) (*EndpointEnumResult, error) {
-	if err := checkTarget(extractHost(targetURL)); err != nil {
+	if err := checkTarget(ctx, extractHost(targetURL)); err != nil {
 		return nil, err
 	}
 
@@ -110,10 +110,10 @@ func (e *EndpointEnumerator) Run(ctx context.Context, targetURL string, params m
 	}
 
 	type probeResult struct {
-		path   string
-		code   int
-		size   int64
-		err    error
+		path string
+		code int
+		size int64
+		err  error
 	}
 
 	paths := make(chan string, concurrency)

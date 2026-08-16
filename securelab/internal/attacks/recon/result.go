@@ -7,6 +7,7 @@
 package recon
 
 import (
+	"context"
 	"errors"
 	"net"
 	"time"
@@ -21,10 +22,10 @@ type AttackResult struct {
 }
 
 // checkTarget enforces that the target host resolves to a private/loopback IP.
-func checkTarget(host string) error {
+func checkTarget(ctx context.Context, host string) error {
 	ip := net.ParseIP(host)
 	if ip == nil {
-		addrs, err := net.LookupHost(host)
+		addrs, err := new(net.Resolver).LookupHost(ctx, host)
 		if err != nil || len(addrs) == 0 {
 			return errors.New("safety: cannot resolve target host")
 		}

@@ -19,16 +19,16 @@ import (
 
 // Scenario mirrors the scenarios table row.
 type Scenario struct {
-	ID                 string    `json:"id"`
-	Name               string    `json:"name"`
-	Description        string    `json:"description"`
-	MitreTechniqueIDs  []string  `json:"mitre_technique_ids"`
-	Tags               []string  `json:"tags"`
-	Severity           string    `json:"severity"`
-	TimeoutSeconds     int       `json:"timeout_seconds"`
-	YAMLContent        string    `json:"yaml_content"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	Description       string    `json:"description"`
+	MitreTechniqueIDs []string  `json:"mitre_technique_ids"`
+	Tags              []string  `json:"tags"`
+	Severity          string    `json:"severity"`
+	TimeoutSeconds    int       `json:"timeout_seconds"`
+	YAMLContent       string    `json:"yaml_content"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // Environment mirrors the environments table row.
@@ -45,17 +45,17 @@ type Environment struct {
 
 // ScenarioRun mirrors the scenario_runs table row.
 type ScenarioRun struct {
-	ID                  string          `json:"id"`
-	ScenarioID          string          `json:"scenario_id"`
-	EnvironmentID       string          `json:"environment_id"`
-	Status              string          `json:"status"`
-	StartedAt           *time.Time      `json:"started_at,omitempty"`
-	FinishedAt          *time.Time      `json:"finished_at,omitempty"`
-	AttackEvents        json.RawMessage `json:"attack_events"`
-	DetectionEvents     json.RawMessage `json:"detection_events"`
-	DetectionLatencyMs  *int            `json:"detection_latency_ms,omitempty"`
-	Detected            *bool           `json:"detected,omitempty"`
-	Notes               string          `json:"notes"`
+	ID                 string          `json:"id"`
+	ScenarioID         string          `json:"scenario_id"`
+	EnvironmentID      string          `json:"environment_id"`
+	Status             string          `json:"status"`
+	StartedAt          *time.Time      `json:"started_at,omitempty"`
+	FinishedAt         *time.Time      `json:"finished_at,omitempty"`
+	AttackEvents       json.RawMessage `json:"attack_events"`
+	DetectionEvents    json.RawMessage `json:"detection_events"`
+	DetectionLatencyMs *int            `json:"detection_latency_ms,omitempty"`
+	Detected           *bool           `json:"detected,omitempty"`
+	Notes              string          `json:"notes"`
 }
 
 // MitreCoverage mirrors the mitre_coverage table row.
@@ -237,6 +237,14 @@ func InsertRun(ctx context.Context, q *pgxpool.Pool, r *ScenarioRun) (string, er
 }
 
 // UpdateRunStatus updates a run's mutable fields after execution.
+//
+// attack_events/detection_events are NOT NULL jsonb columns (DEFAULT '[]'),
+// but that default only applies on INSERT — a caller that updates just the
+// status (e.g. the initial "mark running" transition, before any events
+// exist yet) leaves AttackEvents/DetectionEvents as a nil json.RawMessage,
+// which pgx sends as SQL NULL and the column rejects. Default both to an
+// empty JSON array here so a partial status update never fails on account
+// of fields it wasn't trying to change.
 func UpdateRunStatus(ctx context.Context, q *pgxpool.Pool, r *ScenarioRun) error {
 	const sql = `
 		UPDATE scenario_runs
@@ -250,12 +258,21 @@ func UpdateRunStatus(ctx context.Context, q *pgxpool.Pool, r *ScenarioRun) error
 		    notes                = $8
 		WHERE id = $9`
 
+	attackEvents := r.AttackEvents
+	if attackEvents == nil {
+		attackEvents = json.RawMessage("[]")
+	}
+	detectionEvents := r.DetectionEvents
+	if detectionEvents == nil {
+		detectionEvents = json.RawMessage("[]")
+	}
+
 	_, err := q.Exec(ctx, sql,
 		r.Status,
 		r.StartedAt,
 		r.FinishedAt,
-		r.AttackEvents,
-		r.DetectionEvents,
+		attackEvents,
+		detectionEvents,
 		r.DetectionLatencyMs,
 		r.Detected,
 		r.Notes,

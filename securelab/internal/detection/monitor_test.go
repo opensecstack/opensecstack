@@ -16,7 +16,7 @@ import (
 func TestMonitor_WatchAlerts_ForwardsMatchingTechnique(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`[{"alert_id":"a1","technique":"bola","severity":"high","timestamp":"2024-01-01T00:00:00Z"}]`))
+		_, _ = w.Write([]byte(`[{"alert_id":"a1","technique":"bola","severity":"high","timestamp":"2024-01-01T00:00:00Z"}]`))
 	}))
 	defer server.Close()
 
@@ -47,7 +47,7 @@ func TestMonitor_WatchAlerts_ForwardsMatchingTechnique(t *testing.T) {
 func TestMonitor_WatchAlerts_FiltersNonMatchingTechnique(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`[{"alert_id":"a1","technique":"unrelated_technique","timestamp":"2024-01-01T00:00:00Z"}]`))
+		_, _ = w.Write([]byte(`[{"alert_id":"a1","technique":"unrelated_technique","timestamp":"2024-01-01T00:00:00Z"}]`))
 	}))
 	defer server.Close()
 
@@ -72,7 +72,7 @@ func TestMonitor_WatchAlerts_FiltersNonMatchingTechnique(t *testing.T) {
 func TestMonitor_WatchAlerts_EnvelopeFormat(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"alerts":[{"alert_id":"a2","technique":"ssrf","timestamp":"2024-01-01T00:00:00Z"}]}`))
+		_, _ = w.Write([]byte(`{"alerts":[{"alert_id":"a2","technique":"ssrf","timestamp":"2024-01-01T00:00:00Z"}]}`))
 	}))
 	defer server.Close()
 
@@ -105,7 +105,7 @@ func TestMonitor_WatchAlerts_EnvelopeFormat(t *testing.T) {
 func TestMonitor_WatchAlerts_NilTechniqueFilterForwardsEverything(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`[{"alert_id":"a1","technique":"bola","severity":"high","timestamp":"2024-01-01T00:00:00Z"}]`))
+		_, _ = w.Write([]byte(`[{"alert_id":"a1","technique":"bola","severity":"high","timestamp":"2024-01-01T00:00:00Z"}]`))
 	}))
 	defer server.Close()
 

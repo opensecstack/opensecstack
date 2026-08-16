@@ -14,7 +14,7 @@ import (
 // immediately closes connections, returning the port.
 func localTCPListener(t *testing.T) string {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := new(net.ListenConfig).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to start listener: %v", err)
 	}

@@ -23,7 +23,7 @@ func TestMisconfigAttack_Run_DetectsExposedDebugEndpoint(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/actuator/env" {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"env":"leaked"}`))
+			_, _ = w.Write([]byte(`{"env":"leaked"}`))
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -53,7 +53,7 @@ func TestMisconfigAttack_Run_DetectsDefaultCredentials(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/login" {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"token":"fake"}`))
+			_, _ = w.Write([]byte(`{"token":"fake"}`))
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -83,7 +83,7 @@ func TestMisconfigAttack_Run_DetectsVerboseError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/users/not-a-valid-id-99999" {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("panic: runtime error: index out of range\n\ngoroutine 1 [running]:\nmain.main()\n\t/home/app/main.go:42"))
+			_, _ = w.Write([]byte("panic: runtime error: index out of range\n\ngoroutine 1 [running]:\nmain.main()\n\t/home/app/main.go:42"))
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -152,7 +152,7 @@ func TestMisconfigAttack_Run_CleanServerReportsNoFindings(t *testing.T) {
 			return
 		default:
 			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte("not found"))
+			_, _ = w.Write([]byte("not found"))
 		}
 	}))
 	defer server.Close()

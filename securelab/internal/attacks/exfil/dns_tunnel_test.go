@@ -54,14 +54,14 @@ func TestBuildDNSQuery_HeaderAndQuestionStructure(t *testing.T) {
 
 func TestCheckDNSServer_AllowsLoopbackAndPrivate(t *testing.T) {
 	for _, host := range []string{"127.0.0.1", "10.0.0.5", "192.168.1.1"} {
-		if err := checkDNSServer(host); err != nil {
+		if err := checkDNSServer(context.Background(), host); err != nil {
 			t.Errorf("checkDNSServer(%q) = %v, want nil", host, err)
 		}
 	}
 }
 
 func TestCheckDNSServer_BlocksPublicIP(t *testing.T) {
-	if err := checkDNSServer("8.8.8.8"); err == nil {
+	if err := checkDNSServer(context.Background(), "8.8.8.8"); err == nil {
 		t.Error("expected public DNS IP to be blocked")
 	}
 }
@@ -83,7 +83,7 @@ func TestDNSTunnelAttack_Run_BlocksPublicDNSServer(t *testing.T) {
 }
 
 func TestDNSTunnelAttack_Run_ChannelOpenWhenServerResponds(t *testing.T) {
-	conn, err := net.ListenPacket("udp", "127.0.0.1:0")
+	conn, err := new(net.ListenConfig).ListenPacket(context.Background(), "udp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}
@@ -97,7 +97,7 @@ func TestDNSTunnelAttack_Run_ChannelOpenWhenServerResponds(t *testing.T) {
 				return
 			}
 			// Echo back a minimal "response" so the tunnel sees a reply.
-			conn.WriteTo(buf[:n], addr)
+			_, _ = conn.WriteTo(buf[:n], addr)
 		}
 	}()
 
@@ -125,7 +125,7 @@ func TestDNSTunnelAttack_Run_ChannelOpenWhenServerResponds(t *testing.T) {
 
 func TestDNSTunnelAttack_Run_BlockedWhenNoResponse(t *testing.T) {
 	// Bind and immediately close so nothing answers.
-	conn, err := net.ListenPacket("udp", "127.0.0.1:0")
+	conn, err := new(net.ListenConfig).ListenPacket(context.Background(), "udp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to listen: %v", err)
 	}

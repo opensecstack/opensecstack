@@ -32,7 +32,7 @@ func TestDataExfilAttack_Run_StopsOnRateLimit(t *testing.T) {
 		if page == "1" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`[{"id":1},{"id":2}]`))
+			_, _ = w.Write([]byte(`[{"id":1},{"id":2}]`))
 			return
 		}
 		w.WriteHeader(http.StatusTooManyRequests)
@@ -84,9 +84,9 @@ func TestDataExfilAttack_Run_ExhaustedOnEmptyPage(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		if page == "1" {
-			w.Write([]byte(`[{"id":1}]`))
+			_, _ = w.Write([]byte(`[{"id":1}]`))
 		} else {
-			w.Write([]byte(`[]`))
+			_, _ = w.Write([]byte(`[]`))
 		}
 	}))
 	defer server.Close()

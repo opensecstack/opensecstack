@@ -87,7 +87,9 @@ func TestHashQuiz(t *testing.T) {
 	root, _ := filepath.Abs("testdata")
 	tr, _ := LoadTrack(root, "sample-track")
 	q := tr.Modules[0].Quiz
-	if HashQuiz(q) != HashQuiz(q) {
+	h1 := HashQuiz(q)
+	h2 := HashQuiz(q)
+	if h1 != h2 {
 		t.Error("quiz hash non-deterministic")
 	}
 }

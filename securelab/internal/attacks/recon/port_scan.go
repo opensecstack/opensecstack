@@ -20,8 +20,8 @@ import (
 
 // OpenPort holds the result for a single open port.
 type OpenPort struct {
-	Port    int
-	Banner  string // optional service banner grabbed from the connection
+	Port   int
+	Banner string // optional service banner grabbed from the connection
 }
 
 // PortScanResult extends AttackResult with discovered open ports.
@@ -44,7 +44,7 @@ func NewPortScanner() *PortScanner { return &PortScanner{} }
 //   - "timeout_ms"   int    — per-port dial timeout in milliseconds (default 500)
 //   - "concurrency"  int    — parallel probes (default 50, max 500)
 func (p *PortScanner) Run(ctx context.Context, targetHost string, params map[string]any) (*PortScanResult, error) {
-	if err := checkTarget(targetHost); err != nil {
+	if err := checkTarget(ctx, targetHost); err != nil {
 		return nil, err
 	}
 
@@ -85,8 +85,8 @@ func (p *PortScanner) Run(ctx context.Context, targetHost string, params map[str
 				default:
 				}
 
-				addr := fmt.Sprintf("%s:%d", targetHost, port)
-				conn, err := net.DialTimeout("tcp", addr, timeout)
+				addr := net.JoinHostPort(targetHost, fmt.Sprintf("%d", port))
+				conn, err := (&net.Dialer{Timeout: timeout}).DialContext(ctx, "tcp", addr)
 				if err != nil {
 					results <- portResult{port: port, open: false}
 					continue
@@ -94,7 +94,7 @@ func (p *PortScanner) Run(ctx context.Context, targetHost string, params map[str
 
 				// Attempt a banner grab.
 				banner := ""
-				conn.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+				_ = conn.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
 				buf := make([]byte, 256)
 				n, _ := conn.Read(buf)
 				if n > 0 {

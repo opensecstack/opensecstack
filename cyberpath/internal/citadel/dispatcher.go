@@ -54,10 +54,7 @@ func errIsRetryable(err error) bool {
 		return false
 	}
 	var nr *nonRetryableError
-	if errors.As(err, &nr) {
-		return false
-	}
-	return true
+	return !errors.As(err, &nr)
 }
 
 // dispatch is the destination-aware fan-out called by the worker.

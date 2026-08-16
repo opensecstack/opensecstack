@@ -141,7 +141,6 @@ func (d *DataExfilAttack) Run(ctx context.Context, targetURL string, params map[
 		default:
 			result.Evidence = append(result.Evidence,
 				fmt.Sprintf("DataExfil: unexpected HTTP %d on page %d", resp.StatusCode, page))
-			break
 		}
 	}
 

@@ -115,8 +115,7 @@ type Worker struct {
 	// was empty, that also satisfies "healthy".
 	lastEmptyClaimNanos atomic.Int64
 
-	wg       sync.WaitGroup
-	stopOnce sync.Once
+	wg sync.WaitGroup
 }
 
 // NewWorker builds a Worker. Sensible defaults are applied for any

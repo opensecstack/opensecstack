@@ -37,6 +37,13 @@ jobs:
       typescript_sdk:  ${{ steps.filter.outputs.typescript_sdk }}
       vantage_hash:    ${{ steps.filter.outputs.vantage_hash }}
       deploy:          ${{ steps.filter.outputs.deploy }}
+      community:       ${{ steps.filter.outputs.community }}
+      sinauth:         ${{ steps.filter.outputs.sinauth }}
+      cyberpath:       ${{ steps.filter.outputs.cyberpath }}
+      securelab:       ${{ steps.filter.outputs.securelab }}
+      opencsirt:       ${{ steps.filter.outputs.opencsirt }}
+      vertguard:       ${{ steps.filter.outputs.vertguard }}
+      openscrub:       ${{ steps.filter.outputs.openscrub }}
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
@@ -62,6 +69,20 @@ jobs:
               - 'threatflow/**'
             deploy:
               - 'deploy/**'
+            community:
+              - 'community/**'
+            sinauth:
+              - 'sinauth/**'
+            cyberpath:
+              - 'cyberpath/**'
+            securelab:
+              - 'securelab/**'
+            opencsirt:
+              - 'opencsirt/**'
+            vertguard:
+              - 'vertguard/**'
+            openscrub:
+              - 'openscrub/**'
 
   # ──────────────────────────────────────────────────────────────────────────
   # 1a. APIGuard — Go backend tests (with Postgres)
@@ -745,8 +766,7 @@ jobs:
       - name: Install Nuclei
         run: |
           go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-          "$(go env GOPATH)/bin/nuclei" -update-templates
+          nuclei -update-templates
       - name: DAST — APIGuard
         run: |
           nuclei -t apiguard/.nuclei/templates/ \
@@ -770,6 +790,513 @@ jobs:
         run: docker compose -f deploy/docker-compose.dev.yml down -v
 
   # ──────────────────────────────────────────────────────────────────────────
+  # 6a. SIN Community — Go tests (with Postgres)
+  # ──────────────────────────────────────────────────────────────────────────
+  test-community:
+    needs: changes
+    if: needs.changes.outputs.community == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: community
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: community_test
+          POSTGRES_USER: community
+          POSTGRES_PASSWORD: community
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: community/go.sum
+      - name: Go tests (race detector)
+        env:
+          COMMUNITY_TEST_DB_URL: postgres://community:community@localhost:5432/community_test?sslmode=disable
+        # tests/integration hits a running HTTP server (COMMUNITY_TEST_URL),
+        # not just a database — it belongs in a future live-stack job, not
+        # this unit/DB-integration coverage gate.
+        run: go test -race -count=1 -coverprofile=coverage.out -covermode=atomic ./cmd/... ./internal/...
+
+      - name: Enforce 70 % coverage
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${COVERAGE}%"
+          if [ "$(echo "$COVERAGE < 70" | bc -l)" -eq 1 ]; then
+            echo "::error::Coverage ${COVERAGE}% is below the 70% threshold"
+            exit 1
+          fi
+
+      - name: Upload Go coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: community-go-coverage
+          path: community/coverage.out
+
+  lint-community:
+    needs: changes
+    if: needs.changes.outputs.community == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: community/go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.12.2
+          working-directory: community
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 6b. sinauth — Go tests (with Postgres)
+  # ──────────────────────────────────────────────────────────────────────────
+  test-sinauth:
+    needs: changes
+    if: needs.changes.outputs.sinauth == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sinauth
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: sinauth_test
+          POSTGRES_USER: sinauth
+          POSTGRES_PASSWORD: sinauth
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: sinauth/go.sum
+      - name: Go tests (race detector)
+        env:
+          SINAUTH_TEST_DB_URL: postgres://sinauth:sinauth@localhost:5432/sinauth_test?sslmode=disable
+        run: go test -race -count=1 -tags=integration -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Enforce 70 % coverage
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${COVERAGE}%"
+          if [ "$(echo "$COVERAGE < 70" | bc -l)" -eq 1 ]; then
+            echo "::error::Coverage ${COVERAGE}% is below the 70% threshold"
+            exit 1
+          fi
+
+      - name: Upload Go coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sinauth-go-coverage
+          path: sinauth/coverage.out
+
+  lint-sinauth:
+    needs: changes
+    if: needs.changes.outputs.sinauth == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: sinauth/go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.12.2
+          working-directory: sinauth
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 6c. CyberPath — Go tests (with Postgres)
+  # ──────────────────────────────────────────────────────────────────────────
+  test-cyberpath:
+    needs: changes
+    if: needs.changes.outputs.cyberpath == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cyberpath
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cyberpath_test
+          POSTGRES_USER: cyberpath
+          POSTGRES_PASSWORD: cyberpath
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: cyberpath/go.sum
+      - name: Go tests (race detector)
+        env:
+          CYBERPATH_TEST_DB_URL: postgres://cyberpath:cyberpath@localhost:5432/cyberpath_test?sslmode=disable
+        # -p 1: make test-integration in this platform's own Makefile serializes
+        # package execution for the same reason — internal/db and related
+        # packages share/truncate the same live database.
+        run: go test -race -count=1 -tags=integration -p 1 -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Enforce 70 % coverage
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${COVERAGE}%"
+          if [ "$(echo "$COVERAGE < 70" | bc -l)" -eq 1 ]; then
+            echo "::error::Coverage ${COVERAGE}% is below the 70% threshold"
+            exit 1
+          fi
+
+      - name: Upload Go coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cyberpath-go-coverage
+          path: cyberpath/coverage.out
+
+  lint-cyberpath:
+    needs: changes
+    if: needs.changes.outputs.cyberpath == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: cyberpath/go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.12.2
+          working-directory: cyberpath
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 6d. SecureLab — Go tests (with Postgres)
+  # ──────────────────────────────────────────────────────────────────────────
+  test-securelab:
+    needs: changes
+    if: needs.changes.outputs.securelab == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: securelab
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: securelab_test
+          POSTGRES_USER: securelab
+          POSTGRES_PASSWORD: securelab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: securelab/go.sum
+      - name: Go tests (race detector)
+        env:
+          DATABASE_URL: postgres://securelab:securelab@localhost:5432/securelab_test?sslmode=disable
+          SECURELAB_DB_URL: postgres://securelab:securelab@localhost:5432/securelab_test?sslmode=disable
+        # -p 1: internal/db truncates shared tables between tests; internal/scenarios
+        # reads/writes the same live database, so packages can't run in parallel.
+        # tests/integration builds testdata/target-api as a Docker image, which
+        # doesn't exist in this repo yet — excluded, same as the other
+        # platforms' live-server-only suites. tests/scenarios has no such
+        # dependency and stays in.
+        run: go test -race -count=1 -p 1 -coverprofile=coverage.out -covermode=atomic ./cmd/... ./internal/... ./tests/scenarios/...
+
+      - name: Enforce 70 % coverage
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${COVERAGE}%"
+          if [ "$(echo "$COVERAGE < 70" | bc -l)" -eq 1 ]; then
+            echo "::error::Coverage ${COVERAGE}% is below the 70% threshold"
+            exit 1
+          fi
+
+      - name: Upload Go coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: securelab-go-coverage
+          path: securelab/coverage.out
+
+  lint-securelab:
+    needs: changes
+    if: needs.changes.outputs.securelab == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: securelab/go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.12.2
+          working-directory: securelab
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 6e. OpenCSIRT — Go tests (with Postgres)
+  # ──────────────────────────────────────────────────────────────────────────
+  test-opencsirt:
+    needs: changes
+    if: needs.changes.outputs.opencsirt == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: opencsirt
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: opencsirt_test
+          POSTGRES_USER: opencsirt
+          POSTGRES_PASSWORD: opencsirt
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: opencsirt/go.sum
+
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgres://opencsirt:opencsirt@localhost:5432/opencsirt_test?sslmode=disable
+        run: |
+          go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+          migrate -path migrations -database "$DATABASE_URL" up
+
+      - name: Go tests (race detector)
+        env:
+          DATABASE_URL: postgres://opencsirt:opencsirt@localhost:5432/opencsirt_test?sslmode=disable
+        # tests/integration needs a running server + Python service
+        # (OPENCSIRT_API_BASE/OPENCSIRT_TEST_PY_URL) — out of scope here.
+        run: go test -race -count=1 -coverprofile=coverage.out -covermode=atomic ./cmd/... ./internal/...
+
+      - name: Enforce 70 % coverage
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${COVERAGE}%"
+          if [ "$(echo "$COVERAGE < 70" | bc -l)" -eq 1 ]; then
+            echo "::error::Coverage ${COVERAGE}% is below the 70% threshold"
+            exit 1
+          fi
+
+      - name: Upload Go coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: opencsirt-go-coverage
+          path: opencsirt/coverage.out
+
+  lint-opencsirt:
+    needs: changes
+    if: needs.changes.outputs.opencsirt == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: opencsirt/go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.12.2
+          working-directory: opencsirt
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 6f. VertGuard — Go tests (with Postgres)
+  # ──────────────────────────────────────────────────────────────────────────
+  test-vertguard:
+    needs: changes
+    if: needs.changes.outputs.vertguard == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vertguard
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: vertguard_test
+          POSTGRES_USER: vertguard
+          POSTGRES_PASSWORD: vertguard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: vertguard/go.sum
+      - name: Go tests (race detector)
+        env:
+          VERTGUARD_TEST_DB_URL: postgres://vertguard:vertguard@localhost:5432/vertguard_test?sslmode=disable
+        # -p 1: matches this platform's own `make test-integration`, which
+        # serializes package execution because the store tests share/truncate
+        # the same live database. tests/integration's ML e2e test is opt-in
+        # via VERTGUARD_ML_E2E (unset here) and skips cleanly.
+        run: go test -race -count=1 -tags=integration -p 1 -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Enforce 70 % coverage
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${COVERAGE}%"
+          if [ "$(echo "$COVERAGE < 70" | bc -l)" -eq 1 ]; then
+            echo "::error::Coverage ${COVERAGE}% is below the 70% threshold"
+            exit 1
+          fi
+
+      - name: Upload Go coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vertguard-go-coverage
+          path: vertguard/coverage.out
+
+  lint-vertguard:
+    needs: changes
+    if: needs.changes.outputs.vertguard == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: vertguard/go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.12.2
+          working-directory: vertguard
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 6g. OpenScrub — Go tests (with Postgres)
+  # ──────────────────────────────────────────────────────────────────────────
+  test-openscrub:
+    needs: changes
+    if: needs.changes.outputs.openscrub == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: openscrub
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: openscrub_test
+          POSTGRES_USER: openscrub
+          POSTGRES_PASSWORD: openscrub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: openscrub/go.sum
+
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgres://openscrub:openscrub@localhost:5432/openscrub_test?sslmode=disable
+        run: |
+          go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+          migrate -path migrations -database "$DATABASE_URL" up
+
+      - name: Go tests (race detector)
+        env:
+          OPENSCRUB_TEST_DB_URL: postgres://openscrub:openscrub@localhost:5432/openscrub_test?sslmode=disable
+        # tests/integration needs a live server on :8087 — out of scope here.
+        # The kernel-level XDP/eBPF dataplane is Rust/C, not exercised by
+        # this Go job.
+        run: go test -race -count=1 -tags=integration -coverprofile=coverage.out -covermode=atomic ./cmd/... ./internal/...
+
+      - name: Enforce 70 % coverage
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${COVERAGE}%"
+          if [ "$(echo "$COVERAGE < 70" | bc -l)" -eq 1 ]; then
+            echo "::error::Coverage ${COVERAGE}% is below the 70% threshold"
+            exit 1
+          fi
+
+      - name: Upload Go coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: openscrub-go-coverage
+          path: openscrub/coverage.out
+
+  lint-openscrub:
+    needs: changes
+    if: needs.changes.outputs.openscrub == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
+      - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: openscrub/go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.12.2
+          working-directory: openscrub
+
+  # ──────────────────────────────────────────────────────────────────────────
   # 7. CI Gate — single required status check for branch protection
   #    "skipped" (path-filtered) jobs are treated as success.
   # ──────────────────────────────────────────────────────────────────────────
@@ -791,6 +1318,20 @@ jobs:
       - test-threatflow
       - test-typescript-sdk
       - test-vantage-hash
+      - test-community
+      - lint-community
+      - test-sinauth
+      - lint-sinauth
+      - test-cyberpath
+      - lint-cyberpath
+      - test-securelab
+      - lint-securelab
+      - test-opencsirt
+      - lint-opencsirt
+      - test-vertguard
+      - lint-vertguard
+      - test-openscrub
+      - lint-openscrub
       - docker-build
       - integration
     if: always()

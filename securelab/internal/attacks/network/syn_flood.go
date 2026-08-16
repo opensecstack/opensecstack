@@ -37,7 +37,7 @@ func NewSYNFlood() *SYNFlood { return &SYNFlood{} }
 //   - "pps"       int           — packets (connections) per second (default 1000, max 10000)
 //   - "duration"  string        — how long to run, e.g. "5s" (default "5s", max "30s")
 func (s *SYNFlood) Run(ctx context.Context, targetIP, targetPort string, params map[string]any) (*AttackResult, error) {
-	if err := checkNetworkTarget(targetIP); err != nil {
+	if err := checkNetworkTarget(ctx, targetIP); err != nil {
 		return nil, err
 	}
 
@@ -78,7 +78,7 @@ func (s *SYNFlood) Run(ctx context.Context, targetIP, targetPort string, params 
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				conn, err := net.DialTimeout("tcp", addr, 500*time.Millisecond)
+				conn, err := (&net.Dialer{Timeout: 500 * time.Millisecond}).DialContext(ctx, "tcp", addr)
 				if err != nil {
 					atomic.AddInt64(&errors, 1)
 					return

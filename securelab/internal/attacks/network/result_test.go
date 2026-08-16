@@ -4,33 +4,34 @@
 package network
 
 import (
+	"context"
 	"net"
 	"testing"
 	"time"
 )
 
 func TestCheckNetworkTarget_AllowsLoopback(t *testing.T) {
-	if err := checkNetworkTarget("127.0.0.1"); err != nil {
+	if err := checkNetworkTarget(context.Background(), "127.0.0.1"); err != nil {
 		t.Errorf("expected loopback to be allowed, got: %v", err)
 	}
 }
 
 func TestCheckNetworkTarget_AllowsRFC1918(t *testing.T) {
 	for _, ip := range []string{"10.0.0.1", "172.16.0.1", "192.168.1.1"} {
-		if err := checkNetworkTarget(ip); err != nil {
+		if err := checkNetworkTarget(context.Background(), ip); err != nil {
 			t.Errorf("checkNetworkTarget(%q) = %v, want nil", ip, err)
 		}
 	}
 }
 
 func TestCheckNetworkTarget_BlocksPublicIP(t *testing.T) {
-	if err := checkNetworkTarget("8.8.8.8"); err == nil {
+	if err := checkNetworkTarget(context.Background(), "8.8.8.8"); err == nil {
 		t.Error("expected public IP 8.8.8.8 to be blocked")
 	}
 }
 
 func TestCheckNetworkTarget_BlocksUnresolvableHost(t *testing.T) {
-	if err := checkNetworkTarget("this-host-does-not-exist.invalid"); err == nil {
+	if err := checkNetworkTarget(context.Background(), "this-host-does-not-exist.invalid"); err == nil {
 		t.Error("expected unresolvable host to error")
 	}
 }

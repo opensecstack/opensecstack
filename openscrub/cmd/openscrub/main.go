@@ -442,7 +442,11 @@ func mitigationRecordFromRow(ctx context.Context, repo rules.Repo, m db.Mitigati
 }
 
 func (a *mitigationStoreAdapter) MarkEmitted(ctx context.Context, id uuid.UUID) error {
-	return a.store.MarkEmitted(ctx, id)
+	// a.store.MarkEmitted is deprecated and just routes to MarkSent (see
+	// internal/db/mitigation_store.go) — call MarkSent directly so this
+	// adapter, which still has to implement the MarkEmitted interface
+	// method for older callers, doesn't itself use the deprecated symbol.
+	return a.store.MarkSent(ctx, id)
 }
 
 func (a *mitigationStoreAdapter) MarkSending(ctx context.Context, id uuid.UUID, eventID string) error {

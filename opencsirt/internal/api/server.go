@@ -14,14 +14,14 @@ import (
 )
 
 type Deps struct {
-	Auth          *auth.Authenticator
-	AuthHandler   *handlers.Auth
-	Health        *handlers.Health
-	Snapshot      *handlers.Snapshot
-	Constituency  *handlers.Constituency
-	Incident      *handlers.Incident
-	Advisory      *handlers.Advisory
-	Peers         *handlers.Peers
+	Auth           *auth.Authenticator
+	AuthHandler    *handlers.Auth
+	Health         *handlers.Health
+	Snapshot       *handlers.Snapshot
+	Constituency   *handlers.Constituency
+	Incident       *handlers.Incident
+	Advisory       *handlers.Advisory
+	Peers          *handlers.Peers
 	IRFlowWebhook  http.Handler
 	TaranisWebhook http.Handler
 }
@@ -31,7 +31,12 @@ func Router(d Deps) http.Handler {
 	// Recoverer must be outermost so it catches panics from all middleware
 	// beneath it, including Timeout (which can panic on context cancellation).
 	r.Use(chimw.Recoverer)
-	r.Use(chimw.RealIP)
+	// chimw.RealIP is deliberately NOT used: it blindly trusts the leftmost
+	// X-Forwarded-For / X-Real-IP / True-Client-IP header from any client,
+	// letting a spoofed header override r.RemoteAddr with no trusted-proxy
+	// allowlist to validate against (GHSA-3fxj-6jh8-hvhx). Nothing in this
+	// service currently keys a security decision off the client IP, so the
+	// safer default is the raw TCP peer address chi/net/http already set.
 	r.Use(chimw.RequestID)
 	r.Use(chimw.Timeout(30 * time.Second))
 

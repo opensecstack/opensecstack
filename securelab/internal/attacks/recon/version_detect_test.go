@@ -49,7 +49,7 @@ func TestVersionDetector_Run_DetectsJSONVersionField(t *testing.T) {
 		if r.URL.Path == "/version" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"version":"3.2.1"}`))
+			_, _ = w.Write([]byte(`{"version":"3.2.1"}`))
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)

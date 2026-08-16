@@ -33,7 +33,13 @@ type Deps struct {
 // NewRouter returns a chi router with all routes registered.
 func NewRouter(d Deps) http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.RealIP)
+	// middleware.RealIP is deliberately NOT used: it blindly trusts the
+	// leftmost X-Forwarded-For / X-Real-IP / True-Client-IP header from any
+	// client, letting a spoofed header override r.RemoteAddr with no
+	// trusted-proxy allowlist to validate against (GHSA-3fxj-6jh8-hvhx).
+	// Nothing in this service currently keys a security decision off the
+	// client IP, so the safer default is the raw TCP peer address chi/
+	// net/http already set.
 	r.Use(middleware.RequestID)
 	r.Use(quietRecoverer(d.Logger))
 	r.Use(middleware.Timeout(30 * time.Second))

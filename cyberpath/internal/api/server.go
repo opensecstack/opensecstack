@@ -74,7 +74,17 @@ func NewRouter(opts Options) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	// middleware.RealIP is deliberately NOT used: it blindly trusts the
+	// leftmost X-Forwarded-For / X-Real-IP / True-Client-IP header from any
+	// client, letting a spoofed header override r.RemoteAddr with no
+	// trusted-proxy allowlist to validate against (GHSA-3fxj-6jh8-hvhx).
+	// handlers.clientIP (internal/api/handlers/auth.go) reads
+	// X-Forwarded-For directly for the same reason and has the same
+	// unresolved gap — both need a real trusted-proxy allowlist before this
+	// header can be trusted for audit-log IP attribution. Tracked as a
+	// known follow-up, not silently left unaddressed: removing the
+	// double-mutation here at least stops chi from ALSO rewriting
+	// RemoteAddr from the same untrusted header.
 	r.Use(loggerMiddleware(opts.Logger))
 	r.Use(metricsMiddleware(opts.Metrics))
 	r.Use(middleware.Recoverer)
@@ -296,4 +306,3 @@ func corsMiddleware() func(http.Handler) http.Handler {
 		})
 	}
 }
-

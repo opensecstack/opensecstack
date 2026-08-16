@@ -251,7 +251,7 @@ func TestNewServerListenAndServeGracefulShutdown(t *testing.T) {
 // (port already in use) propagates as a non-nil, non-ErrServerClosed
 // error from ListenAndServe instead of being swallowed.
 func TestNewServerListenAndServeBindError(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := new(net.ListenConfig).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to reserve a port for the test: %v", err)
 	}

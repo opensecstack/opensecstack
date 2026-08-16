@@ -21,7 +21,7 @@ func TestSSRFAttack_Run_BlocksProductionTarget(t *testing.T) {
 func TestSSRFAttack_Run_ConfirmedWhenBodyLeaksMetadata(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"instance-id":"i-0123456789","local-ipv4":"169.254.1.1"}`))
+		_, _ = w.Write([]byte(`{"instance-id":"i-0123456789","local-ipv4":"169.254.1.1"}`))
 	}))
 	defer server.Close()
 
@@ -51,7 +51,7 @@ func TestSSRFAttack_Run_ConfirmedWhenBodyLeaksMetadata(t *testing.T) {
 func TestSSRFAttack_Run_PossibleWhenBodyAcceptedButNoSignal(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"ok":true}`))
+		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
 	defer server.Close()
 

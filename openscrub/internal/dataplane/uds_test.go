@@ -44,7 +44,7 @@ func TestUDSClientStatsCarriesSynCookies(t *testing.T) {
 	dir := t.TempDir()
 	socket := filepath.Join(dir, "dp.sock")
 
-	ln, err := net.Listen("unix", socket)
+	ln, err := new(net.ListenConfig).Listen(context.Background(), "unix", socket)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}

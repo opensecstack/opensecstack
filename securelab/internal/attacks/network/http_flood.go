@@ -39,7 +39,7 @@ func NewHTTPFlood() *HTTPFlood { return &HTTPFlood{} }
 //   - "duration"    string — alternative to requests: run for this long, e.g. "10s" (max "60s")
 //   - "path"        string — URL path to flood (default "/")
 func (h *HTTPFlood) Run(ctx context.Context, targetIP, targetPort string, params map[string]any) (*AttackResult, error) {
-	if err := checkNetworkTarget(targetIP); err != nil {
+	if err := checkNetworkTarget(ctx, targetIP); err != nil {
 		return nil, err
 	}
 

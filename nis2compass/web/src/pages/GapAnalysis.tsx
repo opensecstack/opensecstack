@@ -77,9 +77,7 @@ export default function GapAnalysis({ role }: { role: Role }) {
       setAssessment(asm)
       const orgData = await api.organisations.get(asm.org_id)
       setOrg(orgData)
-      // API may return an array directly or a wrapped object
-      const list: Gap[] = Array.isArray(gapData) ? gapData : (gapData.gaps ?? gapData.data ?? [])
-      setGaps(list)
+      setGaps((gapData.gaps ?? []) as unknown as Gap[])
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load gap analysis')
     } finally {

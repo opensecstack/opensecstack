@@ -455,7 +455,7 @@ function EvidenceSection({ assessmentId, role }: EvidenceSectionProps) {
     setArtifactActionMsg(null)
     try {
       const result = await compliance.verifyArtifact(artifact.id)
-      const msg = result?.valid === false ? 'Verification failed: signature invalid' : 'Signature verified'
+      const msg = result.verified ? 'Signature verified' : 'Verification failed: signature invalid'
       setArtifactActionMsg({ id: artifact.id, msg })
     } catch (err: unknown) {
       setArtifactError(err instanceof Error ? err.message : 'Verify failed')
@@ -849,14 +849,7 @@ export default function AssessmentDetail({ role }: { role: Role }) {
     try {
       await compliance.computeScore(id!)
       const result = await compliance.getScore(id!)
-      const pct: number =
-        typeof result?.score === 'number'
-          ? result.score
-          : typeof result?.percentage === 'number'
-          ? result.percentage
-          : typeof result?.compliance_score === 'number'
-          ? result.compliance_score
-          : null
+      const pct = result.compliance_score
       setScore(pct)
     } catch (err: unknown) {
       setScoreError(err instanceof Error ? err.message : 'Score calculation failed')

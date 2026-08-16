@@ -1,4 +1,18 @@
-import type { Organisation, Assessment, Control, AuditEntry, Artifact, ApiKey } from './types'
+import type {
+  Organisation,
+  Assessment,
+  Control,
+  AuditEntry,
+  Artifact,
+  ApiKey,
+  ComputeScoreResult,
+  GetScoreResult,
+  LockResult,
+  UnlockResult,
+  SignArtifactResult,
+  VerifyArtifactResult,
+  GapReport,
+} from './types'
 
 const BASE = '/api/v1'
 const TOKEN_KEY = 'nis2compass_token'
@@ -295,35 +309,35 @@ export async function downloadAssessmentPDF(id: string): Promise<Blob> {
 
 export const compliance = {
   computeScore: (assessmentId: string) =>
-    request<any>(`/assessments/${assessmentId}/score`, { method: 'POST' }),
+    request<ComputeScoreResult>(`/assessments/${assessmentId}/score`, { method: 'POST' }),
 
   getScore: (assessmentId: string) =>
-    request<any>(`/assessments/${assessmentId}/score`),
+    request<GetScoreResult>(`/assessments/${assessmentId}/score`),
 
   approve: (assessmentId: string, action: 'approve' | 'reject', notes?: string) =>
-    request<any>(`/assessments/${assessmentId}/approve`, {
+    request<Assessment>(`/assessments/${assessmentId}/approve`, {
       method: 'POST',
       body: JSON.stringify({ action, notes }),
     }),
 
   lock: (assessmentId: string, reason?: string) =>
-    request<any>(`/assessments/${assessmentId}/lock`, {
+    request<LockResult>(`/assessments/${assessmentId}/lock`, {
       method: 'POST',
       body: JSON.stringify({ reason }),
     }),
 
   unlock: (assessmentId: string) =>
-    request<any>(`/assessments/${assessmentId}/unlock`, { method: 'POST' }),
+    request<UnlockResult>(`/assessments/${assessmentId}/unlock`, { method: 'POST' }),
 
   signArtifact: (artifactId: string) =>
-    request<any>(`/artifacts/${artifactId}/sign`, { method: 'POST' }),
+    request<SignArtifactResult>(`/artifacts/${artifactId}/sign`, { method: 'POST' }),
 
   verifyArtifact: (artifactId: string) =>
-    request<any>(`/artifacts/${artifactId}/verify`),
+    request<VerifyArtifactResult>(`/artifacts/${artifactId}/verify`),
 
   analyzeGaps: (assessmentId: string) =>
-    request<any>(`/assessments/${assessmentId}/analyze-gaps`, { method: 'POST' }),
+    request<GapReport>(`/assessments/${assessmentId}/analyze-gaps`, { method: 'POST' }),
 
   getGaps: (assessmentId: string) =>
-    request<any>(`/assessments/${assessmentId}/gaps`),
+    request<GapReport>(`/assessments/${assessmentId}/gaps`),
 }

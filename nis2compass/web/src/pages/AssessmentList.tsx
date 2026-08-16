@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, useEffect, useCallback, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../api'
 import type { Assessment, Organisation } from '../types'
@@ -21,11 +21,7 @@ export default function AssessmentList() {
   const [dueDate, setDueDate] = useState('')
   const [scope, setScope] = useState('')
 
-  useEffect(() => {
-    if (orgId) load()
-  }, [orgId])
-
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -40,7 +36,11 @@ export default function AssessmentList() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [orgId])
+
+  useEffect(() => {
+    if (orgId) load()
+  }, [orgId, load])
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault()

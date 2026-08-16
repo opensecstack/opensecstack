@@ -130,6 +130,84 @@ export interface ApiKey {
   key?: string // only present on creation response
 }
 
+// ── Compliance feature responses ─────────────────────────────────────────────
+
+export interface ScoreBreakdownEntry {
+  status: ControlStatus
+  weight: number | null
+}
+
+export interface ComputeScoreResult {
+  assessment_id: string
+  compliance_score: number | null
+  total_controls: number
+  scored_controls: number
+  excluded_controls: number
+  breakdown: Record<string, ScoreBreakdownEntry>
+}
+
+export interface GetScoreResult {
+  assessment_id: string
+  compliance_score: number | null
+}
+
+export interface LockResult {
+  assessment_id: string
+  locked: true
+  locked_by: string
+}
+
+export interface UnlockResult {
+  assessment_id: string
+  locked: false
+}
+
+export interface SignArtifactResult {
+  artifact_id: string
+  signature: string
+  signed_by: string
+  signed_at: string
+}
+
+export interface VerifyArtifactResult {
+  artifact_id: string
+  verified: boolean
+  signed_by?: string | null
+  signed_at?: string | null
+  file_hash?: string
+  reason?: string // present when the artifact has never been signed
+}
+
+export interface GapReportItem {
+  measure_ref: string
+  article_ref: string
+  title: string
+  measure_label: string
+  status: ControlStatus
+  gap_description: string
+  has_remediation: boolean
+  remediation_status: RemediationStatus
+  remediation_due: string | null
+  risk_score: number | null
+  evidence_count: number
+  severity: 'critical' | 'warning'
+}
+
+export interface GapReport {
+  generated_at: string
+  total_controls: number
+  compliant: number
+  non_compliant: number
+  partially_compliant: number
+  not_assessed: number
+  not_applicable: number
+  compliance_rate: number | null
+  gaps: GapReportItem[]
+  critical_gaps: number
+  warning_gaps: number
+  remediation_coverage: number
+}
+
 export interface AuditEntry {
   id: string
   action: string

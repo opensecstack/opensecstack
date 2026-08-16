@@ -84,7 +84,10 @@ func Register(d Deps) http.HandlerFunc {
 		}
 
 		token, _ := d.UserSvc.GenerateToken()
-		d.UserSvc.StoreVerificationToken(ctx, u.ID, token)
+		// Best-effort: a failed token store here means verification stays
+		// pending rather than silently "succeeding" — same best-effort
+		// tolerance as the email send right below.
+		_ = d.UserSvc.StoreVerificationToken(ctx, u.ID, token)
 		d.Mailer.SendVerification(u.Email, u.Username, token) //nolint:errcheck
 
 		if d.Audit != nil {
@@ -113,7 +116,8 @@ func ForgotPassword(d Deps) http.HandlerFunc {
 		}
 
 		token, _ := d.UserSvc.GenerateToken()
-		d.UserSvc.StorePasswordResetToken(ctx, u.ID, token)
+		// Best-effort, same reasoning as StoreVerificationToken above.
+		_ = d.UserSvc.StorePasswordResetToken(ctx, u.ID, token)
 		d.Mailer.SendPasswordReset(u.Email, token) //nolint:errcheck
 
 		writeJSON(w, http.StatusOK, map[string]string{"message": "if that email exists, a reset link was sent"})
@@ -143,7 +147,14 @@ func ResetPassword(d Deps) http.HandlerFunc {
 		}
 
 		hash, _ := d.UserSvc.HashPassword(req.NewPassword)
-		d.UserSvc.UpdatePassword(ctx, userID, hash)
+		// The reset token is already consumed (single-use) above — a failure
+		// here must not be silently swallowed. Doing so would burn the token,
+		// leave the password unchanged, still write an audit log claiming
+		// "password_reset", and tell the user it worked, with no way to retry.
+		if err := d.UserSvc.UpdatePassword(ctx, userID, hash); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update password"})
+			return
+		}
 
 		if d.Audit != nil {
 			d.Audit.Log("user.password_reset", userID, "", r.RemoteAddr, r.UserAgent(), nil)

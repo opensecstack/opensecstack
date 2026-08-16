@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -15,7 +16,7 @@ var healthCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		addr, _ := cmd.Flags().GetString("addr")
 		client := &http.Client{Timeout: 4 * time.Second}
-		if err := checkHealth(client, addr); err != nil {
+		if err := checkHealth(cmd.Context(), client, addr); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -31,8 +32,12 @@ func init() {
 // an error unless the server responds 200 OK. Split out of healthCmd's RunE
 // so the success/failure decision logic is unit-testable without going
 // through os.Exit (which would kill the test process).
-func checkHealth(client *http.Client, addr string) error {
-	resp, err := client.Get("http://" + addr + "/api/v1/health")
+func checkHealth(ctx context.Context, client *http.Client, addr string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/api/v1/health", nil)
+	if err != nil {
+		return fmt.Errorf("health check failed: %w", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}

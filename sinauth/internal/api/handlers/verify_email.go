@@ -68,7 +68,7 @@ func ResendVerification(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not store token"})
 			return
 		}
-		d.Mailer.SendVerification(u.Email, u.Username, token) // ignore error — dev mode skips sending
+		_ = d.Mailer.SendVerification(u.Email, u.Username, token) // ignore error — dev mode skips sending
 
 		writeJSON(w, http.StatusOK, map[string]string{"message": "verification email sent"})
 	}

@@ -3,6 +3,7 @@ package mfa
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -94,11 +95,21 @@ func SaveCredential(ctx context.Context, pool *pgxpool.Pool, userID, name string
 }
 
 // UpdateCredential updates the sign count after a successful assertion.
+//
+// sign_count is WebAuthn's clone-detection signal: a stale (not-advanced)
+// stored count doesn't itself let a replay succeed here (the assertion
+// already passed FinishLogin), but it does widen the window in which a
+// cloned authenticator's replayed counter value could later slip past the
+// monotonicity check. Login has already succeeded by the time this runs, so
+// a failure here logs rather than fails the request — but it must not be
+// silently dropped.
 func UpdateCredential(ctx context.Context, pool *pgxpool.Pool, c *webauthn.Credential) {
-	pool.Exec(ctx,
+	if _, err := pool.Exec(ctx,
 		`UPDATE webauthn_credentials SET sign_count=$1, last_used_at=now() WHERE credential_id=$2`,
 		c.Authenticator.SignCount, c.ID,
-	)
+	); err != nil {
+		slog.Error("UpdateCredential: sign_count update failed", "credential_id", c.ID, "err", err)
+	}
 }
 
 // StoreWASession persists a WebAuthn session challenge in the DB.

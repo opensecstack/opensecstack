@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/sinauth/internal/audit"
 	"github.com/opensecstack/sinauth/internal/authz"
 	"github.com/opensecstack/sinauth/internal/client"
@@ -54,7 +55,7 @@ type Deps struct {
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 func decodeJSON(r *http.Request, v any) error {

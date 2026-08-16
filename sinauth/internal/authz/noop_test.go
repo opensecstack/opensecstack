@@ -67,10 +67,10 @@ func TestNoopChecker_WriteDeleteAreNoops(t *testing.T) {
 }
 
 // TestNoopChecker_SatisfiesChecker is a compile-time-adjacent smoke test
-// that NoopChecker can be used anywhere a Checker is expected.
+// that NoopChecker can be used anywhere a Checker is expected. The
+// assignment itself is the assertion — NewNoopChecker returns *NoopChecker,
+// which can never be a nil interface value here, so a runtime nil check
+// would be dead code (staticcheck SA4023).
 func TestNoopChecker_SatisfiesChecker(t *testing.T) {
-	var c Checker = NewNoopChecker()
-	if c == nil {
-		t.Fatal("NewNoopChecker returned a nil Checker")
-	}
+	var _ Checker = NewNoopChecker()
 }

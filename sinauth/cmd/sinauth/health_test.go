@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,7 +22,7 @@ func TestCheckHealth_OK(t *testing.T) {
 
 	client := &http.Client{Timeout: 4 * time.Second}
 	addr := strings.TrimPrefix(srv.URL, "http://")
-	if err := checkHealth(client, addr); err != nil {
+	if err := checkHealth(context.Background(), client, addr); err != nil {
 		t.Fatalf("checkHealth: %v", err)
 	}
 }
@@ -36,7 +37,7 @@ func TestCheckHealth_NonOKStatus(t *testing.T) {
 
 	client := &http.Client{Timeout: 4 * time.Second}
 	addr := strings.TrimPrefix(srv.URL, "http://")
-	err := checkHealth(client, addr)
+	err := checkHealth(context.Background(), client, addr)
 	if err == nil {
 		t.Fatal("checkHealth: expected error for 503 response, got nil")
 	}
@@ -57,7 +58,7 @@ func TestCheckHealth_ConnectionFailure(t *testing.T) {
 	addr := strings.TrimPrefix(srv.URL, "http://")
 	srv.Close() // now nothing is listening on addr
 
-	err := checkHealth(client, addr)
+	err := checkHealth(context.Background(), client, addr)
 	if err == nil {
 		t.Fatal("checkHealth: expected error for unreachable server, got nil")
 	}

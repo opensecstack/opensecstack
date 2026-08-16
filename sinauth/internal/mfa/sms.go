@@ -59,8 +59,9 @@ func GenerateOTP() (string, error) {
 
 // StoreSMSOTP inserts a new OTP record, invalidating previous ones for this user.
 func StoreSMSOTP(ctx context.Context, pool *pgxpool.Pool, userID, phone, code string) error {
-	// Invalidate previous unused codes for this user.
-	pool.Exec(ctx, `UPDATE sms_otp SET used=true WHERE user_id=$1 AND used=false`, userID)
+	// Best-effort cleanup of previous codes — the real correctness guard is
+	// the fresh INSERT below, whose error is returned to the caller.
+	_, _ = pool.Exec(ctx, `UPDATE sms_otp SET used=true WHERE user_id=$1 AND used=false`, userID)
 	_, err := pool.Exec(ctx,
 		`INSERT INTO sms_otp (user_id, phone, code) VALUES ($1, $2, $3)`,
 		userID, phone, code,
@@ -79,7 +80,12 @@ func VerifySMSOTP(ctx context.Context, pool *pgxpool.Pool, userID, code string) 
 	if err != nil {
 		return false
 	}
-	pool.Exec(ctx, `UPDATE sms_otp SET used=true WHERE id=$1`, id)
+	// If marking the code used fails, it must NOT be treated as a successful
+	// verification — the same SMS code would otherwise stay valid (used=false)
+	// and replayable for the rest of its expiry window.
+	if _, err := pool.Exec(ctx, `UPDATE sms_otp SET used=true WHERE id=$1`, id); err != nil {
+		return false
+	}
 	return true
 }
 

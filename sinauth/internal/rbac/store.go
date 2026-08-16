@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/sinauth/internal/authz"
 )
 
@@ -170,7 +171,9 @@ func (s *Store) ListGroupMembers(ctx context.Context, groupID string) ([]string,
 	var members []string
 	for rows.Next() {
 		var m string
-		rows.Scan(&m)
+		if err := rows.Scan(&m); err != nil {
+			continue
+		}
 		members = append(members, m)
 	}
 	return members, nil
@@ -189,7 +192,9 @@ func (s *Store) ListClientRoles(ctx context.Context, clientID string) ([]ClientR
 	var roles []ClientRole
 	for rows.Next() {
 		var r ClientRole
-		rows.Scan(&r.ID, &r.ClientID, &r.Name, &r.Description)
+		if err := rows.Scan(&r.ID, &r.ClientID, &r.Name, &r.Description); err != nil {
+			continue
+		}
 		roles = append(roles, r)
 	}
 	return roles, nil
@@ -266,7 +271,9 @@ func (s *Store) GetEffectiveRoles(ctx context.Context, userID, clientID string) 
 	var roles []string
 	for rows.Next() {
 		var r string
-		rows.Scan(&r)
+		if err := rows.Scan(&r); err != nil {
+			continue
+		}
 		roles = append(roles, r)
 	}
 	return roles, nil
@@ -312,7 +319,9 @@ func (s *Store) ListPolicies(ctx context.Context) ([]Policy, error) {
 	var policies []Policy
 	for rows.Next() {
 		var p Policy
-		rows.Scan(&p.ID, &p.Name, &p.Description, &p.Type, &p.ClientID, &p.RoleName, &p.Enabled)
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Type, &p.ClientID, &p.RoleName, &p.Enabled); err != nil {
+			continue
+		}
 		policies = append(policies, p)
 	}
 	return policies, nil

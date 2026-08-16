@@ -48,10 +48,10 @@ func Token(d Deps) http.HandlerFunc {
 }
 
 func handleAuthCodeGrant(w http.ResponseWriter, r *http.Request, d Deps) {
-	code        := r.FormValue("code")
+	code := r.FormValue("code")
 	redirectURI := r.FormValue("redirect_uri")
-	clientID    := r.FormValue("client_id")
-	verifier    := r.FormValue("code_verifier")
+	clientID := r.FormValue("client_id")
+	verifier := r.FormValue("code_verifier")
 
 	if code == "" || redirectURI == "" || clientID == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
@@ -155,7 +155,13 @@ func handleAuthCodeGrant(w http.ResponseWriter, r *http.Request, d Deps) {
 			b := make([]byte, 32)
 			rand.Read(b)
 			refreshToken = hex.EncodeToString(b)
-			d.TokenStore.SaveRefreshToken(r.Context(), refreshToken, clientID, userID, scopes, time.Now().Add(d.Cfg.RefreshTokenTTL))
+			// A failed save must not hand the client a refresh_token that
+			// was never persisted — every future refresh attempt with it
+			// would then fail with a confusing "invalid refresh token".
+			if err := d.TokenStore.SaveRefreshToken(r.Context(), refreshToken, clientID, userID, scopes, time.Now().Add(d.Cfg.RefreshTokenTTL)); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server_error"})
+				return
+			}
 			break
 		}
 	}
@@ -221,7 +227,13 @@ func handleRefreshGrant(w http.ResponseWriter, r *http.Request, d Deps) {
 	b := make([]byte, 32)
 	rand.Read(b)
 	newRefresh := hex.EncodeToString(b)
-	d.TokenStore.SaveRefreshToken(r.Context(), newRefresh, clientID, userID, scopes, time.Now().Add(d.Cfg.RefreshTokenTTL))
+	// ConsumeRefreshToken above already invalidated the old token (rotation
+	// is single-use) — a failed save here would strand the client with no
+	// working refresh token at all once the access token expires.
+	if err := d.TokenStore.SaveRefreshToken(r.Context(), newRefresh, clientID, userID, scopes, time.Now().Add(d.Cfg.RefreshTokenTTL)); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server_error"})
+		return
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"access_token":  accessToken,

@@ -25,8 +25,8 @@ import (
 	"testing"
 	"time"
 
-	v1 "buf.build/gen/go/permifyco/permify/protocolbuffers/go/base/v1"
 	basev1grpc "buf.build/gen/go/permifyco/permify/grpc/go/base/v1/basev1grpc"
+	v1 "buf.build/gen/go/permifyco/permify/protocolbuffers/go/base/v1"
 	permifygrpc "github.com/Permify/permify-go/grpc"
 	"google.golang.org/grpc"
 )
@@ -319,10 +319,10 @@ func TestPermifyChecker_NilClient(t *testing.T) {
 }
 
 // TestPermifyChecker_SatisfiesChecker is a compile-time-adjacent smoke test
-// that *PermifyChecker can be used anywhere a Checker is expected.
+// that *PermifyChecker can be used anywhere a Checker is expected. The
+// assignment itself is the assertion — newTestChecker returns a concrete
+// pointer type, which can never be a nil interface value here, so a
+// runtime nil check would be dead code (staticcheck SA4023).
 func TestPermifyChecker_SatisfiesChecker(t *testing.T) {
-	var c Checker = newTestChecker(&fakePermissionClient{}, &fakeSchemaClient{}, &fakeDataClient{})
-	if c == nil {
-		t.Fatal("expected non-nil Checker")
-	}
+	var _ Checker = newTestChecker(&fakePermissionClient{}, &fakeSchemaClient{}, &fakeDataClient{})
 }

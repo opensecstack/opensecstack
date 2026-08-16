@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 )
 
 // Ensure base64 standard encoding is used for oauth_return decoding.
@@ -414,9 +413,9 @@ func githubUserInfo(ctx context.Context, accessToken string) (*githubUser, error
 	// GitHub may not expose email in the /user endpoint — fetch it separately.
 	if u.Email == "" {
 		var emails []struct {
-			Email   string `json:"email"`
-			Primary bool   `json:"primary"`
-			Verified bool  `json:"verified"`
+			Email    string `json:"email"`
+			Primary  bool   `json:"primary"`
+			Verified bool   `json:"verified"`
 		}
 		if err := doReq("https://api.github.com/user/emails", &emails); err == nil {
 			for _, e := range emails {
@@ -449,7 +448,3 @@ func githubUserInfo(ctx context.Context, accessToken string) (*githubUser, error
 
 	return &u, nil
 }
-
-// httpClientWithTimeout returns an http.Client with a 15s timeout.
-// Used for token exchanges to avoid hanging on slow upstreams.
-var httpClientWithTimeout = &http.Client{Timeout: 15 * time.Second}

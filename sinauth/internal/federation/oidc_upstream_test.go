@@ -14,7 +14,7 @@ func TestDiscoverOIDC_ParsesDiscoveryDocument(t *testing.T) {
 		if r.URL.Path != "/.well-known/openid-configuration" {
 			t.Errorf("unexpected discovery path: %s", r.URL.Path)
 		}
-		json.NewEncoder(w).Encode(OIDCDiscovery{
+		_ = json.NewEncoder(w).Encode(OIDCDiscovery{
 			AuthorizationEndpoint: "https://upstream.example/authorize",
 			TokenEndpoint:         "https://upstream.example/token",
 			UserinfoEndpoint:      "https://upstream.example/userinfo",
@@ -44,7 +44,7 @@ func TestDiscoverOIDC_TrimsTrailingSlash(t *testing.T) {
 	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
-		json.NewEncoder(w).Encode(OIDCDiscovery{})
+		_ = json.NewEncoder(w).Encode(OIDCDiscovery{})
 	}))
 	defer srv.Close()
 
@@ -101,7 +101,7 @@ func TestExchangeOIDCCode_ReturnsUserinfoClaims(t *testing.T) {
 		if r.Form.Get("code") != "auth-code-1" {
 			t.Errorf("code = %q, want auth-code-1", r.Form.Get("code"))
 		}
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"access_token": "at-1",
 			"id_token":     "idtok-1",
 		})
@@ -110,7 +110,7 @@ func TestExchangeOIDCCode_ReturnsUserinfoClaims(t *testing.T) {
 		if auth := r.Header.Get("Authorization"); auth != "Bearer at-1" {
 			t.Errorf("Authorization = %q, want Bearer at-1", auth)
 		}
-		json.NewEncoder(w).Encode(OIDCUpstreamClaims{
+		_ = json.NewEncoder(w).Encode(OIDCUpstreamClaims{
 			Sub:   "upstream-sub-1",
 			Email: "user@upstream.example",
 			Name:  "Upstream User",

@@ -116,11 +116,17 @@ func InitiateOIDCUpstream(d Deps) http.HandlerFunc {
 		nonce, _ := federation.GenerateState()
 		redirectURI := d.Cfg.SiteURL + "/federation/oidc/" + slug + "/callback"
 
-		// Store state in DB.
-		d.Pool.Exec(r.Context(),
+		// Store state in DB — the callback validates the returned state
+		// against this row (CSRF protection), so a failed insert here must
+		// not silently redirect the user into a flow that can never
+		// complete a successful state check.
+		if _, err := d.Pool.Exec(r.Context(),
 			`INSERT INTO oidc_upstream_states (provider_id, state, nonce, redirect_uri) VALUES ($1,$2,$3,$4)`,
 			p.ID, state, nonce, redirectURI,
-		)
+		); err != nil {
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 
 		authURL := federation.BuildAuthURL(discovery, p, state, nonce, redirectURI)
 		http.Redirect(w, r, authURL, http.StatusFound)
@@ -327,8 +333,12 @@ func federatedLogin(r *http.Request, d Deps, p *federation.Provider, externalID,
 		return "", "", err
 	}
 
+	// username becomes the token's "sub" claim below — a failed lookup must
+	// not fall through to issuing a token with an empty subject.
 	var username string
-	d.Pool.QueryRow(r.Context(), `SELECT username FROM users WHERE id=$1`, userID).Scan(&username)
+	if err := d.Pool.QueryRow(r.Context(), `SELECT username FROM users WHERE id=$1`, userID).Scan(&username); err != nil {
+		return "", "", err
+	}
 
 	tok, err := d.Issuer.IssueAccessToken(username, "sinauth-federation", []string{"openid", "profile", "email"}, d.Cfg.AccessTokenTTL)
 	if err != nil {

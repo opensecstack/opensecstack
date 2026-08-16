@@ -51,7 +51,7 @@ func (s *PgSnapshotStore) ReplaceSnapshot(ctx context.Context, rows map[RoleActi
 		br := tx.SendBatch(ctx, batch)
 		for i := 0; i < batch.Len(); i++ {
 			if _, err := br.Exec(); err != nil {
-				br.Close()
+				_ = br.Close() // best-effort cleanup; the Exec error below is the one that matters
 				return fmt.Errorf("permifysync: upsert snapshot row %d: %w", i, err)
 			}
 		}

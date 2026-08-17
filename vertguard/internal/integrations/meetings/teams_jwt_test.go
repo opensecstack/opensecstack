@@ -36,7 +36,7 @@ func newTestBotFrameworkServer(t *testing.T) (*httptest.Server, *rsa.PrivateKey,
 		})
 	})
 	mux.HandleFunc("/.well-known/keys", func(w http.ResponseWriter, r *http.Request) {
-		nBytes := priv.PublicKey.N.Bytes()
+		nBytes := priv.N.Bytes()
 		eBytes := big.NewInt(int64(priv.PublicKey.E)).Bytes()
 		_ = json.NewEncoder(w).Encode(jwksResponse{Keys: []jwksKey{{
 			Kty: "RSA",

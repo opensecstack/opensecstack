@@ -33,23 +33,23 @@ func IsValidContext(ctx string) bool {
 //
 // Aggregation rule (v0.1.0-alpha.0):
 //
-//   1. Pick the max base confidence across matches.
-//   2. Apply category boost:
-//        LLM01 → +0.10  (prompt injection is highest-priority)
-//        LLM06 → +0.05  (sensitive info disclosure)
-//        others → unchanged
-//   3. Apply multi-match boost: +0.05 per additional match, capped +0.15.
-//   4. Apply context adjustment (see below).
-//   5. Clamp to [0, 1].
-//   6. Compare against thresholds to classify.
+//  1. Pick the max base confidence across matches.
+//  2. Apply category boost:
+//     LLM01 → +0.10  (prompt injection is highest-priority)
+//     LLM06 → +0.05  (sensitive info disclosure)
+//     others → unchanged
+//  3. Apply multi-match boost: +0.05 per additional match, capped +0.15.
+//  4. Apply context adjustment (see below).
+//  5. Clamp to [0, 1].
+//  6. Compare against thresholds to classify.
 //
 // Context map:
 //
-//   authenticated_operator      → −0.10
-//   internal_dev_tool           → −0.20
-//   user_chat_input (default)   →   0
-//   untrusted_third_party       → +0.10
-//   untrusted_document_content  → +0.20
+//	authenticated_operator      → −0.10
+//	internal_dev_tool           → −0.20
+//	user_chat_input (default)   →   0
+//	untrusted_third_party       → +0.10
+//	untrusted_document_content  → +0.20
 func Score(matches []Match, context string, cleanT, blockT float64) Scored {
 	if len(matches) == 0 {
 		return Scored{Classification: ClassificationClean, Confidence: 0}

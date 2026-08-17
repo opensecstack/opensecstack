@@ -51,8 +51,10 @@ func (s *Store) List(ctx context.Context) ([]Client, error) {
 	var clients []Client
 	for rows.Next() {
 		var c Client
-		rows.Scan(&c.ID, &c.ClientID, &c.ClientSecret, &c.Name, &c.LogoURL,
-			&c.RedirectURIs, &c.AllowedScopes, &c.GrantTypes, &c.RequirePKCE, &c.IsConfidential)
+		if err := rows.Scan(&c.ID, &c.ClientID, &c.ClientSecret, &c.Name, &c.LogoURL,
+			&c.RedirectURIs, &c.AllowedScopes, &c.GrantTypes, &c.RequirePKCE, &c.IsConfidential); err != nil {
+			continue
+		}
 		clients = append(clients, c)
 	}
 	return clients, nil

@@ -17,22 +17,22 @@ import (
 type Category string
 
 const (
-	CategoryLLM01  Category = "OWASP-LLM01"  // Prompt Injection
-	CategoryLLM02  Category = "OWASP-LLM02"  // Insecure Output Handling
-	CategoryLLM04  Category = "OWASP-LLM04"  // Model DoS
-	CategoryLLM06  Category = "OWASP-LLM06"  // Sensitive Info Disclosure
-	CategoryLLM10  Category = "OWASP-LLM10"  // Model Theft
+	CategoryLLM01  Category = "OWASP-LLM01" // Prompt Injection
+	CategoryLLM02  Category = "OWASP-LLM02" // Insecure Output Handling
+	CategoryLLM04  Category = "OWASP-LLM04" // Model DoS
+	CategoryLLM06  Category = "OWASP-LLM06" // Sensitive Info Disclosure
+	CategoryLLM10  Category = "OWASP-LLM10" // Model Theft
 	CategoryCustom Category = "CUSTOM"
 )
 
 // Pattern is a single injection detection rule.
 type Pattern struct {
-	ID              string
-	Category        Category
-	Description     string
-	AtlasTechnique  string // MITRE ATLAS technique ID, e.g. AML.T0051.000
-	BaseScore       float64
-	re              *regexp.Regexp
+	ID             string
+	Category       Category
+	Description    string
+	AtlasTechnique string // MITRE ATLAS technique ID, e.g. AML.T0051.000
+	BaseScore      float64
+	re             *regexp.Regexp
 }
 
 // MustCompilePattern is a helper for static pattern definitions.
@@ -53,12 +53,12 @@ func MustCompilePattern(id string, cat Category, desc, atlas string, base float6
 
 // Match is a single pattern hit within the scanned input.
 type Match struct {
-	PatternID       string   `json:"pattern_id"`
-	Category        Category `json:"category"`
-	Description     string   `json:"description"`
-	AtlasTechnique  string   `json:"atlas_technique,omitempty"`
-	ByteRange       [2]int   `json:"byte_range"`
-	Confidence      float64  `json:"confidence"`
+	PatternID      string   `json:"pattern_id"`
+	Category       Category `json:"category"`
+	Description    string   `json:"description"`
+	AtlasTechnique string   `json:"atlas_technique,omitempty"`
+	ByteRange      [2]int   `json:"byte_range"`
+	Confidence     float64  `json:"confidence"`
 }
 
 // Scan applies the pattern against the input and returns any matches.

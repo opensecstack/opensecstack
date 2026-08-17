@@ -90,12 +90,12 @@ func NewWebhookSubscribersHandler(s *vgwebhook.Store, d *vgwebhook.Dispatcher) *
 }
 
 type webhookSubscriberCreateRequest struct {
-	URL         string   `json:"url"`
-	EventTypes  []string `json:"event_types"`
-	HMACSecret  string   `json:"hmac_secret"` // lands in primary slot
-	KeyID       string   `json:"key_id"`
-	Tenant      string   `json:"tenant"`
-	Enabled     *bool    `json:"enabled"`
+	URL        string   `json:"url"`
+	EventTypes []string `json:"event_types"`
+	HMACSecret string   `json:"hmac_secret"` // lands in primary slot
+	KeyID      string   `json:"key_id"`
+	Tenant     string   `json:"tenant"`
+	Enabled    *bool    `json:"enabled"`
 }
 
 type webhookSubscriberRotateRequest struct {

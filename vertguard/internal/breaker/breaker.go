@@ -45,7 +45,7 @@ var ErrOpen = errors.New("breaker: circuit open")
 
 // Config tunes a Breaker.
 type Config struct {
-	Name           string
+	Name          string
 	FailThreshold int           // consecutive failures that trip
 	CoolDown      time.Duration // open → half-open delay
 	Now           func() time.Time

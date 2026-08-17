@@ -22,7 +22,7 @@ type Category string
 const (
 	CategoryURLObfuscation     Category = "URL_OBFUSCATION"
 	CategoryBrandImpersonation Category = "BRAND_IMPERSONATION"
-	CategoryCredentialHarvest  Category = "CREDENTIAL_HARVEST"
+	CategoryCredentialHarvest  Category = "CREDENTIAL_HARVEST" // #nosec G101 -- category tag, not a credential
 	CategoryUrgency            Category = "URGENCY"
 	CategorySuspiciousDomain   Category = "SUSPICIOUS_DOMAIN"
 	CategoryAttachmentLure     Category = "ATTACHMENT_LURE"

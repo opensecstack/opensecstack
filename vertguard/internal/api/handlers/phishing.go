@@ -127,4 +127,3 @@ func (h *PhishingHandler) Scan(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, result)
 }
-

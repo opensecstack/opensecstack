@@ -146,7 +146,7 @@ func (c *teamsKeyCache) fetchOpenIDConfig() (*openIDConfig, error) {
 		return nil, fmt.Errorf("decoding Bot Framework OpenID config: %w", err)
 	}
 	if cfg.JWKSURI == "" || cfg.Issuer == "" {
-		return nil, fmt.Errorf("Bot Framework OpenID config missing issuer/jwks_uri")
+		return nil, fmt.Errorf("missing issuer/jwks_uri in Bot Framework OpenID config")
 	}
 	return &cfg, nil
 }

@@ -51,7 +51,9 @@ func createTestClient(t *testing.T, pool *pgxpool.Pool, clientID string) {
 	if err != nil {
 		t.Fatalf("createTestClient: %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM oauth_clients WHERE client_id=$1`, clientID) })
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM oauth_clients WHERE client_id=$1`, clientID)
+	})
 }
 
 func TestStore_SaveAndConsumeRefreshToken(t *testing.T) {

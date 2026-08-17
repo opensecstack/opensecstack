@@ -38,14 +38,14 @@ type Misclassified struct {
 
 // Report summarises corpus evaluation.
 type Report struct {
-	Total          int
-	ByExpected     map[string]int
-	Confusion      map[string]map[string]int // expected -> actual -> count
-	Precision      map[string]float64
-	Recall         map[string]float64
-	F1             map[string]float64
-	MacroF1        float64
-	Misclassified  []Misclassified
+	Total         int
+	ByExpected    map[string]int
+	Confusion     map[string]map[string]int // expected -> actual -> count
+	Precision     map[string]float64
+	Recall        map[string]float64
+	F1            map[string]float64
+	MacroF1       float64
+	Misclassified []Misclassified
 }
 
 // Load reads a JSONL file. Blank lines + lines starting with "#" are

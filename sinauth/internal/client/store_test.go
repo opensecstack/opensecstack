@@ -49,7 +49,9 @@ func TestStore_CreateAndGetByClientID(t *testing.T) {
 	if err := s.Create(context.Background(), c); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM oauth_clients WHERE client_id=$1`, c.ClientID) })
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM oauth_clients WHERE client_id=$1`, c.ClientID)
+	})
 
 	got, err := s.GetByClientID(context.Background(), c.ClientID)
 	if err != nil {
@@ -87,7 +89,9 @@ func TestStore_List_IncludesCreatedClients(t *testing.T) {
 	if err := s.Create(context.Background(), c); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM oauth_clients WHERE client_id=$1`, c.ClientID) })
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM oauth_clients WHERE client_id=$1`, c.ClientID)
+	})
 
 	clients, err := s.List(context.Background())
 	if err != nil {
@@ -130,7 +134,9 @@ func TestStore_Create_DuplicateClientIDFails(t *testing.T) {
 	if err := s.Create(context.Background(), c); err != nil {
 		t.Fatalf("Create (1st): %v", err)
 	}
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `DELETE FROM oauth_clients WHERE client_id=$1`, c.ClientID) })
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM oauth_clients WHERE client_id=$1`, c.ClientID)
+	})
 
 	dup := testClient("store-dup-1")
 	if err := s.Create(context.Background(), dup); err == nil {

@@ -428,10 +428,7 @@ func TestPuller_RunSource_FiresImmediatelyThenOnTicker(t *testing.T) {
 	}()
 
 	deadline := time.After(2 * time.Second)
-	for {
-		if store.auditCount() >= 2 {
-			break
-		}
+	for store.auditCount() < 2 {
 		select {
 		case <-deadline:
 			t.Fatal("timed out waiting for at least 2 ticks (immediate + ticker)")
@@ -455,10 +452,7 @@ func TestPuller_RunSource_LogsErrorsAndKeepsRunning(t *testing.T) {
 	}()
 
 	deadline := time.After(2 * time.Second)
-	for {
-		if store.auditCount() >= 2 {
-			break
-		}
+	for store.auditCount() < 2 {
 		select {
 		case <-deadline:
 			t.Fatal("timed out waiting for repeated failed ticks")

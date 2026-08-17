@@ -376,7 +376,7 @@ func TestRoundTrip_ModelInfoResponse(t *testing.T) {
 }
 
 // TestUnmarshalVT_SkipsUnknownFields verifies forward-compatibility: an
-// unrecognized field number must be skipped via ConsumeFieldValue without
+// unrecognised field number must be skipped via ConsumeFieldValue without
 // corrupting the fields that follow it.
 func TestUnmarshalVT_SkipsUnknownFields(t *testing.T) {
 	var b []byte

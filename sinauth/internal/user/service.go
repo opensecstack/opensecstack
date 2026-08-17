@@ -78,10 +78,10 @@ func (s *Service) Create(ctx context.Context, username, email, password, display
 		return nil, err
 	}
 	u := &User{
-		Username:    username,
-		Email:       email,
+		Username:     username,
+		Email:        email,
 		PasswordHash: hash,
-		DisplayName: displayName,
+		DisplayName:  displayName,
 	}
 	if err := s.store.Create(ctx, u); err != nil {
 		return nil, err

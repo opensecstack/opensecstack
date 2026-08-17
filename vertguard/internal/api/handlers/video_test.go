@@ -42,8 +42,8 @@ func (f *fakeVideoStream) Header() (metadata.MD, error) { return nil, nil }
 func (f *fakeVideoStream) Trailer() metadata.MD         { return nil }
 func (f *fakeVideoStream) CloseSend() error             { f.closeSendCalled = true; return nil }
 func (f *fakeVideoStream) Context() context.Context     { return context.Background() }
-func (f *fakeVideoStream) SendMsg(any) error             { return nil }
-func (f *fakeVideoStream) RecvMsg(any) error             { return nil }
+func (f *fakeVideoStream) SendMsg(any) error            { return nil }
+func (f *fakeVideoStream) RecvMsg(any) error            { return nil }
 
 func TestCreateSession_ReturnsUniqueSessionIDs(t *testing.T) {
 	h := NewVideoStreamHandler(nil, zerolog.Nop())

@@ -54,12 +54,12 @@ func genCert(t *testing.T, serial int64) (*x509.Certificate, []byte, *ecdsa.Priv
 		t.Fatal(err)
 	}
 	tmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(serial),
-		Subject:      pkix.Name{CommonName: "vertguard-test"},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(time.Hour),
-		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-		IsCA:         true,
+		SerialNumber:          big.NewInt(serial),
+		Subject:               pkix.Name{CommonName: "vertguard-test"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		IsCA:                  true,
 		BasicConstraintsValid: true,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
@@ -79,15 +79,15 @@ func genCert(t *testing.T, serial int64) (*x509.Certificate, []byte, *ecdsa.Priv
 func makePayload(t *testing.T, certPEM []byte) []byte {
 	t.Helper()
 	res := map[string]any{
-		"has_manifest":    true,
-		"signature_valid": true,
-		"signer":          nil,
-		"claims_count":    1,
-		"format":          "image/png",
-		"errors":          []string{},
-		"warnings":        []string{},
+		"has_manifest":     true,
+		"signature_valid":  true,
+		"signer":           nil,
+		"claims_count":     1,
+		"format":           "image/png",
+		"errors":           []string{},
+		"warnings":         []string{},
 		"manifest_summary": map[string]any{},
-		"signing_certs":   []string{string(certPEM)},
+		"signing_certs":    []string{string(certPEM)},
 	}
 	b, err := json.Marshal(res)
 	if err != nil {

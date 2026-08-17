@@ -62,7 +62,9 @@ func insertAuthCode(t *testing.T, d Deps, code, clientID, userID string) {
 	if err != nil {
 		t.Fatalf("insertAuthCode: %v", err)
 	}
-	t.Cleanup(func() { _, _ = d.Pool.Exec(context.Background(), `DELETE FROM authorization_codes WHERE code=$1`, code) })
+	t.Cleanup(func() {
+		_, _ = d.Pool.Exec(context.Background(), `DELETE FROM authorization_codes WHERE code=$1`, code)
+	})
 }
 
 func doTokenRequest(t *testing.T, d Deps, form url.Values) *httptest.ResponseRecorder {
@@ -464,7 +466,9 @@ func TestHandleAuthCodeGrant_OfflineAccess_IssuesRefreshToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("insert auth code: %v", err)
 	}
-	t.Cleanup(func() { _, _ = d.Pool.Exec(context.Background(), `DELETE FROM authorization_codes WHERE code=$1`, code) })
+	t.Cleanup(func() {
+		_, _ = d.Pool.Exec(context.Background(), `DELETE FROM authorization_codes WHERE code=$1`, code)
+	})
 
 	rec := doTokenRequest(t, d, url.Values{
 		"grant_type":   {"authorization_code"},
@@ -601,7 +605,9 @@ func TestHandleAuthCodeGrant_OrgClaims_MembershipRevokedBeforeTokenExchange(t *t
 	if err != nil {
 		t.Fatalf("insert auth code: %v", err)
 	}
-	t.Cleanup(func() { _, _ = d.Pool.Exec(context.Background(), `DELETE FROM authorization_codes WHERE code=$1`, code) })
+	t.Cleanup(func() {
+		_, _ = d.Pool.Exec(context.Background(), `DELETE FROM authorization_codes WHERE code=$1`, code)
+	})
 
 	// Revoke membership before the code is exchanged.
 	if err := d.OrgSvc.RemoveMember(context.Background(), org.ID, u.ID); err != nil {
@@ -691,7 +697,9 @@ func insertAuthCodeWithPKCE(t *testing.T, d Deps, code, clientID, userID, challe
 	if err != nil {
 		t.Fatalf("insertAuthCodeWithPKCE: %v", err)
 	}
-	t.Cleanup(func() { _, _ = d.Pool.Exec(context.Background(), `DELETE FROM authorization_codes WHERE code=$1`, code) })
+	t.Cleanup(func() {
+		_, _ = d.Pool.Exec(context.Background(), `DELETE FROM authorization_codes WHERE code=$1`, code)
+	})
 }
 
 // organizationStoreFor builds a plain organization.Store for tests that need

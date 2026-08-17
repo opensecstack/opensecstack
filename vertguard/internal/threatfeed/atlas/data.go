@@ -19,12 +19,12 @@ type Technique struct {
 
 // Tactics covered by the embedded dataset.
 const (
-	TacticExecution          = "AML.TA0005"
-	TacticDiscovery          = "AML.TA0010"
-	TacticCollection         = "AML.TA0011"
-	TacticExfiltration       = "AML.TA0013"
-	TacticDefenseEvasion     = "AML.TA0008"
-	TacticMLAttackStaging    = "AML.TA0012"
+	TacticExecution       = "AML.TA0005"
+	TacticDiscovery       = "AML.TA0010"
+	TacticCollection      = "AML.TA0011"
+	TacticExfiltration    = "AML.TA0013"
+	TacticDefenseEvasion  = "AML.TA0008"
+	TacticMLAttackStaging = "AML.TA0012"
 )
 
 // Initial returns the curated subset of ATLAS techniques shipped

@@ -34,10 +34,10 @@ func TestIDFormatFor(t *testing.T) {
 		wantNil bool
 	}{
 		{"AL", ClaimPassport, false},
-		{"al", ClaimPassport, false}, // case-insensitive
+		{"al", ClaimPassport, false},   // case-insensitive
 		{" AL ", ClaimPassport, false}, // trims whitespace
 		{"AL", ClaimDriverLicense, false},
-		{"ZZ", ClaimPassport, true},  // unknown country
+		{"ZZ", ClaimPassport, true},   // unknown country
 		{"AL", ClaimLoginCreds, true}, // no rule for this claim type
 	}
 	for _, c := range cases {
@@ -67,7 +67,7 @@ func TestIsSanctioned(t *testing.T) {
 	}{
 		{"KP", true},
 		{"IR", true},
-		{"kp", true}, // case-insensitive
+		{"kp", true},   // case-insensitive
 		{" IR ", true}, // trims
 		{"US", false},
 		{"AL", false},

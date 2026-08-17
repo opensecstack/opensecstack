@@ -133,12 +133,12 @@ type stubMetrics struct {
 	results map[string]int
 }
 
-func newStubMetrics() *stubMetrics                      { return &stubMetrics{results: map[string]int{}} }
-func (s *stubMetrics) IncWebhookDispatch(r string)      { s.mu.Lock(); s.results[r]++; s.mu.Unlock() }
-func (s *stubMetrics) ObserveWebhookLatency(_ float64)  {}
-func (s *stubMetrics) SetWebhookOutboxSize(_ int)       {}
-func (s *stubMetrics) IncWebhookRotation()              { s.mu.Lock(); s.results["rotate"]++; s.mu.Unlock() }
-func (s *stubMetrics) get(r string) int                 { s.mu.Lock(); defer s.mu.Unlock(); return s.results[r] }
+func newStubMetrics() *stubMetrics                     { return &stubMetrics{results: map[string]int{}} }
+func (s *stubMetrics) IncWebhookDispatch(r string)     { s.mu.Lock(); s.results[r]++; s.mu.Unlock() }
+func (s *stubMetrics) ObserveWebhookLatency(_ float64) {}
+func (s *stubMetrics) SetWebhookOutboxSize(_ int)      {}
+func (s *stubMetrics) IncWebhookRotation()             { s.mu.Lock(); s.results["rotate"]++; s.mu.Unlock() }
+func (s *stubMetrics) get(r string) int                { s.mu.Lock(); defer s.mu.Unlock(); return s.results[r] }
 
 func newSub(url, primarySecret, kid string) Subscriber {
 	return Subscriber{

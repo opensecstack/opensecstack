@@ -202,8 +202,8 @@ func (e *InputTooLargeError) Error() string {
 //
 // Context boosts / degradations are applied in Score via the context
 // string passed alongside; see scorer.go.
-func (s *Scanner) Scan(input, context string) (*ScanResult, error) {
-	return s.ScanWithML(nil, input, context, nil)
+func (s *Scanner) Scan(input, contextTag string) (*ScanResult, error) {
+	return s.ScanWithML(context.TODO(), input, contextTag, nil)
 }
 
 // ScanWithML is the ML-aware scan entry point. The regex prefilter is

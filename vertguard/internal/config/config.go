@@ -31,20 +31,20 @@ var ErrInsecureProdConfig = errors.New("insecure configuration in production env
 // Config bundles every runtime knob. Nested structs keep the
 // top-level flat; Viper's env mapping uses underscores.
 type Config struct {
-	Server     ServerConfig     `mapstructure:"server"`
-	DB         DBConfig         `mapstructure:"db"`
-	Auth       AuthConfig       `mapstructure:"auth"`
-	Citadel    CitadelConfig    `mapstructure:"citadel"`
-	ThreatFlow ThreatFlowConfig `mapstructure:"threatflow"`
-	Prompt     PromptConfig     `mapstructure:"prompt"`
-	ThreatFeed ThreatFeedConfig `mapstructure:"threatfeed"`
-	Media      MediaConfig      `mapstructure:"media"`
-	Phishing   PhishingConfig   `mapstructure:"phishing"` // Phase 4.2
-	Identity   IdentityConfig   `mapstructure:"identity"` // Phase 4.3
-	ML         MLConfig         `mapstructure:"ml"`       // Phase 4.2+
-	IOC        IOCConfig        `mapstructure:"ioc"`      // VG-006
-	Webhook    WebhookConfig    `mapstructure:"webhook"`  // VG-015
-	Meetings   []meetings.PlatformConfig                  // Phase 4.3 — meeting platform integrations
+	Server     ServerConfig              `mapstructure:"server"`
+	DB         DBConfig                  `mapstructure:"db"`
+	Auth       AuthConfig                `mapstructure:"auth"`
+	Citadel    CitadelConfig             `mapstructure:"citadel"`
+	ThreatFlow ThreatFlowConfig          `mapstructure:"threatflow"`
+	Prompt     PromptConfig              `mapstructure:"prompt"`
+	ThreatFeed ThreatFeedConfig          `mapstructure:"threatfeed"`
+	Media      MediaConfig               `mapstructure:"media"`
+	Phishing   PhishingConfig            `mapstructure:"phishing"` // Phase 4.2
+	Identity   IdentityConfig            `mapstructure:"identity"` // Phase 4.3
+	ML         MLConfig                  `mapstructure:"ml"`       // Phase 4.2+
+	IOC        IOCConfig                 `mapstructure:"ioc"`      // VG-006
+	Webhook    WebhookConfig             `mapstructure:"webhook"`  // VG-015
+	Meetings   []meetings.PlatformConfig // Phase 4.3 — meeting platform integrations
 }
 
 // WebhookConfig — VG-015 outbound webhook dispatcher tunables.
@@ -87,17 +87,29 @@ type SourceConfig struct {
 
 // ServerConfig — HTTP listener settings.
 type ServerConfig struct {
-	Port              int           `mapstructure:"port"`
-	DashboardPort     int           `mapstructure:"dashboard_port"`
-	LogLevel          string        `mapstructure:"log_level"`
-	ReadTimeout       time.Duration `mapstructure:"read_timeout"`
-	WriteTimeout      time.Duration `mapstructure:"write_timeout"`
-	RateLimitEnabled  bool          `mapstructure:"rate_limit_enabled"`
-	RateLimitRPS      float64       `mapstructure:"rate_limit_rps"`
-	RateLimitBurst    int           `mapstructure:"rate_limit_burst"`
+	Port             int           `mapstructure:"port"`
+	DashboardPort    int           `mapstructure:"dashboard_port"`
+	LogLevel         string        `mapstructure:"log_level"`
+	ReadTimeout      time.Duration `mapstructure:"read_timeout"`
+	WriteTimeout     time.Duration `mapstructure:"write_timeout"`
+	RateLimitEnabled bool          `mapstructure:"rate_limit_enabled"`
+	RateLimitRPS     float64       `mapstructure:"rate_limit_rps"`
+	RateLimitBurst   int           `mapstructure:"rate_limit_burst"`
 	// DrainGrace is the wait between flipping /readyz to 503 and calling
 	// srv.Shutdown so the LB has time to stop sending new traffic.
-	DrainGrace        time.Duration `mapstructure:"drain_grace"`
+	DrainGrace time.Duration `mapstructure:"drain_grace"`
+	// TrustedProxyHops is the exact number of reverse proxies (LB / ingress)
+	// between the public internet and this server. Zero (the default) means
+	// "no trusted proxy" — the client IP used for rate limiting and audit
+	// logging is read directly from the TCP connection (net/http's
+	// r.RemoteAddr), which cannot be spoofed. Set this to the real hop
+	// count only when the deployment actually sits behind that many
+	// proxies that each unconditionally append to X-Forwarded-For — a
+	// wrong count here lets an attacker forge the logged/rate-limited IP.
+	// See internal/api.New's client-IP middleware wiring, and
+	// GHSA-3fxj-6jh8-hvhx / GHSA-rjr7-jggh-pgcp / GHSA-9g5q-2w5x-hmxf for
+	// the vulnerability this replaces (chi middleware.RealIP).
+	TrustedProxyHops int `mapstructure:"trusted_proxy_hops"`
 }
 
 // DBConfig — PostgreSQL connection pool.
@@ -139,7 +151,7 @@ type AuthConfig struct {
 	TokenTTL       time.Duration `mapstructure:"token_ttl"`
 	Issuer         string        `mapstructure:"issuer"`
 	DevMode        bool          `mapstructure:"dev_mode"`
-	SinauthURL     string        `mapstructure:"sinauth_url"`     // RS256 SSO issuer (sinauth)
+	SinauthURL     string        `mapstructure:"sinauth_url"` // RS256 SSO issuer (sinauth)
 }
 
 // ActiveSecrets returns every non-empty secret in priority order:
@@ -268,21 +280,21 @@ func (c CitadelConfig) EffectiveHMACSecret() string {
 
 // ThreatFlowConfig — bidirectional ThreatFlow integration.
 type ThreatFlowConfig struct {
-	APIURL         string `mapstructure:"api_url"`
-	KeyID          string `mapstructure:"key_id"`
-	KeySecret      string `mapstructure:"key_secret"`
-	WebhookSecret  string `mapstructure:"webhook_secret"`
+	APIURL        string `mapstructure:"api_url"`
+	KeyID         string `mapstructure:"key_id"`
+	KeySecret     string `mapstructure:"key_secret"`
+	WebhookSecret string `mapstructure:"webhook_secret"`
 }
 
 // PromptConfig — Module 3 (Prompt Injection Defence).
 type PromptConfig struct {
-	CleanThreshold         float64 `mapstructure:"clean_threshold"`
-	BlockThreshold         float64 `mapstructure:"block_threshold"`
-	MaxInputSize           int64   `mapstructure:"max_input_size"`
-	PatternRegistryPath    string  `mapstructure:"pattern_registry_path"`
-	CustomPatternsPath     string  `mapstructure:"custom_patterns_path"`
-	NemoEndpoint           string  `mapstructure:"nemo_endpoint"`
-	LlamaGuardEndpoint     string  `mapstructure:"llamaguard_endpoint"`
+	CleanThreshold      float64 `mapstructure:"clean_threshold"`
+	BlockThreshold      float64 `mapstructure:"block_threshold"`
+	MaxInputSize        int64   `mapstructure:"max_input_size"`
+	PatternRegistryPath string  `mapstructure:"pattern_registry_path"`
+	CustomPatternsPath  string  `mapstructure:"custom_patterns_path"`
+	NemoEndpoint        string  `mapstructure:"nemo_endpoint"`
+	LlamaGuardEndpoint  string  `mapstructure:"llamaguard_endpoint"`
 
 	// VG-003 v1.0 detector knobs. RulePackPath points at the JSON rule
 	// pack shipped under internal/prompt/rules/v1.json. MLBinaryPath /

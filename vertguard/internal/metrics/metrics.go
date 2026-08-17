@@ -32,10 +32,10 @@ type Registry struct {
 	ThreatFeedPushTotal     *prometheus.CounterVec
 	ThreatFeedStalenessSecs *prometheus.GaugeVec
 
-	CitadelCallsTotal   *prometheus.CounterVec
-	CitadelLatencySecs  *prometheus.HistogramVec
-	WORMEmitTotal       *prometheus.CounterVec
-	CitadelQueueDepth   prometheus.Gauge
+	CitadelCallsTotal  *prometheus.CounterVec
+	CitadelLatencySecs *prometheus.HistogramVec
+	WORMEmitTotal      *prometheus.CounterVec
+	CitadelQueueDepth  prometheus.Gauge
 
 	AuditEventsTotal *prometheus.CounterVec
 
@@ -52,8 +52,8 @@ type Registry struct {
 	RateLimitOverrideHitTotal *prometheus.CounterVec
 
 	// ML enricher (Phase 4.2+).
-	MLCallsTotal      *prometheus.CounterVec
-	MLLatencySeconds  *prometheus.HistogramVec
+	MLCallsTotal       *prometheus.CounterVec
+	MLLatencySeconds   *prometheus.HistogramVec
 	MLBreakerOpenTotal *prometheus.CounterVec
 
 	// Module 6 — Identity Verification (rule-based v1).

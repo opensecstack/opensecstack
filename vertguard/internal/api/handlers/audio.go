@@ -47,8 +47,8 @@ func (h *AudioHandler) WithTenant(tenant string) *AudioHandler {
 // audioScoreRequest is the JSON body accepted by Score.
 type audioScoreRequest struct {
 	SessionID     string  `json:"session_id"`
-	MfccHash      string  `json:"mfcc_hash"`      // hex-encoded 32-byte SHA-256
-	SpectralHash  string  `json:"spectral_hash"`  // hex-encoded 32-byte SHA-256
+	MfccHash      string  `json:"mfcc_hash"`     // hex-encoded 32-byte SHA-256
+	SpectralHash  string  `json:"spectral_hash"` // hex-encoded 32-byte SHA-256
 	DurationMs    float32 `json:"duration_ms"`
 	VoiceDetected bool    `json:"voice_detected"`
 }

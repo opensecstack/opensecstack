@@ -45,9 +45,9 @@ type Metrics interface {
 // noopMetrics keeps the call sites unconditional when no adapter wired.
 type noopMetrics struct{}
 
-func (noopMetrics) IncMLCall(string, string)            {}
-func (noopMetrics) ObserveMLLatency(string, float64)    {}
-func (noopMetrics) IncBreakerOpen(string)               {}
+func (noopMetrics) IncMLCall(string, string)         {}
+func (noopMetrics) ObserveMLLatency(string, float64) {}
+func (noopMetrics) IncBreakerOpen(string)            {}
 
 // Result mirrors mlpb.ScoreResponse but lives in this package so
 // callers don't need a transitive proto import.
@@ -405,4 +405,3 @@ func classifyErr(err error) string {
 	}
 	return "fail"
 }
-

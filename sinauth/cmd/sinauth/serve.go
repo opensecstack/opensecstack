@@ -9,11 +9,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/spf13/cobra"
+
 	"github.com/opensecstack/sinauth/internal/api"
 	"github.com/opensecstack/sinauth/internal/config"
 	"github.com/opensecstack/sinauth/internal/keys"
 	"github.com/opensecstack/sinauth/internal/user"
-	"github.com/spf13/cobra"
 )
 
 var serveCmd = &cobra.Command{

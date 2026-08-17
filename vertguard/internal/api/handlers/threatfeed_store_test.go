@@ -18,7 +18,6 @@ type fakeIOCStore struct {
 	listErr    error
 	upsertErr  error
 	rows       []ioc.IOC
-	total      int
 	nextCursor int
 	upserted   []ioc.IOC
 	upsertRes  ioc.UpsertResult

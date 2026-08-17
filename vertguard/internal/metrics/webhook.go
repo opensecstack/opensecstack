@@ -6,10 +6,10 @@ import "github.com/prometheus/client_golang/prometheus"
 // Lives on its own struct to keep the surface change to Registry
 // additive (just an embedded *WebhookMetrics field initialised in New).
 type WebhookMetrics struct {
-	DispatchTotal    *prometheus.CounterVec
-	DispatchLatency  prometheus.Histogram
-	OutboxSize       prometheus.Gauge
-	RotationTotal    prometheus.Counter
+	DispatchTotal   *prometheus.CounterVec
+	DispatchLatency prometheus.Histogram
+	OutboxSize      prometheus.Gauge
+	RotationTotal   prometheus.Counter
 }
 
 // newWebhookMetrics constructs and registers the collectors.

@@ -85,7 +85,7 @@ func buildIDPMetadata(provider *Provider) (*saml.EntityDescriptor, error) {
 			return nil, fmt.Errorf("parsing SAML certificate: %w", err)
 		}
 		certData := base64.StdEncoding.EncodeToString(cert.Raw)
-		idpDesc.SSODescriptor.RoleDescriptor.KeyDescriptors = []saml.KeyDescriptor{
+		idpDesc.KeyDescriptors = []saml.KeyDescriptor{
 			{
 				Use: "signing",
 				KeyInfo: saml.KeyInfo{

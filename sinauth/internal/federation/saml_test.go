@@ -33,8 +33,7 @@ func generateTestCert(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var buf []byte
-	buf = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	buf := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	return string(buf)
 }
 
@@ -335,7 +334,7 @@ func TestBuildIDPMetadata_WithCert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildIDPMetadata with cert: %v", err)
 	}
-	kds := meta.IDPSSODescriptors[0].SSODescriptor.RoleDescriptor.KeyDescriptors
+	kds := meta.IDPSSODescriptors[0].KeyDescriptors
 	if len(kds) == 0 {
 		t.Fatal("expected KeyDescriptor for signing cert")
 	}

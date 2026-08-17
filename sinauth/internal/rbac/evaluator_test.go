@@ -35,8 +35,12 @@ func (f *evalFakeChecker) Check(_ context.Context, subject authz.Entity, permiss
 	return f.allow[f.key(subject, permission, entity)], nil
 }
 
-func (f *evalFakeChecker) WriteRelationship(_ context.Context, _ authz.Relationship) error  { return nil }
-func (f *evalFakeChecker) DeleteRelationship(_ context.Context, _ authz.Relationship) error { return nil }
+func (f *evalFakeChecker) WriteRelationship(_ context.Context, _ authz.Relationship) error {
+	return nil
+}
+func (f *evalFakeChecker) DeleteRelationship(_ context.Context, _ authz.Relationship) error {
+	return nil
+}
 
 var _ authz.Checker = (*evalFakeChecker)(nil)
 

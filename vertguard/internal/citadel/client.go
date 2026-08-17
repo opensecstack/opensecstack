@@ -192,7 +192,7 @@ func (c *Client) EmitWORM(ctx context.Context, ev Evidence) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(backoff[attempt-1]):
+			case <-time.After(backoff[attempt-1]): // #nosec G602 -- attempt ranges 1..maxAttempts-1 here (guarded by "attempt > 0" above, loop bound is maxAttempts=3), so attempt-1 is always a valid index into the 3-element backoff slice
 			}
 			if c.metrics != nil {
 				c.metrics.IncWORMEmit(ev.EventType, "retry")

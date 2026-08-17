@@ -5,9 +5,10 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/spf13/cobra"
+
 	"github.com/opensecstack/sinauth/internal/config"
 	"github.com/opensecstack/sinauth/internal/user"
-	"github.com/spf13/cobra"
 )
 
 // promoteAdminCmd is the one-off CLI path for bootstrapping (or revoking)

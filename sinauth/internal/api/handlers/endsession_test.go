@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,7 +15,7 @@ import (
 // than, say, echoing an unvalidated URL.
 func TestEndSession_NoRedirectURI_FallsBackToSiteURL(t *testing.T) {
 	d := Deps{Cfg: &config.Config{SiteURL: "https://sinauth.test", DevMode: true}}
-	req := httptest.NewRequest(http.MethodGet, "/oauth/endsession", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/oauth/endsession", nil)
 	rec := httptest.NewRecorder()
 	EndSession(d)(rec, req)
 
@@ -35,7 +36,7 @@ func TestEndSession_NoRedirectURI_FallsBackToSiteURL(t *testing.T) {
 func TestEndSession_UnvalidatedRedirectURI_FallsBackToSiteURL(t *testing.T) {
 	d := Deps{Cfg: &config.Config{SiteURL: "https://sinauth.test", DevMode: true}}
 	evil := "https://evil.example/phish"
-	req := httptest.NewRequest(http.MethodGet, "/oauth/endsession?post_logout_redirect_uri="+evil, nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/oauth/endsession?post_logout_redirect_uri="+evil, nil)
 	rec := httptest.NewRecorder()
 	EndSession(d)(rec, req)
 
@@ -49,7 +50,7 @@ func TestEndSession_UnvalidatedRedirectURI_FallsBackToSiteURL(t *testing.T) {
 // cookies over plain HTTP).
 func TestEndSession_DevMode_CookieNotSecure(t *testing.T) {
 	d := Deps{Cfg: &config.Config{SiteURL: "https://sinauth.test", DevMode: true}}
-	req := httptest.NewRequest(http.MethodGet, "/oauth/endsession", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/oauth/endsession", nil)
 	rec := httptest.NewRecorder()
 	EndSession(d)(rec, req)
 
@@ -64,7 +65,7 @@ func TestEndSession_DevMode_CookieNotSecure(t *testing.T) {
 // cleared (MaxAge<0), not just left alone, regardless of redirect target.
 func TestEndSession_ClearsCookie(t *testing.T) {
 	d := Deps{Cfg: &config.Config{SiteURL: "https://sinauth.test", DevMode: false}}
-	req := httptest.NewRequest(http.MethodGet, "/oauth/endsession", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/oauth/endsession", nil)
 	rec := httptest.NewRecorder()
 	EndSession(d)(rec, req)
 

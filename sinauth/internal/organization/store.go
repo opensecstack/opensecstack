@@ -8,21 +8,22 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/opensecstack/sinauth/internal/authz"
 )
 
 // Organization is an identity subject representing a government, private,
 // e-commerce, or NGO entity that individual users can act on behalf of.
 type Organization struct {
-	ID                  string     `json:"id"`
-	LegalName           string     `json:"legal_name"`
-	Slug                string     `json:"slug"`
-	OrgType             string     `json:"org_type"`
-	RegistrationNumber  string     `json:"registration_number,omitempty"`
-	VerifiedAt          *time.Time `json:"verified_at,omitempty"`
-	VerifiedBy          string     `json:"verified_by,omitempty"`
-	Status              string     `json:"status"`
-	CreatedAt           time.Time  `json:"created_at"`
+	ID                 string     `json:"id"`
+	LegalName          string     `json:"legal_name"`
+	Slug               string     `json:"slug"`
+	OrgType            string     `json:"org_type"`
+	RegistrationNumber string     `json:"registration_number,omitempty"`
+	VerifiedAt         *time.Time `json:"verified_at,omitempty"`
+	VerifiedBy         string     `json:"verified_by,omitempty"`
+	Status             string     `json:"status"`
+	CreatedAt          time.Time  `json:"created_at"`
 }
 
 // Membership is a joined view of organization_members with enough

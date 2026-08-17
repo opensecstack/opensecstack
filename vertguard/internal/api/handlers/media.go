@@ -103,25 +103,25 @@ func isAllowedMediaType(ct string) bool {
 
 // mediaVerifyResponse is the JSON envelope returned by Verify.
 type mediaVerifyResponse struct {
-	ScanID         string          `json:"scan_id"`
-	HasManifest    bool            `json:"has_manifest"`
-	SignatureValid bool            `json:"signature_valid"`
-	Signer         *string         `json:"signer,omitempty"`
-	ClaimsCount    uint32          `json:"claims_count"`
-	Format         string          `json:"format,omitempty"`
-	FileSize       int64           `json:"file_size"`
-	ContentType    string          `json:"content_type,omitempty"`
-	Errors         []string        `json:"errors"`
-	Warnings       []string        `json:"warnings"`
-	ManifestSummary media.ManifestSummary `json:"manifest_summary"`
-	DurationMS     float64         `json:"duration_ms"`
-	TrustStatus    string          `json:"trust_status"`
-	RevocationReason *string       `json:"revocation_reason,omitempty"`
+	ScanID           string                `json:"scan_id"`
+	HasManifest      bool                  `json:"has_manifest"`
+	SignatureValid   bool                  `json:"signature_valid"`
+	Signer           *string               `json:"signer,omitempty"`
+	ClaimsCount      uint32                `json:"claims_count"`
+	Format           string                `json:"format,omitempty"`
+	FileSize         int64                 `json:"file_size"`
+	ContentType      string                `json:"content_type,omitempty"`
+	Errors           []string              `json:"errors"`
+	Warnings         []string              `json:"warnings"`
+	ManifestSummary  media.ManifestSummary `json:"manifest_summary"`
+	DurationMS       float64               `json:"duration_ms"`
+	TrustStatus      string                `json:"trust_status"`
+	RevocationReason *string               `json:"revocation_reason,omitempty"`
 	// ML enrichment fields — populated when ML service is available (Phase 4.2).
-	MLConfidence   float64  `json:"ml_confidence,omitempty"`
-	MLVerdict      string   `json:"ml_verdict,omitempty"`
-	MLModelVersion string   `json:"ml_backend_version,omitempty"`
-	MLLatencyMS    float64  `json:"ml_latency_ms,omitempty"`
+	MLConfidence   float64 `json:"ml_confidence,omitempty"`
+	MLVerdict      string  `json:"ml_verdict,omitempty"`
+	MLModelVersion string  `json:"ml_backend_version,omitempty"`
+	MLLatencyMS    float64 `json:"ml_latency_ms,omitempty"`
 }
 
 // countingReader wraps an io.Reader and tracks bytes successfully read.
@@ -200,19 +200,19 @@ func (h *MediaHandler) Verify(w http.ResponseWriter, r *http.Request) {
 	fileSize := counter.n
 
 	resp := mediaVerifyResponse{
-		ScanID:          scanID,
-		HasManifest:     result.HasManifest,
-		SignatureValid:  result.SignatureValid,
-		Signer:          result.Signer,
-		ClaimsCount:     result.ClaimsCount,
-		Format:          result.Format,
-		FileSize:        fileSize,
-		ContentType:     sniffedCT,
-		Errors:          result.Errors,
-		Warnings:        result.Warnings,
-		ManifestSummary: result.ManifestSummary,
-		DurationMS:      durationMS,
-		TrustStatus:     result.TrustStatus,
+		ScanID:           scanID,
+		HasManifest:      result.HasManifest,
+		SignatureValid:   result.SignatureValid,
+		Signer:           result.Signer,
+		ClaimsCount:      result.ClaimsCount,
+		Format:           result.Format,
+		FileSize:         fileSize,
+		ContentType:      sniffedCT,
+		Errors:           result.Errors,
+		Warnings:         result.Warnings,
+		ManifestSummary:  result.ManifestSummary,
+		DurationMS:       durationMS,
+		TrustStatus:      result.TrustStatus,
 		RevocationReason: result.RevocationReason,
 	}
 	if resp.TrustStatus == "" {

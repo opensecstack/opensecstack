@@ -10,21 +10,21 @@ type Scored struct {
 //
 // Aggregation rule (mirrors prompt + phishing scorers):
 //
-//   1. Pick the max base confidence across matches.
-//   2. Apply category boost based on the highest-severity match:
-//        SANCTIONED_JURISDICTION → +0.20
-//        ID_FORMAT_MISMATCH      → +0.15
-//        CRED_STUFFING           → +0.15
-//        REPLAY_SUSPECTED        → +0.10
-//        SYNTHETIC_PROFILE       → +0.10
-//        others                  → unchanged
-//   3. Multi-match boost: +0.05 per additional match, capped at +0.15.
-//   4. Context modifier:
-//        kyc              →  0
-//        login            → −0.05
-//        account_recovery → +0.10
-//   5. Clamp to [0, 1].
-//   6. Compare against thresholds.
+//  1. Pick the max base confidence across matches.
+//  2. Apply category boost based on the highest-severity match:
+//     SANCTIONED_JURISDICTION → +0.20
+//     ID_FORMAT_MISMATCH      → +0.15
+//     CRED_STUFFING           → +0.15
+//     REPLAY_SUSPECTED        → +0.10
+//     SYNTHETIC_PROFILE       → +0.10
+//     others                  → unchanged
+//  3. Multi-match boost: +0.05 per additional match, capped at +0.15.
+//  4. Context modifier:
+//     kyc              →  0
+//     login            → −0.05
+//     account_recovery → +0.10
+//  5. Clamp to [0, 1].
+//  6. Compare against thresholds.
 func Score(matches []Match, ctx Context, cleanT, blockT float64) Scored {
 	if len(matches) == 0 {
 		return Scored{Classification: ClassificationClean, Confidence: 0}

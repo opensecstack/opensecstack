@@ -889,6 +889,19 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: sinauth/go.sum
+
+      - name: Run migrations
+        # sinauth ships its own `sinauth migrate` command (cmd/sinauth/migrate.go)
+        # that applies plain-numbered .sql files directly — it does not use
+        # golang-migrate's up/down naming convention.
+        env:
+          SINAUTH_DB_URL: postgres://sinauth:sinauth@localhost:5432/sinauth_test?sslmode=disable
+          # config.Load() requires these to be non-empty even for `migrate`,
+          # which never actually uses them — CI-only placeholder values.
+          SINAUTH_ISSUER: http://localhost:8100
+          SINAUTH_SIGNING_KEY_PATH: /tmp/sinauth-ci-signing-key.pem
+        run: go run ./cmd/sinauth migrate --dir migrations
+
       - name: Go tests (race detector)
         env:
           SINAUTH_TEST_DB_URL: postgres://sinauth:sinauth@localhost:5432/sinauth_test?sslmode=disable
@@ -956,6 +969,20 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: cyberpath/go.sum
+
+      - name: Run migrations
+        # cyberpath has no migration tool yet (its Makefile's migrate-up target
+        # is a placeholder that only applies 0001_initial.sql — see the comment
+        # on migrate-status). The .sql files are plain, idempotent
+        # (IF NOT EXISTS), forward-only DDL, so applying them in numeric order
+        # via psql is equivalent and safe for a throwaway CI database.
+        env:
+          PGPASSWORD: cyberpath
+        run: |
+          for f in internal/db/migrations/*.sql; do
+            psql -h localhost -U cyberpath -d cyberpath_test -v ON_ERROR_STOP=1 -f "$f"
+          done
+
       - name: Go tests (race detector)
         env:
           CYBERPATH_TEST_DB_URL: postgres://cyberpath:cyberpath@localhost:5432/cyberpath_test?sslmode=disable

@@ -11,8 +11,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/opensecstack/sinauth/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/opensecstack/sinauth/internal/config"
 )
 
 var migrateCmd = &cobra.Command{

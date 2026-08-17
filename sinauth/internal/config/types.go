@@ -9,8 +9,8 @@ type Config struct {
 	DBMaxConns int32
 
 	// JWT / token signing
-	SigningKeyPath  string        // path to PEM private key file
-	SigningKeyID    string        // kid for JWKS
+	SigningKeyPath string // path to PEM private key file
+	SigningKeyID   string // kid for JWKS
 	// DefaultRole is the primary role granted in issued access tokens when a
 	// user has no explicit per-client RBAC role assignment. Keeps prod least-
 	// privilege (default "viewer"); dev sets it to "admin" via SINAUTH_DEFAULT_ROLE.
@@ -38,10 +38,10 @@ type Config struct {
 	SMTPFrom     string
 
 	// Security
-	BcryptCost           int
-	TrustedProxies       []string
-	AllowedOrigins       []string
-	RateLimitAuthPerMin  int // per-IP limit on auth endpoints (login/register/etc.)
+	BcryptCost            int
+	TrustedProxies        []string
+	AllowedOrigins        []string
+	RateLimitAuthPerMin   int // per-IP limit on auth endpoints (login/register/etc.)
 	RateLimitGlobalPerMin int // per-IP global limit across all endpoints
 
 	// Site

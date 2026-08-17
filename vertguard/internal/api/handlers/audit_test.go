@@ -13,10 +13,10 @@ import (
 
 // fakeAuditLister implements AuditLister for handler tests.
 type fakeAuditLister struct {
-	events    []audit.Event
-	err       error
-	gotLimit  int
-	gotSince  string
+	events   []audit.Event
+	err      error
+	gotLimit int
+	gotSince string
 }
 
 func (f *fakeAuditLister) ListAuditEvents(_ context.Context, limit int, sinceID string) ([]audit.Event, error) {

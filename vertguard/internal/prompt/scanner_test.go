@@ -10,10 +10,10 @@ import (
 // fakeML is a unit-test MLEnricher that returns a canned verdict and
 // optionally records the call for assertions.
 type fakeML struct {
-	verdict     string
-	confidence  float64
-	always      bool
-	called      bool
+	verdict    string
+	confidence float64
+	always     bool
+	called     bool
 }
 
 func (f *fakeML) Score(_ context.Context, _, _ string) (*MLScore, error) {

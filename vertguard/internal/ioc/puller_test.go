@@ -18,9 +18,9 @@ import (
 // fakeStore swaps the pgx-backed Store for in-memory bookkeeping so
 // the puller can be exercised without Postgres.
 type fakeStore struct {
-	mu      sync.Mutex
-	rows    map[string]IOC
-	audits  []PullAudit
+	mu     sync.Mutex
+	rows   map[string]IOC
+	audits []PullAudit
 }
 
 func newFakeStore() *fakeStore {

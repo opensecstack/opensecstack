@@ -6,7 +6,9 @@ package api
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -25,31 +27,31 @@ import (
 // Options bundles everything the Server needs. Interfaces for service
 // references let tests inject mocks.
 type Options struct {
-	Config        *config.Config
-	Logger        *zerolog.Logger
-	Pinger        handlers.Pinger
-	Prompt        *handlers.PromptHandler
-	Phishing      *handlers.PhishingHandler
-	Identity      *handlers.IdentityHandler
-	ThreatFeed    *handlers.ThreatFeedHandler
+	Config             *config.Config
+	Logger             *zerolog.Logger
+	Pinger             handlers.Pinger
+	Prompt             *handlers.PromptHandler
+	Phishing           *handlers.PhishingHandler
+	Identity           *handlers.IdentityHandler
+	ThreatFeed         *handlers.ThreatFeedHandler
 	Media              *handlers.MediaHandler
 	ThreatflowReceiver *handlers.ThreatflowReceiver
 	WebhookAdmin       *handlers.WebhookAdminHandler
 	WebhookSubscribers *handlers.WebhookSubscribersHandler // VG-015
 	AdminAtlas         *handlers.AdminAtlasHandler
 	AdminPatterns      *handlers.AdminPatternsHandler
-	AdminML          *handlers.AdminMLHandler
-	Audit            *handlers.AuditHandler
-	AuditSink        audit.Sink
-	AuditMetrics     audit.MetricsHook
-	Metrics          *metrics.Registry
-	Authenticator    *auth.Verifier
-	TokenRevoker     auth.Revoker
-	Denylist         *handlers.DenylistAdminHandler
-	RateLimitAdmin   *handlers.RateLimitAdminHandler
-	RateLimiter      *ratelimit.Limiter
-	RateLimitMetrics ratelimit.Metrics
-	Auth             *handlers.AuthHandler
+	AdminML            *handlers.AdminMLHandler
+	Audit              *handlers.AuditHandler
+	AuditSink          audit.Sink
+	AuditMetrics       audit.MetricsHook
+	Metrics            *metrics.Registry
+	Authenticator      *auth.Verifier
+	TokenRevoker       auth.Revoker
+	Denylist           *handlers.DenylistAdminHandler
+	RateLimitAdmin     *handlers.RateLimitAdminHandler
+	RateLimiter        *ratelimit.Limiter
+	RateLimitMetrics   ratelimit.Metrics
+	Auth               *handlers.AuthHandler
 	// Audio is the Phase 4.3 voice clone detection handler.
 	// Nil disables the /api/v1/audio routes.
 	Audio *handlers.AudioHandler
@@ -72,7 +74,7 @@ func New(opts Options) *Server {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	r.Use(clientIPMiddleware(opts.Config))
 	r.Use(loggerMiddleware(opts.Logger))
 	r.Use(metricsMiddleware(opts.Metrics))
 	// Audit-aware recovery only when a sink is wired; otherwise fall
@@ -303,6 +305,71 @@ func (s *Server) Shutdown(ctx context.Context) error {
 }
 
 // ─── Middleware helpers ─────────────────────────────────────────────
+
+// clientIPMiddleware replaces chi's deprecated middleware.RealIP, which
+// unconditionally trusts True-Client-IP / X-Real-IP / X-Forwarded-For
+// and is vulnerable to IP spoofing (GHSA-3fxj-6jh8-hvhx,
+// GHSA-rjr7-jggh-pgcp, GHSA-9g5q-2w5x-hmxf) — any client could forge
+// those headers to bypass per-IP rate limiting (internal/ratelimit) or
+// forge the RemoteIP recorded in CITADEL audit events
+// (internal/audit.ParseRemoteIP), both of which read r.RemoteAddr.
+//
+// Default (TrustedProxyHops == 0): never trust proxy headers, use the
+// raw TCP peer address only — safe against spoofing, correct when this
+// server is reachable directly.
+//
+// TrustedProxyHops > 0: the operator has confirmed exactly that many
+// reverse proxies sit in front of this server and each unconditionally
+// appends to X-Forwarded-For, so resolveClientIP walks exactly that
+// many hops in from the right — an attacker-supplied XFF prefix can't
+// reach a position the proxies overwrite.
+//
+// Either way the resolved IP is copied into r.RemoteAddr so existing
+// downstream readers (ratelimit.keyFor, audit.ParseRemoteIP) keep
+// working unchanged; only the trust model changes.
+//
+// chi v5.2.1's middleware package only ships the deprecated, header-
+// trusting RealIP (see the GHSA advisories above) — it has no trusted-
+// hop-count resolver, so this is implemented directly here instead of
+// depending on a chi API that doesn't exist in the pinned version.
+func clientIPMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
+	hops := 0
+	if cfg != nil {
+		hops = cfg.Server.TrustedProxyHops
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if ip := resolveClientIP(r, hops); ip != "" {
+				r.RemoteAddr = ip
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// resolveClientIP returns the client IP per the trust model documented on
+// clientIPMiddleware. hops <= 0 always uses the raw TCP peer address.
+func resolveClientIP(r *http.Request, hops int) string {
+	if hops > 0 {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			for i := range parts {
+				parts[i] = strings.TrimSpace(parts[i])
+			}
+			idx := len(parts) - hops
+			if idx < 0 {
+				idx = 0
+			}
+			if ip := parts[idx]; ip != "" {
+				return ip
+			}
+		}
+	}
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+	return r.RemoteAddr
+}
 
 func loggerMiddleware(log *zerolog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

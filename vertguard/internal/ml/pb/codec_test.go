@@ -41,7 +41,7 @@ func TestCodec_Marshal_RejectsNonVTMessage(t *testing.T) {
 	c := Codec{}
 	_, err := c.Marshal("not a vtMessage")
 	if err == nil {
-		t.Fatal("expected error marshaling a non-vtMessage value")
+		t.Fatal("expected error marshalling a non-vtMessage value")
 	}
 }
 

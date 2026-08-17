@@ -132,7 +132,7 @@ func MiddlewareWithSinauth(v *Verifier, devMode bool, sinauthURL string, logger 
 					role = sc.ClientRoles[0]
 				}
 				claims = &Claims{
-					Sub: sc.Sub,
+					Sub:  sc.Sub,
 					Role: role,
 					Iss:  sc.Issuer,
 				}

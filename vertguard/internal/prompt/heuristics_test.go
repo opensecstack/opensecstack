@@ -21,7 +21,7 @@ func TestHeuristics_BenignText_NoMatches(t *testing.T) {
 }
 
 func TestHeuristics_InvisibleCharacters_Flagged(t *testing.T) {
-	in := "hello​​​​ world"
+	in := "hello​​​​ world" //nolint:staticcheck // ST1018: deliberate zero-width-space adversarial fixture — this test verifies the invisible-char heuristic detects exactly this attack, not a stray literal
 	got := RunHeuristics(in, DefaultHeuristicLimits)
 	if !hasMatch(got, HeuristicInvisibles) {
 		t.Fatalf("expected invisible-chars match, got %+v", got)
@@ -29,7 +29,7 @@ func TestHeuristics_InvisibleCharacters_Flagged(t *testing.T) {
 }
 
 func TestHeuristics_BiDiOverride_Flagged(t *testing.T) {
-	in := "name‮‮‮gnp.exe"
+	in := "name‮‮‮gnp.exe" //nolint:staticcheck // ST1018: deliberate RTL-override (U+202E) adversarial fixture — this test verifies the BiDi-override heuristic detects exactly this attack, not a stray literal
 	got := RunHeuristics(in, DefaultHeuristicLimits)
 	if !hasMatch(got, HeuristicInvisibles) {
 		t.Fatalf("expected BiDi override flagged, got %+v", got)

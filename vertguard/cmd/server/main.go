@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http"
 	"os"
 	"os/signal"
@@ -26,11 +27,11 @@ import (
 	"github.com/opensecstack/vertguard/internal/citadel"
 	"github.com/opensecstack/vertguard/internal/config"
 	"github.com/opensecstack/vertguard/internal/db"
+	"github.com/opensecstack/vertguard/internal/identity"
+	iocpkg "github.com/opensecstack/vertguard/internal/ioc"
 	"github.com/opensecstack/vertguard/internal/media"
 	"github.com/opensecstack/vertguard/internal/metrics"
 	"github.com/opensecstack/vertguard/internal/ml"
-	"github.com/opensecstack/vertguard/internal/identity"
-	iocpkg "github.com/opensecstack/vertguard/internal/ioc"
 	"github.com/opensecstack/vertguard/internal/phishing"
 	"github.com/opensecstack/vertguard/internal/prompt"
 	"github.com/opensecstack/vertguard/internal/ratelimit"
@@ -44,6 +45,19 @@ import (
 type stubPinger struct{}
 
 func (stubPinger) Ping(context.Context) error { return nil }
+
+// clampInt32 caps an operator-configured pool-size setting (DBConfig.
+// MaxOpenConns / MinConns) to the int32 range that pgxpool's API
+// requires, instead of truncating/wrapping silently on conversion.
+func clampInt32(n int) int32 {
+	if n > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	if n < math.MinInt32 {
+		return math.MinInt32
+	}
+	return int32(n)
+}
 
 func main() {
 	logger := zerolog.New(os.Stdout).
@@ -78,7 +92,7 @@ func main() {
 	var pinger handlers.Pinger = stubPinger{}
 	var store *db.DB
 	if cfg.DB.Password != "" || cfg.DB.Host != "" {
-		d, err := db.New(ctx, cfg.DB.URL(), int32(cfg.DB.MaxOpenConns), int32(cfg.DB.MinConns))
+		d, err := db.New(ctx, cfg.DB.URL(), clampInt32(cfg.DB.MaxOpenConns), clampInt32(cfg.DB.MinConns))
 		if err != nil {
 			logger.Warn().Err(err).Msg("DB unavailable — continuing with stub pinger (scans will not persist)")
 		} else {
@@ -548,18 +562,18 @@ func main() {
 		WebhookAdmin:       webhookAdmin,
 		AdminAtlas:         adminAtlasH,
 		AdminPatterns:      adminPatternsH,
-		AdminML:          adminMLH,
-		Audit:            auditH,
-		AuditSink:        auditSink,
-		AuditMetrics:     metrics.NewAuditMetricsAdapter(mreg),
-		Metrics:          mreg,
-		Authenticator:    verifier,
-		TokenRevoker:     denylistCache,
-		Denylist:         denylistAdminH,
-		RateLimitAdmin:   rlAdminH,
-		RateLimiter:      rl,
-		RateLimitMetrics: rlMetrics,
-		Auth:             handlers.NewAuthHandler(),
+		AdminML:            adminMLH,
+		Audit:              auditH,
+		AuditSink:          auditSink,
+		AuditMetrics:       metrics.NewAuditMetricsAdapter(mreg),
+		Metrics:            mreg,
+		Authenticator:      verifier,
+		TokenRevoker:       denylistCache,
+		Denylist:           denylistAdminH,
+		RateLimitAdmin:     rlAdminH,
+		RateLimiter:        rl,
+		RateLimitMetrics:   rlMetrics,
+		Auth:               handlers.NewAuthHandler(),
 		WebhookSubscribers: webhookSubH,
 	})
 

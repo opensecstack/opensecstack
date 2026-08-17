@@ -3,8 +3,9 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/opensecstack/sinauth/internal/client"
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/opensecstack/sinauth/internal/client"
 )
 
 func ListClients(d Deps) http.HandlerFunc {

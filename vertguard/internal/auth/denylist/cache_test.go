@@ -23,7 +23,7 @@ func (f *failingStore) List(ctx context.Context) ([]Entry, error) {
 	}
 	return f.inner.List(ctx)
 }
-func (f *failingStore) Add(ctx context.Context, e Entry) error    { return f.inner.Add(ctx, e) }
+func (f *failingStore) Add(ctx context.Context, e Entry) error { return f.inner.Add(ctx, e) }
 func (f *failingStore) Remove(ctx context.Context, k, v string) error {
 	return f.inner.Remove(ctx, k, v)
 }
@@ -251,8 +251,10 @@ func TestCache_RunSecondCallIsNoop(t *testing.T) {
 	// Give the first Run a moment to install the ticker, then call again;
 	// per the doc comment ("Safe to invoke once per Cache") the second
 	// call must return immediately rather than installing a second ticker.
+	// Poll via running() (tickerMu-guarded) rather than reading c.ticker
+	// directly, which would race with Run's locked write to that field.
 	deadline := time.Now().Add(time.Second)
-	for c.ticker == nil && time.Now().Before(deadline) {
+	for !c.running() && time.Now().Before(deadline) {
 		time.Sleep(2 * time.Millisecond)
 	}
 	done2 := make(chan struct{})

@@ -2,7 +2,7 @@ package identity
 
 import (
 	"context"
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505 -- SHA-1 used only as a k-anonymity lookup key against a known-breached-password corpus (HIBP-style), never for authentication or integrity; see checkLeakedPassword below
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -511,7 +511,7 @@ func (s *Scanner) checkLeakedPassword(p *Pattern, c ClaimRequest) []Match {
 	if pwd == "" {
 		return nil
 	}
-	h := sha1.Sum([]byte(pwd))
+	h := sha1.Sum([]byte(pwd)) // #nosec G401 -- SHA-1 is the lookup key format for the leaked-credential blocklist (matches upstream breach-corpus format, e.g. HIBP), not a security boundary
 	if !IsLeakedHash(strings.ToUpper(hex.EncodeToString(h[:]))) {
 		return nil
 	}

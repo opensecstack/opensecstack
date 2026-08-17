@@ -290,7 +290,7 @@ func TestNewPhishingHandler_WiresFields(t *testing.T) {
 
 type fakePhishingMetrics struct{}
 
-func (fakePhishingMetrics) ObservePhishingScan(string, float64)       {}
+func (fakePhishingMetrics) ObservePhishingScan(string, float64)      {}
 func (fakePhishingMetrics) IncPhishingIndicatorMatch(string, string) {}
 
 func TestNewPromptHandler_WiresFields(t *testing.T) {

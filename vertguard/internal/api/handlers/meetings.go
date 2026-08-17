@@ -269,9 +269,9 @@ func (h *MeetingsHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 // JWT auth is required — registered with auth.RequireRead in server.go.
 func (h *MeetingsHandler) Status(w http.ResponseWriter, r *http.Request) {
 	type platformStatus struct {
-		Name           string `json:"name"`
-		Enabled        bool   `json:"enabled"`
-		OAuthConfigured bool  `json:"oauth_configured"`
+		Name            string `json:"name"`
+		Enabled         bool   `json:"enabled"`
+		OAuthConfigured bool   `json:"oauth_configured"`
 	}
 
 	// Report all three platforms; fall back to unconfigured defaults for
@@ -287,15 +287,15 @@ func (h *MeetingsHandler) Status(w http.ResponseWriter, r *http.Request) {
 		cfg, ok := h.platformConfig(p)
 		if !ok {
 			statuses = append(statuses, platformStatus{
-				Name:           string(p),
-				Enabled:        false,
+				Name:            string(p),
+				Enabled:         false,
 				OAuthConfigured: false,
 			})
 			continue
 		}
 		statuses = append(statuses, platformStatus{
-			Name:           string(p),
-			Enabled:        cfg.Enabled,
+			Name:            string(p),
+			Enabled:         cfg.Enabled,
 			OAuthConfigured: cfg.ClientID != "" && cfg.ClientSecret != "",
 		})
 	}

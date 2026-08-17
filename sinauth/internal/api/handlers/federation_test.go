@@ -185,7 +185,9 @@ func TestCreateIdentityProvider_AppliesDefaults(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	t.Cleanup(func() { _, _ = d.Pool.Exec(context.Background(), `DELETE FROM identity_providers WHERE id=$1`, out["id"]) })
+	t.Cleanup(func() {
+		_, _ = d.Pool.Exec(context.Background(), `DELETE FROM identity_providers WHERE id=$1`, out["id"])
+	})
 
 	p, err := d.FedStore.GetProviderBySlug(context.Background(), slug)
 	if err != nil {

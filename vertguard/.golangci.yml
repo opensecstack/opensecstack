@@ -18,6 +18,15 @@ linters:
         - summarise
         - materialise
         - recognised
+        # "unauthorized" is an established HTTP/API term, not a spelling
+        # mistake: it matches Go's http.StatusUnauthorized constant, the
+        # "401 Unauthorized" RFC 7231 status text, this platform's
+        # "code":"unauthorized" JSON wire contract (internal/auth/middleware.go),
+        # and the OpenAPI spec (api/openapi.yaml). Respelling it to
+        # "unauthorised" would break the wire contract and diverge from
+        # the rest of the codebase, which uses the American spelling
+        # consistently for this specific technical term.
+        - unauthorized
     revive:
       rules:
         - name: exported

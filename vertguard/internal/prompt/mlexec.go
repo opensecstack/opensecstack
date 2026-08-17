@@ -70,7 +70,8 @@ type mlExecRequest struct {
 
 // mlExecResponse mirrors MLScore on the wire. Backend authors return
 // {"verdict":"CLEAN|SUSPICIOUS|BLOCKED","confidence":0.x,
-//  "model_version":"name@semver"}.
+//
+//	"model_version":"name@semver"}.
 type mlExecResponse struct {
 	Verdict      string  `json:"verdict"`
 	Confidence   float64 `json:"confidence"`
@@ -92,7 +93,7 @@ func (m *mlExec) Score(ctx context.Context, input, contextTag string) (*MLScore,
 		return nil, fmt.Errorf("ml backend: marshal: %w", err)
 	}
 
-	cmd := exec.CommandContext(cctx, m.cfg.BinaryPath, m.cfg.ExtraArgs...)
+	cmd := exec.CommandContext(cctx, m.cfg.BinaryPath, m.cfg.ExtraArgs...) // #nosec G204 -- BinaryPath and ExtraArgs are operator-configured (PromptConfig), not derived from request input
 	cmd.Stdin = bytes.NewReader(req)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

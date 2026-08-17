@@ -233,6 +233,17 @@ func (c *Cache) Run(ctx context.Context) {
 	}
 }
 
+// running reports whether Run has installed its ticker yet. It exists so
+// callers (in practice, tests that need to synchronise with Run's
+// startup) have a race-free way to observe that state instead of
+// reading the unexported ticker field directly, which would race with
+// the tickerMu-guarded write in Run.
+func (c *Cache) running() bool {
+	c.tickerMu.Lock()
+	defer c.tickerMu.Unlock()
+	return c.ticker != nil
+}
+
 // Close stops the ticker. Safe to call multiple times.
 func (c *Cache) Close() {
 	if c == nil {

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -17,7 +18,7 @@ func TestDiscovery_ReturnsSpecRequiredFields(t *testing.T) {
 	issuer := "https://sinauth.test"
 	d := Deps{Discovery: oidc.Build(issuer)}
 
-	req := httptest.NewRequest(http.MethodGet, "/.well-known/openid-configuration", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/.well-known/openid-configuration", nil)
 	rec := httptest.NewRecorder()
 	Discovery(d)(rec, req)
 
@@ -101,7 +102,7 @@ func TestJWKS_ReturnsManagerKeySet(t *testing.T) {
 	km := newTestKeyManager(t, tmpDir)
 	d := Deps{Keys: km}
 
-	req := httptest.NewRequest(http.MethodGet, "/.well-known/jwks.json", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/.well-known/jwks.json", nil)
 	rec := httptest.NewRecorder()
 	JWKS(d)(rec, req)
 

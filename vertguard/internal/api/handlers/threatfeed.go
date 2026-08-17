@@ -369,10 +369,13 @@ func keywordOverlap(a, b string) float64 {
 		"on": true, "at": true, "for": true, "with": true, "and": true, "or": true,
 		"is": true, "are": true, "was": true, "be": true, "by": true,
 	}
+	isTokenRune := func(r rune) bool {
+		return (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+	}
 	tokens := func(s string) map[string]bool {
 		out := map[string]bool{}
 		for _, t := range strings.FieldsFunc(s, func(r rune) bool {
-			return !(r >= 'a' && r <= 'z') && !(r >= '0' && r <= '9')
+			return !isTokenRune(r)
 		}) {
 			if len(t) > 2 && !stopwords[t] {
 				out[t] = true

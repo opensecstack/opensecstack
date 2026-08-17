@@ -9,11 +9,11 @@ import (
 // Heuristic IDs. Stable strings — they end up in audit logs and
 // dashboards, so rename only with a migration.
 const (
-	HeuristicLongToken    = "rp.v1.heur.long_token"
-	HeuristicHighEntropy  = "rp.v1.heur.high_entropy"
-	HeuristicMixedScript  = "rp.v1.heur.mixed_script"
-	HeuristicInvisibles   = "rp.v1.heur.invisible_chars"
-	HeuristicTokenFlood   = "rp.v1.heur.token_flood"
+	HeuristicLongToken   = "rp.v1.heur.long_token" // #nosec G101 -- heuristic ID string, not a credential
+	HeuristicHighEntropy = "rp.v1.heur.high_entropy"
+	HeuristicMixedScript = "rp.v1.heur.mixed_script"
+	HeuristicInvisibles  = "rp.v1.heur.invisible_chars"
+	HeuristicTokenFlood  = "rp.v1.heur.token_flood" // #nosec G101 -- heuristic ID string, not a credential
 )
 
 // HeuristicLimits bounds the token-level checks. Defaults come from

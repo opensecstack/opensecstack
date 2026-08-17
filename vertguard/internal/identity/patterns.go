@@ -24,25 +24,25 @@ import (
 type Category string
 
 const (
-	CategorySyntheticProfile     Category = "SYNTHETIC_PROFILE"
-	CategoryIDFormatMismatch     Category = "ID_FORMAT_MISMATCH"
-	CategoryCredStuffing         Category = "CRED_STUFFING"
+	CategorySyntheticProfile       Category = "SYNTHETIC_PROFILE"
+	CategoryIDFormatMismatch       Category = "ID_FORMAT_MISMATCH"
+	CategoryCredStuffing           Category = "CRED_STUFFING"
 	CategorySanctionedJurisdiction Category = "SANCTIONED_JURISDICTION"
-	CategoryReplaySuspected      Category = "REPLAY_SUSPECTED"
-	CategoryEmailDisposable      Category = "EMAIL_DISPOSABLE"
-	CategoryImpossibleAge        Category = "IMPOSSIBLE_AGE"
-	CategoryDocNumberRepeated    Category = "DOC_NUMBER_REPEATED_DIGITS"
-	CategoryWeakPassword         Category = "WEAK_PASSWORD_PATTERN"
+	CategoryReplaySuspected        Category = "REPLAY_SUSPECTED"
+	CategoryEmailDisposable        Category = "EMAIL_DISPOSABLE"
+	CategoryImpossibleAge          Category = "IMPOSSIBLE_AGE"
+	CategoryDocNumberRepeated      Category = "DOC_NUMBER_REPEATED_DIGITS"
+	CategoryWeakPassword           Category = "WEAK_PASSWORD_PATTERN"
 )
 
 // ClaimType narrows scoring + which indicators apply.
 type ClaimType string
 
 const (
-	ClaimPassport       ClaimType = "passport"
-	ClaimNationalID     ClaimType = "national_id"
-	ClaimDriverLicense  ClaimType = "driver_license"
-	ClaimLoginCreds     ClaimType = "login_credentials"
+	ClaimPassport      ClaimType = "passport"
+	ClaimNationalID    ClaimType = "national_id"
+	ClaimDriverLicense ClaimType = "driver_license"
+	ClaimLoginCreds    ClaimType = "login_credentials" // #nosec G101 -- claim-type enum tag, not a credential value
 )
 
 // Context narrows scoring for the request surface.
@@ -60,13 +60,13 @@ const (
 type FieldKey string
 
 const (
-	FieldIDNumber       FieldKey = "id_number"
-	FieldIssuerCountry  FieldKey = "issuer_country"
-	FieldDOB            FieldKey = "dob"
-	FieldName           FieldKey = "name"
-	FieldEmail          FieldKey = "email"
-	FieldPassword       FieldKey = "password"
-	FieldComposite      FieldKey = "*"
+	FieldIDNumber      FieldKey = "id_number"
+	FieldIssuerCountry FieldKey = "issuer_country"
+	FieldDOB           FieldKey = "dob"
+	FieldName          FieldKey = "name"
+	FieldEmail         FieldKey = "email"
+	FieldPassword      FieldKey = "password"
+	FieldComposite     FieldKey = "*"
 )
 
 // Pattern is a single identity-verification indicator.
@@ -150,11 +150,11 @@ var SanctionedCountries = map[string]bool{
 
 // DisposableEmailDomains — tiny embedded list. Operators expand via overlay.
 var DisposableEmailDomains = map[string]bool{
-	"mailinator.com":  true,
+	"mailinator.com":    true,
 	"guerrillamail.com": true,
-	"10minutemail.com": true,
-	"tempmail.com":    true,
-	"throwaway.email": true,
+	"10minutemail.com":  true,
+	"tempmail.com":      true,
+	"throwaway.email":   true,
 }
 
 // LeakedHashPrefixes — SHA-1 prefix blocklist (HIBP-style). v1 has
@@ -234,8 +234,8 @@ var LeakedHashPrefixes = map[string]bool{
 // pass the home-country check digits is much harder.
 var IDFormatByCountry = map[string]map[ClaimType]*regexp.Regexp{
 	"AL": {
-		ClaimPassport:    regexp.MustCompile(`^[A-Z]\d{7}[A-Z]?$`),
-		ClaimNationalID:  regexp.MustCompile(`^[A-Z]\d{8}[A-Z]$`),
+		ClaimPassport:      regexp.MustCompile(`^[A-Z]\d{7}[A-Z]?$`),
+		ClaimNationalID:    regexp.MustCompile(`^[A-Z]\d{8}[A-Z]$`),
 		ClaimDriverLicense: regexp.MustCompile(`^AL\d{7}$`),
 	},
 	"US": {

@@ -215,7 +215,7 @@ func (s *Syncer) RunPeriodic(ctx context.Context) {
 
 type yamlRoot struct {
 	Matrices []struct {
-		ID         string `yaml:"id"`
+		ID         string          `yaml:"id"`
 		Tactics    []yamlTactic    `yaml:"tactics"`
 		Techniques []yamlTechnique `yaml:"techniques"`
 	} `yaml:"matrices"`
@@ -227,11 +227,11 @@ type yamlTactic struct {
 }
 
 type yamlTechnique struct {
-	ID              string   `yaml:"id"`
-	Name            string   `yaml:"name"`
-	Description     string   `yaml:"description"`
-	Tactics         []string `yaml:"tactics"`
-	SubtechniqueOf  string   `yaml:"subtechnique-of"`
+	ID             string   `yaml:"id"`
+	Name           string   `yaml:"name"`
+	Description    string   `yaml:"description"`
+	Tactics        []string `yaml:"tactics"`
+	SubtechniqueOf string   `yaml:"subtechnique-of"`
 }
 
 func parseYAML(body []byte) ([]Technique, error) {

@@ -166,7 +166,7 @@ func suppressBrandPathFP(input string, matches []Match) []Match {
 // kind selects scoring context (email gets a harvest boost). Defaults
 // to KindURL when blank to preserve safety on missing field.
 func (s *Scanner) Scan(input string, kind Kind) (*ScanResult, error) {
-	return s.ScanWithML(nil, input, kind, nil)
+	return s.ScanWithML(context.TODO(), input, kind, nil)
 }
 
 // ScanWithML mirrors prompt.Scanner.ScanWithML — see that doc for the

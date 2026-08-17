@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/opensecstack/sinauth/internal/user"
 	"github.com/spf13/cobra"
+
+	"github.com/opensecstack/sinauth/internal/user"
 )
 
 // newPromoteAdminTestCmd builds a standalone *cobra.Command carrying just

@@ -52,14 +52,14 @@ type Config struct {
 
 // Result mirrors the JSON output of c2pa-verify.
 type Result struct {
-	HasManifest      bool             `json:"has_manifest"`
-	SignatureValid   bool             `json:"signature_valid"`
-	Signer           *string          `json:"signer"`
-	ClaimsCount      uint32           `json:"claims_count"`
-	Format           string           `json:"format"`
-	Errors           []string         `json:"errors"`
-	Warnings         []string         `json:"warnings"`
-	ManifestSummary  ManifestSummary  `json:"manifest_summary"`
+	HasManifest     bool            `json:"has_manifest"`
+	SignatureValid  bool            `json:"signature_valid"`
+	Signer          *string         `json:"signer"`
+	ClaimsCount     uint32          `json:"claims_count"`
+	Format          string          `json:"format"`
+	Errors          []string        `json:"errors"`
+	Warnings        []string        `json:"warnings"`
+	ManifestSummary ManifestSummary `json:"manifest_summary"`
 
 	// Trust verdict, populated by Verify after parsing the cert chain.
 	// One of TrustStatus* constants.
@@ -68,7 +68,7 @@ type Result struct {
 
 	// SigningCerts carries the parsed cert chain when the c2pa-rs CLI
 	// emits it (PEM strings under "signing_certs" or
-	// "signing_credential.certs"). Internal use only — not serialized
+	// "signing_credential.certs"). Internal use only — not serialised
 	// in API responses.
 	SigningCerts []string `json:"signing_certs,omitempty"`
 
@@ -198,7 +198,7 @@ func (v *Verifier) Verify(ctx context.Context, r io.Reader, hint string) (*Resul
 	// --certs asks the Rust CLI to embed the signing chain in the
 	// JSON output (PEM strings, leaf first). Older builds may ignore
 	// the flag; the verifier copes with either shape.
-	cmd := exec.CommandContext(runCtx, v.cfg.BinaryPath,
+	cmd := exec.CommandContext(runCtx, v.cfg.BinaryPath, // #nosec G204 -- BinaryPath is an operator-configured trusted path (not request-derived); "--input" is the temp file we just created under a uuid name, no user-controlled argv
 		"--input", path, "--format", "json", "--certs")
 	out, err := cmd.Output()
 	if err != nil {

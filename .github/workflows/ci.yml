@@ -766,7 +766,8 @@ jobs:
       - name: Install Nuclei
         run: |
           go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
-          nuclei -update-templates
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          "$(go env GOPATH)/bin/nuclei" -update-templates
       - name: DAST — APIGuard
         run: |
           nuclei -t apiguard/.nuclei/templates/ \

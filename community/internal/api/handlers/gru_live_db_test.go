@@ -40,10 +40,17 @@ var (
 )
 
 // liveTestDBURL returns the connection string to use for live-DB tests.
-// COMMUNITY_DB_URL is the env var internal/config already uses in production
-// (see internal/config/config.go), so we honour it here too rather than
-// inventing a separate test-only variable.
+// COMMUNITY_TEST_DB_URL is checked first because it's the variable CI's
+// test-community job actually sets (see .github/workflows/ci.yml); COMMUNITY_DB_URL
+// is also honoured as a fallback since internal/config uses it in production.
+// This file previously checked only COMMUNITY_DB_URL, which CI never sets, so
+// every test relying on requireLiveDB (admin, admin_tags, gdpr, reports, users)
+// silently skipped in CI while passing locally for anyone who happened to
+// export COMMUNITY_DB_URL — part of why measured CI coverage lagged local runs.
 func liveTestDBURL() string {
+	if v := os.Getenv("COMMUNITY_TEST_DB_URL"); v != "" {
+		return v
+	}
 	if v := os.Getenv("COMMUNITY_DB_URL"); v != "" {
 		return v
 	}

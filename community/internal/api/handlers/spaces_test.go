@@ -50,7 +50,18 @@ var (
 	migrateErrSCS  error
 )
 
+// liveTestDBURLSCS resolves the live-DB connection string. COMMUNITY_TEST_DB_URL
+// is checked first because it's the variable CI's test-community job actually
+// sets (see .github/workflows/ci.yml and oauth_testutil_internal_test.go) —
+// this file previously checked only DATABASE_URL, which CI never sets, so
+// every test in this file silently skipped in CI while passing locally for
+// anyone who happened to export DATABASE_URL. That gap is exactly why the
+// Spaces/Series/ChannelMessages coverage measured 0% in CI despite this file
+// existing and passing on developer machines.
 func liveTestDBURLSCS() string {
+	if v := os.Getenv("COMMUNITY_TEST_DB_URL"); v != "" {
+		return v
+	}
 	if v := os.Getenv("DATABASE_URL"); v != "" {
 		return v
 	}

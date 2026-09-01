@@ -23,8 +23,6 @@ import (
 	"github.com/opensecstack/community/internal/db"
 )
 
-const liveTestDBURL13 = "postgres://apiguard@localhost:5434/community_test?sslmode=disable"
-
 // live13Pool lazily connects (once per test binary run) to the live test
 // database and applies migrations. Returns nil if the DB is not reachable.
 var live13PoolCache *pgxpool.Pool
@@ -34,7 +32,7 @@ func live13Pool(t *testing.T) *pgxpool.Pool {
 	if live13PoolCache != nil {
 		return live13PoolCache
 	}
-	pool, err := db.Connect(liveTestDBURL13, 5)
+	pool, err := db.Connect(liveTestDBURL(), 5)
 	if err != nil {
 		t.Skipf("live test DB not reachable, skipping integration test: %v", err)
 		return nil

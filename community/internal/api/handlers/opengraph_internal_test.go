@@ -10,6 +10,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -18,6 +19,20 @@ import (
 	"github.com/opensecstack/community/internal/config"
 	"github.com/opensecstack/community/internal/db"
 )
+
+// liveTestDBURLOG resolves the live-DB connection string. COMMUNITY_TEST_DB_URL
+// is checked first because it's the variable CI's test-community job actually
+// sets; this file previously hardcoded an unreachable localhost:5434 URL, so
+// this test always skipped in CI, which is why fetchOGPost measured 0% there.
+func liveTestDBURLOG() string {
+	if v := os.Getenv("COMMUNITY_TEST_DB_URL"); v != "" {
+		return v
+	}
+	if v := os.Getenv("COMMUNITY_DB_URL"); v != "" {
+		return v
+	}
+	return "postgres://apiguard@localhost:5434/community_test?sslmode=disable"
+}
 
 func TestStripMarkdown_RemovesHeadingsAndEmphasis(t *testing.T) {
 	got := stripMarkdown("# Heading\n\nSome **bold** and _italic_ text.", 500)
@@ -135,14 +150,12 @@ func TestServeWithOG_NonPostsPath_ServesIndexUnchanged(t *testing.T) {
 	}
 }
 
-const liveTestDBURLOG = "postgres://apiguard@localhost:5434/community_test?sslmode=disable"
-
 // TestServeWithOG_PublishedPost_InjectsOGTags_LiveDB exercises fetchOGPost
 // against the real schema (posts JOIN users), proving the query's column
 // list and JOIN actually match the live database, then verifies the OG tags
 // served for a real published post reflect that post's title/body.
 func TestServeWithOG_PublishedPost_InjectsOGTags_LiveDB(t *testing.T) {
-	pool, err := db.Connect(liveTestDBURLOG, 5)
+	pool, err := db.Connect(liveTestDBURLOG(), 5)
 	if err != nil {
 		t.Skipf("live test DB not reachable: %v", err)
 	}

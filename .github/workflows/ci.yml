@@ -764,8 +764,16 @@ jobs:
       - name: Start full stack
         run: docker compose -f deploy/docker-compose.dev.yml up -d --wait --wait-timeout 120
       - name: Install Nuclei
+        # go install intermittently hits transient network errors talking to
+        # sum.golang.org (checksum verification) — retry rather than
+        # disabling GOSUMDB, which this repo doesn't do for supply-chain
+        # integrity reasons (see CLAUDE.md).
         run: |
-          go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+          for i in 1 2 3; do
+            go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest && break
+            echo "go install failed (attempt $i/3), retrying in 10s..." >&2
+            sleep 10
+          done
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
           "$(go env GOPATH)/bin/nuclei" -update-templates
       - name: DAST — APIGuard

@@ -1,3 +1,16 @@
+//go:build integration
+
+// These tests need a real, migrated `worm_entries`/`anchors` schema, which
+// only exists in the citadel_worm_test database the test-citadel-worm CI job
+// migrates (see .github/workflows/ci.yml) — the plain test-citadel job's
+// Postgres service is deliberately left unmigrated, and every existing test
+// in this package was written around that constraint (they only exercise
+// error paths on closed/invalid connections, never a real table). Confirmed
+// the hard way: without this build tag, these tests ran as part of plain
+// `go test ./...` in test-citadel and failed with
+// `relation "worm_entries" does not exist` in actual CI, despite passing
+// locally where migrations were applied manually first.
+
 package db
 
 import (

@@ -449,6 +449,11 @@ jobs:
           echo "Verify that UPDATE/DELETE on worm_entries is rejected by the DB rule"
           go test -tags=integration ./internal/api/handlers/... -v -count=1 -run TestImmutability -timeout 60s
 
+      - name: Ed25519 anchor signing + verification tests
+        env:
+          DATABASE_URL: postgres://citadel:citadel@localhost:5432/citadel_worm_test?sslmode=disable
+        run: go test -tags=integration ./internal/db/... -v -count=1 -timeout 60s
+
   # ──────────────────────────────────────────────────────────────────────────
   # 3c. IRFlow — Go tests (with Postgres)
   # ──────────────────────────────────────────────────────────────────────────

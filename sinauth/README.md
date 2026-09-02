@@ -12,9 +12,13 @@ sinauth is what [Porta](https://porta.gjirafa.tech) is for Gjirafa and [Auth0](h
 - Social login: Google, GitHub
 - Admin dashboard for managing OAuth clients (platforms)
 
-> **Not yet implemented:** TOTP MFA has a database migration
-> (`007_totp.sql`) but no verify endpoint or enrollment flow — don't rely
-> on it as a real second factor yet.
+- TOTP (RFC 6238) MFA: two-step enrollment (`POST /api/v1/mfa/totp/enroll/begin`
+  then `/enroll/confirm`), backup recovery codes issued once at confirmation,
+  and a two-phase login (`POST /api/v1/auth/login` returns a `challenge_id`
+  instead of a token when TOTP is enabled; `POST /api/v1/mfa/totp/login/verify`
+  redeems it). Disabling TOTP (`POST /api/v1/mfa/totp/disable`) requires a
+  valid current code or backup code — an authenticated session alone is not
+  enough. See `internal/mfa/totp.go`.
 
 ## Quick start
 

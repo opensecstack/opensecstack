@@ -168,6 +168,19 @@ func NewServer(cfg *config.Config, pool *pgxpool.Pool, km *keys.Manager) http.Ha
 	mux.Handle("POST /api/v1/mfa/sms/send", adminAuth(http.HandlerFunc(handlers.SendSMSOTP(d))))
 	mux.Handle("POST /api/v1/mfa/sms/verify", adminAuth(http.HandlerFunc(handlers.VerifySMSOTP(d))))
 
+	// ── MFA: TOTP ────────────────────────────────────────────────────────────
+	// enroll/begin, enroll/confirm, status, and disable require an
+	// authenticated session (adminAuth == BearerAuth, same naming as the
+	// WebAuthn/SMS routes above — not platform-admin-only). login/verify is
+	// deliberately unauthenticated: it's the second half of a login that
+	// hasn't issued a token yet, so it's rate-limited the same as
+	// /api/v1/auth/login instead.
+	mux.Handle("POST /api/v1/mfa/totp/enroll/begin", adminAuth(http.HandlerFunc(handlers.BeginTOTPEnroll(d))))
+	mux.Handle("POST /api/v1/mfa/totp/enroll/confirm", authRL(adminAuth(http.HandlerFunc(handlers.ConfirmTOTPEnroll(d)))))
+	mux.Handle("GET /api/v1/mfa/totp/status", adminAuth(http.HandlerFunc(handlers.TOTPStatus(d))))
+	mux.Handle("POST /api/v1/mfa/totp/disable", authRL(adminAuth(http.HandlerFunc(handlers.DisableTOTP(d)))))
+	mux.Handle("POST /api/v1/mfa/totp/login/verify", authRL(http.HandlerFunc(handlers.VerifyTOTPLogin(d))))
+
 	// ── Federation (SSO / external IDPs) ────────────────────────────────────
 	// Provider admin routes require platform-admin standing (RequireAdmin),
 	// not just a validly-signed token — see auth.go.

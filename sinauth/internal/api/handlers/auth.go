@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/opensecstack/sinauth/internal/mfa"
 	"github.com/opensecstack/sinauth/internal/user"
 )
 
@@ -29,6 +30,37 @@ func Login(d Deps) http.HandlerFunc {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 			return
 		}
+
+		// Step-up MFA: a user with TOTP enabled does not get a token from
+		// password auth alone. Stand up a short-lived login challenge and
+		// tell the client a second call to
+		// POST /api/v1/mfa/totp/login/verify (with a TOTP or backup code)
+		// is required. WebAuthn in this codebase is a standalone
+		// passwordless/credential-management flow, not a step-up gate
+		// chained after password login — TOTP is the first mechanism here
+		// to actually enforce a two-phase login.
+		totpEnabled, err := mfa.IsTOTPEnabled(r.Context(), d.Pool, u.ID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server_error"})
+			return
+		}
+		if totpEnabled {
+			challengeID, err := mfa.CreateTOTPLoginChallenge(r.Context(), d.Pool, u.ID)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server_error"})
+				return
+			}
+			if d.Audit != nil {
+				d.Audit.Log("login.mfa_challenge", u.Username, "", ip, ua, nil)
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"mfa_required": true,
+				"method":       "totp",
+				"challenge_id": challengeID,
+			})
+			return
+		}
+
 		accessToken, err := d.Issuer.IssueAccessToken(u.Username, "sinauth-dashboard", []string{"openid", "profile", "email"}, d.Cfg.AccessTokenTTL)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "token error"})

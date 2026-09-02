@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"crypto/ed25519"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -10,6 +11,15 @@ import (
 // DB wraps a pgx connection pool.
 type DB struct {
 	Pool *pgxpool.Pool
+
+	// anchorKey is the Ed25519 master key used to sign (and verify) WORM
+	// anchors. nil means anchoring is disabled — see ConfigureAnchoring in
+	// worm.go. Never logged or exposed outside this package.
+	anchorKey ed25519.PrivateKey
+	// anchorInterval is how many WORM entries between anchor signatures.
+	// 0 means anchoring has not been configured at all (distinct from "no
+	// master key" — see ConfigureAnchoring).
+	anchorInterval int
 }
 
 // New creates a new DB instance with a pgx connection pool.

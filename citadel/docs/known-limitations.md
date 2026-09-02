@@ -25,21 +25,49 @@ ceiling is adequate.
 project_id with its own DB — you get two isolated chains that cannot
 cross-reference but each scale to the per-instance ceiling.
 
-### Anchor signatures not verified in `VerifyChain`
+### Anchor signatures: production and verification
 
-**Status:** `worm/verify` returns `AnchorVerified: false` in v1.0.0
-when the anchor verification step is not yet wired into the verifier.
-The linear chain walk (TripleHash + chain_hash + continuity) is what
-guarantees integrity today.
+**Status:** both halves of this feature are implemented and covered by
+tests (`internal/db/worm.go`, `internal/db/worm_anchor_test.go`):
 
-**Impact:** tamper-*evidence* is intact, but tamper-*resistance*
-against a DB-level attacker who can also rewrite chain_hashes is not
-enforced at verification time. Anchor signatures are produced and
-stored correctly — they just aren't cross-checked in the verify
-endpoint.
+- **Production:** `AppendWORM` signs `chain_hash` with the Ed25519
+  master key (`CITADEL_MASTER_KEY`, hex-encoded, same format as
+  `citadel keygen`'s output) every `CITADEL_ANCHOR_INTERVAL`-th entry
+  (default 100) and inserts `{sequence_num, chain_hash, ed25519_sig}`
+  into `anchors`, in the same transaction as the WORM append — an
+  anchor can never exist for an entry that didn't commit, or vice
+  versa. If `CITADEL_MASTER_KEY` is unset, anchor production is
+  skipped (matches `WarnIfInsecure`'s startup warning), but every
+  interval boundary crossed with no key configured is logged loudly,
+  so an auditor can tell "anchoring is off by policy" from "anchoring
+  is silently broken."
+- **Verification:** `worm/verify` (`VerifyChain`) now looks up every
+  `anchors` row whose `sequence_num` falls inside the verified range
+  and checks two independent things per anchor: (1) `ed25519_sig` is a
+  valid Ed25519 signature over the anchor's own claimed `chain_hash`,
+  using the public half of the configured master key, and (2) that
+  claimed `chain_hash` still matches the real, current `chain_hash` of
+  that `sequence_num` in `worm_entries`. Either check failing is a
+  `BreakAt` condition with the same severity as a `chain_hash`/
+  `triple_hash` break — this is exactly the "DB-level attacker who
+  rewrites chain_hashes but can't forge anchor signatures" scenario
+  this feature exists to catch. A range with zero anchors in it (e.g.
+  a query window narrower than the anchor interval) is not a failure:
+  `AnchorVerified: true`, reflecting "nothing to check, nothing
+  contradicts the chain" rather than a false negative. If anchors
+  exist in range but the verifying CITADEL instance has no
+  `CITADEL_MASTER_KEY` configured to check them against, verification
+  fails closed (`AnchorVerified: false`) rather than silently skipping
+  the check.
 
-**Roadmap:** v1.1 lands the in-API anchor verification; auditors today
-run the check independently per [auditor-walkthrough.md § Step 3](./auditor-walkthrough.md#step-3--anchor-signatures).
+**Impact:** tamper-*resistance* against a DB-level attacker who
+rewrites chain_hashes consistently enough to fool the linear walk is
+now enforced at verification time, not just achievable via an
+out-of-band audit script.
+
+**Remaining gap:** the master key itself still lives in CITADEL's
+process memory for both signing and verifying — see "Anchor key lives
+in memory" below, which this change does not affect.
 
 ### Anchor key lives in memory
 

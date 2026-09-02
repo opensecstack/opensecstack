@@ -67,6 +67,16 @@ func main() {
 
 	logger.Info().Msg("database connection established")
 
+	// Wire the Ed25519 master key + anchor interval into the DB layer so
+	// AppendWORM can produce anchors and VerifyChain can check them (see
+	// internal/db/worm.go's ConfigureAnchoring). A malformed (non-empty but
+	// invalid) key is a config error and must fail startup loudly rather
+	// than silently disabling anchoring — an empty key is the documented,
+	// already-warned-about "anchoring disabled" case (WarnIfInsecure above).
+	if err := database.ConfigureAnchoring(cfg.Citadel.MasterKey, cfg.Citadel.AnchorInterval); err != nil {
+		log.Fatalf("citadel: %v", err)
+	}
+
 	// Start the Permify-snapshot background sync (internal/permifysync) —
 	// only when a Permify endpoint is configured. This is what Gate 2's
 	// EnforcePermifyAuthz check reads from; see

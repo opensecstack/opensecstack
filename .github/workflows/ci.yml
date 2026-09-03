@@ -219,7 +219,7 @@ jobs:
       - name: cargo audit
         working-directory: apiguard/rust
         run: |
-          cargo install cargo-audit --quiet
+          cargo install cargo-audit --quiet --locked
           cargo audit
 
   # ──────────────────────────────────────────────────────────────────────────
@@ -697,7 +697,7 @@ jobs:
         run: cargo test --all-features
       - name: cargo audit
         run: |
-          cargo install cargo-audit --quiet
+          cargo install cargo-audit --quiet --locked
           cargo audit
 
   # ──────────────────────────────────────────────────────────────────────────

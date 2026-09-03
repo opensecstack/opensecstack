@@ -75,7 +75,13 @@ services:
       - CITADEL_DB_URL=postgres://citadel:changeme@postgres:5432/citadel?sslmode=disable
       - CITADEL_HTTP_ADDR=:8099
       - CITADEL_DEV_MODE=true
-      - CITADEL_MASTER_KEY=dev-master-key-do-not-use-in-production-32b
+      # Ed25519 private key, hex-encoded (must decode to exactly
+      # ed25519.PrivateKeySize == 64 bytes / 128 hex chars) — main.go's
+      # ConfigureAnchoring call log.Fatal's on a malformed value, so this
+      # can't be an arbitrary placeholder string the way other dev secrets
+      # here are. Generated once for local/CI dev use only, via
+      # `openssl rand -hex 64`; never used for anything but this stack.
+      - CITADEL_MASTER_KEY=8e8a4634add65be000a5af02610f8ab129f543ad1edc8ea12f84383358a299e8928b220f4d676574d8042fbb6d14446b6e12f441f945f2fcded8584de65d7d4c
       # Required — internal/config.CitadelConfig.SinauthIssuerURL: server init
       # (internal/api.NewServer -> auth.NewSinauthVerifier) fetches the OIDC
       # discovery document from this URL at startup and log.Fatal's if the

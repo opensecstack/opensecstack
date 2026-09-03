@@ -1,15 +1,15 @@
-//go:build integration
-
-// These tests need a real, migrated `worm_entries`/`anchors` schema, which
-// only exists in the citadel_worm_test database the test-citadel-worm CI job
-// migrates (see .github/workflows/ci.yml) — the plain test-citadel job's
-// Postgres service is deliberately left unmigrated, and every existing test
-// in this package was written around that constraint (they only exercise
-// error paths on closed/invalid connections, never a real table). Confirmed
-// the hard way: without this build tag, these tests ran as part of plain
-// `go test ./...` in test-citadel and failed with
-// `relation "worm_entries" does not exist` in actual CI, despite passing
-// locally where migrations were applied manually first.
+// These tests need a real, migrated `worm_entries`/`anchors` schema.
+// test-citadel's CI job now migrates its citadel_test database before
+// running tests (see .github/workflows/ci.yml) specifically so this file
+// can run as part of the normal coverage-measured suite — an earlier
+// version of this file carried a `-tags=integration` guard and ran only in
+// test-citadel-worm's separately-migrated database instead, but that meant
+// none of the new anchor-production/verification code was ever counted
+// toward citadel's coverage gate, which is a worse problem than the one the
+// tag solved (it dropped total coverage from ~70%+ to 66.5% in actual CI).
+// Every pre-existing test in this package still passes against a migrated
+// database — they were written to test error paths on closed/invalid
+// connections, not to depend on the schema's absence.
 
 package db
 

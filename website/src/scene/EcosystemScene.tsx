@@ -8,7 +8,6 @@ import DataFlowPackets from './DataFlowPackets'
 import ParticleGrid from './ParticleGrid'
 import Effects from './postprocessing/Effects'
 import { useScrollMax } from '../hooks/useScrollMax'
-import VantaBackground from '../components/VantaBackground'
 
 const START_POS = new THREE.Vector3(0, 2, 12)
 const END_POS = new THREE.Vector3(0, 5, 16)
@@ -57,7 +56,6 @@ function ScrollCamera() {
 export default function EcosystemScene() {
   return (
     <div className="scene-container">
-      <VantaBackground />
       <Canvas
         camera={{ position: [0, 2, 12], fov: 55 }}
         dpr={[1, 1.5]}

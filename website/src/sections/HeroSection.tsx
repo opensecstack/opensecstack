@@ -1,7 +1,5 @@
 import { motion } from 'framer-motion'
 import { useI18n } from '../i18n/useI18n'
-import MediaVideo from '../components/MediaVideo'
-import { heroMedia } from '../data/media'
 
 export default function HeroSection() {
   const { t } = useI18n()
@@ -12,16 +10,6 @@ export default function HeroSection() {
       id="hero"
       style={{ display: 'flex', alignItems: 'center', minHeight: '100vh', position: 'relative', overflow: 'hidden' }}
     >
-      {heroMedia && (
-        <MediaVideo
-          name={heroMedia}
-          variant="background"
-          style={{
-            position: 'absolute', inset: 0, width: '100%', height: '100%',
-            objectFit: 'cover', zIndex: 0, opacity: 0.35, pointerEvents: 'none',
-          }}
-        />
-      )}
       <motion.div
         initial={{ opacity: 0, y: 50 }}
         animate={{ opacity: 1, y: 0 }}

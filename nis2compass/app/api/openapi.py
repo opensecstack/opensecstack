@@ -596,7 +596,10 @@ _SPEC = {
             "get": {
                 "tags": ["Incidents"],
                 "summary": "Cross-org incidents with an approaching/missed Article 23 deadline",
-                "description": "Polling target for external cron/monitoring. Scoped to organisations the caller owns; significant incidents only.",
+                "description": (
+                    "Polling target for external cron/monitoring. Scoped to "
+                    "organisations the caller owns; significant incidents only."
+                ),
                 "responses": {
                     "200": {
                         "content": {
@@ -665,7 +668,9 @@ _SPEC = {
                     "200": {
                         "content": {"application/json": {"schema": {"$ref": "#/components/schemas/IncidentReport"}}}
                     },
-                    "409": {"description": "Already submitted (CONFLICT) or prerequisite report missing (OUT_OF_ORDER)"},
+                    "409": {
+                        "description": "Already submitted (CONFLICT) or prerequisite report missing (OUT_OF_ORDER)"
+                    },
                 },
             },
         },

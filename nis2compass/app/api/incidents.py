@@ -336,7 +336,7 @@ def submit_report(incident_id: uuid_lib.UUID, report_type: str) -> ResponseRetur
         return jsonify({"error": "Report row not found for this incident", "code": "NOT_FOUND"}), 404
 
     # Rule 1: a deadline can only be met once. Re-submitting an already
-    #-submitted report would let an organisation quietly overwrite the
+    # -submitted report would let an organisation quietly overwrite the
     # record of when it actually reported — submitted_at is the compliance
     # fact CITADEL/auditors rely on, so it is write-once.
     if report.submitted_at is not None:

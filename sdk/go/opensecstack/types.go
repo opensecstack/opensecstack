@@ -473,3 +473,70 @@ type ListAdvisoriesOptions struct {
 	Status   AdvisoryStatus   `url:"status,omitempty"`
 	Severity AdvisorySeverity `url:"severity,omitempty"`
 }
+
+// ----------------------------------------------------------------------------
+// Compliance Evidence (NIS2 Compass -> CITADEL) — root CLAUDE.md's
+// SDK-contract table, "Compliance Evidence | JSON v1 | NIS2 Compass ->
+// CITADEL". This is the contract of record: field names/JSON tags here MUST
+// match citadel/internal/api/handlers/evidence.go's request/response
+// structs exactly, and nis2compass/app/citadel_client.py's
+// submit_compliance_evidence builds its wire JSON to match this shape
+// field-for-field (there is no shared Python SDK yet, so the Python side
+// hand-mirrors this Go source the same way it already does for Kerkese —
+// see that module's docstring).
+//
+// Unlike CITADEL Kerkese, Compliance Evidence is NOT a MARSHAL governance
+// request: NIS2 Compass isn't asking CITADEL for permission to do
+// something risky, it's depositing an audit record after the fact. It is
+// still audit-relevant, so CITADEL forwards it through the WORM chain
+// (TripleHash-protected) rather than storing it in a parallel shadow table
+// — see citadel/internal/api/handlers/evidence.go's package doc comment.
+// ----------------------------------------------------------------------------
+
+// SubmitComplianceEvidenceRequest is the body sent to
+// POST /api/v1/evidence/submit. Report is the exact bytes of the JSON
+// compliance report produced by nis2compass/app/reporters/json_reporter.py
+// (schema documented in that module's docstring) — CITADEL stores it
+// verbatim and does not interpret its contents.
+type SubmitComplianceEvidenceRequest struct {
+	// ActorToken is the submitting user's live sinauth bearer token,
+	// forwarded verbatim so CITADEL can verify it directly against
+	// sinauth's JWKS and derive the submitter's identity/role for RBAC —
+	// the same pattern Kerkese.ActorToken already uses (see
+	// citadel ADR-005, sinauth identity bridge). Never persisted.
+	ActorToken     string          `json:"actor_token"`
+	OrganisationID string          `json:"organisation_id"`
+	AssessmentID   string          `json:"assessment_id"`
+	SchemaVersion  string          `json:"schema_version"`
+	Report         json.RawMessage `json:"report"`
+}
+
+// SubmitComplianceEvidenceResponse is returned by
+// POST /api/v1/evidence/submit on success (HTTP 201).
+type SubmitComplianceEvidenceResponse struct {
+	ID          string    `json:"id"`
+	WORMEntryID string    `json:"worm_entry_id"`
+	ChainHash   string    `json:"chain_hash"`
+	SubmittedAt time.Time `json:"submitted_at"`
+}
+
+// ComplianceEvidence is the JSON representation of a stored evidence
+// record, returned by GET /api/v1/evidence/{id} and as elements of
+// GET /api/v1/evidence's "data" array.
+type ComplianceEvidence struct {
+	ID             string          `json:"id"`
+	OrganisationID string          `json:"organisation_id"`
+	AssessmentID   string          `json:"assessment_id"`
+	SchemaVersion  string          `json:"schema_version"`
+	ReportHash     string          `json:"report_hash"`
+	Report         json.RawMessage `json:"report"`
+	SubmittedBy    string          `json:"submitted_by"`
+	WORMEntryID    string          `json:"worm_entry_id"`
+	SubmittedAt    time.Time       `json:"submitted_at"`
+}
+
+// ListComplianceEvidenceResponse is the envelope returned by
+// GET /api/v1/evidence.
+type ListComplianceEvidenceResponse struct {
+	Data []ComplianceEvidence `json:"data"`
+}

@@ -95,6 +95,14 @@ class Assessment(db.Model):
     gap_report = db.Column(JSONB, nullable=True)
     gap_generated_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
+    # CITADEL Compliance Evidence push (root CLAUDE.md's SDK-contract table).
+    # citadel_evidence_id is the evidence record id CITADEL returned from
+    # POST /api/v1/evidence/submit (see app/citadel_client.py's
+    # submit_compliance_evidence) — nullable because submission is
+    # best-effort and may never have succeeded for this assessment.
+    citadel_evidence_id = db.Column(db.String(64), nullable=True)
+    citadel_evidence_submitted_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
     controls = db.relationship("Control", backref="assessment", cascade="all, delete-orphan", lazy="dynamic")
     artifacts = db.relationship("Artifact", backref="assessment", cascade="all, delete-orphan", lazy="dynamic")
 
@@ -120,6 +128,10 @@ class Assessment(db.Model):
             "locked": self.locked,
             "locked_by": self.locked_by,
             "locked_at": self.locked_at.isoformat() if self.locked_at else None,
+            "citadel_evidence_id": self.citadel_evidence_id,
+            "citadel_evidence_submitted_at": (
+                self.citadel_evidence_submitted_at.isoformat() if self.citadel_evidence_submitted_at else None
+            ),
         }
         if include_stats:
             controls = list(self.controls)

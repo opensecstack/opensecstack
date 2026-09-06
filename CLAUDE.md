@@ -163,7 +163,7 @@ All cross-platform data flows through versioned schemas in the SDK:
 | Scan Result | JSON v1 | APIGuard → IRFlow, ThreatFlow, NIS2 Compass | 📋 Target design — `sdk/go` has `Scan`/`Finding` types, but no platform outside the SDK's own examples/tests imports them |
 | IOC Bundle | STIX 2.1 v1 | ThreatFlow → OpenScrub, IRFlow, OpenCSIRT | 📋 Target design — the real, working IOC pipeline between these platforms bypasses the SDK and exchanges STIX 2.1 directly (see `threatflow/internal/stix`); no `IOCBundle` SDK type exists |
 | Incident Record | JSON v1 | IRFlow → NIS2 Compass, OpenCSIRT, CITADEL | 📋 Target design — no `IncidentRecord` type exists under `sdk/` |
-| Compliance Evidence | JSON v1 | NIS2 Compass → CITADEL | 📋 Target design — evidence generation exists (`nis2compass/app/reporters/json_reporter.py`) but is pull-API only; no push and no CITADEL-side ingestion |
+| Compliance Evidence | JSON v1 | NIS2 Compass → CITADEL | ✅ Implemented — `nis2compass/app/citadel_client.py`'s `submit_compliance_evidence` pushes generated reports to CITADEL's `POST /api/v1/evidence/submit`/`GET /api/v1/evidence` (`citadel/internal/api/handlers/evidence.go`), WORM-chained and retrievable; typed contract at `sdk/go/opensecstack.ComplianceEvidence` |
 | Advisory | CSAF 2.0 v1 | OpenCSIRT → ThreatFlow | 📋 Target design — `sdk/go` has an `Advisory` type but no consumer imports it |
 | Simulation Result | JSON v1 | SecureLab → IRFlow, OpenScrub, ThreatFlow, VertGuard | 📋 Target design — no `SimulationResult` type exists under `sdk/` |
 | AI-Attack Detection | JSON v1 | VertGuard → CITADEL, IRFlow, ThreatFlow | 📋 Target design — no `AIAttackDetection` type exists under `sdk/` |

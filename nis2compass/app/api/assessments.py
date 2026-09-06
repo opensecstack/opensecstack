@@ -22,6 +22,7 @@ from reportlab.platypus import (
 )
 from sqlalchemy.exc import IntegrityError
 
+from .. import citadel_client
 from ..audit import write_audit
 from ..auth import require_auth, require_scope
 from ..extensions import db
@@ -832,6 +833,27 @@ def generate_report(assessment_id: _uuid_mod.UUID) -> ResponseReturnValue:
             risk_class="INFO",
             metadata={"format": "json"},
         )
+
+        # Push the generated evidence to CITADEL (root CLAUDE.md's
+        # SDK-contract table, "Compliance Evidence | JSON v1"). Best-effort
+        # by design — see submit_compliance_evidence's docstring for why a
+        # CITADEL outage must not fail this report download. On success,
+        # record the reference on the assessment so "what evidence was
+        # submitted, and when" is answerable without calling CITADEL again;
+        # on failure (None), leave any prior reference untouched rather than
+        # clearing it — a failed *re-submission* attempt does not mean the
+        # *previous* submission stopped being true.
+        identity = citadel_client.current_actor_identity()
+        citadel_result = citadel_client.submit_compliance_evidence(
+            organisation_id=str(org.id),
+            assessment_id=str(assessment.id),
+            report=report_bytes,
+            actor_token=identity["actor_token"],
+        )
+        if citadel_result:
+            assessment.citadel_evidence_id = citadel_result.get("id")
+            assessment.citadel_evidence_submitted_at = datetime.now(timezone.utc)
+
         db.session.commit()
 
         from flask import Response

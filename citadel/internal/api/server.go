@@ -150,6 +150,7 @@ func (s *Server) registerRoutes() {
 	health := handlers.NewHealth(s.logger, s.db)
 	worm := handlers.NewWORM(s.logger, s.db)
 	keys := handlers.NewKeys(s.logger, s.db, s.verifier)
+	evidence := handlers.NewEvidence(s.logger, s.db, s.verifier)
 
 	// MARSHAL engine uses MarshalStore adapter (breaks db↔marshal import cycle)
 	engine := marshal.New(db.NewMarshalStore(s.db), s.verifier).
@@ -174,4 +175,7 @@ func (s *Server) registerRoutes() {
 	s.router.Get("/api/v1/worm/verify", worm.Verify)
 	s.router.Post("/api/v1/keys/register", keys.Register)
 	s.router.Get("/api/v1/keys/{user_id}", keys.Get)
+	s.router.Post("/api/v1/evidence/submit", evidence.Submit)
+	s.router.Get("/api/v1/evidence/{id}", evidence.Get)
+	s.router.Get("/api/v1/evidence", evidence.List)
 }

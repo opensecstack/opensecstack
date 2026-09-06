@@ -355,3 +355,147 @@ class TestCurrentActorIdentity:
         with app.test_request_context('/'):
             with pytest.raises(RuntimeError):
                 citadel_client.current_actor_identity()
+
+
+# --------------------------------------------------------------------- #
+# submit_compliance_evidence() — POST /api/v1/evidence/submit, best-effort
+# --------------------------------------------------------------------- #
+
+class TestSubmitComplianceEvidence:
+    def test_no_op_when_citadel_not_configured(self, app, monkeypatch):
+        calls = []
+        monkeypatch.setattr('requests.post', lambda *a, **kw: calls.append((a, kw)))
+        with app.app_context():
+            monkeypatch.setitem(app.config, 'CITADEL_API_URL', '')
+            result = citadel_client.submit_compliance_evidence(
+                organisation_id='org-1', assessment_id='assessment-1',
+                report=b'{"schema_version": "1.0"}', actor_token='tok',
+            )
+        assert result is None
+        assert calls == []
+
+    def test_posts_to_correct_endpoint_with_correct_shape(self, app, monkeypatch):
+        captured = {}
+
+        class FakeResp:
+            status_code = 201
+
+            def json(self):
+                return {
+                    'id': 'evidence-uuid-1',
+                    'worm_entry_id': 'worm-uuid-1',
+                    'chain_hash': 'abc123',
+                    'submitted_at': '2026-01-01T00:00:00+00:00',
+                }
+
+        def fake_post(url, json=None, headers=None, timeout=None):
+            captured['url'] = url
+            captured['json'] = json
+            captured['headers'] = headers
+            captured['timeout'] = timeout
+            return FakeResp()
+
+        monkeypatch.setattr('requests.post', fake_post)
+        with app.app_context():
+            monkeypatch.setitem(app.config, 'CITADEL_API_URL', 'http://citadel.local:8099')
+            monkeypatch.setitem(app.config, 'CITADEL_API_KEY', 'secret-key')
+            result = citadel_client.submit_compliance_evidence(
+                organisation_id='org-1', assessment_id='assessment-1',
+                report=b'{"schema_version": "1.0", "report_type": "nis2_compliance"}',
+                actor_token='user-jwt-raw',
+            )
+
+        assert captured['url'] == 'http://citadel.local:8099/api/v1/evidence/submit'
+        assert captured['json'] == {
+            'actor_token': 'user-jwt-raw',
+            'organisation_id': 'org-1',
+            'assessment_id': 'assessment-1',
+            'schema_version': '1.0',
+            'report': {'schema_version': '1.0', 'report_type': 'nis2_compliance'},
+        }
+        assert captured['headers']['Authorization'] == 'Bearer secret-key'
+        assert result == {
+            'id': 'evidence-uuid-1',
+            'worm_entry_id': 'worm-uuid-1',
+            'chain_hash': 'abc123',
+            'submitted_at': '2026-01-01T00:00:00+00:00',
+        }
+
+    def test_custom_schema_version_forwarded(self, app, monkeypatch):
+        captured = {}
+
+        class FakeResp:
+            status_code = 201
+
+            def json(self):
+                return {}
+
+        def fake_post(url, json=None, **kw):
+            captured['json'] = json
+            return FakeResp()
+
+        monkeypatch.setattr('requests.post', fake_post)
+        with app.app_context():
+            monkeypatch.setitem(app.config, 'CITADEL_API_URL', 'http://citadel.local:8099')
+            citadel_client.submit_compliance_evidence(
+                organisation_id='org-1', assessment_id='assessment-1',
+                report=b'{}', actor_token='tok', schema_version='2.0',
+            )
+        assert captured['json']['schema_version'] == '2.0'
+
+    def test_never_raises_on_network_failure(self, app, monkeypatch):
+        def boom(*a, **kw):
+            raise ConnectionError('unreachable')
+
+        monkeypatch.setattr('requests.post', boom)
+        with app.app_context():
+            monkeypatch.setitem(app.config, 'CITADEL_API_URL', 'http://citadel.local:8099')
+            # Must not raise.
+            result = citadel_client.submit_compliance_evidence(
+                organisation_id='org-1', assessment_id='assessment-1',
+                report=b'{}', actor_token='tok',
+            )
+        assert result is None
+
+    def test_returns_none_on_non_201_status(self, app, monkeypatch):
+        class FakeResp:
+            status_code = 403
+            text = 'role not permitted'
+
+            def json(self):
+                return {'error': 'forbidden'}
+
+        monkeypatch.setattr('requests.post', lambda *a, **kw: FakeResp())
+        with app.app_context():
+            monkeypatch.setitem(app.config, 'CITADEL_API_URL', 'http://citadel.local:8099')
+            result = citadel_client.submit_compliance_evidence(
+                organisation_id='org-1', assessment_id='assessment-1',
+                report=b'{}', actor_token='tok',
+            )
+        assert result is None
+
+    def test_returns_none_on_non_json_response(self, app, monkeypatch):
+        class FakeResp:
+            status_code = 201
+
+            def json(self):
+                raise ValueError('not json')
+
+        monkeypatch.setattr('requests.post', lambda *a, **kw: FakeResp())
+        with app.app_context():
+            monkeypatch.setitem(app.config, 'CITADEL_API_URL', 'http://citadel.local:8099')
+            result = citadel_client.submit_compliance_evidence(
+                organisation_id='org-1', assessment_id='assessment-1',
+                report=b'{}', actor_token='tok',
+            )
+        assert result is None
+
+    def test_never_raises_when_no_app_context(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr('requests.post', lambda *a, **kw: calls.append((a, kw)))
+        result = citadel_client.submit_compliance_evidence(
+            organisation_id='org-1', assessment_id='assessment-1',
+            report=b'{}', actor_token='tok',
+        )
+        assert result is None
+        assert calls == []

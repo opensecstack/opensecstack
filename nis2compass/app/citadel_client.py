@@ -2,7 +2,7 @@
 
 There is no shared Python SDK equivalent to sdk/go/citadel yet, so this
 module is nis2compass's own client, scoped to what nis2compass needs. It
-implements the two CITADEL HTTP contracts used by this platform:
+implements the three CITADEL HTTP contracts used by this platform:
 
   - POST /api/v1/worm/emit        — plain audit-log append, no authorization
     decision. Fire-and-forget (never raises into the caller).
@@ -10,11 +10,25 @@ implements the two CITADEL HTTP contracts used by this platform:
     AuthN -> AuthZ -> NDS -> AUGUR -> WORM). Synchronous; callers that use
     this for a governance-candidate action MUST honour a REFUSE/HARD_STOP
     outcome by blocking the action (see evaluate_governance_action below).
+  - POST /api/v1/evidence/submit  — Compliance Evidence push (root
+    CLAUDE.md's SDK-contract table, "Compliance Evidence | JSON v1"). Not a
+    governance decision (nothing to REFUSE/HARD_STOP — the caller isn't
+    asking permission), so it does not go through MARSHAL; instead it lands
+    as a retrievable, structured record on CITADEL's side, tamper-evidenced
+    via CITADEL's own WORM chain forwarding (see
+    citadel/internal/api/handlers/evidence.go). Best-effort like emit_worm,
+    not fail-closed like evaluate — see submit_compliance_evidence below for
+    why.
 
-Wire shapes mirror citadel/internal/marshal/types.go and
-citadel/internal/api/handlers/worm.go exactly (field names, nesting,
+Wire shapes mirror citadel/internal/marshal/types.go,
+citadel/internal/api/handlers/worm.go, and
+citadel/internal/api/handlers/evidence.go exactly (field names, nesting,
 `omitempty` semantics) — that Go source is the contract of record. Field
-names below were copied 1:1 from the Go struct tags, not guessed.
+names below were copied 1:1 from the Go struct tags, not guessed. The
+Compliance Evidence wire shape additionally matches
+sdk/go/opensecstack.SubmitComplianceEvidenceRequest field-for-field (see
+that type's doc comment for the same "Go source is the contract of record"
+convention, applied to a non-Kerkese contract).
 
 Kerkese field/value conventions (project_id="nis2compass",
 kerkese_version="1.0", Actor/Verifier.Role as free-form producer-asserted
@@ -137,6 +151,112 @@ def emit_worm(source: str, event_type: str, project_id: str, payload: dict | Non
             current_app.logger.warning("CITADEL worm/emit failed: %s", exc)
         except RuntimeError:
             pass
+
+
+def submit_compliance_evidence(
+    organisation_id: str,
+    assessment_id: str,
+    report: bytes,
+    *,
+    actor_token: str,
+    schema_version: str = "1.0",
+    timeout: float = 5.0,
+) -> dict | None:
+    """POST /api/v1/evidence/submit — push a generated compliance report to CITADEL.
+
+    Wire shape matches citadel/internal/api/handlers/evidence.go's
+    submitEvidenceRequest and sdk/go/opensecstack.SubmitComplianceEvidenceRequest
+    field-for-field (see this module's docstring).
+
+    Error-handling philosophy: best-effort, matching emit_worm rather than
+    evaluate_governance_action. This is a deliberate choice, not an
+    oversight — unlike a governance-candidate action (where CITADEL being
+    unreachable must block the action, since it might have said REFUSE),
+    compliance evidence submission has no verdict to honour. The
+    report was already generated and, in the caller's actual use (see
+    app/api/assessments.py's generate_report), is already being returned to
+    the requesting user as a download. Making that download fail — or
+    making the HTTP request hang for `timeout` seconds — because CITADEL
+    happens to be down would turn an availability problem in an optional
+    audit-forwarding path into an availability problem in the primary
+    compliance-reporting feature, which is the wrong trade-off for a
+    "deposit a copy in the audit trail" side effect. On any failure this
+    logs a warning and returns None; it never raises into the caller.
+
+    Returns the parsed response dict (`id`, `worm_entry_id`, `chain_hash`,
+    `submitted_at`) on HTTP 201, or None if CITADEL is not configured, the
+    request fails, or the response cannot be parsed as the expected shape.
+    Callers that want to record "this assessment's evidence was submitted
+    to CITADEL at time T with reference R" should treat None as "not
+    submitted this attempt" and simply leave the previous reference (if
+    any) in place rather than erroring the request.
+    """
+    try:
+        url, api_key = _citadel_config()
+    except RuntimeError:
+        return None  # no app context (e.g. tests without full stack)
+    if not url:
+        return None
+
+    try:
+        import requests  # lazy import — only used if CITADEL is configured
+
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        # `report` is already-serialised JSON bytes (see
+        # app/reporters/json_reporter.py's generate_json_report) — decode it
+        # back into an object so it nests as real JSON under the "report"
+        # key of the request body, matching submitEvidenceRequest.Report
+        # (json.RawMessage on the Go side), rather than double-encoding it
+        # as an escaped JSON string.
+        import json as _json
+
+        report_obj = _json.loads(report.decode("utf-8"))
+
+        resp = requests.post(
+            f'{url.rstrip("/")}/api/v1/evidence/submit',
+            json={
+                "actor_token": actor_token,
+                "organisation_id": organisation_id,
+                "assessment_id": assessment_id,
+                "schema_version": schema_version,
+                "report": report_obj,
+            },
+            headers=headers,
+            timeout=timeout,
+        )
+    except Exception as exc:
+        try:
+            from flask import current_app
+
+            current_app.logger.warning("CITADEL evidence/submit failed: %s", exc)
+        except RuntimeError:
+            pass
+        return None
+
+    if resp.status_code != 201:
+        try:
+            from flask import current_app
+
+            current_app.logger.warning(
+                "CITADEL evidence/submit returned unexpected HTTP %s: %s", resp.status_code, resp.text
+            )
+        except RuntimeError:
+            pass
+        return None
+
+    try:
+        return resp.json()
+    except ValueError as exc:
+        try:
+            from flask import current_app
+
+            current_app.logger.warning("CITADEL evidence/submit returned a non-JSON response: %s", exc)
+        except RuntimeError:
+            pass
+        return None
 
 
 def build_kerkese(

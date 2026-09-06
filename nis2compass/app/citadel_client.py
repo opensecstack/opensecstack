@@ -248,7 +248,8 @@ def submit_compliance_evidence(
         return None
 
     try:
-        return resp.json()
+        result: dict = resp.json()
+        return result
     except ValueError as exc:
         try:
             from flask import current_app

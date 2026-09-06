@@ -182,6 +182,52 @@ _SPEC = {
                     "guidance": {"type": "string", "nullable": True},
                 },
             },
+            "IncidentReport": {
+                "type": "object",
+                "description": "One NIS2 Article 23 reporting obligation for an incident.",
+                "properties": {
+                    "id": {"type": "string", "format": "uuid"},
+                    "incident_id": {"type": "string", "format": "uuid"},
+                    "report_type": {"type": "string", "enum": ["early_warning", "notification", "final_report"]},
+                    "submitted_at": {"type": "string", "format": "date-time", "nullable": True},
+                    "submitted_by": {"type": "string", "nullable": True},
+                    "content": {"type": "string", "nullable": True},
+                    "created_at": {"type": "string", "format": "date-time"},
+                    "due_at": {"type": "string", "format": "date-time"},
+                    "status": {
+                        "type": "string",
+                        "enum": ["on_track", "due_soon", "overdue", "met", "missed"],
+                        "description": "Live-computed against wall-clock time — never a stored value.",
+                    },
+                },
+            },
+            "Incident": {
+                "type": "object",
+                "description": "NIS2 Article 23 incident record. See docs/incident-reporting.md.",
+                "properties": {
+                    "id": {"type": "string", "format": "uuid"},
+                    "org_id": {"type": "string", "format": "uuid"},
+                    "title": {"type": "string"},
+                    "description": {"type": "string", "nullable": True},
+                    "detected_at": {"type": "string", "format": "date-time"},
+                    "severity": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+                    "status": {"type": "string", "enum": ["active", "contained", "resolved"]},
+                    "resolved_at": {"type": "string", "format": "date-time", "nullable": True},
+                    "significant": {"type": "boolean"},
+                    "created_by": {"type": "string", "nullable": True},
+                    "created_at": {"type": "string", "format": "date-time"},
+                    "updated_at": {"type": "string", "format": "date-time"},
+                    "deadlines": {
+                        "type": "object",
+                        "properties": {
+                            "early_warning_due_at": {"type": "string", "format": "date-time"},
+                            "notification_due_at": {"type": "string", "format": "date-time"},
+                            "final_report_due_at": {"type": "string", "format": "date-time"},
+                        },
+                    },
+                    "reports": {"type": "array", "items": {"$ref": "#/components/schemas/IncidentReport"}},
+                },
+            },
         },
     },
     "paths": {
@@ -494,6 +540,132 @@ _SPEC = {
                 },
                 "responses": {
                     "200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Control"}}}}
+                },
+            },
+        },
+        "/organisations/{org_id}/incidents": {
+            "parameters": [
+                {"name": "org_id", "in": "path", "required": True, "schema": {"type": "string", "format": "uuid"}}
+            ],
+            "get": {
+                "tags": ["Incidents"],
+                "summary": "List incidents for organisation",
+                "parameters": [
+                    {"name": "status", "in": "query", "schema": {"type": "string"}},
+                    {"name": "significant", "in": "query", "schema": {"type": "boolean"}},
+                    {"name": "page", "in": "query", "schema": {"type": "integer"}},
+                    {"name": "per_page", "in": "query", "schema": {"type": "integer"}},
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {"type": "array", "items": {"$ref": "#/components/schemas/Incident"}}
+                            }
+                        }
+                    }
+                },
+            },
+            "post": {
+                "tags": ["Incidents"],
+                "summary": "Create incident (starts the Article 23 clocks)",
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["title"],
+                                "properties": {
+                                    "title": {"type": "string"},
+                                    "description": {"type": "string"},
+                                    "detected_at": {"type": "string", "format": "date-time"},
+                                    "severity": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+                                    "significant": {"type": "boolean"},
+                                },
+                            }
+                        }
+                    },
+                },
+                "responses": {
+                    "201": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Incident"}}}}
+                },
+            },
+        },
+        "/incidents/at-risk": {
+            "get": {
+                "tags": ["Incidents"],
+                "summary": "Cross-org incidents with an approaching/missed Article 23 deadline",
+                "description": "Polling target for external cron/monitoring. Scoped to organisations the caller owns; significant incidents only.",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {"type": "array", "items": {"type": "object"}},
+                                        "total": {"type": "integer"},
+                                        "generated_at": {"type": "string", "format": "date-time"},
+                                    },
+                                }
+                            }
+                        }
+                    }
+                },
+            }
+        },
+        "/incidents/{id}": {
+            "parameters": [
+                {"name": "id", "in": "path", "required": True, "schema": {"type": "string", "format": "uuid"}}
+            ],
+            "get": {
+                "tags": ["Incidents"],
+                "summary": "Get incident with live deadline status",
+                "responses": {
+                    "200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Incident"}}}}
+                },
+            },
+            "patch": {
+                "tags": ["Incidents"],
+                "summary": "Update severity/status/significant/title/description",
+                "description": "detected_at is immutable — including it returns 400 INVALID_INPUT.",
+                "responses": {
+                    "200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Incident"}}}}
+                },
+            },
+        },
+        "/incidents/{id}/reports/{report_type}": {
+            "parameters": [
+                {"name": "id", "in": "path", "required": True, "schema": {"type": "string", "format": "uuid"}},
+                {
+                    "name": "report_type",
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string", "enum": ["early_warning", "notification", "final_report"]},
+                },
+            ],
+            "post": {
+                "tags": ["Incidents"],
+                "summary": "Submit a report against an Article 23 deadline",
+                "description": (
+                    "Write-once per report_type, and enforced in order "
+                    "(early_warning -> notification -> final_report). "
+                    "submitted_at/submitted_by are always server-set."
+                ),
+                "requestBody": {
+                    "required": False,
+                    "content": {
+                        "application/json": {
+                            "schema": {"type": "object", "properties": {"content": {"type": "string"}}}
+                        }
+                    },
+                },
+                "responses": {
+                    "200": {
+                        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/IncidentReport"}}}
+                    },
+                    "409": {"description": "Already submitted (CONFLICT) or prerequisite report missing (OUT_OF_ORDER)"},
                 },
             },
         },

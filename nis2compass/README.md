@@ -62,6 +62,7 @@ CITADEL HTTP contracts NIS2 Compass uses:
   | Artifact signing | `POST /api/v1/artifacts/{id}/sign` | **Real second identity** — `Artifact.created_by` (the preparer) against the signer as actor |
   | Assessment lock | `POST /api/v1/assessments/{id}/lock` | Fixed placeholder |
   | Assessment unlock | `POST /api/v1/assessments/{id}/unlock` | Fixed placeholder |
+  | Incident report submission (NIS2 Article 23) | `POST /api/v1/incidents/{id}/reports/{report_type}` | Fixed placeholder |
 
   A `REFUSE` or `HARD_STOP` verdict blocks the action (`403`, no commit). If
   CITADEL is configured but unreachable, the action is also blocked
@@ -80,12 +81,12 @@ correctly flags it — that is a genuine control, not a false positive.
 
 **Known gap:** CITADEL's RBAC map does not yet recognise NIS2 Compass's
 action types (`CONTROL_STATUS_UPDATE`, `ARTIFACT_SIGN`, `ASSESSMENT_LOCK`,
-`ASSESSMENT_UNLOCK`) or its `assessor` role. Until CITADEL's RBAC map is
-extended (a CITADEL-side change, tracked separately), a real
-`marshal/evaluate` call for these actions will typically `REFUSE` at the
-AuthZ gate — deployments that have set `CITADEL_API_URL` should expect
-these four endpoints to return `403 CITADEL_REFUSE` until that follow-up
-lands.
+`ASSESSMENT_UNLOCK`, `INCIDENT_REPORT_SUBMIT`) or its `assessor` role.
+Until CITADEL's RBAC map is extended (a CITADEL-side change, tracked
+separately), a real `marshal/evaluate` call for these actions will
+typically `REFUSE` at the AuthZ gate — deployments that have set
+`CITADEL_API_URL` should expect these five endpoints to return `403
+CITADEL_REFUSE` until that follow-up lands.
 
 ---
 
@@ -130,6 +131,8 @@ Five core tables are created by Alembic migrations and extended by the seed scri
 | `organisations` | Registered entities undergoing NIS2 assessment. Stores industry sector, country, size, and NIS2 entity type (`essential` / `important`). |
 | `assessments` | One assessment per organisation per assessment cycle. Tracks framework version, assessor, and lifecycle status (`draft` → `in_progress` → `completed`). |
 | `controls` | Per-assessment control entries, one row per Article 21(2) measure. Stores compliance status, evidence links, and reviewer notes. |
+| `incidents` | NIS2 Article 23 incident records — one row per tracked security incident, keyed to an organisation. `detected_at` starts all three reporting clocks. |
+| `incident_reports` | One row per Article 23 reporting obligation (`early_warning` / `notification` / `final_report`) per incident, recording whether and when each was submitted. See [incident-reporting.md](docs/incident-reporting.md). |
 | `audit_log` | Immutable append-only log of all status changes and user actions against assessments and controls. |
 
 ---
@@ -206,6 +209,10 @@ The NIS2 Compass API listens on **port 8090** (both development and production).
 | `/api/v1/organisations/{id}/assessments` | GET | List assessments for an organisation |
 | `/api/v1/assessments/{id}/controls` | GET | List controls for an assessment |
 | `/api/v1/assessments/{id}/controls/{ref}` | PATCH | Update control status and evidence |
+| `/api/v1/organisations/{id}/incidents` | POST/GET | Create/list NIS2 Article 23 incidents for an organisation |
+| `/api/v1/incidents/{id}` | GET/PATCH | Get/update an incident, including live per-deadline status |
+| `/api/v1/incidents/{id}/reports/{report_type}` | POST | Submit an early_warning/notification/final_report against its Article 23 deadline |
+| `/api/v1/incidents/at-risk` | GET | Cross-organisation monitoring feed of incidents with an approaching/missed deadline (see [incident-reporting.md](docs/incident-reporting.md)) |
 
 Full OpenAPI specification is available at `http://localhost:8090/docs` when the API is running.
 
@@ -224,6 +231,7 @@ Detailed documentation lives in the `docs/` directory. The table below lists eve
 | [schema-reference.md](docs/schema-reference.md) | Complete PostgreSQL 16 schema reference including ENUM types, tables, indexes, and constraints |
 | [api-reference.md](docs/api-reference.md) | Full REST API reference with endpoints, request/response schemas, and JWT authentication details |
 | [nis2-controls-reference.md](docs/nis2-controls-reference.md) | Canonical reference for all ten NIS2 Article 21(2) cybersecurity risk-management measures (a)-(j) |
+| [incident-reporting.md](docs/incident-reporting.md) | NIS2 Article 23 incident-timer subsystem — the 24h/72h/1-month deadlines, data model, API, and known limitations |
 | [security-model.md](docs/security-model.md) | Security architecture — authentication, secret management, database hardening, and CITADEL WORM audit chain |
 | [audit-log.md](docs/audit-log.md) | Design, implementation, and operational use of the CITADEL WORM append-only audit log |
 | [configuration.md](docs/configuration.md) | Environment variable reference for all runtime configuration across development, staging, and production |

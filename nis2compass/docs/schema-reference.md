@@ -91,6 +91,37 @@ Severity classification for audit log entries.
 | `WARNING` | Potentially significant action requiring attention |
 | `CRITICAL` | High-impact action (deletion, privilege change, etc.) |
 
+### `incident_severity`
+
+Severity classification for a tracked security incident.
+
+| Value |
+|---|
+| `low` |
+| `medium` |
+| `high` |
+| `critical` |
+
+### `incident_status`
+
+Lifecycle state of a tracked security incident.
+
+| Value | Meaning |
+|---|---|
+| `active` | Incident is ongoing |
+| `contained` | Incident's spread/impact has been stopped but is not yet fully resolved |
+| `resolved` | Incident is closed. Setting this value sets `incidents.resolved_at`, which feeds the Article 23(4) final-report deadline re-basing — see [incident-reporting.md](incident-reporting.md). |
+
+### `incident_report_type`
+
+Which NIS2 Article 23(4) reporting obligation an `incident_reports` row tracks.
+
+| Value | Article 23(4) deadline |
+|---|---|
+| `early_warning` | 24 hours from `incidents.detected_at` |
+| `notification` | 72 hours from `incidents.detected_at` |
+| `final_report` | 1 month from the `notification` deadline (or from `incidents.resolved_at`, if resolution happens later — see [incident-reporting.md](incident-reporting.md#known-limitations)) |
+
 ---
 
 ## Tables
@@ -256,6 +287,96 @@ Artifacts have no `updated_at` column and no update trigger. Once written, an ar
 | `idx_artifacts_assessment_id` | `assessment_id` | Supports listing all artifacts for a given assessment |
 | `idx_artifacts_control_id` | `control_id` | Supports listing all artifacts for a specific control |
 | `idx_artifacts_hash` | `hash` | Supports deduplication detection by content hash |
+
+---
+
+### `incidents`
+
+One row per tracked security incident. `detected_at` is the moment the
+organisation became aware of the incident — it starts all three NIS2
+Article 23 reporting clocks and is treated as immutable after creation at
+the API layer (not DB-enforced). The three deadlines themselves are never
+stored as columns; they are computed from `detected_at` (and
+`resolved_at`) at read time by `app/incident_timers.py`. See
+[incident-reporting.md](incident-reporting.md).
+
+| Column | Type | Nullable | Default | Description |
+|---|---|---|---|---|
+| `id` | `UUID` | No | `gen_random_uuid()` | Primary key |
+| `org_id` | `UUID` | No | — | Foreign key to `organisations.id` — CASCADE DELETE |
+| `title` | `VARCHAR(255)` | No | — | Short incident title |
+| `description` | `TEXT` | Yes | `NULL` | Free-text incident description |
+| `detected_at` | `TIMESTAMPTZ` | No | — | When the organisation became aware of the incident. Starts all Article 23 clocks. Immutable after creation (API-enforced). |
+| `severity` | `incident_severity` | No | `medium` | Severity classification |
+| `status` | `incident_status` | No | `active` | Lifecycle state |
+| `resolved_at` | `TIMESTAMPTZ` | Yes | `NULL` | Set when `status` transitions to `resolved`. Feeds the Article 23(4) final-report deadline re-basing. |
+| `significant` | `BOOLEAN` | No | `false` | Whether the incident meets the Article 23(3) significance criteria — Article 23 deadlines only legally bind significant incidents. |
+| `created_by` | `VARCHAR(255)` | Yes | `NULL` | Identity of the user who created the incident record |
+| `created_at` | `TIMESTAMPTZ` | No | `NOW()` | Row creation timestamp (UTC) |
+| `updated_at` | `TIMESTAMPTZ` | No | `NOW()` | Last modification timestamp (UTC); auto-updated by trigger |
+
+**Foreign keys**
+
+| Column | References | On delete |
+|---|---|---|
+| `org_id` | `organisations(id)` | `CASCADE` |
+
+**Indexes**
+
+| Index name | Columns | Notes |
+|---|---|---|
+| `idx_incidents_org_id` | `org_id` | Supports listing all incidents for a given organisation |
+| `idx_incidents_status` | `status` | Supports filtering by lifecycle state |
+| `idx_incidents_significant` | `significant` | Supports the `/incidents/at-risk` monitoring query, which only considers significant incidents |
+
+**Triggers**
+
+| Trigger name | Event | Function | Description |
+|---|---|---|---|
+| `trg_incidents_updated_at` | `BEFORE UPDATE` | `set_updated_at()` | Automatically sets `updated_at = NOW()` on every row update |
+
+---
+
+### `incident_reports`
+
+One row per `(incident_id, report_type)` — i.e. one row per NIS2 Article
+23 reporting obligation per incident. All three rows are created
+automatically when the parent `incidents` row is created.
+`due_at` is deliberately not a column here: it is recomputed on every
+read from the parent incident's `detected_at`/`resolved_at`, because for
+`final_report` the true due date can move (see `incident_severity`
+above and [incident-reporting.md](incident-reporting.md)) — a value
+snapshotted at row-creation time would go stale exactly when it matters
+most.
+
+| Column | Type | Nullable | Default | Description |
+|---|---|---|---|---|
+| `id` | `UUID` | No | `gen_random_uuid()` | Primary key |
+| `incident_id` | `UUID` | No | — | Foreign key to `incidents.id` — CASCADE DELETE |
+| `report_type` | `incident_report_type` | No | — | Which obligation this row tracks |
+| `submitted_at` | `TIMESTAMPTZ` | Yes | `NULL` | When the report was actually filed. Always server time — never accepted from the API request body. Write-once: a report_type can only be submitted once. |
+| `submitted_by` | `VARCHAR(255)` | Yes | `NULL` | Identity of the user who submitted the report |
+| `content` | `TEXT` | Yes | `NULL` | Free-text report content |
+| `created_at` | `TIMESTAMPTZ` | No | `NOW()` | Row creation timestamp (UTC) |
+
+**Constraints**
+
+| Constraint | Expression | Description |
+|---|---|---|
+| `UNIQUE` | `(incident_id, report_type)` | Exactly one row per obligation per incident |
+
+**Foreign keys**
+
+| Column | References | On delete |
+|---|---|---|
+| `incident_id` | `incidents(id)` | `CASCADE` |
+
+**Indexes**
+
+| Index name | Columns | Notes |
+|---|---|---|
+| `idx_incident_reports_incident_id` | `incident_id` | Supports listing all reports for a given incident |
+| `idx_incident_reports_report_type` | `report_type` | Supports the `/incidents/at-risk` monitoring query |
 
 ---
 

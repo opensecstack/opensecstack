@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
+from . import incident_timers
 from .extensions import db
 
 # NOTE: Flask-SQLAlchemy sets `db.Model` as a dynamic instance attribute
@@ -36,6 +37,7 @@ class Organisation(db.Model):
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
 
     assessments = db.relationship("Assessment", backref="organisation", cascade="all, delete-orphan", lazy="dynamic")
+    incidents = db.relationship("Incident", backref="organisation", cascade="all, delete-orphan", lazy="dynamic")
 
     def to_dict(self) -> dict:
         return {
@@ -377,3 +379,183 @@ class ControlTemplate(db.Model):
             "guidance": self.guidance,
             "framework": self.framework,
         }
+
+
+class Incident(db.Model):
+    """A security incident tracked for EU NIS2 Directive Article 23 reporting.
+
+    `detected_at` is the moment the organisation became aware of the
+    incident — Article 23(4) starts all three reporting clocks (early
+    warning / notification / final report) from this single timestamp, not
+    from when the incident actually began or was created in this system.
+    It is treated as immutable after creation (enforced in
+    app/api/incidents.py, not at the DB layer) precisely because the three
+    deadlines are computed from it on every read (see app/incident_timers.py)
+    rather than stored — silently changing it after IncidentReport rows
+    already exist would retroactively move deadlines those rows were
+    already being tracked against.
+    """
+
+    __tablename__ = "incidents"
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    org_id = db.Column(UUID(as_uuid=True), db.ForeignKey("organisations.id", ondelete="CASCADE"), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    detected_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    severity = db.Column(
+        db.Enum("low", "medium", "high", "critical", name="incident_severity"),
+        nullable=False,
+        server_default="medium",
+    )
+    status = db.Column(
+        db.Enum("active", "contained", "resolved", name="incident_status"),
+        nullable=False,
+        server_default="active",
+    )
+    # Set when `status` transitions to 'resolved'. Used by
+    # incident_timers.final_report_due_at() to re-base the final-report
+    # deadline for the ongoing-incident extension case (Article 23(4)) —
+    # see the module docstring in app/incident_timers.py for the exact
+    # (partial) scope of what is implemented there.
+    resolved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    # Article 23 obligations only apply to a "significant incident".
+    # Article 23(3) defines significance as an incident that either:
+    #   (a) has caused or is capable of causing severe operational
+    #       disruption of the services, or financial loss, for the entity
+    #       concerned; or
+    #   (b) has affected or is capable of affecting other natural or legal
+    #       persons by causing considerable material or non-material damage.
+    # This is a judgement call the organisation makes (with NCA guidance
+    # where available), so it is stored as an explicit, human-set field
+    # rather than derived from severity — a 'critical' severity incident
+    # confined entirely to internal systems with no service impact may
+    # still not meet the Article 23(3) bar, and a 'medium' severity
+    # incident with third-party impact may. Non-significant incidents can
+    # still be tracked here (for internal record-keeping) but are excluded
+    # from the at-risk/compliance-deadline views in app/api/incidents.py,
+    # since Article 23's timers do not legally bind them.
+    significant = db.Column(db.Boolean, nullable=False, server_default=text("false"))
+
+    created_by = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    updated_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+
+    reports = db.relationship("IncidentReport", backref="incident", cascade="all, delete-orphan", lazy="dynamic")
+
+    # ------------------------------------------------------------------ #
+    # Deadline computation — see app/incident_timers.py for the actual
+    # arithmetic and its rationale. These are intentionally plain Python
+    # properties, not stored columns and not SQL "GENERATED ALWAYS"
+    # columns:
+    #   - early_warning_due_at / notification_due_at are a pure function
+    #     of detected_at, so persisting them would be redundant and would
+    #     introduce exactly the drift risk this design avoids.
+    #   - final_report_due_at additionally depends on resolved_at, which
+    #     can be set after the row is created — a stored/generated column
+    #     would need a trigger to stay correct, when a property gets the
+    #     same correctness for free on every read.
+    #   - None of the three deadlines can be expressed as a PostgreSQL
+    #     STORED generated column even if we wanted to: generated columns
+    #     must be IMMUTABLE expressions, and these are not (they depend on
+    #     other row data, not on a fixed formula from constants alone,
+    #     and there is no meaningful "current time" component to a due
+    #     date anyway — only *status* below depends on wall-clock time).
+    # ------------------------------------------------------------------ #
+
+    @property
+    def early_warning_due_at(self) -> datetime:
+        return incident_timers.early_warning_due_at(self.detected_at)
+
+    @property
+    def notification_due_at(self) -> datetime:
+        return incident_timers.notification_due_at(self.detected_at)
+
+    @property
+    def final_report_due_at(self) -> datetime:
+        return incident_timers.final_report_due_at(self.detected_at, self.resolved_at)
+
+    def to_dict(self, include_reports: bool = False) -> dict:
+        d = {
+            "id": str(self.id),
+            "org_id": str(self.org_id),
+            "title": self.title,
+            "description": self.description,
+            "detected_at": self.detected_at.isoformat() if self.detected_at else None,
+            "severity": self.severity,
+            "status": self.status,
+            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+            "significant": self.significant,
+            "created_by": self.created_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "deadlines": {
+                "early_warning_due_at": self.early_warning_due_at.isoformat(),
+                "notification_due_at": self.notification_due_at.isoformat(),
+                "final_report_due_at": self.final_report_due_at.isoformat(),
+            },
+        }
+        if include_reports:
+            d["reports"] = [r.to_dict(incident=self) for r in self.reports]
+        return d
+
+
+class IncidentReport(db.Model):
+    """One Article 23 reporting obligation (early warning / notification /
+    final report) for a given Incident, and whether/when it was submitted.
+
+    Exactly one row per (incident_id, report_type) is created up front when
+    the Incident is created (see app/api/incidents.py) — this is what makes
+    "was the early warning ever submitted, and when" a queryable fact
+    rather than something inferred from audit-log mining. `due_at` is NOT
+    stored here: it is recomputed from the parent Incident's detected_at
+    (and resolved_at, for final_report) on every read via
+    Incident.early_warning_due_at / notification_due_at /
+    final_report_due_at, for the same drift-avoidance reason described on
+    Incident. Storing a due_at snapshot here would be *especially* wrong
+    for final_report, whose true due date can move if the incident
+    resolves late (see incident_timers.final_report_due_at) — a stored
+    snapshot taken at incident-creation time would go stale exactly in the
+    case that matters most.
+    """
+
+    __tablename__ = "incident_reports"
+
+    __table_args__ = (
+        db.UniqueConstraint("incident_id", "report_type", name="uq_incident_reports_incident_report_type"),
+    )
+
+    id = db.Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    incident_id = db.Column(UUID(as_uuid=True), db.ForeignKey("incidents.id", ondelete="CASCADE"), nullable=False)
+    report_type = db.Column(
+        db.Enum("early_warning", "notification", "final_report", name="incident_report_type"),
+        nullable=False,
+    )
+    submitted_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    submitted_by = db.Column(db.String(255), nullable=True)
+    # Free-form report content (initial assessment / detailed description /
+    # root cause etc., depending on report_type — see Article 23(4) for the
+    # required content of each). Kept as text rather than a rigid schema
+    # since the required content differs materially by report_type and by
+    # incident; structured evidence can still be attached separately via
+    # the existing Artifact model if a file needs to accompany the report.
+    content = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+
+    def to_dict(self, incident: "Incident | None" = None) -> dict:
+        d = {
+            "id": str(self.id),
+            "incident_id": str(self.incident_id),
+            "report_type": self.report_type,
+            "submitted_at": self.submitted_at.isoformat() if self.submitted_at else None,
+            "submitted_by": self.submitted_by,
+            "content": self.content,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+        inc = incident if incident is not None else self.incident
+        if inc is not None:
+            due_at = incident_timers.due_at_for(self.report_type, inc.detected_at, inc.resolved_at)
+            d["due_at"] = due_at.isoformat()
+            d["status"] = incident_timers.deadline_status(due_at, self.submitted_at, datetime.now(timezone.utc))
+        return d

@@ -20,14 +20,15 @@ Tokens are obtained via `POST /api/v1/auth/token` and carry a finite expiry. All
 4. [Assessments](#assessments)
 5. [Reports](#reports)
 6. [Controls](#controls)
-7. [Artifacts](#artifacts)
-8. [Audit Log](#audit-log)
-9. [Control Templates](#control-templates)
-10. [API Key Management](#api-key-management)
-11. [API Schema](#api-schema)
-12. [Error Responses](#error-responses)
-13. [Pagination](#pagination)
-14. [Rate Limiting](#rate-limiting)
+7. [Incidents](#incidents)
+8. [Artifacts](#artifacts)
+9. [Audit Log](#audit-log)
+10. [Control Templates](#control-templates)
+11. [API Key Management](#api-key-management)
+12. [API Schema](#api-schema)
+13. [Error Responses](#error-responses)
+14. [Pagination](#pagination)
+15. [Rate Limiting](#rate-limiting)
 
 ---
 
@@ -630,6 +631,165 @@ Returns the full updated control object.
 | 200 | Control updated |
 | 400 | Invalid field value (e.g., `risk_score` out of range, unrecognised `status`) |
 | 404 | Assessment or control not found |
+
+---
+
+## Incidents
+
+NIS2 Article 23 incident reporting. See
+[incident-reporting.md](incident-reporting.md) for the full legal
+background, the deadline-computation model, and known limitations. All
+routes require `Authorization: Bearer <token>`.
+
+### POST /api/v1/organisations/{org_id}/incidents
+
+Create an incident. This starts all three Article 23 clocks (early
+warning / notification / final report), all measured from `detected_at`,
+and pre-creates one `IncidentReport` row per obligation.
+
+**Auth required:** Yes (scope `read_write`)
+
+**Request body**
+
+```json
+{
+  "title": "Ransomware detected on file server",
+  "description": "Suspicious encryption activity observed on FS-03.",
+  "detected_at": "2026-09-05T08:00:00Z",
+  "severity": "critical",
+  "significant": true
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `title` | string | Yes | Max 255 characters |
+| `description` | string | No | Free text |
+| `detected_at` | string (ISO 8601) | No | When the organisation became aware of the incident. Defaults to now. Cannot be in the future. Immutable after creation. |
+| `severity` | string | No | One of: `low`, `medium`, `high`, `critical`. Default `medium`. |
+| `significant` | boolean | No | Whether Article 23(3) significance criteria are met. Default `false`. |
+
+**Response — 201 Created**
+
+Returns the incident object including `deadlines` (the three computed due
+dates) and `reports` (the three pre-created `IncidentReport` rows, each
+with a live-computed `status`).
+
+**Status codes**
+
+| Code | Condition |
+|---|---|
+| 201 | Incident created |
+| 400 | Missing/invalid `title`, `severity`, `significant`, or `detected_at` (including a future `detected_at`) |
+| 404 | Organisation not found |
+
+### GET /api/v1/organisations/{org_id}/incidents
+
+List incidents for an organisation.
+
+**Auth required:** Yes
+
+**Query parameters**
+
+| Parameter | Type | Description |
+|---|---|---|
+| `status` | string | Filter by `active` / `contained` / `resolved` |
+| `significant` | boolean | Filter by the `significant` flag |
+| `page`, `per_page` | integer | Standard pagination (see [Pagination](#pagination)) |
+
+**Response — 200 OK:** paginated list, each item including live-computed
+`deadlines` and `reports[].status`.
+
+### GET /api/v1/incidents/{id}
+
+Get a single incident, including live-computed `deadlines` and
+`reports[].status`.
+
+**Status codes:** `200`, `404`.
+
+### PATCH /api/v1/incidents/{id}
+
+Update `title`, `description`, `severity`, `status`, and/or `significant`.
+`detected_at` is immutable — including it in the request body returns
+`400 INVALID_INPUT`. Setting `status` to `resolved` sets `resolved_at` to
+the current server time if not already set; moving away from `resolved`
+clears it.
+
+**Status codes**
+
+| Code | Condition |
+|---|---|
+| 200 | Updated |
+| 400 | Invalid field value, or an attempt to change `detected_at` |
+| 404 | Incident not found |
+
+### POST /api/v1/incidents/{id}/reports/{report_type}
+
+Submit a report against one of the three Article 23 deadlines.
+`report_type` is one of `early_warning`, `notification`, `final_report`.
+
+**Auth required:** Yes (scope `read_write`)
+
+**Request body**
+
+```json
+{
+  "content": "Initial assessment: ransomware, ~40 workstations affected, no evidence of exfiltration."
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `content` | string | No | Free-text report content. Max 20000 characters. |
+
+`submitted_at` and `submitted_by` are always set server-side from the
+authenticated actor and the current time — they cannot be supplied by the
+caller.
+
+**Response — 200 OK:** the updated `IncidentReport`, including its
+`due_at` and resulting `status` (`met` or `missed`).
+
+**Status codes**
+
+| Code | Condition |
+|---|---|
+| 200 | Report recorded |
+| 400 | Invalid `report_type`, or `content` too long |
+| 403 | Blocked by CITADEL governance (`REFUSE`/`HARD_STOP`) |
+| 404 | Incident not found |
+| 409 | `CONFLICT` — this report_type was already submitted; or `OUT_OF_ORDER` — its prerequisite report_type has not been submitted yet |
+| 503 | CITADEL is configured but unreachable (fails closed) |
+
+### GET /api/v1/incidents/at-risk
+
+Cross-organisation monitoring feed: incidents (scoped to those the caller
+owns, and to `significant` incidents only) with a next unfilled deadline
+that is `due_soon` or `overdue`, sorted by due date ascending. Intended to
+be polled by an external cron job or monitoring/alerting integration —
+see [incident-reporting.md](incident-reporting.md#monitoring--alerting)
+for why this is an endpoint rather than a background job.
+
+**Auth required:** Yes
+
+**Response — 200 OK**
+
+```json
+{
+  "data": [
+    {
+      "incident": { "id": "...", "title": "...", "significant": true, "...": "..." },
+      "report": {
+        "id": "...",
+        "report_type": "early_warning",
+        "due_at": "2026-09-06T08:00:00+00:00",
+        "status": "overdue"
+      }
+    }
+  ],
+  "total": 1,
+  "generated_at": "2026-09-06T09:15:00+00:00"
+}
+```
 
 ---
 

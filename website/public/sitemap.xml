@@ -7,14 +7,14 @@
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://opensecstack.github.io/opensecstack/citadelos</loc>
-    <lastmod>2026-08-04</lastmod>
+    <loc>https://opensecstack.github.io/opensecstack/runix</loc>
+    <lastmod>2026-09-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://opensecstack.github.io/opensecstack/citadelos/mobile</loc>
-    <lastmod>2026-08-04</lastmod>
+    <loc>https://opensecstack.github.io/opensecstack/runix/mobile</loc>
+    <lastmod>2026-09-05</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>

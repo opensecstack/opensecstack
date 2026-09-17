@@ -135,10 +135,10 @@ a:hover { color: #66f7ff; text-shadow: 0 0 8px rgba(0,240,255,0.4); text-decorat
 }
 
 /* Narrow viewports: the 3D canvas sits behind .scroll-content and must never
-   intercept touch gestures or contribute to horizontal overflow. Disabling
-   the WebGL render itself (to save battery/perf on mobile) is a JS-level
-   mount decision outside this CSS-only pass -- see HomePage.tsx / the scene
-   mount logic, owned by other engineers this round. */
+   intercept touch gestures or contribute to horizontal overflow. HomePage.tsx
+   also skips mounting EcosystemScene entirely below this same breakpoint (see
+   useNarrowViewport), so these rules are a fallback for the brief window
+   before that check resolves. */
 @media (max-width: 480px) {
   .scene-container {
     pointer-events: none;

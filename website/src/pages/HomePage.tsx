@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import ErrorBoundary from '../components/ErrorBoundary'
 import { useWebGL } from '../hooks/useWebGL'
+import { useNarrowViewport } from '../hooks/useNarrowViewport'
 import { useThemeToggle } from '../hooks/useThemeToggle'
 import Navbar from '../components/Navbar'
 import Footer from '../components/Footer'
@@ -63,6 +64,7 @@ function useDeferredMount() {
 
 export default function HomePage() {
   const webgl = useWebGL()
+  const narrowViewport = useNarrowViewport()
   const deferredReady = useDeferredMount()
   useThemeToggle() // initialize theme (body class + localStorage) on mount
 
@@ -82,7 +84,7 @@ export default function HomePage() {
           content="APIGuard, NIS2 Compass, and CITADEL governance engine — open-source tools for EU Digital Decade compliance."
         />
       </Helmet>
-      {webgl && deferredReady && (
+      {webgl && !narrowViewport && deferredReady && (
         // Isolate WebGL / Three.js failures so a driver issue or runtime
         // error in the 3D scene never takes down the whole page. Falling
         // back to null leaves the static content intact. Mounting is

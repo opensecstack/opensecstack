@@ -1,0 +1,9 @@
+[target.x86_64-unknown-none]
+# `curve25519-dalek` (pulled in transitively via `ed25519-dalek`) auto-selects
+# a "simd" backend on nightly toolchains regardless of whether the target
+# actually has usable SIMD codegen support. On x86_64-unknown-none that trips
+# an LLVM ICE ("Do not know how to split the result of this operator"), not a
+# normal compile error. Force the portable scalar backend instead — same fix,
+# same reason, as Runix's kernel/.cargo/config.toml (capability-manager hits
+# the identical issue there).
+rustflags = ["--cfg", "curve25519_dalek_backend=\"serial\""]

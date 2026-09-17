@@ -1,0 +1,7 @@
+[toolchain]
+# No host suffix on purpose — see Runix's kernel/rust-toolchain.toml for the
+# same note (Windows dev boxes without MSVC Build Tools resolve host-default
+# nightly to -msvc and fail to link; invoke explicitly instead:
+#   rustup run nightly-x86_64-pc-windows-gnu cargo build --target x86_64-unknown-none
+channel = "nightly"
+targets = ["x86_64-unknown-none"]

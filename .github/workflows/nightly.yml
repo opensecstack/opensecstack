@@ -80,6 +80,19 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: ${{ matrix.go_sum_path }}
 
+      - name: Run Go migrations
+        # citadel's internal/db tests (evidence_test.go, worm_anchor_test.go)
+        # hit a real Postgres schema directly -- see ci.yml's test-citadel
+        # job, which runs this same step. apiguard/irflow have no
+        # schema-dependent unit tests today, so this is scoped to citadel
+        # only rather than run unconditionally for every Go component.
+        if: matrix.component == 'citadel'
+        env:
+          DATABASE_URL: postgres://${{ matrix.component }}:${{ matrix.component }}@localhost:5432/${{ matrix.component }}_test?sslmode=disable
+        run: |
+          go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+          migrate -path migrations -database "$DATABASE_URL" up
+
       - name: Go tests (race detector, 15m timeout)
         if: matrix.language == 'go'
         env:

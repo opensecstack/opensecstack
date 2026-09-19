@@ -9,7 +9,11 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [1.1.0] — 2026-09-19
+## [1.0.0] — 2026-09-19
+
+First real release — earlier dated entries below predate this project
+ever actually being published; this is the first version cut through
+a real release pipeline.
 
 ### Added
 
@@ -31,13 +35,6 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Alembic migration 014: creates `compliance_snapshots` table
 - Artifact type `pentest`: pentest reports can now be uploaded as evidence artifacts
 - Notification system: `app/notifications.py` dispatches webhook POSTs on assessment status changes and control overdue events; optional SMTP email support via `NIS2_SMTP_*` env vars
-
----
-
-## [1.0.0] — 2026-03-31
-
-### Added
-
 - Organisation management: create, update, and manage NIS2-subject organisations with entity type (essential/important), industry, country, and size classification
 - Assessment lifecycle: full draft → in_progress → under_review → completed workflow for NIS2 Article 21 assessments
 - Control framework: 10 NIS2 Article 21(2) measures (a–j) pre-seeded as control templates, automatically attached to each assessment

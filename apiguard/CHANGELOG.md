@@ -6,32 +6,20 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [1.1.0] - 2026-09-19
+## [1.0.0] - 2026-09-19
+
+First real release — earlier dated entries below predate this project
+ever actually being published; this is the first version cut through
+a real release pipeline.
 
 ### Added
 
 - sinauth SSO integration — authenticate via the SIN identity provider (OAuth 2.0 / OIDC, authorization_code + PKCE).
 - Access-token denylist with a `POST /api/v1/auth/logout` endpoint for immediate token invalidation on sign-out.
 - `sinauth.ts` client and `AuthCallback` page added to the web dashboard for popup-based SSO login.
-
 - `citadel.require_approval` config flag (default `false`) — gates a real two-person approval flow for scan initiation.
 - `POST /api/v1/scans/{id}/approve`, `POST /api/v1/scans/{id}/reject`, `GET /api/v1/scans/{id}/approval` endpoints for two-person Separation-of-Duties sign-off on pending scans.
 - `scan_approvals` table (migration `008_create_scan_approvals`) and `pending_approval` scan status.
-
-### Changed
-
-- Backend auth handler now forwards authentication events to the CITADEL WORM audit chain.
-- Scan creation now derives the real authenticated user's identity and sinauth bearer token and forwards them to CITADEL as the Kerkese `Actor`/`ActorToken`, replacing a previous bug where scan creation submitted a hardcoded `UserID: 0` placeholder.
-
-### Fixed
-
-- Scan creation no longer submits a hardcoded `UserID: 0` to CITADEL MARSHAL — the real authenticated caller's sinauth identity is used instead.
-
----
-
-## [1.0.0] - 2026-05-10
-
-### Added
 - JWT secret rotation support (`auth.previous_jwt_secret`) for zero-downtime key rotation
 - `POST /api/v1/admin/auth/secrets/rotate` — live secret rotation without server restart
 - Refresh token revocation: `GET /auth/refresh` (list) and `DELETE /auth/refresh` (revoke all)
@@ -49,12 +37,15 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - CITADEL `hard_stop` webhook handler — cancels in-flight scans and initiates graceful shutdown
 
 ### Changed
+- Backend auth handler now forwards authentication events to the CITADEL WORM audit chain.
+- Scan creation now derives the real authenticated user's identity and sinauth bearer token and forwards them to CITADEL as the Kerkese `Actor`/`ActorToken`, replacing a previous bug where scan creation submitted a hardcoded `UserID: 0` placeholder.
 - Rate limiter upgraded from simple in-memory counter to atomic Redis Lua script with graceful fallback
 - All 6 rate limiters now respect trusted proxy CIDRs for correct per-client-IP accounting
 - CORS now defaults to deny-all in production; origins must be explicitly allowlisted
 - API key subject claims embed SHA-256 hash for identity traceability and revocation checking
 
 ### Fixed
+- Scan creation no longer submits a hardcoded `UserID: 0` to CITADEL MARSHAL — the real authenticated caller's sinauth identity is used instead.
 - Sequence handling in PostgreSQL migrations
 - Audit log query ordering
 - Stale "Planned" notice removed from API Inventory documentation (endpoints are implemented)

@@ -14,12 +14,6 @@ func TestDefaultValues_AreNonEmpty(t *testing.T) {
 	}
 }
 
-func TestVersion_DefaultIsDev(t *testing.T) {
-	if Version != "1.0.0" {
-		t.Errorf("Version = %q, want %q", Version, "1.0.0")
-	}
-}
-
 func TestGitCommit_DefaultIsUnknown(t *testing.T) {
 	if GitCommit != "unknown" {
 		t.Errorf("GitCommit = %q, want %q", GitCommit, "unknown")

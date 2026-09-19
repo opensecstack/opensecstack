@@ -6,7 +6,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-## [1.1.0] — 2026-09-19
+## [1.0.0] — 2026-09-19
+
+First real release — build, test, and version-tracking milestones
+below predate this project ever actually being published; this is
+the first version cut through a real release pipeline.
 
 ### Added
 - **Gate 2 (AuthZ) rewrite — optional Permify-snapshot soft-check.**
@@ -32,10 +36,6 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `PermifySyncInterval` (`CITADEL_CITADEL_PERMIFY_SYNC_INTERVAL`,
   default `5m`).
 - **ADR-007** — Permify-derived Gate 2 snapshot check.
-
-## [1.0.0] — 2026-04-08
-
-### Added
 - **MARSHAL Decision Engine** — 5-gate cryptographic governance engine enforcing Zero-Trust authorization on every privileged operation
 - **WORM Hash Chain** — append-only audit log with SHA-256 chain hashing, resistant to retrospective falsification
 - **TripleHash Model** — composite 128-byte digest combining SHA-256, SHA-512, and BLAKE3 for defense-in-depth against algorithmic compromise

@@ -15,24 +15,43 @@ For how releases are cut and ecosystem-release tags are produced, see
 
 ---
 
-## [ecosystem/v1.3.0] - 2026-09-19
+## [ecosystem/v1.0.0] - 2026-09-19
 
-**Governance goes from audit-only to enforced, end to end.** Every platform now
-calls CITADEL MARSHAL synchronously and fails closed on a refused or
-unreachable governance check, instead of only forwarding events for the audit
-trail. IRFlow and NIS2 Compass gain real two-person Separation-of-Duties
-flows, and the SDK grows two more typed clients plus a shared password-hashing
-module.
+**The first ecosystem release actually published.** Every entry below this one
+(`v1.2.0`, `v1.0.0-2026-Q2`, etc. — see also `docs/compatibility-matrix.md`)
+describes work that genuinely happened in this repo, but none of it was ever
+cut through a real release pipeline: no `ecosystem/v*` tag existed before
+today, no SDK package (`opensecstack` on crates.io, `@opensecstack/sdk` on
+npm, `opensecstack-sdk` on PyPI) had ever been published, and no platform
+Docker image had ever been pushed to GHCR. Those earlier entries are
+aspirational/internal-development records, not release history. This entry —
+numbered `v1.0.0` despite appearing after higher-numbered entries below, by
+date — is the real first release: the first time anything in this ecosystem
+has actually shipped to a registry a deployer could install from.
 
-### CITADEL v1.1.0 — optional Permify-backed Gate 2 check
+It bundles everything currently sitting in each platform's own `CHANGELOG.md`
+[1.0.0] entry (itself likewise the first *real* version of each platform,
+renumbered down from what had been drafted as `1.1.0` for the same reason).
+Scope is exactly what `release.yml` builds, tests, and publishes: APIGuard,
+NIS2 Compass, CITADEL, IRFlow, and the SDK (Go/Python/TypeScript/Rust,
+including `vantage-hash`). ThreatFlow has real, substantial `[Unreleased]`
+work of its own (CSAF 2.0 advisory ingestion, sinauth SSO, a governance
+actor-identity fix) but isn't part of this cut — `release.yml` has no
+`test-threatflow` job and its Docker matrix doesn't include it, so nothing
+here actually builds, tests, or publishes it.
+
+### CITADEL — optional Permify-backed Gate 2 check, plus the full MARSHAL/WORM/NDS core
 
 - Gate 2 (AuthZ) can now cross-check a periodically-synced Permify policy
   snapshot alongside the existing, unconditionally-enforced RBAC map. Disabled
   by default (`EnforcePermifyAuthz=false`); an unsynced role/action pair is
   always treated as PASS, and a known deny only warns until explicitly
   enabled. See [ADR-007](citadel/adrs/007-permify-gate2-snapshot.md).
+- Ships alongside the full MARSHAL 5-gate decision engine, WORM hash chain,
+  TripleHash digest, and NDS dual-signature Separation of Duties — see
+  [CITADEL's own changelog](citadel/CHANGELOG.md) for the complete list.
 
-### NIS2 Compass v1.1.0, IRFlow v1.1.0, APIGuard v1.1.0 — real governance enforcement
+### NIS2 Compass, IRFlow, APIGuard — real governance enforcement
 
 - **NIS2 Compass**: four privileged actions (control status update, artifact
   signing, assessment lock/unlock) now call CITADEL MARSHAL synchronously and
@@ -51,22 +70,30 @@ module.
   authenticated caller's identity to CITADEL instead of a hardcoded
   placeholder user.
 
-### sinauth SSO reaches APIGuard, IRFlow, and NIS2 Compass
+### sinauth SSO — APIGuard, IRFlow, and NIS2 Compass
 
-- Each platform's own dashboard/API now authenticates via sinauth (OAuth 2.0 /
-  OIDC, authorization_code + PKCE), matching the sinauth identity layer
-  introduced in `ecosystem/v1.2.0`.
+- Each platform's own dashboard/API authenticates via sinauth (OAuth 2.0 /
+  OIDC, authorization_code + PKCE).
 - **Note:** `ecosystem/v1.2.0` (below) described this SSO rollout as already
   ecosystem-wide; these platforms' own `[Unreleased]` sections had it listed
   as still-pending until this release. Flagging the discrepancy rather than
   silently resolving it — the per-platform changelogs are the more granular,
   code-level record and are what this entry is built from.
-- ThreatFlow's own `[Unreleased]` section also lists sinauth SSO integration,
-  CSAF advisory ingestion, and a governance-identity fix, but ThreatFlow is
-  not built or published by this release's CI pipeline (`release.yml` covers
-  APIGuard, NIS2 Compass, CITADEL, and IRFlow only), so those changes are not
-  part of this ecosystem cut and stay under `[Unreleased]` until a release
-  actually exercises them.
+
+### SDK — typed clients across four languages, plus shared password hashing
+
+- APIGuard, NIS2 Compass, and CITADEL typed clients across Go, Python,
+  TypeScript, and Rust, plus new IRFlow and ThreatFlow typed clients (Go and
+  Python) and a webhook retry helper with exponential backoff. (A separate,
+  in-progress `citadel-kerkese-core` no_std crate for freestanding-kernel
+  hosts exists in `sdk/rust/` but is not part of this release.)
+- New Argon2id (RFC 9106) password/API-key hashing module, shared between Go
+  (`github.com/opensecstack/sdk/password`) and Python
+  (`opensecstack-password`) with an identical PHC wire format so hashes
+  verify cleanly across both languages. IRFlow is the first adopter.
+- `vantage-hash` (TripleHash: BLAKE3 + SHA-256 + SHA-512), used by the Rust
+  SDK for CITADEL chain verification, is published standalone on crates.io
+  for the first time.
 
 ### SDK v1.1.0 — two more typed clients, shared password hashing
 

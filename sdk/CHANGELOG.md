@@ -6,7 +6,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
-## [1.1.0] — 2026-09-19
+## [1.0.0] — 2026-09-19
+
+Production release of the opensecstack SDK across all four languages —
+first version cut through a real release pipeline.
 
 ### Added
 - IRFlow typed client (Go and Python)
@@ -15,12 +18,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - **`github.com/opensecstack/sdk/password`** — Go sub-module providing the OpenSecStack reference password / API-key hasher. Argon2id (RFC 9106) with an HMAC-SHA256 server-side pepper, PHC string encoding for cross-language portability, constant-time verification, and `NeedsRehash` for parameter rotation. Lives in its own Go module so the core SDK keeps its zero-external-dependency guarantee; apps opt in by importing `github.com/opensecstack/sdk/password` directly. Full test suite covers round-trip, wrong-password, wrong-pepper, malformed input, and PHC format stability
 - **`opensecstack-password`** (Python) — sister of `sdk/go/password`. Same Argon2id + HMAC-pepper recipe, same PHC wire format, so hashes produced by either language verify cleanly on the other. Uses `argon2-cffi` for the Argon2id primitive. Published separately from `opensecstack-sdk` so the core SDK keeps its slim dependency footprint. 20 tests cover round-trip, wrong-pepper, malformed PHC, and cross-language format stability
 - **IRFlow `auth.Config.Pepper` + `auth.NewHasher(cfg)`** — first adopter wiring. New `IRFLOW_AUTH_PEPPER` config key resolves a shared `*password.Hasher` for any future API-key or user-password feature. Empty pepper is allowed at startup (logs a warning) so adopters can roll out gradually
-
----
-
-## [1.0.0] — 2026-04-08
-
-Production release of the opensecstack SDK across all four languages.
 
 ### Changed
 - All platform client references updated from v0.1.x to v1.0.0 API contracts

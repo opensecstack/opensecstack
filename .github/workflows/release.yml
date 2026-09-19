@@ -529,7 +529,24 @@ jobs:
         # on @opensecstack/sdk's npm settings, pointing at this repo and
         # workflow. No NODE_AUTH_TOKEN: npm mints a short-lived token itself
         # via the id-token: write permission already granted to this job.
-        run: npm publish --provenance --access public
+        #
+        # Same retry-safety concern as the vantage-hash/Rust SDK steps
+        # above: a later step failing forces the whole job to retry from
+        # the top, so this step's own success must be idempotent too.
+        run: |
+          set +e
+          PUBLISH_OUTPUT="$(npm publish --provenance --access public 2>&1)"
+          PUBLISH_EXIT=$?
+          set -e
+          echo "${PUBLISH_OUTPUT}"
+
+          if [ ${PUBLISH_EXIT} -ne 0 ]; then
+            if echo "${PUBLISH_OUTPUT}" | grep -q "cannot publish over the previously published versions"; then
+              echo "@opensecstack/sdk was already published -- treating as success."
+            else
+              exit ${PUBLISH_EXIT}
+            fi
+          fi
 
   # ---------------------------------------------------------------------------
   # 4. GitHub Release (needs docker + sdk-publish)

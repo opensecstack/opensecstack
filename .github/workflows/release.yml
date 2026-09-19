@@ -392,6 +392,11 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: sdk/python/dist/
+          # This job's other publish steps aren't guaranteed to all succeed
+          # on the first attempt (see the vantage-hash step below for a
+          # concrete case) -- a re-run of this job must not hard-fail just
+          # because this step's upload already went through last time.
+          skip-existing: true
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -433,13 +438,34 @@ jobs:
           HTTP_STATUS="$(curl -s -o /dev/null -w '%{http_code}' \
             "https://crates.io/api/v1/crates/vantage-hash/${VERSION}")"
 
+          # The crates.io index-lookup above is a fast pre-check, not an
+          # authoritative guarantee -- it can lag shortly after a real
+          # publish (observed directly: a real `cargo publish` failed here
+          # with "already exists" seconds after this same lookup had
+          # returned 200 for a separate, earlier check on the same
+          # version). So `cargo publish`'s own "already exists" response is
+          # treated as the authoritative success case, not this lookup.
           if [ "${HTTP_STATUS}" = "200" ]; then
             echo "vantage-hash ${VERSION} is already published on crates.io -- skipping (dry-run or real), sdk/rust will resolve it from the registry."
-          elif [ "${{ needs.resolve-release-mode.outputs.publish }}" = "true" ]; then
-            cargo publish
-          else
+            exit 0
+          fi
+
+          if [ "${{ needs.resolve-release-mode.outputs.publish }}" != "true" ]; then
             echo "vantage-hash ${VERSION} is not yet on crates.io. Publishing it for real even though this run is otherwise a dry run -- see comment above this step for why that's safe here."
-            cargo publish
+          fi
+
+          set +e
+          PUBLISH_OUTPUT="$(cargo publish 2>&1)"
+          PUBLISH_EXIT=$?
+          set -e
+          echo "${PUBLISH_OUTPUT}"
+
+          if [ ${PUBLISH_EXIT} -ne 0 ]; then
+            if echo "${PUBLISH_OUTPUT}" | grep -q "already exists on crates.io index"; then
+              echo "vantage-hash ${VERSION} was already published (caught here instead of the index lookup above) -- treating as success."
+            else
+              exit ${PUBLISH_EXIT}
+            fi
           fi
 
       # -- Rust SDK -> crates.io --

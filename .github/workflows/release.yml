@@ -498,14 +498,19 @@ jobs:
           fi
 
       # -- TypeScript SDK -> npm --
+      # Node 22, not 20: npm Trusted Publishing (OIDC, no NPM_TOKEN) needs
+      # npm >= 11.5.1, and current npm majors have dropped Node 20 support
+      # entirely (npm@latest here failed outright on Node 20 with
+      # EBADENGINE, requiring Node ^22.22.2 / ^24.15.0 / >=26). The
+      # TypeScript SDK's own test job elsewhere in this workflow still
+      # targets Node 20 as its minimum-supported runtime for consumers --
+      # this bump is scoped to the publish tooling only, not a change to
+      # what the SDK itself supports.
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
-      # npm Trusted Publishing (OIDC, no NPM_TOKEN) requires npm >= 11.5.1;
-      # Node 20's bundled npm is older, so upgrade it explicitly before
-      # the publish step below.
       - name: Upgrade npm for Trusted Publishing support
         run: npm install -g npm@latest
 

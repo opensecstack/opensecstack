@@ -503,6 +503,12 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
+      # npm Trusted Publishing (OIDC, no NPM_TOKEN) requires npm >= 11.5.1;
+      # Node 20's bundled npm is older, so upgrade it explicitly before
+      # the publish step below.
+      - name: Upgrade npm for Trusted Publishing support
+        run: npm install -g npm@latest
+
       - name: Install TypeScript SDK dependencies
         working-directory: sdk/typescript
         run: npm ci
@@ -514,9 +520,11 @@ jobs:
       - name: Publish TypeScript SDK to npm
         if: ${{ needs.resolve-release-mode.outputs.publish == 'true' }}
         working-directory: sdk/typescript
+        # Trusted Publishing (OIDC) -- see the trusted publisher configured
+        # on @opensecstack/sdk's npm settings, pointing at this repo and
+        # workflow. No NODE_AUTH_TOKEN: npm mints a short-lived token itself
+        # via the id-token: write permission already granted to this job.
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # ---------------------------------------------------------------------------
   # 4. GitHub Release (needs docker + sdk-publish)

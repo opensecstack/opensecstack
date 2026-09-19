@@ -6,6 +6,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-09-19
+
 ### Added
 - sinauth SSO integration — authenticate via the SIN identity provider (OAuth 2.0 / OIDC).
 - `auth.Config.Pepper` + `auth.NewHasher(cfg)` — thin wrapper around `github.com/opensecstack/sdk/password` for Argon2id API-key hashing. New config key `IRFLOW_AUTH_PEPPER` (≥ 16 bytes). Empty pepper at startup logs a warning; future features that need hashing (API keys, SSO token binding) call `auth.NewHasher` at their own init time and surface typed errors there

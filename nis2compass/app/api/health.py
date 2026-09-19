@@ -7,7 +7,7 @@ from ..extensions import db, redis_client
 
 health_bp = Blueprint("health", __name__)
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 
 def _collect_checks() -> dict:

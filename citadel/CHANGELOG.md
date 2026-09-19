@@ -6,6 +6,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-09-19
+
 ### Added
 - **Gate 2 (AuthZ) rewrite — optional Permify-snapshot soft-check.**
   `gate2AuthZ` (`internal/marshal/marshal.go`) now composes two checks

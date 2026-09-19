@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-09-19
+
 ### Added
 
 - Real CITADEL governance integration: `app/citadel_client.py` implements `POST /api/v1/worm/emit` (fire-and-forget audit forwarding) and `POST /api/v1/marshal/evaluate` (synchronous, fail-closed governance evaluation). Wired into four privileged actions — control status update, artifact signing, assessment lock, and assessment unlock — each of which now blocks (`403`/`503`) on a `REFUSE`/`HARD_STOP` verdict or an unreachable CITADEL, instead of proceeding un-governed. No-op (proceeds as before) when `CITADEL_API_URL` is not set.

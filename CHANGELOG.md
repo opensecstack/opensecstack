@@ -15,6 +15,70 @@ For how releases are cut and ecosystem-release tags are produced, see
 
 ---
 
+## [ecosystem/v1.3.0] - 2026-09-19
+
+**Governance goes from audit-only to enforced, end to end.** Every platform now
+calls CITADEL MARSHAL synchronously and fails closed on a refused or
+unreachable governance check, instead of only forwarding events for the audit
+trail. IRFlow and NIS2 Compass gain real two-person Separation-of-Duties
+flows, and the SDK grows two more typed clients plus a shared password-hashing
+module.
+
+### CITADEL v1.1.0 — optional Permify-backed Gate 2 check
+
+- Gate 2 (AuthZ) can now cross-check a periodically-synced Permify policy
+  snapshot alongside the existing, unconditionally-enforced RBAC map. Disabled
+  by default (`EnforcePermifyAuthz=false`); an unsynced role/action pair is
+  always treated as PASS, and a known deny only warns until explicitly
+  enabled. See [ADR-007](citadel/adrs/007-permify-gate2-snapshot.md).
+
+### NIS2 Compass v1.1.0, IRFlow v1.1.0, APIGuard v1.1.0 — real governance enforcement
+
+- **NIS2 Compass**: four privileged actions (control status update, artifact
+  signing, assessment lock/unlock) now call CITADEL MARSHAL synchronously and
+  fail closed (`403`/`503`) on a `REFUSE`/`HARD_STOP` verdict or an
+  unreachable CITADEL. This replaces audit forwarding that was, in fact,
+  completely broken — it posted to a route CITADEL never exposed, so every
+  event silently failed regardless of configuration. Artifact signing now
+  sends a genuine second identity (the preparer) as Verifier, rather than a
+  placeholder.
+- **IRFlow**: new propose → approve/reject incident-action flow. A second,
+  distinct authenticated user must approve an action before CITADEL MARSHAL is
+  ever evaluated — enforced both in the application layer and with a database
+  constraint (`verifier_user_id <> operator_user_id`).
+- **APIGuard**: scan initiation gains an optional two-person approval flow
+  (`citadel.require_approval`), and scan creation now forwards the real
+  authenticated caller's identity to CITADEL instead of a hardcoded
+  placeholder user.
+
+### sinauth SSO reaches APIGuard, IRFlow, and NIS2 Compass
+
+- Each platform's own dashboard/API now authenticates via sinauth (OAuth 2.0 /
+  OIDC, authorization_code + PKCE), matching the sinauth identity layer
+  introduced in `ecosystem/v1.2.0`.
+- **Note:** `ecosystem/v1.2.0` (below) described this SSO rollout as already
+  ecosystem-wide; these platforms' own `[Unreleased]` sections had it listed
+  as still-pending until this release. Flagging the discrepancy rather than
+  silently resolving it — the per-platform changelogs are the more granular,
+  code-level record and are what this entry is built from.
+- ThreatFlow's own `[Unreleased]` section also lists sinauth SSO integration,
+  CSAF advisory ingestion, and a governance-identity fix, but ThreatFlow is
+  not built or published by this release's CI pipeline (`release.yml` covers
+  APIGuard, NIS2 Compass, CITADEL, and IRFlow only), so those changes are not
+  part of this ecosystem cut and stay under `[Unreleased]` until a release
+  actually exercises them.
+
+### SDK v1.1.0 — two more typed clients, shared password hashing
+
+- New IRFlow and ThreatFlow typed clients (Go and Python), and a webhook
+  retry helper with exponential backoff.
+- New Argon2id (RFC 9106) password/API-key hashing module, shared between Go
+  (`github.com/opensecstack/sdk/password`) and Python
+  (`opensecstack-password`) with an identical PHC wire format so hashes
+  verify cleanly across both languages. IRFlow is the first adopter.
+
+---
+
 ## [ecosystem/v1.2.0] - 2026-05-23
 
 **Single sign-on across the stack.** Introduces **sinauth**, a dedicated identity layer, and wires every platform to it over OpenID Connect.

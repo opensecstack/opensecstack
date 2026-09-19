@@ -2,7 +2,7 @@
 
 > 11 platforms. 1 governance layer. 1 SDK. All open source. All integrated.
 >
-> Current state (2026-05-23, ecosystem v1.2.0): all 11 platforms, sinauth, and the SDK have shipped v1.0.0. VertGuard is partial (Phase 4.1: 3 of 5 modules scaffolded, 2 endpoints return `501`). OpenScrub (GoBGP not yet implemented) and CyberPath (Wasm sandbox labs not yet wired) each carry one specific, self-documented gap against their original scope — see README.md's [Known Gaps](README.md#known-gaps) section. Long-term sovereignty stack (Phase 5) is aspirational — see [ROADMAP.md](ROADMAP.md).
+> Current state (2026-09-19, ecosystem v1.0.0 — the first ecosystem release ever actually published): **APIGuard, CITADEL, IRFlow, NIS2 Compass, and the SDK** (Go/Python/TypeScript/Rust) are real, tagged, and published — Docker images on GHCR, SDK packages on crates.io/npm/PyPI. ThreatFlow, OpenScrub, CyberPath, SecureLab, OpenCSIRT, SIN Community, and sinauth are feature-complete in this repo but have never been through a release pipeline — no published image or package exists for any of them yet. VertGuard is partial (Phase 4.1: 3 of 5 modules scaffolded, 2 endpoints return `501`). OpenScrub (GoBGP not yet implemented) and CyberPath (Wasm sandbox labs not yet wired) each carry one specific, self-documented gap against their original scope — see README.md's [Known Gaps](README.md#known-gaps) section. Long-term sovereignty stack (Phase 5) is aspirational — see [ROADMAP.md](ROADMAP.md).
 
 ## Platform Overview
 
@@ -11,18 +11,18 @@
 | **APIGuard** | API security testing (OWASP API Top 10) | Go + Rust | Apache 2.0 | **v1.0.0** | ✅ Production |
 | **NIS2 Compass** | NIS2 Article 21 compliance assessment | Python + Go | AGPL-3.0 | **v1.0.0** | ✅ Production |
 | **IRFlow** | Incident response orchestration | Go + Python | AGPL-3.0 | **v1.0.0** | ✅ Production |
-| **ThreatFlow** | Threat intelligence aggregation & correlation | Go | Apache 2.0 | **v1.0.0** | ✅ Production |
-| **OpenScrub** | DDoS mitigation (XDP/eBPF; GoBGP not yet implemented) | Rust + C + Go | Apache 2.0 | **v1.0.0** | ✅ Production |
-| **CyberPath** | Security training & certification (Wasm sandbox labs not yet wired) | Go + React + Rust | Apache 2.0 | **v1.0.0** | ✅ Production |
-| **SecureLab** | Attack simulation & detection validation | Python + Rust | Apache 2.0 | **v1.0.0** | ✅ Production |
-| **OpenCSIRT** | National/sector CSIRT operations | Go + Python | AGPL-3.0 | **v1.0.0** | ✅ Production |
+| **ThreatFlow** | Threat intelligence aggregation & correlation | Go | Apache 2.0 | feature-complete | 🧩 Not yet released |
+| **OpenScrub** | DDoS mitigation (XDP/eBPF; GoBGP not yet implemented) | Rust + C + Go | Apache 2.0 | feature-complete | 🧩 Not yet released |
+| **CyberPath** | Security training & certification (Wasm sandbox labs not yet wired) | Go + React + Rust | Apache 2.0 | feature-complete | 🧩 Not yet released |
+| **SecureLab** | Attack simulation & detection validation | Python + Rust | Apache 2.0 | feature-complete | 🧩 Not yet released |
+| **OpenCSIRT** | National/sector CSIRT operations | Go + Python | AGPL-3.0 | feature-complete | 🧩 Not yet released |
 | **VertGuard** | AI-attack defence — prompt injection defence (OWASP LLM Top 10) and AI threat feed (MITRE ATLAS) live, 2 endpoints pending Rust pattern-engine integration; C2PA media authenticity, deepfake video/voice detection, Python ML (HuggingFace), Zoom/Teams/WebEx plugins, and real-time WebSocket video stream planned | Go + Rust + Python | AGPL-3.0 | **Phase 4.1** | 🔨 Partial |
-| **SIN Community** | Developer knowledge hub — posts, comments, tags, full-text search, notifications, TOTP 2FA, API keys, series, spaces | Go + React + TypeScript + PostgreSQL + Meilisearch | Apache 2.0 | **v1.0.0** | ✅ Production |
+| **SIN Community** | Developer knowledge hub — posts, comments, tags, full-text search, notifications, TOTP 2FA, API keys, series, spaces | Go + React + TypeScript + PostgreSQL + Meilisearch | Apache 2.0 | feature-complete | 🧩 Not yet released |
 
 **Identity Layer:**
 | Component | Purpose | Language | Version | Status |
 |-----------|---------|----------|---------|--------|
-| **sinauth** | OAuth 2.0 / OpenID Connect authorization server — single sign-on for all platforms, RS256 + JWKS, authorization-code + PKCE, social login (Google, GitHub), TOTP MFA | Go + PostgreSQL | **v1.0.0** | ✅ Production |
+| **sinauth** | OAuth 2.0 / OpenID Connect authorization server — single sign-on for all platforms, RS256 + JWKS, authorization-code + PKCE, social login (Google, GitHub), TOTP MFA | Go + PostgreSQL | feature-complete | 🧩 Not yet released |
 
 **Governance Layer:**
 | Component | Purpose | Language | Version | Status |
@@ -74,7 +74,7 @@
 │ testing  │  │ assessment   │  │ aggregation  │  │ response   │  │ mitigation   │
 │          │  │              │  │              │  │            │  │              │
 │ Go+Rust  │  │ Python+Go    │  │ Go           │  │ Go+Python  │  │ Rust+C+Go    │
-│ v1.0.0 ✅│  │ v1.0.0 ✅    │  │ v1.0.0 ✅    │  │ v1.0.0 ✅  │  │ v1.0.0 ✅    │
+│ v1.0.0 ✅│  │ v1.0.0 ✅    │  │ unreleased🧩 │  │ v1.0.0 ✅  │  │ unreleased🧩 │
 └────┬─────┘  └──────┬───────┘  └──────┬───────┘  └─────┬──────┘  └──────┬───────┘
      │               │                 │                │                │
      └───────────────┼─────────────────┼────────────────┼────────────────┘
@@ -83,7 +83,7 @@
          │           │                 │                │            │
   ┌──────┴───────┐  │  ┌──────────────┐│┌─────────────┐│ ┌──────────┴───┐
   │  CyberPath   │  │  │  SecureLab   │││  OpenCSIRT  ││ │  VertGuard   │
-  │  (v1.0.0)    │  │  │  (v1.0.0)    │││  (v1.0.0)   ││ │  (partial)   │
+  │ (unreleased) │  │  │ (unreleased) │││(unreleased) ││ │  (partial)   │
   │              │  │  │              │││             ││ │              │
   │ Security     │  │  │ Attack sim   │││ CSIRT       ││ │ AI-attack    │
   │ training     │  │  │ & detection  │││ operations  ││ │ defence      │
@@ -220,8 +220,8 @@ opensecstack/                       ← monorepo (current, 2026)
 ├── securelab/          ← Attack simulation & detection
 ├── opencsirt/          ← CSIRT operations
 ├── vertguard/          ← AI-attack defence (partial, Phase 4.1)
-├── community/          ← SIN developer knowledge hub (v1.0.0) + community resources
-├── sinauth/            ← SIN identity provider (OAuth2 / OIDC SSO, v1.0.0)
+├── community/          ← SIN developer knowledge hub (feature-complete, not yet released) + community resources
+├── sinauth/            ← SIN identity provider (OAuth2 / OIDC SSO, feature-complete, not yet released)
 ├── citadel/            ← CITADEL governance layer
 ├── sdk/                ← Go + Python + TypeScript + Rust SDK
 ├── deploy/             ← Docker Compose, K8s manifests

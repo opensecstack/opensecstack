@@ -199,7 +199,7 @@ Restore procedure:
 Every tagged version (`1.x.y`) is backwards-compatible with the
 previous tag.
 
-1. Pull the new image: `docker pull ghcr.io/opensecstack/irflow:1.1.0`.
+1. Pull the new image: `docker pull ghcr.io/opensecstack/opensecstack/irflow:1.0.0`.
 2. Run the migration job first — it is idempotent, safe to run
    against an up-to-date DB.
 3. Roll the Deployment forward — rolling update, replicas are

@@ -40,7 +40,9 @@ disclosure policy and response SLA.
 - Peer-CSIRT handshake protocol
   ([docs/peer-csirt-handshake-protocol.md](docs/peer-csirt-handshake-protocol.md))
 - TLP enforcement on advisory read
-- Docker images published to `ghcr.io/opensecstack/opencsirt-*`
+- No OpenCSIRT images have been published to a registry yet; images
+  are built locally (`make compose-up`, or the Helm chart's build
+  process) until a release is published
 - Helm chart at [deploy/helm/opencsirt/](deploy/helm/opencsirt/)
 
 **OUT OF SCOPE:**

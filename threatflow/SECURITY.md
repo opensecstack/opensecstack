@@ -19,7 +19,8 @@ This policy covers:
 - IOC ingestion and STIX 2.1 parsing
 - CITADEL HMAC-SHA256 connector authentication
 - Feed polling and credential handling
-- Docker images published to ghcr.io
+- No ThreatFlow images have been published to a registry yet; build
+  locally with `docker build` (see README) until a release is published
 
 ## Supported Versions
 

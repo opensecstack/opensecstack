@@ -146,7 +146,7 @@ Expected output:
 
 ```
 NAME                    IMAGE                                      STATUS
-nis2compass-api         ghcr.io/opensecstack/nis2compass:latest    running (healthy)
+nis2compass-api         ghcr.io/opensecstack/opensecstack/nis2compass:1.0.0    running (healthy)
 nis2compass-migrate-1   python:3.12-slim                           exited (0)
 nis2compass-postgres-1  postgres:16-alpine                         running (healthy)
 nis2compass-redis-1     redis:7-alpine                             running (healthy)
@@ -346,18 +346,18 @@ Configuration notes:
 The production image is published to:
 
 ```
-ghcr.io/opensecstack/nis2compass:latest
+ghcr.io/opensecstack/opensecstack/nis2compass:1.0.0
 ```
 
 In production, pin to a specific image digest rather than the mutable `latest` tag to ensure reproducible deployments:
 
 ```bash
-# Find the digest of the current latest image.
-docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/opensecstack/nis2compass:latest
-# Example output: ghcr.io/opensecstack/nis2compass@sha256:a1b2c3...
+# Find the digest of the current pinned-version image.
+docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/opensecstack/opensecstack/nis2compass:1.0.0
+# Example output: ghcr.io/opensecstack/opensecstack/nis2compass@sha256:a1b2c3...
 
 # Use the digest in docker-compose.yml.
-image: ghcr.io/opensecstack/nis2compass@sha256:a1b2c3...
+image: ghcr.io/opensecstack/opensecstack/nis2compass@sha256:a1b2c3...
 ```
 
 Update the pinned digest as part of your upgrade procedure (Step 1 above). Never run `latest` in production if you require audit trail continuity — a silent image update could change audit log behaviour without a corresponding migration.

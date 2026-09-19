@@ -30,11 +30,12 @@ disclosure policy and response SLA.
 - Rust crates under `rust/` (Wasm lab runtime, v1.0.0+)
 - Wasm sandbox host and per-session isolation policy
 - Pre-built lab images: `labs/labs.yaml` is the in-repo registry
-  pinning each lab to a SHA-256 digest, while the actual lab images
-  live at `ghcr.io/opensecstack/cyberpath-labs/<track>:<version>`
-  (Cosign-signed per [`docs/security/image-signing.md`](docs/security/image-signing.md)).
-  Both must be verified at deploy time.
-- Docker images published to `ghcr.io/opensecstack/cyberpath:*`
+  pinning each lab to a SHA-256 digest. No CyberPath images have been
+  published to a registry yet; lab and application images are built
+  locally (`docker build`, or `docker-compose up --build`) until a
+  release is published. Once published, images will be Cosign-signed
+  per [`docs/security/image-signing.md`](docs/security/image-signing.md)
+  and must be verified at deploy time.
 - Certification signing (Ed25519) and verification flow
 - CITADEL `cyberpath.completion` evidence emitter
 - NIS2 Compass coverage / recommend API contracts

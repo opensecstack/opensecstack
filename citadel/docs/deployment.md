@@ -86,7 +86,7 @@ spec:
     spec:
       containers:
       - name: citadel
-        image: ghcr.io/opensecstack/citadel:1.0.0
+        image: ghcr.io/opensecstack/opensecstack/citadel:1.0.0
         ports: [{ containerPort: 8099 }]
         envFrom:
           - configMapRef: { name: citadel-config }

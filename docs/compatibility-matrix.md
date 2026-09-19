@@ -20,9 +20,13 @@ The matrix has three dimensions:
 
 ## Current ecosystem release
 
-### `ecosystem/v1.0.0-2026-Q2`
+### `ecosystem/v1.0.0` (2026-09-19)
 
-The first ecosystem release. Pins the v1.0.0 baseline.
+**The first ecosystem release actually published.** Before today, no
+`ecosystem/v*` tag existed, no platform Docker image had ever been pushed to
+GHCR, and no SDK package had ever been published. Scope is exactly what
+[`release.yml`](../.github/workflows/release.yml) builds, tests, and
+publishes — nothing more.
 
 | Platform | Version | Status | PQC status |
 |---|---|---|---|
@@ -30,37 +34,18 @@ The first ecosystem release. Pins the v1.0.0 baseline.
 | NIS2 Compass | `1.0.0` | Stable | Classical (no anchor signing) |
 | CITADEL | `1.0.0` | Stable | **Ed25519 anchors** — PQ migration scheduled v1.1/v2.0 |
 | IRFlow | `1.0.0` | Stable | HMAC-SHA256 webhooks (PQ-safe); no signing |
-| ThreatFlow | `1.0.0` | Stable | HMAC-SHA256 webhooks (PQ-safe); no signing |
 | SDK (Go / Python / TS / Rust) | `1.0.0` | Stable (Rust currently Linux-only in CI) | HMAC verification only |
 
 All platforms above are production-ready per the
 [security maturity](./security-maturity.md) tier-1 profile.
 
-### `ecosystem/v1.1.0-2026-Q2`
-
-The 10-platform stack. All core platforms at v1.0.0. VertGuard AI-attack defence complete.
-
-| Platform | Version | Status | PQC status |
-|---|---|---|---|
-| APIGuard | `1.0.0` | Stable | Classical (no anchor signing) |
-| NIS2 Compass | `1.0.0` | Stable | Classical (no anchor signing) |
-| CITADEL | `1.0.0` | Stable | **Ed25519 anchors** — PQ migration scheduled v1.1/v2.0 |
-| IRFlow | `1.0.0` | Stable | HMAC-SHA256 webhooks (PQ-safe); no signing |
-| ThreatFlow | `1.0.0` | Stable | HMAC-SHA256 webhooks (PQ-safe); no signing |
-| OpenScrub | `1.0.0` | Stable | Classical (no signing) |
-| CyberPath | `1.0.0` | Stable | Classical (no signing) |
-| OpenCSIRT | `1.0.0` | Stable | Ed25519 peer identity; HMAC-SHA256 per-message |
-| VertGuard | `1.0.0` | Stable | Classical (no signing); HMAC-SHA256 webhooks; gRPC mTLS via Istio/Linkerd |
-| SDK (Go / Python / TS / Rust) | `1.0.0` | Stable (Rust currently Linux-only in CI) | HMAC verification only |
-
-All platforms above are production-ready per the [security maturity](./security-maturity.md) tier-1 profile.
-
-**New in v1.1.0 vs v1.0.0:**
-- VertGuard v1.0.0 added (AI-attack defence, 28 endpoints, Python ML gRPC service)
-- APIGuard: JWT multi-secret rotation, Redis sliding-window rate limiting, access token denylist, trusted-proxy depth stripping
-- OpenCSIRT v1.0.0 added (CSIRT operations, CSAF 2.0, CITADEL WORM emission)
-- OpenScrub v1.0.0 added (XDP/eBPF DDoS mitigation)
-- CyberPath v1.0.0 added (security training)
+**Not part of this release:** ThreatFlow, VertGuard, OpenScrub, CyberPath,
+OpenCSIRT, SecureLab, sinauth, and SIN Community have real, substantial work
+sitting in their own `[Unreleased]` changelog sections and are
+feature-complete in-repo, but none of them has ever been through a real
+release pipeline — `release.yml` doesn't build, test, or publish any of
+them, so there is no version of any of them to list here yet. They will be
+added to this table the first time each one is actually cut and published.
 
 ### Post-quantum migration status
 
@@ -79,7 +64,12 @@ Target: **PQ-default by v3.0 (2030)** — aligned with expected NIS3 transpositi
 
 ### Prior ecosystem releases
 
-- `ecosystem/v1.0.0-2026-Q2` — initial 5-platform foundation (CITADEL, APIGuard, NIS2 Compass, IRFlow, ThreatFlow) + SDK
+None — `ecosystem/v1.0.0` (2026-09-19) is the first. Earlier version
+numbers referenced elsewhere in this repo's history (e.g.
+`v1.0.0-2026-Q2`, `v1.1.0-2026-Q2`) describe work that genuinely happened
+but was never cut through a real release pipeline; they are not real prior
+releases. See the `[ecosystem/v1.0.0] - 2026-09-19` entry in
+[CHANGELOG.md](../CHANGELOG.md) for the full explanation.
 
 
 ## Per-platform pair-wise matrix
@@ -109,7 +99,7 @@ each major bump.
 
 ThreatFlow pushes IOC bundles to IRFlow webhook.
 
-|                | ThreatFlow 1.0.x |
+|                | ThreatFlow (unreleased) |
 |----------------|:-:|
 | **IRFlow 1.0.x** | Tested |
 
@@ -151,7 +141,7 @@ VertGuard emits WORM evidence via CITADEL for all scan verdicts.
 
 |                    | CITADEL 1.0.x |
 |--------------------|:-:|
-| **VertGuard 1.0.x** | Tested |
+| **VertGuard (partial, unreleased)** | Tested |
 
 ### VertGuard ↔ IRFlow
 
@@ -159,7 +149,7 @@ VertGuard emits incidents to IRFlow on HIGH-confidence detections.
 
 |                    | IRFlow 1.0.x |
 |--------------------|:-:|
-| **VertGuard 1.0.x** | Tested |
+| **VertGuard (partial, unreleased)** | Tested |
 
 ### VertGuard ML gRPC service
 
@@ -192,7 +182,7 @@ How long each version continues to receive fixes.
 | **Current stable** | v1.1.x (latest minor) | When v1.3 ships |
 | **Previous stable** | v1.0.x | 12 months after v1.1 ships |
 | **Older** | v0.9 and earlier | Unsupported immediately |
-| **Ecosystem release** | `ecosystem/v1.0.0-2026-Q2` | 12 months from the release date |
+| **Ecosystem release** | `ecosystem/v1.0.0` (2026-09-19) | 12 months from the release date (through 2027-09-19) |
 
 **In practice:** two minor versions back are always supported for
 security fixes. Everything older is archived.
@@ -251,8 +241,8 @@ For any claimed combination:
 
 ```bash
 # Deploy the specific versions
-docker run ghcr.io/opensecstack/citadel:1.0.0
-docker run ghcr.io/opensecstack/irflow:1.0.0
+docker run ghcr.io/opensecstack/opensecstack/citadel:1.0.0
+docker run ghcr.io/opensecstack/opensecstack/irflow:1.0.0
 
 # Exercise the end-to-end path
 curl -XPOST $IRFLOW/api/v1/incidents -d '{...}'

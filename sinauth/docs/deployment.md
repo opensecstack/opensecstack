@@ -54,11 +54,15 @@ kubectl create secret generic sinauth-key \
 
 ### Running migrations in Kubernetes
 
-Use an init container or a pre-upgrade Job:
+Use an init container or a pre-upgrade Job. No sinauth image has been
+published to a registry yet — build one from the repo's `Dockerfile`
+and push it to your own registry, or use a local image:
 
 ```bash
+docker build -t your-registry.example.org/sinauth:1.0.0 .
+
 kubectl run sinauth-migrate --rm -it \
-  --image=ghcr.io/opensecstack/sinauth:1.0.0 \
+  --image=your-registry.example.org/sinauth:1.0.0 \
   --env="SINAUTH_DB_URL=postgres://..." \
   --command -- /sinauth migrate
 ```

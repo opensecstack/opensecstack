@@ -120,14 +120,17 @@ to run against the container.
 
 ## Verifying the Docker image signature
 
-SecureLab images are signed with Cosign at release. Verify before
-deployment:
+No SecureLab image has been published to a registry yet — the
+`docker-compose.yml` in this repo builds the `api` and `web` images
+locally (`docker compose build`). Once a release is published,
+images will be signed with Cosign at release time and should be
+verified before deployment with a command of this shape:
 
 ```bash
 cosign verify \
   --certificate-identity-regexp "github.com/opensecstack/opensecstack" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-  ghcr.io/opensecstack/securelab:<version>
+  ghcr.io/opensecstack/opensecstack/securelab:<version>
 ```
 
 ## Kubernetes deployment
@@ -180,23 +183,28 @@ server {
 
 ## Upgrade procedure
 
+No published image exists yet, so upgrades are done by rebuilding
+from source:
+
 ```bash
-# 1. Pull the new image
-docker pull ghcr.io/opensecstack/securelab:<new-version>
+# 1. Pull the new source (git pull / checkout the target tag)
 
-# 2. Verify the image signature (see above)
-
-# 3. Stop the current stack
+# 2. Stop the current stack
 docker compose down
 
-# 4. Update the image tag in docker-compose.yml
+# 3. Rebuild the images
+docker compose build --no-cache
 
-# 5. Start the new stack
+# 4. Start the new stack
 docker compose up -d
 
-# 6. Verify health — pending migrations apply automatically on startup
+# 5. Verify health — pending migrations apply automatically on startup
 curl http://127.0.0.1:8080/health
 ```
+
+Once a release is published, this procedure will instead pull and
+verify (Cosign) a tagged `ghcr.io/opensecstack/opensecstack/securelab`
+image.
 
 ## Data persistence and backup
 

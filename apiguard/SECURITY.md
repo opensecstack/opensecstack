@@ -27,7 +27,7 @@ If you discover a security vulnerability in APIGuard, please report it responsib
 **IN SCOPE:**
 - APIGuard core (parser, scanner, reporter, dashboard, API server)
 - opensecstack/sdk when used by APIGuard
-- Docker images published to ghcr.io/opensecstack/apiguard
+- Docker images published to ghcr.io/opensecstack/opensecstack/apiguard
 
 **OUT OF SCOPE:**
 - Target APIs being scanned by APIGuard (those are your systems)

@@ -78,12 +78,15 @@ ships:
 - `NetworkPolicy` (default-deny + per-tier allow rules).
 - `ServiceMonitor` (Prometheus Operator).
 
-Minimal `values.yaml`:
+No published OpenCSIRT image exists yet; build the images locally
+(`cmd/opencsirt/Dockerfile`, `python/Dockerfile`, `web/Dockerfile` —
+see the Docker Compose section above) and push them to your own
+registry, or point the chart at that build. Minimal `values.yaml`:
 
 ```yaml
 api:
   replicas: 2
-  image: ghcr.io/opensecstack/opencsirt-api:1.0.0
+  image: your-registry.example.org/opencsirt-api:1.0.0
   dbUrlSecret: opencsirt-db
   jwtSecretSecret: opencsirt-jwt
   pepperSecret: opencsirt-pepper

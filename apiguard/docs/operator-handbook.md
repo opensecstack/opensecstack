@@ -209,7 +209,7 @@ APIGuard exposes a Prometheus metrics endpoint at `GET /metrics`. Key metrics:
 
 1. Read the CHANGELOG for breaking changes before upgrading
 2. Back up the database
-3. Pull the new image: `docker pull ghcr.io/opensecstack/apiguard:x.y.z`
+3. Pull the new image: `docker pull ghcr.io/opensecstack/opensecstack/apiguard:x.y.z`
 4. Stop the running instance
 5. Start the new instance — migrations run automatically on startup
 6. Verify: `curl /api/v1/health` returns `{"status":"ok","version":"x.y.z"}`

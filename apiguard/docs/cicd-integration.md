@@ -1,6 +1,6 @@
 # CI/CD Integration
 
-APIGuard integrates into any CI/CD pipeline. The CLI binary is distributed via [GitHub Releases](https://github.com/opensecstack/apiguard/releases), a Docker image is published to `ghcr.io/opensecstack/apiguard`, and a first-party GitHub Action is available at `opensecstack/apiguard-action@v1`.
+APIGuard integrates into any CI/CD pipeline. The CLI binary is distributed via [GitHub Releases](https://github.com/opensecstack/apiguard/releases), a Docker image is published to `ghcr.io/opensecstack/opensecstack/apiguard`, and a first-party GitHub Action is available at `opensecstack/apiguard-action@v1`.
 
 All examples below assume your OpenAPI spec is committed to the repository and the target API is reachable from the CI runner.
 
@@ -111,7 +111,7 @@ To avoid failing on pre-existing findings, use `--baseline` with a previous scan
 
 ## GitLab CI
 
-Use the `ghcr.io/opensecstack/apiguard` Docker image directly.
+Use the `ghcr.io/opensecstack/opensecstack/apiguard` Docker image directly.
 
 ```yaml
 # .gitlab-ci.yml
@@ -121,7 +121,7 @@ stages:
 
 api-security-scan:
   stage: security
-  image: ghcr.io/opensecstack/apiguard:latest
+  image: ghcr.io/opensecstack/opensecstack/apiguard:1.0.0
   variables:
     APIGUARD_SPEC: "./api/openapi.yaml"
     APIGUARD_TARGET: "${API_TARGET_URL}"
@@ -219,7 +219,7 @@ pipeline {
 ### Requirements
 
 - The [Warnings Next Generation](https://plugins.jenkins.io/warnings-ng/) plugin is required for `recordIssues` with SARIF support.
-- For Docker-based Jenkins agents, use the `ghcr.io/opensecstack/apiguard` image directly instead of downloading the binary.
+- For Docker-based Jenkins agents, use the `ghcr.io/opensecstack/opensecstack/apiguard` image directly instead of downloading the binary.
 
 ---
 
@@ -438,14 +438,14 @@ steps:
 
 ## Docker Usage
 
-The official Docker image is published to `ghcr.io/opensecstack/apiguard`.
+The official Docker image is published to `ghcr.io/opensecstack/opensecstack/apiguard`.
 
 ### Basic Scan
 
 ```bash
 docker run --rm \
     -v "$(pwd)":/workspace \
-    ghcr.io/opensecstack/apiguard:latest \
+    ghcr.io/opensecstack/opensecstack/apiguard:1.0.0 \
     scan \
         --spec /workspace/api/openapi.yaml \
         --target https://api.example.com \
@@ -460,7 +460,7 @@ docker run --rm \
 docker run --rm \
     -v "$(pwd)":/workspace \
     -e APIGUARD_AUTH_TOKEN="${API_AUTH_TOKEN}" \
-    ghcr.io/opensecstack/apiguard:latest \
+    ghcr.io/opensecstack/opensecstack/apiguard:1.0.0 \
     scan \
         --spec /workspace/api/openapi.yaml \
         --target https://api.example.com \
@@ -474,7 +474,7 @@ docker run --rm \
 ```bash
 docker run --rm \
     -v "$(pwd)":/workspace \
-    ghcr.io/opensecstack/apiguard:0.5.2 \
+    ghcr.io/opensecstack/opensecstack/apiguard:1.0.0 \
     scan \
         --spec /workspace/api/openapi.yaml \
         --target https://api.example.com \
@@ -488,7 +488,7 @@ docker run --rm \
 # docker-compose.ci.yml
 services:
   apiguard-scan:
-    image: ghcr.io/opensecstack/apiguard:latest
+    image: ghcr.io/opensecstack/opensecstack/apiguard:1.0.0
     volumes:
       - .:/workspace
     command: >
@@ -537,7 +537,7 @@ Modules `a6_business_flow` and `a10_unsafe_consumption` are disabled by default 
 
 ### Pin the APIGuard Version
 
-Use a specific version tag (`opensecstack/apiguard-action@v1.2.3`, `ghcr.io/opensecstack/apiguard:0.5.2`) rather than `latest` in production CI pipelines. This prevents unexpected changes in scan behaviour when a new version is released.
+Use a specific version tag (`opensecstack/apiguard-action@v1.2.3`, `ghcr.io/opensecstack/opensecstack/apiguard:1.0.0`) rather than `latest` in production CI pipelines. This prevents unexpected changes in scan behaviour when a new version is released.
 
 ### Secure the Auth Token
 

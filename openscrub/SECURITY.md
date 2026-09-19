@@ -33,7 +33,9 @@ disclosure policy and response SLA.
 - BPF map ABI (blocklist LPM, rate-limit map)
 - ThreatFlow IOC puller — IOC validation + map-reconcile path
 - CITADEL `openscrub.mitigation` evidence emitter
-- Docker images published to `ghcr.io/opensecstack/openscrub:*`
+- No OpenScrub images have been published to a registry yet; build
+  locally with `docker build` / the shipped `docker-compose.yml`
+  until a release is published
 - Helm chart at `deploy/helm/openscrub/`
 
 **OUT OF SCOPE:**

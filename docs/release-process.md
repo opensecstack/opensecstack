@@ -216,9 +216,9 @@ features defer to the next ecosystem release.
   together, a synthetic incident walked end-to-end through APIGuard
   → IRFlow → CITADEL → NIS2 Compass → ThreatFlow.
 
-The ecosystem release tag (`ecosystem/v1.0.0-2026-Q2`) points at a
-specific commit on each platform; deployers can reproduce the tested
-stack exactly.
+An ecosystem release tag (e.g. `ecosystem/v1.0.0`, the first such tag,
+cut 2026-09-19) points at a specific commit on each platform;
+deployers can reproduce the tested stack exactly.
 
 ## PR checklist items that feed into this
 

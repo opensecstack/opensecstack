@@ -151,7 +151,7 @@ is in Postgres. A rolling update with 2+ replicas is zero-downtime.
 
 ```bash
 # New image
-kubectl set image deployment/citadel citadel=ghcr.io/opensecstack/citadel:1.1.0
+kubectl set image deployment/citadel citadel=ghcr.io/opensecstack/opensecstack/citadel:1.0.0
 
 # Watch the rollout
 kubectl rollout status deployment/citadel

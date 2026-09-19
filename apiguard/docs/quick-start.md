@@ -10,7 +10,7 @@ From zero to your first API security scan in 5 minutes.
 
 ```bash
 # Scan an API directly
-docker run --rm ghcr.io/opensecstack/apiguard:latest scan \
+docker run --rm ghcr.io/opensecstack/opensecstack/apiguard:1.0.0 scan \
   --spec https://petstore3.swagger.io/api/v3/openapi.json \
   --target https://petstore3.swagger.io \
   --format json

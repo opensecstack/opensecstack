@@ -13,7 +13,7 @@ The SDK provides typed contracts, event schemas, and client libraries that all o
 | Core client (APIGuard, NIS2 Compass, CITADEL WORM/AUGUR) | Go, Python, TypeScript, Rust | HTTP client for platform-to-platform and platform-to-CITADEL (event connector) communication |
 | [`sinauth` client](go/sinauth/README.md) | Go, TypeScript | RS256 JWT verification and OIDC/PKCE helpers for the sinauth identity provider. No Python or Rust package yet |
 | [`citadel` MARSHAL client](go/citadel/README.md) | Go only | Submits Kerkese governance requests to CITADEL's MARSHAL evaluation engine (`Evaluate`) and Ed25519-signs them as Operator/Verifier (`Sign`, `RegisterKey`). New — not yet ported to Python, TypeScript, or Rust, and not yet covered by a tagged SDK release (see [CHANGELOG.md](CHANGELOG.md)) |
-| `password` hasher | Go, Python | Shared Argon2id (RFC 9106) + HMAC-SHA256 pepper password/API-key hashing; byte-compatible PHC encoding across the two languages. Published as separate packages ([`sdk/go/password`](go/password), `opensecstack-password` on PyPI). No TypeScript or Rust package yet |
+| `password` hasher | Go, Python | Shared Argon2id (RFC 9106) + HMAC-SHA256 pepper password/API-key hashing; byte-compatible PHC encoding across the two languages. Ships as separate packages ([`sdk/go/password`](go/password), `opensecstack-password` for Python) — neither is published yet (`opensecstack-password` is not on PyPI). No TypeScript or Rust package yet |
 | Event schemas | JSON Schema | Typed contracts for all inter-platform events |
 | OpenAPI specs | YAML | API contracts for each platform's public endpoints |
 

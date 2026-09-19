@@ -242,8 +242,11 @@ spec:
     spec:
       serviceAccountName: threatflow
       containers:
+        # No published ThreatFlow image exists yet — build locally
+        # (`docker build -t your-registry.example.org/threatflow:1.0.0 .`,
+        # see README) and push it to your own registry.
         - name: threatflow
-          image: ghcr.io/opensecstack/threatflow:latest
+          image: your-registry.example.org/threatflow:1.0.0
           ports:
             - containerPort: 8091
               protocol: TCP

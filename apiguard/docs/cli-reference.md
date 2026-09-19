@@ -35,7 +35,7 @@ brew install opensecstack/tap/apiguard
 ### Docker
 
 ```bash
-docker run --rm ghcr.io/opensecstack/apiguard:latest scan \
+docker run --rm ghcr.io/opensecstack/opensecstack/apiguard:1.0.0 scan \
   --spec /specs/openapi.yaml \
   --target https://api.example.com
 ```
@@ -43,7 +43,7 @@ docker run --rm ghcr.io/opensecstack/apiguard:latest scan \
 Mount a local spec file:
 
 ```bash
-docker run --rm -v $(pwd):/work ghcr.io/opensecstack/apiguard:latest scan \
+docker run --rm -v $(pwd):/work ghcr.io/opensecstack/opensecstack/apiguard:1.0.0 scan \
   --spec /work/openapi.yaml \
   --target https://api.example.com \
   --output /work/report.json
@@ -377,7 +377,7 @@ docker run --rm \
   -e APIGUARD_OUTPUT=/work/report.html \
   -e APIGUARD_AUTH_TYPE=bearer \
   -e APIGUARD_AUTH_TOKEN="$API_TOKEN" \
-  ghcr.io/opensecstack/apiguard:latest scan
+  ghcr.io/opensecstack/opensecstack/apiguard:1.0.0 scan
 ```
 
 ### Use a configuration file for repeated scans

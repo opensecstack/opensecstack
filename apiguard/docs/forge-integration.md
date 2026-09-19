@@ -72,7 +72,7 @@ For organisation-wide deployment without per-repo secrets:
 # .gitlab-ci.yml
 api-security:
   stage: test
-  image: ghcr.io/opensecstack/apiguard:latest
+  image: ghcr.io/opensecstack/opensecstack/apiguard:1.0.0
   script:
     - apiguard scan
         --spec ./api/openapi.yaml
@@ -101,7 +101,7 @@ pipelines:
     '**':
       - step:
           name: API Security Scan
-          image: ghcr.io/opensecstack/apiguard:latest
+          image: ghcr.io/opensecstack/opensecstack/apiguard:1.0.0
           script:
             - apiguard scan
                 --spec ./api/openapi.yaml
@@ -127,7 +127,7 @@ pipelines:
       docker run --rm \
         -e APIGUARD_AUTH_TOKEN=$(APIGUARD_AUTH_TOKEN) \
         -v $(Build.SourcesDirectory)/api:/specs \
-        ghcr.io/opensecstack/apiguard:latest scan \
+        ghcr.io/opensecstack/opensecstack/apiguard:1.0.0 scan \
           --spec /specs/openapi.yaml \
           --target $(STAGING_API_URL) \
           --format sarif \

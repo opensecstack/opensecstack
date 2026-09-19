@@ -95,23 +95,26 @@ Not yet ported to Python, TypeScript, or Rust.
 
 ## Platform API versions referenced above
 
-All confirmed from each platform's own `CHANGELOG.md` and cross-checked
-against the root [`ECOSYSTEM.md`](../ECOSYSTEM.md) (as of its
-2026-05-23, ecosystem v1.2.0 status line):
+The root [`ECOSYSTEM.md`](../ECOSYSTEM.md) previously carried a
+2026-05-23, ecosystem v1.2.0 status line — that status line predates the
+actual first release and is being corrected there directly. The real
+status, confirmed from `ecosystem/v1.0.0` (tagged 2026-09-19, the first
+ecosystem release this repo has ever published) and each platform's own
+`CHANGELOG.md`:
 
 | Platform | Current API version |
 |---|---|
-| APIGuard | v1.0.0 |
-| NIS2 Compass | v1.0.0 |
-| CITADEL | v1.0.0 |
-| IRFlow | v1.0.0 |
-| ThreatFlow | v1.0.0 |
-| OpenScrub | v1.0.0 |
-| CyberPath | v1.0.0 |
-| SecureLab | v1.0.0 |
-| OpenCSIRT | v1.0.0 |
-| VertGuard | v1.0.0 (partial functionality — see ECOSYSTEM.md's Known Gaps: 2 of 5 modules still return `501`) |
-| sinauth | v1.0.0 per ECOSYSTEM.md/README.md — see the "Known gap" note above, its own CHANGELOG.md has not recorded a matching `[1.0.0]` entry |
+| APIGuard | v1.0.0 (real, released 2026-09-19 under `ecosystem/v1.0.0`) |
+| NIS2 Compass | v1.0.0 (real, released 2026-09-19 under `ecosystem/v1.0.0`) |
+| CITADEL | v1.0.0 (real, released 2026-09-19 under `ecosystem/v1.0.0`) |
+| IRFlow | v1.0.0 (real, released 2026-09-19 under `ecosystem/v1.0.0`) |
+| ThreatFlow | Never released — has substantial `[Unreleased]` work but no tagged version and no published Docker image |
+| OpenScrub | Never released — no tagged version, no published Docker image |
+| CyberPath | Never released — no tagged version, no published Docker image |
+| SecureLab | Never released — no tagged version, no published Docker image |
+| OpenCSIRT | Never released — no tagged version, no published Docker image |
+| VertGuard | Never released — no tagged version, no published Docker image (also has partial functionality per ECOSYSTEM.md's Known Gaps: 2 of 5 modules still return `501`) |
+| sinauth | Never released — see the "Known gap" note above; its own CHANGELOG.md has not recorded a `[1.0.0]` entry, and it is not part of `ecosystem/v1.0.0` |
 
 ## See also
 

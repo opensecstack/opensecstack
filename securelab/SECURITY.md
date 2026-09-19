@@ -74,7 +74,9 @@ disclosure policy and response SLA.
   (`internal/detection/`)
 - CITADEL `securelab.run_completed` evidence emitter
   (`internal/citadel/connector.go`)
-- Docker images published to `ghcr.io/opensecstack/securelab:*`
+- No SecureLab images have been published to a registry yet; build
+  locally with `docker build` / the shipped `docker-compose.yml`
+  until a release is published
 - Network isolation controls in the reference Docker Compose
   (`docker-compose.yml`) — no Kubernetes/Helm manifests ship today
 - Scenario library: YAML scenarios under `scenarios/`

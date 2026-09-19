@@ -102,7 +102,7 @@ spec:
     spec:
       containers:
       - name: irflow
-        image: ghcr.io/opensecstack/irflow:1.0.0
+        image: ghcr.io/opensecstack/opensecstack/irflow:1.0.0
         ports: [{ containerPort: 8083 }]
         envFrom:
         - configMapRef: { name: irflow-config }
@@ -126,7 +126,7 @@ spec:
       restartPolicy: OnFailure
       containers:
       - name: migrate
-        image: ghcr.io/opensecstack/irflow:1.0.0
+        image: ghcr.io/opensecstack/opensecstack/irflow:1.0.0
         command: ["irflow", "migrate"]
         envFrom:
         - configMapRef: { name: irflow-config }

@@ -25,7 +25,9 @@ disclosure policy and response SLA.
 - VertGuard Go API server + CLI
 - Rust crates under `rust/` (c2pa, prompt-patterns, audio-fingerprint)
 - Python ML service (Phase 4.2+)
-- Docker images published to `ghcr.io/opensecstack/vertguard:*`
+- No VertGuard images have been published to a registry yet; build
+  locally with `docker build` / the shipped `docker-compose.yml`
+  until a release is published
 - Model registry (`models.yaml`) and dataset registry integrity
 - gRPC contracts between Go and Python ML layer
 - VertGuard-specific webhooks and integrations (CITADEL, ThreatFlow)

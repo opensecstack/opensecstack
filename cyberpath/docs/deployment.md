@@ -131,12 +131,16 @@ firewalled to the Prometheus scrape source.
 
 ## Step 5 — Compose file (production overlay)
 
-Author `docker-compose.prod.yml` alongside the shipped dev compose:
+No published CyberPath image exists yet — build locally (`docker
+build`, or the `build: .` already used by the shipped
+`docker-compose.yml`) and reference that build in your production
+overlay. Author `docker-compose.prod.yml` alongside the shipped dev
+compose:
 
 ```yaml
 services:
   api:
-    image: ghcr.io/opensecstack/cyberpath:1.0.0
+    build: .
     restart: unless-stopped
     env_file: /etc/cyberpath/cyberpath.env
     ports:
@@ -155,7 +159,7 @@ services:
       retries: 3
 
   web:
-    image: ghcr.io/opensecstack/cyberpath-web:1.0.0
+    build: ./web
     restart: unless-stopped
     ports:
       - "127.0.0.1:3006:3006"

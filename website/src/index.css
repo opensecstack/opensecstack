@@ -328,13 +328,23 @@ a:hover { color: #66f7ff; text-shadow: 0 0 8px rgba(0,240,255,0.4); text-decorat
   opacity: 0.3;
 }
 
-/* ── Responsive ── */
-
-@media (max-width: 768px) {
+/* ── Responsive ──
+   Tablet-range breakpoint. 900px was chosen (rather than 768px) so this
+   lines up with the docs layout's own tablet cutoff below (.docs-sidebar /
+   .docs-main-column at max-width: 900px) instead of leaving a gap between
+   769px-900px where common tablets in landscape (e.g. a 810px-wide iPad)
+   would still get full desktop spacing on the marketing sections while the
+   docs sidebar had already collapsed. Phone-specific overrides stay at
+   480px (see .scene-container above and useNarrowViewport.ts) and are
+   untouched. */
+@media (max-width: 900px) {
   .section { padding: 4rem 1.25rem; }
+  .section-subtitle { max-width: 100%; }
   .stat-grid { gap: 1.5rem; }
   .stat-item .stat-value { font-size: 1.75rem; }
   .glass-card { padding: 1.25rem; }
+  .grid-2 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem; }
+  .grid-3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; }
 }
 
 @keyframes spin {

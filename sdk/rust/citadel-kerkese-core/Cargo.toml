@@ -30,6 +30,27 @@ sha2 = { version = "0.10", default-features = false, features = ["force-soft"] }
 [dev-dependencies]
 ed25519-dalek = { version = "2", default-features = false, features = ["alloc", "rand_core"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
+# Only pulled in for examples/async_proxy_sketch.rs (a std, Tokio+reqwest
+# example of RFC-0005's "Option 2" transport). Dev-dependencies are never
+# compiled for a plain `cargo build`/`cargo build --target
+# x86_64-unknown-none` of the library itself, but the `async-proxy-example`
+# feature + this example's `required-features` below are an extra guard so
+# this is never accidentally built by `cargo build --examples` or `cargo
+# test` either — it's opt-in only.
+tokio = { version = "1", features = ["rt"] }
+reqwest = { version = "0.12" }
+
+[features]
+# Gates examples/async_proxy_sketch.rs. Never enabled by default, never
+# required by the library itself.
+async-proxy-example = []
 
 [lib]
 name = "citadel_kerkese_core"
+
+[[example]]
+name = "kernel_direct_sketch"
+
+[[example]]
+name = "async_proxy_sketch"
+required-features = ["async-proxy-example"]

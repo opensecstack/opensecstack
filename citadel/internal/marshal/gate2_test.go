@@ -156,6 +156,83 @@ func TestGate2_UnknownRole_FailsClosed_EvenWithPermifyUnknown(t *testing.T) {
 	}
 }
 
+// "grid_sandbox.spawn_instance" (Runix's kernel-driven grid-sandbox-host
+// spawn path — see kernel/src/grid_sandbox.rs's shadow_marshal_evaluate)
+// is now a recognized rbacMap action type for the "operator" role, and
+// passes Gate 2 on its own exactly like any of the other 10 legacy types.
+func TestGate2_GridSandboxSpawnInstance_OperatorRole_Pass(t *testing.T) {
+	store, verifier, opPriv, vfPriv := storeWithUsers("operator", "analyst")
+	engine := New(store, verifier)
+	k := baseKerkese()
+	k.Action.Type = "grid_sandbox.spawn_instance"
+	signKerkese(k, opPriv, vfPriv)
+
+	d, err := engine.Evaluate(context.Background(), k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Gates[1].Status != GatePass {
+		t.Errorf("gate2: expected PASS for grid_sandbox.spawn_instance/operator, got %s: %s", d.Gates[1].Status, d.Gates[1].Reason)
+	}
+}
+
+// Regression guard: "grid_sandbox.spawn_instance" is still absent from
+// roles that were never granted it (this addition must stay additive and
+// scoped to admin/operator only, not open the action to every role).
+func TestGate2_GridSandboxSpawnInstance_ViewerRole_Refuse(t *testing.T) {
+	store, verifier, opPriv, vfPriv := storeWithUsers("viewer", "analyst")
+	engine := New(store, verifier)
+	k := baseKerkese()
+	k.Actor.Role = "viewer"
+	k.Action.Type = "grid_sandbox.spawn_instance"
+	signKerkese(k, opPriv, vfPriv)
+
+	d, err := engine.Evaluate(context.Background(), k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Gates[1].Status != GateFail {
+		t.Errorf("gate2: expected FAIL for grid_sandbox.spawn_instance/viewer, got %s: %s", d.Gates[1].Status, d.Gates[1].Reason)
+	}
+	if d.Outcome != OutcomeRefuse {
+		t.Errorf("expected REFUSE, got %s", d.Outcome)
+	}
+}
+
+// Real finding, not just a regression check: Runix's shadow-mode Kerkese
+// (kernel/src/grid_sandbox.rs's shadow_marshal_evaluate) sets *both* actor
+// and verifier to the literal same principal ("kernel"). Even after this
+// rbacMap fix lets Gate 2 pass, Gate 3's NDS check unconditionally
+// HARD_STOPs on same-identity Operator/Verifier — this rbacMap addition
+// alone does not make Runix's current Kerkese shape pass end-to-end.
+// Fixing that is a Runix-side design question (a real Operator/Verifier
+// distinction), not something an rbacMap entry can address.
+func TestGate3_GridSandboxSpawnInstance_HardStop_SameIdentity_MirrorsRunixShadowShape(t *testing.T) {
+	store, verifier, opPriv, _ := storeWithUsers("operator", "analyst")
+	engine := New(store, verifier)
+	k := baseKerkese()
+	k.Action.Type = "grid_sandbox.spawn_instance"
+	k.SoD.VerifierUserID = k.SoD.OperatorUserID // same principal, mirroring actor==verifier=="kernel"
+	k.Verifier.UserID = k.Actor.UserID
+	k.Verifier.Role = k.Actor.Role
+	signKerkese(k, opPriv, opPriv)
+	k.VerifierToken = operatorToken
+
+	d, err := engine.Evaluate(context.Background(), k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Gates[1].Status != GatePass {
+		t.Errorf("gate2: expected PASS (rbacMap fix applies), got %s: %s", d.Gates[1].Status, d.Gates[1].Reason)
+	}
+	if d.Gates[2].Status != GateHardStop {
+		t.Errorf("gate3: expected HARD_STOP for same-identity operator/verifier, got %s: %s", d.Gates[2].Status, d.Gates[2].Reason)
+	}
+	if d.Outcome != OutcomeHardStop {
+		t.Errorf("expected HARD_STOP outcome even with rbacMap fixed, got %s", d.Outcome)
+	}
+}
+
 // A nil (never-wired) PermifySnapshot behaves identically to a
 // known-nothing snapshot: Gate 2 outcome depends only on rbacMap.
 func TestGate2_NilSnapshot_BehavesLikeUnknown(t *testing.T) {

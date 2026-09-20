@@ -130,12 +130,19 @@ var rbacMap = map[string][]string{
 		"DATA_EXPORT", "CONFIG_CHANGE",
 		"USER_CREATE", "USER_DELETE",
 		"PLAYBOOK_EXECUTE", "IOC_INGEST",
+		"grid_sandbox.spawn_instance",
 	},
 	"operator": {
 		"API_SCAN_INITIATE",
 		"INCIDENT_CREATE",
 		"PLAYBOOK_EXECUTE", "IOC_INGEST",
 		"DATA_EXPORT",
+		// Runix's kernel-driven grid-sandbox-host spawn path (see
+		// kernel/src/grid_sandbox.rs's shadow_marshal_evaluate, and
+		// RFC-0005-rust-sdk-kerkese-runtime-interface.md) is an
+		// infrastructure-execution action, the same category as
+		// PLAYBOOK_EXECUTE — "operator" is the closest existing role fit.
+		"grid_sandbox.spawn_instance",
 	},
 	"analyst": {
 		"API_SCAN_INITIATE",

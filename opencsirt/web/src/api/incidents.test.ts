@@ -24,6 +24,7 @@ afterEach(() => {
 const sampleIncident: Incident = {
   id: "inc-001",
   title: "Ransomware detected",
+  source: "irflow",
   severity: "critical",
   constituency_id: "const-abc",
   status: "open",

@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import axios from "axios";
 
 // We test the thin wrapper functions, not the axios internals.
 // vi.mock replaces apiClient so no real HTTP is made.

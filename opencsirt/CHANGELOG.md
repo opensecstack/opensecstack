@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-09-28
+
+First real release — build, test, and version-tracking milestones
+below predate this project ever actually being published; this is
+the first version cut through a real release pipeline. Folds in the
+work previously drafted as `1.0.0` (2026-05-10) and everything
+accumulated since.
+
 ### Fixed
 
 - **CITADEL WORM emission was completely broken since the integration was built** — `internal/citadel/client.go` posted to `POST {CITADEL_API_URL}/api/v1/events`, a route CITADEL has never exposed. Every `opencsirt.*` event (incident open/close, advisory publish, escalation) silently failed and dead-lettered into `citadel_outbox.state = 'failed'`. Fixed to POST to the real route, `/api/v1/worm/emit`, with the envelope CITADEL actually expects (`{source, event_type, project_id, payload}`). New `Config.ProjectID` / `OPENCSIRT_CITADEL_PROJECT_ID` env var (default `opencsirt`). See [docs/citadel-integration.md](docs/citadel-integration.md).
@@ -16,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Real MARSHAL governance on advisory publication and incident closure.** `(*Advisory).Publish` and `(*Incident).Close` now build a real `Kerkese` with the authenticated caller's actual sinauth identity/token as Actor, call `POST /api/v1/marshal/evaluate`, and block with HTTP 403 (+ reasons) on a `REFUSE`/`HARD_STOP` verdict. New `sdk/go/citadel` dependency. **Known gaps, documented not hidden:** the Verifier side is a fixed system placeholder (`opencsirt-system-verifier`) — OpenCSIRT has no real second-approver workflow to hook a genuine verifier into yet — and CITADEL's RBAC map does not yet recognize OpenCSIRT's `ADVISORY_PUBLISH` action type or cover most roles for `INCIDENT_CLOSE` (only `admin` is currently permitted), so most real evaluate calls will legitimately `REFUSE` at CITADEL's AuthZ gate until that RBAC map is extended on the CITADEL side. See [docs/citadel-integration.md](docs/citadel-integration.md#marshal-governance-advisory-publish--incident-close).
 - sinauth SSO integration — authenticate via the SIN identity provider (OAuth 2.0 / OIDC, authorization_code + PKCE); web dashboard added a sinauth.ts client and /auth/callback route.
 
-## [1.0.0] — 2026-05-10
+### Also delivered as part of this release (originally drafted 2026-05-10)
 
 Phase 3 v1.0.0. Feature complete.
 

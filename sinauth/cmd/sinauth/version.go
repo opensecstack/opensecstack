@@ -12,7 +12,7 @@ import (
 //	-X github.com/opensecstack/sinauth/cmd/sinauth.Commit=<sha>
 //	-X github.com/opensecstack/sinauth/cmd/sinauth.Date=<date>
 var (
-	Version = "dev"
+	Version = "1.0.0"
 	Commit  = "none"
 	Date    = "unknown"
 )

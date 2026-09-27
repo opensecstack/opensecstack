@@ -15,7 +15,7 @@ import (
 	"github.com/opensecstack/community/internal/scheduler"
 )
 
-var version = "dev"
+var version = "1.0.0"
 
 // newHTTPServer builds the *http.Server that wraps the given handler with
 // this service's fixed timeouts. Extracted from main() so the wiring

@@ -4,12 +4,15 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 ARG VERSION=dev
-ARG COMMIT=none
-ARG DATE=unknown
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-X github.com/opensecstack/sinauth/internal/version.Version=${VERSION} \
-              -X github.com/opensecstack/sinauth/internal/version.Commit=${COMMIT} \
-              -X github.com/opensecstack/sinauth/internal/version.Date=${DATE} \
+              -X github.com/opensecstack/sinauth/internal/version.Commit=${GIT_COMMIT} \
+              -X github.com/opensecstack/sinauth/internal/version.Date=${BUILD_DATE} \
+              -X main.Version=${VERSION} \
+              -X main.Commit=${GIT_COMMIT} \
+              -X main.Date=${BUILD_DATE} \
               -w -s" \
     -o /bin/sinauth ./cmd/sinauth
 

@@ -20,13 +20,17 @@ The matrix has three dimensions:
 
 ## Current ecosystem release
 
-### `ecosystem/v1.0.0` (2026-09-19)
+### `ecosystem/v1.1.0` (2026-09-28)
 
-**The first ecosystem release actually published.** Before today, no
-`ecosystem/v*` tag existed, no platform Docker image had ever been pushed to
-GHCR, and no SDK package had ever been published. Scope is exactly what
-[`release.yml`](../.github/workflows/release.yml) builds, tests, and
-publishes — nothing more.
+**Adds 7 platforms to the release pipeline.** ThreatFlow, OpenCSIRT,
+OpenScrub, CyberPath, SecureLab, sinauth, and SIN Community had real,
+substantial, feature-complete work sitting in-repo but had never been
+through a real release pipeline — `release.yml` didn't build, test, or
+publish any of them. This release extends `release.yml`'s test suite and
+docker build matrix to cover all 7, fixes the Docker image version-injection
+gap (containers previously always self-reported a hardcoded default
+regardless of the git tag they were built from — see each platform's own
+`CHANGELOG.md`), and cuts each platform's first real `1.0.0`.
 
 | Platform | Version | Status | PQC status |
 |---|---|---|---|
@@ -35,17 +39,23 @@ publishes — nothing more.
 | CITADEL | `1.0.0` | Stable | **Ed25519 anchors** — PQ migration scheduled v1.1/v2.0 |
 | IRFlow | `1.0.0` | Stable | HMAC-SHA256 webhooks (PQ-safe); no signing |
 | SDK (Go / Python / TS / Rust) | `1.0.0` | Stable (Rust currently Linux-only in CI) | HMAC verification only |
+| ThreatFlow | `1.0.0` | Stable | HMAC-SHA256 webhooks (PQ-safe); no signing |
+| OpenCSIRT | `1.0.0` | Stable | HMAC-SHA256 evidence emission (PQ-safe); no signing |
+| OpenScrub | `1.0.0` | Stable | HMAC-SHA256 evidence emission (PQ-safe); no signing |
+| CyberPath | `1.0.0` | Stable | HMAC-SHA256 evidence emission (PQ-safe); no signing |
+| SecureLab | `1.0.0` | Stable | HMAC-SHA256 evidence emission (PQ-safe); no signing |
+| sinauth | `1.0.0` | Stable | Classical (no anchor signing) |
+| SIN Community | `1.0.0` | Stable | HMAC-SHA256 evidence emission (PQ-safe); no signing |
 
 All platforms above are production-ready per the
 [security maturity](./security-maturity.md) tier-1 profile.
 
-**Not part of this release:** ThreatFlow, VertGuard, OpenScrub, CyberPath,
-OpenCSIRT, SecureLab, sinauth, and SIN Community have real, substantial work
-sitting in their own `[Unreleased]` changelog sections and are
-feature-complete in-repo, but none of them has ever been through a real
-release pipeline — `release.yml` doesn't build, test, or publish any of
-them, so there is no version of any of them to list here yet. They will be
-added to this table the first time each one is actually cut and published.
+**Not part of this release:** VertGuard has real, substantial work sitting
+in its own `[Unreleased]` changelog section and is feature-complete in-repo,
+but has not yet been through a real release pipeline — `release.yml`
+doesn't build, test, or publish it, so there is no version of it to list
+here yet. It will be added to this table the first time it is actually cut
+and published.
 
 ### Post-quantum migration status
 
@@ -64,8 +74,14 @@ Target: **PQ-default by v3.0 (2030)** — aligned with expected NIS3 transpositi
 
 ### Prior ecosystem releases
 
-None — `ecosystem/v1.0.0` (2026-09-19) is the first. Earlier version
-numbers referenced elsewhere in this repo's history (e.g.
+#### `ecosystem/v1.0.0` (2026-09-19)
+
+The first ecosystem release actually published. Scope: APIGuard, NIS2
+Compass, CITADEL, IRFlow, and the SDK, all at `1.0.0`. Superseded by
+`ecosystem/v1.1.0` above, which adds 7 more platforms on top — nothing in
+the original 5 changed version.
+
+Earlier version numbers referenced elsewhere in this repo's history (e.g.
 `v1.0.0-2026-Q2`, `v1.1.0-2026-Q2`) describe work that genuinely happened
 but was never cut through a real release pipeline; they are not real prior
 releases. See the `[ecosystem/v1.0.0] - 2026-09-19` entry in
@@ -99,7 +115,7 @@ each major bump.
 
 ThreatFlow pushes IOC bundles to IRFlow webhook.
 
-|                | ThreatFlow (unreleased) |
+|                | ThreatFlow 1.0.x |
 |----------------|:-:|
 | **IRFlow 1.0.x** | Tested |
 
@@ -182,7 +198,8 @@ How long each version continues to receive fixes.
 | **Current stable** | v1.1.x (latest minor) | When v1.3 ships |
 | **Previous stable** | v1.0.x | 12 months after v1.1 ships |
 | **Older** | v0.9 and earlier | Unsupported immediately |
-| **Ecosystem release** | `ecosystem/v1.0.0` (2026-09-19) | 12 months from the release date (through 2027-09-19) |
+| **Ecosystem release** | `ecosystem/v1.1.0` (2026-09-28) | 12 months from the release date (through 2027-09-28) |
+| **Prior ecosystem release** | `ecosystem/v1.0.0` (2026-09-19) | 12 months from the release date (through 2027-09-19) |
 
 **In practice:** two minor versions back are always supported for
 security fixes. Everything older is archived.

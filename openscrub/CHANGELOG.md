@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-09-28
+
+First real release — build, test, and version-tracking milestones
+below predate this project ever actually being published; this is
+the first version cut through a real release pipeline. Folds in the
+work previously drafted as `1.0.0` (2026-05-09) and everything
+accumulated since.
+
 ### Fixed
 
 - **CITADEL WORM emission was silently broken.** `internal/citadel/client.go`
@@ -37,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [docs/citadel-integration.md § Governance](docs/citadel-integration.md#governance-manual-rule-creation).
 - sinauth SSO integration — authenticate via the SIN identity provider (OAuth 2.0 / OIDC, authorization_code + PKCE); web dashboard added a sinauth.ts client and /auth/callback route.
 
-## [1.0.0] — 2026-05-09
+### Also delivered as part of this release (originally drafted 2026-05-09)
 
 Phase 2 v1.0.0. Feature complete.
 

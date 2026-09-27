@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-28
+
+First real release — build, test, and version-tracking milestones
+below predate this project ever actually being published; this is
+the first version cut through a real release pipeline.
+
 ### Added
 - Second-admin approval gate for GDPR account deletion — `POST /api/v1/admin/deletion-requests/{id}/approve` requires a distinct admin (never the user themselves) to approve a pending erasure request before the scheduled sweep or an immediate admin action can delete anything. Approving and processing a deletion both submit a Kerkese to CITADEL MARSHAL, and a REFUSE/HARD_STOP verdict genuinely blocks the deletion rather than only warning.
 - sinauth SSO integration — authenticate via the SIN identity provider (OAuth 2.0 / OIDC, authorization code + PKCE). First login auto-provisions an account; existing accounts are linked by verified email.

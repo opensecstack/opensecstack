@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-09-28
+
+First real release — build, test, and version-tracking milestones
+below predate this project ever actually being published; this is
+the first version cut through a real release pipeline. Folds in the
+work previously drafted as `1.0.0` (2026-04-19) and everything
+accumulated since.
+
 ### Added
 - **`POST /api/v1/advisories` — CSAF 2.0 advisory ingestion from OpenCSIRT.**
   Resolves [ADR-004](adrs/004-opencsirt-advisory-ingestion-gap.md)'s
@@ -44,10 +52,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runs single-party by deliberate scope decision, not because of this bug — see
   [docs/citadel-integration.md](docs/citadel-integration.md#verifier--single-party-governance-today).
 
-## [1.0.0] — 2026-04-19
+### Also delivered as part of this release (originally drafted 2026-04-19)
 
-First production release. Every scaffold endpoint from v0.1.0 is now backed
-by real persistence, governance, and ecosystem integration.
+Every scaffold endpoint from v0.1.0 is now backed by real persistence,
+governance, and ecosystem integration.
 
 ### Added — Data layer
 - PostgreSQL schema with 10 tables: `feeds`, `iocs`, `ttp_tags`, `sightings`,

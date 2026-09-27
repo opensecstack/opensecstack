@@ -6,10 +6,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [1.0.0] - 2026-05-10
+## [Unreleased]
+
+## [1.0.0] - 2026-09-28
+
+First real release — build, test, and version-tracking milestones
+below predate this project ever actually being published; this is
+the first version cut through a real release pipeline. Folds in the
+work previously drafted as `1.0.0` (2026-05-10) and everything
+accumulated since.
+
+### Fixed
+
+- CITADEL emit was silently failing on every run: `EmitRunCompleted` posted to `/api/v1/events`, a route CITADEL never exposed. It now POSTs to `/api/v1/worm/emit` wrapped in the `emitRequest` envelope (`source`, `event_type`, `project_id`, `payload`) CITADEL's WORM handler expects, with the HMAC-SHA256 signature computed over the full envelope body. See `docs/citadel-integration.md`.
 
 ### Added
 
+- sinauth SSO integration — authenticate via the SIN identity provider (OAuth 2.0 / OIDC, authorization_code + PKCE); web dashboard added a sinauth.ts client and /auth/callback route.
 - Core attack simulation engine (Go 1.22, chi router, pgx, zap)
 - React/TypeScript operator dashboard with MITRE ATT&CK coverage heatmap
 - PostgreSQL schema for scenarios, environments, scenario runs, and MITRE ATT&CK coverage
@@ -34,16 +47,6 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Release pipeline: multi-arch Docker images (linux/amd64 + linux/arm64), GHCR push, GitHub release
 - ADRs: YAML scenario format, isolated Docker networks, MITRE ATT&CK as framework
 - Full documentation: architecture, quick-start, scenario spec, attack library, detection validation, safety controls, MITRE mapping, environment setup, NIS2 mapping, API reference, CITADEL integration, integration validation guides
-
-## [Unreleased]
-
-### Fixed
-
-- CITADEL emit was silently failing on every run: `EmitRunCompleted` posted to `/api/v1/events`, a route CITADEL never exposed. It now POSTs to `/api/v1/worm/emit` wrapped in the `emitRequest` envelope (`source`, `event_type`, `project_id`, `payload`) CITADEL's WORM handler expects, with the HMAC-SHA256 signature computed over the full envelope body. See `docs/citadel-integration.md`.
-
-### Added
-
-- sinauth SSO integration — authenticate via the SIN identity provider (OAuth 2.0 / OIDC, authorization_code + PKCE); web dashboard added a sinauth.ts client and /auth/callback route.
 
 ## Versioning policy
 

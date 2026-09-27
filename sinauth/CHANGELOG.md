@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-28
+
+First real release — build, test, and version-tracking milestones
+below predate this project ever actually being published; this is
+the first version cut through a real release pipeline.
+
 ### Added
 - **`internal/authz` package + Permify integration** — a `Checker`
   interface backed by `PermifyChecker` (real authorization via

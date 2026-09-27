@@ -8,10 +8,133 @@ Per-platform changelogs:
 [CITADEL](citadel/CHANGELOG.md) ·
 [IRFlow](irflow/CHANGELOG.md) ·
 [ThreatFlow](threatflow/CHANGELOG.md) ·
+[OpenCSIRT](opencsirt/CHANGELOG.md) ·
+[OpenScrub](openscrub/CHANGELOG.md) ·
+[CyberPath](cyberpath/CHANGELOG.md) ·
+[SecureLab](securelab/CHANGELOG.md) ·
+[sinauth](sinauth/CHANGELOG.md) ·
+[SIN Community](community/CHANGELOG.md) ·
 [SDK](sdk/CHANGELOG.md)
 
 For how releases are cut and ecosystem-release tags are produced, see
 [docs/release-process.md](docs/release-process.md).
+
+---
+
+## [ecosystem/v1.1.0] - 2026-09-28
+
+**7 more platforms cut through the real release pipeline.** ThreatFlow,
+OpenCSIRT, OpenScrub, CyberPath, SecureLab, sinauth, and SIN Community had
+real, substantial, feature-complete work sitting in-repo (each documented in
+its own `CHANGELOG.md`), but `release.yml` never built, tested, or published
+any of them — no test job, no docker matrix entry. This release closes that
+gap: `release.yml` now has a `test-<platform>` job and docker build matrix
+entries for all 7, and each cuts its first real `1.0.0`. The 5 platforms
+released in `ecosystem/v1.0.0` (APIGuard, NIS2 Compass, CITADEL, IRFlow,
+SDK) are unchanged — this release only adds to the set, nothing in it was
+re-cut.
+
+Also fixes a Docker image version-injection gap found while wiring these 7
+in: `release.yml`'s docker build step never passed `--build-arg VERSION=...`
+to any component, Go or otherwise, so every published container always
+self-reported whatever was hardcoded in its own `internal/version` package
+(mostly `"1.0.0"` regardless of the real tag; sinauth literally said `"dev"`)
+rather than the version it was actually built and tagged as. `release.yml`
+now computes `VERSION`/`GIT_COMMIT`/`BUILD_DATE` once and passes them as
+build-args to every matrix component; each Go-binary Dockerfile injects them
+via `-ldflags -X` into its `internal/version` package (`openscrub` and
+`opencsirt`'s `Version` had to change from `const` to `var` since `-X` can't
+override a `const`; `sinauth`'s Dockerfile had mismatched ARG names —
+`COMMIT`/`DATE` instead of `GIT_COMMIT`/`BUILD_DATE` — so its commit/date
+were never actually being injected, and its `cmd/sinauth` CLI `version`
+subcommand was reading an entirely separate, never-injected `main.Version`
+var; `threatflow`'s Dockerfile tried to read `VERSION`/git at build time via
+shell substitution against files that aren't in the Docker build context,
+which could never have worked).
+
+### ThreatFlow v1.0.0
+
+- CSAF 2.0 advisory ingestion from OpenCSIRT (`POST /api/v1/advisories`) —
+  maps CSAF `vulnerabilities[]` onto STIX 2.1 `vulnerability` objects,
+  keeps `product_tree`/`remediations[]` in advisory-specific tables,
+  dedups/revises by `(tracking_id, version)`.
+- sinauth SSO integration.
+- Fixed CITADEL governance requests carrying no real actor identity —
+  `Kerkese.Actor.UserID` was left at its Go zero value on every governed
+  action, risking an `NDS_SAME_IDENTITY` collision at Gate 3.
+- Everything from the original v1.0.0 scaffold: STIX 2.1 bundle
+  parsing/import, TAXII/CSV/MISP feed polling, MITRE ATT&CK auto-tagging,
+  correlation engine, CITADEL MARSHAL governance + WORM, outbound webhooks.
+- See [threatflow/CHANGELOG.md](threatflow/CHANGELOG.md).
+
+### OpenCSIRT v1.0.0
+
+- Real CITADEL MARSHAL governance on advisory publication and incident
+  closure (was previously ungoverned).
+- Fixed CITADEL WORM emission, which was completely broken since the
+  integration was built — it posted to a route CITADEL never exposed, so
+  every `opencsirt.*` event silently failed and dead-lettered.
+- sinauth SSO integration.
+- Everything from the original Phase 3 scaffold: constituency directory,
+  incident coordination with the IRFlow bridge, CSAF 2.0 advisory authoring,
+  peer-CSIRT handshake, ThreatFlow IOC ingest.
+- See [opencsirt/CHANGELOG.md](opencsirt/CHANGELOG.md).
+
+### OpenScrub v1.0.0
+
+- Real CITADEL MARSHAL governance on manual mitigation-rule creation, gated
+  so it cannot be bypassed by a client claiming `source: "threatflow"`.
+- Fixed CITADEL WORM emission, silently broken since launch (posted to a
+  route that never existed on CITADEL).
+- sinauth SSO integration.
+- Everything from the original Phase 2 scaffold: XDP/eBPF data plane,
+  Rust/Aya loader, ThreatFlow IOC puller, mitigation lifecycle tracking.
+- See [openscrub/CHANGELOG.md](openscrub/CHANGELOG.md).
+
+### CyberPath v1.0.0
+
+- Certification revocation now emits a real WORM audit event and runs a
+  real CITADEL MARSHAL governance evaluation before proceeding (previously
+  had no CITADEL integration at all, unlike issuance).
+- sinauth SSO integration.
+- Everything from the original scaffold: 8 learning modules, Wasm sandbox
+  labs, Ed25519-signed certification issuance, NIS2 Compass coverage API.
+- See [cyberpath/CHANGELOG.md](cyberpath/CHANGELOG.md).
+
+### SecureLab v1.0.0
+
+- Fixed CITADEL emit silently failing on every run (posted to a route
+  CITADEL never exposed).
+- sinauth SSO integration.
+- Everything from the original scaffold: attack simulation engine, 15
+  built-in attack types, MITRE ATT&CK coverage matrix, isolated Docker test
+  environments, Rust payload generator.
+- See [securelab/CHANGELOG.md](securelab/CHANGELOG.md).
+
+### sinauth v1.0.0
+
+- `internal/authz` package + Permify integration — real ReBAC/RBAC
+  authorization behind `rbac.Store.Evaluate`, with self-service
+  organization-membership management routes.
+- Fixed a same-day privilege-escalation bug in the new self-service
+  org-delegation routes, and fixed missing authorization on
+  `/admin/organizations/*` and `/admin/rbac/groups/*` that let any
+  authenticated user create/delete organizations and grant themselves
+  ownership.
+- Everything from the original scaffold: OIDC Authorization Server core
+  (authorization_code + PKCE), RS256/JWKS, social login, TOTP MFA.
+- See [sinauth/CHANGELOG.md](sinauth/CHANGELOG.md).
+
+### SIN Community v1.0.0
+
+- Second-admin approval gate for GDPR account deletion, with a real CITADEL
+  MARSHAL evaluation that genuinely blocks (not just warns) on
+  REFUSE/HARD_STOP.
+- sinauth SSO as the primary, default sign-in option.
+- Fixed CITADEL WORM evidence emission, silently failing since launch.
+- Everything from the original scaffold: post feed, tags, reactions,
+  threaded comments, full-text search.
+- See [community/CHANGELOG.md](community/CHANGELOG.md).
 
 ---
 
@@ -130,7 +253,14 @@ here actually builds, tests, or publishes it.
 
 ---
 
-## [ecosystem/v1.1.0] - 2026-05-10
+## [ecosystem/v1.1.0-draft] (superseded, never tagged) - 2026-05-10
+
+**Renumbered from `v1.1.0`.** Like the entries below it, this describes real
+work that had accumulated pre-pipeline but was never cut through a release —
+no `ecosystem/v1.1.0` tag existed until the actual second release (see the
+real `[ecosystem/v1.1.0]` entry above, dated later by clock time but
+lower in this file per reverse-chronological order). Kept as history of what
+had shipped by this point; superseded by the real entry.
 
 **10-platform stack.** All core platforms at v1.0.0. VertGuard AI-attack defence complete.
 

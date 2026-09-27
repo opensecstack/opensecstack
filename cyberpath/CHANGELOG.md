@@ -8,7 +8,17 @@ For the ecosystem-wide changelog, see [../CHANGELOG.md](../CHANGELOG.md).
 
 ---
 
-## [1.0.0] — 2026-05-09
+## [Unreleased]
+
+## [1.0.0] — 2026-09-28
+
+First real release — build, test, and version-tracking milestones
+below predate this project ever actually being published; this is
+the first version cut through a real release pipeline. Folds in the
+work previously drafted as `1.0.0` (2026-05-09) and everything
+accumulated in `[Unreleased]` since — see below.
+
+### Also delivered as part of this release (originally drafted 2026-05-09)
 
 First stable release. Modules 1–8 feature-complete.
 
@@ -57,8 +67,6 @@ First stable release. Modules 1–8 feature-complete.
   in place; auditor scheduling is operational.
 
 ---
-
-## [Unreleased]
 
 ### Security
 
@@ -131,7 +139,7 @@ still outstanding:
 
 | Version | Scope | Shipped |
 |---|---|---|
-| **v1.0.0** | Modules 1–8: learning path engine, quiz engine, Docker-based labs, browser terminal, Wasm sandbox labs, certification issuance (+ governed revocation), NIS2 Article 21(2)(g) completion records to CITADEL WORM, NIS2 Compass coverage API, content versioning. | 2026-05-09 |
+| **v1.0.0** | Modules 1–8: learning path engine, quiz engine, Docker-based labs, browser terminal, Wasm sandbox labs, certification issuance (+ governed revocation), NIS2 Article 21(2)(g) completion records to CITADEL WORM, NIS2 Compass coverage API, content versioning, sinauth SSO. | 2026-09-28 |
 
 ### Planned (v1.x — not yet started)
 

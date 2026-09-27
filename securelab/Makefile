@@ -52,8 +52,10 @@ run: ## Start API server in dev mode (localhost only)
 # ─── Docker ───────────────────────────────────────────────────────────────────
 
 docker-build: ## Build Docker images (api + web)
-	$(DOCKER) build --target api -t ghcr.io/opensecstack/securelab:dev .
-	$(DOCKER) build --target web -t ghcr.io/opensecstack/securelab-web:dev .
+	# Context is the repo root (.., since this Makefile runs from within
+	# securelab/) -- see Dockerfile's header comment for why.
+	$(DOCKER) build --target api -f Dockerfile -t ghcr.io/opensecstack/securelab:dev ..
+	$(DOCKER) build --target web -f Dockerfile -t ghcr.io/opensecstack/securelab-web:dev ..
 
 # ─── Database ─────────────────────────────────────────────────────────────────
 

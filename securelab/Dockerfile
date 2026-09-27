@@ -1,4 +1,4 @@
-﻿# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: Apache-2.0
 # Copyright (C) 2024 opensecstack contributors.
 #
 # Multi-stage production build.
@@ -6,9 +6,16 @@
 #   api  — distroless image running the Go HTTP server binary
 #   web  — nginx image serving the built React frontend (proxies /api/ to api)
 #
+# Build context is the REPO ROOT, not securelab/ — go.mod's `replace`
+# directive for sdk/go/sinauth (imported by
+# internal/api/middleware/auth.go) points outside this directory, and
+# only resolves if sdk/ is present alongside securelab/ in the build
+# context, the same reason citadel/Dockerfile and
+# openscrub/cmd/openscrub/Dockerfile use root context.
+#
 # Build with:
-#   docker build --target api -t securelab-api .
-#   docker build --target web -t securelab-web .
+#   docker build --target api -f securelab/Dockerfile -t securelab-api .
+#   docker build --target web -f securelab/Dockerfile -t securelab-web .
 
 # ── Stage 1: Go builder ────────────────────────────────────────────────────────
 FROM golang:1.23-alpine AS go-builder
@@ -16,11 +23,16 @@ FROM golang:1.23-alpine AS go-builder
 WORKDIR /src
 
 # Download dependencies first (layer-cached until go.mod/go.sum change).
-COPY go.mod go.sum ./
+COPY securelab/go.mod securelab/go.sum ./securelab/
+COPY sdk/go/sinauth/go.mod sdk/go/sinauth/go.sum ./sdk/go/sinauth/
+WORKDIR /src/securelab
 RUN go mod download
 
 # Copy the full source and build the server binary.
-COPY . .
+WORKDIR /src
+COPY securelab/ ./securelab/
+COPY sdk/go/sinauth/ ./sdk/go/sinauth/
+WORKDIR /src/securelab
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/securelab ./cmd/server
 
 # ── Stage 2: Node builder (React frontend) ────────────────────────────────────
@@ -30,11 +42,11 @@ WORKDIR /web
 
 # Install dependencies first (layer-cached until package.json changes).
 # package-lock.json is not committed, so use npm install.
-COPY web/package.json ./
+COPY securelab/web/package.json ./
 RUN npm install --prefer-offline
 
 # Copy the rest of the frontend source and build.
-COPY web/ .
+COPY securelab/web/ .
 RUN npm run build
 
 # ── Stage 3: api — minimal distroless runtime for the Go binary ───────────────
@@ -52,6 +64,6 @@ ENTRYPOINT ["/securelab"]
 FROM nginx:1.27-alpine AS web
 
 COPY --from=node-builder /web/dist /usr/share/nginx/html
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY securelab/docker/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80

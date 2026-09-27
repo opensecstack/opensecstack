@@ -23,8 +23,10 @@ services:
   securelab-api:
     image: ghcr.io/opensecstack/securelab:1.0.0
     build:
-      context: .
-      dockerfile: Dockerfile
+      # Repo root: securelab/Dockerfile needs the sibling sdk/go/sinauth
+      # tree alongside securelab/ (see that Dockerfile's header comment).
+      context: ..
+      dockerfile: securelab/Dockerfile
       target: api
     container_name: securelab-api
     restart: unless-stopped
@@ -61,8 +63,8 @@ services:
   securelab-web:
     image: ghcr.io/opensecstack/securelab-web:1.0.0
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: securelab/Dockerfile
       target: web
     container_name: securelab-web
     restart: unless-stopped

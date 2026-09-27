@@ -5,7 +5,7 @@
 # It needs the host kernel's BPF subsystem; the actual eBPF object is
 # embedded into the binary at build time via Aya.
 
-FROM rust:1.81-bookworm AS build
+FROM rust:1.85-bookworm AS build
 WORKDIR /src
 
 # Build dependencies for Aya / libbpf-sys.

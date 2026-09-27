@@ -28,7 +28,7 @@ pub use loader_linux::Loader;
 #[cfg(not(target_os = "linux"))]
 pub use loader_stub::Loader;
 
-pub use error::{DataplaneError, Result};
+pub use error::{AttachMode, DataplaneError, Result};
 pub use maps::{Blocklist, MapWriter, RatelimitRule};
 pub use stats::{Stats, StatsReader};
 

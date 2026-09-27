@@ -180,10 +180,10 @@ fn handle_request(
         }
         "snapshot" => {
             let snap = writer.snapshot();
-            let v4: Vec<String> = snap.blocklist_v4.iter().map(|p| p.to_string()).collect();
-            let v6: Vec<String> = snap.blocklist_v6.iter().map(|p| p.to_string()).collect();
+            let v4: Vec<String> = snap.v4.iter().map(|p| p.to_string()).collect();
+            let v6: Vec<String> = snap.v6.iter().map(|p| p.to_string()).collect();
             let rl: serde_json::Map<String, serde_json::Value> = snap
-                .ratelimits
+                .ratelimit
                 .iter()
                 .map(|(ip, pps)| (ip.to_string(), serde_json::json!(*pps as u64)))
                 .collect();

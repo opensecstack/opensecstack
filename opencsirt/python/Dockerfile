@@ -1,13 +1,23 @@
 # OpenCSIRT advisory subsystem container.
 #
 # Multi-stage:
-#   1. python:3.11-slim builder — pip-install into a virtualenv
-#   2. python:3.11-slim runtime  — copy the venv + drop privileges
+#   1. python:3.11-slim-bookworm builder — pip-install into a virtualenv
+#   2. python:3.11-slim-bookworm runtime  — copy the venv + drop privileges
+#
+# Both stages pin the Debian codename explicitly (not the floating
+# "slim" tag, which tracks whatever Debian release is current stable)
+# because yara-python is a C extension dynamically linked against
+# libyara-dev's runtime .so at build time -- if the runtime stage
+# resolved to a different Debian release than the build stage, its
+# libyara package name and SONAME could both silently diverge, exactly
+# what broke this build when "slim" floated from bookworm to trixie
+# (libyara9 -> libyara10) between whenever this file was written and
+# whenever CI first actually built it.
 #
 # Build context is opencsirt/python/:
 #   docker build -t opensecstack/opencsirt-advisory:dev .
 
-FROM python:3.11-slim AS build
+FROM python:3.11-slim-bookworm AS build
 
 # yara-python is a C-extension; it needs the YARA source/headers.
 RUN apt-get update \
@@ -24,9 +34,11 @@ RUN python -m venv /opt/venv \
  && /opt/venv/bin/pip install --no-cache-dir --upgrade pip wheel \
  && /opt/venv/bin/pip install --no-cache-dir .
 
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
-# libyara1 is the runtime counterpart of libyara-dev; libmagic1 is used
+# libyara9 is bookworm's runtime counterpart of libyara-dev (trixie's is
+# libyara10 -- see the header comment on why this stage is pinned to
+# bookworm specifically); libmagic1 is used
 # by python-magic when the YARA rules expand to attachment-typing in a
 # future iteration.
 RUN apt-get update \

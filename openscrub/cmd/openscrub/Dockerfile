@@ -1,7 +1,7 @@
 # OpenScrub control-plane container.
 #
 # Multi-stage:
-#   1. golang:1.22-alpine — build the static binary
+#   1. golang:1.25-alpine — build the static binary
 #   2. gcr.io/distroless/static-debian12 — minimal runtime (no shell)
 #
 # Build context is the REPO ROOT, not openscrub/ — go.mod's `replace`
@@ -14,7 +14,7 @@
 #   docker build -f openscrub/cmd/openscrub/Dockerfile \
 #     -t opensecstack/openscrub-api:dev .
 
-FROM golang:1.22-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 
 COPY openscrub/go.mod openscrub/go.sum ./openscrub/

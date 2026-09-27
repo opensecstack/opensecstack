@@ -18,7 +18,7 @@
 #   docker build --target web -f securelab/Dockerfile -t securelab-web .
 
 # ── Stage 1: Go builder ────────────────────────────────────────────────────────
-FROM golang:1.23-alpine AS go-builder
+FROM golang:1.25-alpine AS go-builder
 
 WORKDIR /src
 

@@ -2,7 +2,7 @@
 # Multi-stage build for the cyberpath-server binary.
 # Builder uses golang:1.24-alpine; final image is distroless static.
 
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 WORKDIR /src
 RUN apk add --no-cache git ca-certificates
 COPY go.mod go.sum* ./

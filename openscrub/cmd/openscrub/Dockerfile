@@ -29,8 +29,9 @@ COPY sdk/go/citadel/ ./sdk/go/citadel/
 COPY sdk/go/sinauth/ ./sdk/go/sinauth/
 WORKDIR /src/openscrub
 
+ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux go build \
-    -trimpath -ldflags="-s -w" \
+    -trimpath -ldflags="-s -w -X github.com/opensecstack/openscrub/internal/version.Version=${VERSION}" \
     -o /out/openscrub ./cmd/openscrub
 
 FROM gcr.io/distroless/static-debian12:nonroot

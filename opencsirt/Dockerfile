@@ -23,8 +23,9 @@ COPY sdk/go/sinauth/ ./sdk/go/sinauth/
 COPY sdk/go/citadel/ ./sdk/go/citadel/
 WORKDIR /src/opencsirt
 
+ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=linux go build \
-    -ldflags "-s -w" \
+    -ldflags "-s -w -X github.com/opensecstack/opencsirt/internal/version.Version=${VERSION}" \
     -o /bin/opencsirt ./cmd/opencsirt
 
 FROM alpine:3.20

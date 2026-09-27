@@ -18,11 +18,17 @@ WORKDIR /src
 COPY threatflow/ ./threatflow/
 COPY sdk/go/sinauth/ ./sdk/go/sinauth/
 WORKDIR /src/threatflow
+# VERSION/GIT_COMMIT/BUILD_DATE are passed in via --build-arg (see
+# release.yml's docker job); .git isn't in this build context, so
+# `git rev-parse` here would always have fallen back to "unknown" anyway.
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags "-s -w \
-      -X github.com/opensecstack/threatflow/internal/version.Version=$(cat VERSION 2>/dev/null || echo dev) \
-      -X github.com/opensecstack/threatflow/internal/version.GitCommit=$(git rev-parse --short HEAD 2>/dev/null || echo unknown) \
-      -X github.com/opensecstack/threatflow/internal/version.BuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      -X github.com/opensecstack/threatflow/internal/version.Version=${VERSION} \
+      -X github.com/opensecstack/threatflow/internal/version.GitCommit=${GIT_COMMIT} \
+      -X github.com/opensecstack/threatflow/internal/version.BuildDate=${BUILD_DATE}" \
     -o /bin/threatflow ./cmd/threatflow
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────────────

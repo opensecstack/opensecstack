@@ -33,7 +33,14 @@ WORKDIR /src
 COPY securelab/ ./securelab/
 COPY sdk/go/sinauth/ ./sdk/go/sinauth/
 WORKDIR /src/securelab
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/securelab ./cmd/server
+ARG VERSION=dev
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE=unknown
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
+    -ldflags="-X github.com/opensecstack/securelab/internal/version.Version=${VERSION} \
+              -X github.com/opensecstack/securelab/internal/version.GitCommit=${GIT_COMMIT} \
+              -X github.com/opensecstack/securelab/internal/version.BuildDate=${BUILD_DATE}" \
+    -o /out/securelab ./cmd/server
 
 # ── Stage 2: Node builder (React frontend) ────────────────────────────────────
 FROM node:20-alpine AS node-builder

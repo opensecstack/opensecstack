@@ -653,6 +653,7 @@ jobs:
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -675,6 +676,17 @@ jobs:
           # docker/build-push-action treats as "use the final stage" --
           # safe to pass unconditionally.
           target: ${{ matrix.target }}
+          # Passed unconditionally to every component. Go-binary
+          # Dockerfiles that declare matching ARGs (VERSION/GIT_COMMIT/
+          # BUILD_DATE) inject these into their internal/version package
+          # via -ldflags -X so a running container's self-reported
+          # version actually matches its image tag; components with no
+          # such ARG (web/python/rust images) just get an unconsumed
+          # build-arg, which BuildKit only warns about, never fails on.
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            GIT_COMMIT=${{ steps.meta.outputs.short_sha }}
+            BUILD_DATE=${{ steps.meta.outputs.build_date }}
           push: ${{ needs.resolve-release-mode.outputs.publish == 'true' }}
           tags: |
             ghcr.io/${{ github.repository }}/${{ matrix.component }}:${{ steps.meta.outputs.version }}

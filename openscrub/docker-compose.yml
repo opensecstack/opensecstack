@@ -32,8 +32,11 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: cmd/openscrub/Dockerfile
+      # Repo root: openscrub/cmd/openscrub/Dockerfile needs the sibling
+      # sdk/go/citadel and sdk/go/sinauth trees alongside openscrub/ (see
+      # that Dockerfile's header comment).
+      context: ..
+      dockerfile: openscrub/cmd/openscrub/Dockerfile
     ports:
       - "8087:8087"
     depends_on:

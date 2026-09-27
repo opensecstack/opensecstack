@@ -72,8 +72,10 @@ test-postgres:
 docker: docker-build docker-sbom docker-sign
 
 docker-build:
+	# Context is the repo root (.., since this Makefile runs from within
+	# openscrub/) -- see cmd/openscrub/Dockerfile's header comment for why.
 	docker build -f cmd/openscrub/Dockerfile \
-	  -t $(IMG_REPO)/openscrub-api:$(IMG_TAG) .
+	  -t $(IMG_REPO)/openscrub-api:$(IMG_TAG) ..
 	# Image name follows the Cargo crate name (`openscrub-dataplane`);
 	# the binary inside is still `openscrub-loader`. Compose + Helm
 	# pull this same name.

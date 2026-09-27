@@ -237,6 +237,294 @@ jobs:
         run: npm test
 
   # ---------------------------------------------------------------------------
+  # 1b. Test jobs for the 7 previously-unreleased platforms joining the
+  #     ecosystem release matrix for the first time. Each mirrors whatever
+  #     infra ci.yml's equivalent test-<platform> job already proves is
+  #     necessary (Postgres, migrations, etc.) rather than guessing.
+  # ---------------------------------------------------------------------------
+  test-openscrub:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: openscrub
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: openscrub_test
+          POSTGRES_USER: openscrub
+          POSTGRES_PASSWORD: openscrub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: openscrub/go.sum
+
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgres://openscrub:openscrub@localhost:5432/openscrub_test?sslmode=disable
+        run: |
+          go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+          migrate -path migrations -database "$DATABASE_URL" up
+
+      - name: Go tests
+        env:
+          OPENSCRUB_TEST_DB_URL: postgres://openscrub:openscrub@localhost:5432/openscrub_test?sslmode=disable
+        # Scoped to cmd/.../internal/..., matching ci.yml: tests/integration
+        # needs a live server on :8087, out of scope here.
+        run: go test -race -count=1 -tags=integration ./cmd/... ./internal/...
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Aya/eBPF build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang llvm libelf-dev zlib1g-dev pkg-config
+
+      - name: Rust dataplane tests
+        working-directory: openscrub/rust/dataplane
+        run: cargo test
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: openscrub/web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: openscrub/web
+        run: npm ci
+
+      - name: Web tests
+        working-directory: openscrub/web
+        run: npm test
+
+  test-sinauth:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sinauth
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: sinauth_test
+          POSTGRES_USER: sinauth
+          POSTGRES_PASSWORD: sinauth
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: sinauth/go.sum
+
+      - name: Run migrations
+        # sinauth ships its own `sinauth migrate` command (cmd/sinauth), which
+        # applies plain-numbered .sql files, not golang-migrate's up/down
+        # convention. config.Load() requires SINAUTH_ISSUER/SIGNING_KEY_PATH
+        # to be non-empty even though migrate never uses them.
+        env:
+          SINAUTH_DB_URL: postgres://sinauth:sinauth@localhost:5432/sinauth_test?sslmode=disable
+          SINAUTH_ISSUER: http://localhost:8100
+          SINAUTH_SIGNING_KEY_PATH: /tmp/sinauth-ci-signing-key.pem
+        run: go run ./cmd/sinauth migrate --dir migrations
+
+      - name: Run tests
+        env:
+          SINAUTH_TEST_DB_URL: postgres://sinauth:sinauth@localhost:5432/sinauth_test?sslmode=disable
+        run: go test -race -count=1 -tags=integration ./...
+
+  test-threatflow:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: threatflow
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: threatflow_test
+          POSTGRES_USER: threatflow
+          POSTGRES_PASSWORD: threatflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: threatflow/go.sum
+      - name: Run tests
+        env:
+          DATABASE_URL: postgres://threatflow:threatflow@localhost:5432/threatflow_test?sslmode=disable
+          THREATFLOW_TEST_DB_URL: postgres://threatflow:threatflow@localhost:5432/threatflow_test?sslmode=disable
+        # -p 1: internal/db/store and internal/correlate integration tests
+        # both truncate/seed the same live database; running those packages'
+        # test binaries in parallel races on shared state.
+        run: go test -race -count=1 -tags=integration -p 1 ./...
+
+  test-opencsirt:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: opencsirt
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: opencsirt_test
+          POSTGRES_USER: opencsirt
+          POSTGRES_PASSWORD: opencsirt
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: opencsirt/go.sum
+
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgres://opencsirt:opencsirt@localhost:5432/opencsirt_test?sslmode=disable
+        run: |
+          go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+          migrate -path migrations -database "$DATABASE_URL" up
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgres://opencsirt:opencsirt@localhost:5432/opencsirt_test?sslmode=disable
+        # tests/integration needs a running server + Python advisory service
+        # -- out of scope here, same exclusion ci.yml's job makes.
+        run: go test -race -count=1 ./cmd/... ./internal/...
+
+  test-cyberpath:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cyberpath
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cyberpath_test
+          POSTGRES_USER: cyberpath
+          POSTGRES_PASSWORD: cyberpath
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: cyberpath/go.sum
+
+      - name: Run migrations
+        # cyberpath has no migration tool wired up yet -- its .sql files are
+        # idempotent, forward-only DDL, applied in order via psql, same
+        # approach ci.yml's test-cyberpath job uses.
+        env:
+          PGPASSWORD: cyberpath
+        run: |
+          for f in internal/db/migrations/*.sql; do
+            psql -h localhost -U cyberpath -d cyberpath_test -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: Run tests
+        env:
+          CYBERPATH_TEST_DB_URL: postgres://cyberpath:cyberpath@localhost:5432/cyberpath_test?sslmode=disable
+        # -p 1: internal/db and related packages share/truncate the same
+        # live database (see cyberpath's own Makefile test-integration).
+        run: go test -race -count=1 -tags=integration -p 1 ./...
+
+  test-securelab:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: securelab
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: securelab_test
+          POSTGRES_USER: securelab
+          POSTGRES_PASSWORD: securelab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: securelab/go.sum
+      - name: Run tests
+        env:
+          DATABASE_URL: postgres://securelab:securelab@localhost:5432/securelab_test?sslmode=disable
+          SECURELAB_DB_URL: postgres://securelab:securelab@localhost:5432/securelab_test?sslmode=disable
+        # -p 1: internal/db truncates shared tables between tests;
+        # internal/scenarios reads/writes the same live database, so
+        # packages can't run in parallel. tests/integration builds a Docker
+        # image that doesn't exist in this repo yet -- excluded, same as
+        # ci.yml's test-securelab.
+        run: go test -race -count=1 -p 1 ./cmd/... ./internal/... ./tests/scenarios/...
+
+  test-community:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: community
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: community_test
+          POSTGRES_USER: community
+          POSTGRES_PASSWORD: community
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: community/go.sum
+      - name: Run tests
+        env:
+          COMMUNITY_TEST_DB_URL: postgres://community:community@localhost:5432/community_test?sslmode=disable
+        # tests/integration hits a running HTTP server (COMMUNITY_TEST_URL),
+        # not just a database -- out of scope here, same exclusion as
+        # ci.yml's test-community job.
+        run: go test -race -count=1 ./cmd/... ./internal/...
+
+  # ---------------------------------------------------------------------------
   # 2. Docker build + push + sign + SBOM (needs all test jobs)
   # ---------------------------------------------------------------------------
   docker:
@@ -249,6 +537,13 @@ jobs:
       - test-vantage-hash
       - test-sdk
       - test-typescript-sdk
+      - test-openscrub
+      - test-sinauth
+      - test-threatflow
+      - test-opencsirt
+      - test-cyberpath
+      - test-securelab
+      - test-community
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -273,6 +568,72 @@ jobs:
           - component: irflow
             context: .
             dockerfile: irflow/Dockerfile
+          # openscrub-api: go.mod's replace directives for sdk/go/citadel
+          # and sdk/go/sinauth point outside openscrub/, so it needs the
+          # repo root as context, like citadel/apiguard/irflow above (see
+          # openscrub/cmd/openscrub/Dockerfile's header comment).
+          - component: openscrub-api
+            context: .
+            dockerfile: openscrub/cmd/openscrub/Dockerfile
+          # openscrub-dataplane (Rust/Aya) and openscrub-web (React) are
+          # self-contained -- no cross-directory go.mod replace to satisfy.
+          - component: openscrub-dataplane
+            context: openscrub/rust/dataplane
+            dockerfile: openscrub/rust/dataplane/Dockerfile
+          - component: openscrub-web
+            context: openscrub/web
+            dockerfile: openscrub/web/Dockerfile
+          # sinauth/go.mod has no replace directives at all -- fully
+          # self-contained, unlike citadel/apiguard/irflow/openscrub-api.
+          - component: sinauth
+            context: sinauth
+            dockerfile: sinauth/Dockerfile
+          - component: sinauth-web
+            context: sinauth/web
+            dockerfile: sinauth/web/Dockerfile
+          # threatflow/go.mod's replace directive for sdk/go/sinauth points
+          # outside threatflow/, exactly like citadel -- needs repo root.
+          - component: threatflow
+            context: .
+            dockerfile: threatflow/Dockerfile
+          # opencsirt-api: go.mod replace directives for sdk/go/sinauth and
+          # sdk/go/citadel point outside opencsirt/ -- needs repo root.
+          - component: opencsirt-api
+            context: .
+            dockerfile: opencsirt/Dockerfile
+          - component: opencsirt-advisory
+            context: opencsirt/python
+            dockerfile: opencsirt/python/Dockerfile
+          - component: opencsirt-web
+            context: opencsirt/web
+            dockerfile: opencsirt/web/Dockerfile
+          # cyberpath: go.mod replace directives for sdk/go/citadel and
+          # sdk/go/sinauth point outside cyberpath/ -- needs repo root.
+          # cyberpath/web/Dockerfile is deliberately excluded: it exists and
+          # is buildable but isn't wired into cyberpath's own
+          # docker-compose.yml or Makefile docker-build target yet, so it
+          # isn't part of cyberpath's currently-deployed service set.
+          - component: cyberpath
+            context: .
+            dockerfile: cyberpath/Dockerfile
+          # securelab: one multi-stage Dockerfile builds two images via
+          # different --target stages (see securelab/Makefile and its own
+          # docker-compose.yml, both already using --target api / --target
+          # web against this same file). go.mod's replace directive for
+          # sdk/go/sinauth points outside securelab/ -- needs repo root.
+          - component: securelab
+            context: .
+            dockerfile: securelab/Dockerfile
+            target: api
+          - component: securelab-web
+            context: .
+            dockerfile: securelab/Dockerfile
+            target: web
+          # community/go.mod's replace directive for sdk/go/citadel points
+          # outside community/ -- needs repo root.
+          - component: community
+            context: .
+            dockerfile: community/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -309,6 +670,11 @@ jobs:
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
+          # Only securelab/securelab-web set this (one Dockerfile, two
+          # build stages); empty/unset for every other component, which
+          # docker/build-push-action treats as "use the final stage" --
+          # safe to pass unconditionally.
+          target: ${{ matrix.target }}
           push: ${{ needs.resolve-release-mode.outputs.publish == 'true' }}
           tags: |
             ghcr.io/${{ github.repository }}/${{ matrix.component }}:${{ steps.meta.outputs.version }}
@@ -621,6 +987,13 @@ jobs:
       - test-vantage-hash
       - test-sdk
       - test-typescript-sdk
+      - test-openscrub
+      - test-sinauth
+      - test-threatflow
+      - test-opencsirt
+      - test-cyberpath
+      - test-securelab
+      - test-community
       - docker
       - sdk-publish
       - github-release

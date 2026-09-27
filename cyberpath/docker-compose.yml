@@ -5,7 +5,12 @@ version: "3.9"
 
 services:
   cyberpath:
-    build: .
+    build:
+      # Repo root: Dockerfile needs the sibling sdk/go/citadel and
+      # sdk/go/sinauth trees alongside cyberpath/ (see that Dockerfile's
+      # header comment).
+      context: ..
+      dockerfile: cyberpath/Dockerfile
     image: opensecstack/cyberpath:dev
     ports:
       - "8086:8086"

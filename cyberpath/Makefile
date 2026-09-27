@@ -61,7 +61,9 @@ migrate-down:
 
 ## docker-build: build the cyberpath-server container image
 docker-build:
-	docker build -t opensecstack/cyberpath:dev .
+	# Context is the repo root (.., since this Makefile runs from within
+	# cyberpath/) -- see Dockerfile's header comment for why.
+	docker build -f Dockerfile -t opensecstack/cyberpath:dev ..
 
 ## docker-compose-up: start CyberPath + Postgres + Prometheus
 docker-compose-up:

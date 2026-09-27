@@ -62,8 +62,11 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: Dockerfile
+      # Repo root: Dockerfile needs the sibling sdk/go/sinauth and
+      # sdk/go/citadel trees alongside opencsirt/ (see that Dockerfile's
+      # header comment).
+      context: ..
+      dockerfile: opencsirt/Dockerfile
     restart: unless-stopped
     depends_on:
       postgres:

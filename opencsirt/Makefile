@@ -62,8 +62,10 @@ lint:
 	cd web && npm run lint
 
 docker-build:
+	# Context is the repo root (.., since this Makefile runs from within
+	# opencsirt/) -- see Dockerfile's header comment for why.
 	docker build -f Dockerfile \
-	  -t $(IMG_REPO)/opencsirt-api:$(IMG_TAG) .
+	  -t $(IMG_REPO)/opencsirt-api:$(IMG_TAG) ..
 	docker build -f python/Dockerfile \
 	  -t $(IMG_REPO)/opencsirt-advisory:$(IMG_TAG) python
 	docker build -f web/Dockerfile \

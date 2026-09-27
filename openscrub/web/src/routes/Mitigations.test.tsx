@@ -15,7 +15,11 @@ function renderWithClient(client: QueryClient) {
 }
 
 describe("Mitigations route", () => {
-  beforeEach(() => vi.useFakeTimers());
+  // shouldAdvanceTime: true lets real wall-clock time keep passing alongside
+  // fake timers, which @testing-library's findByText/waitFor need for their
+  // internal setTimeout-based polling to ever resolve -- without it, every
+  // findByText/waitFor call below hangs until vitest's own test timeout.
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();

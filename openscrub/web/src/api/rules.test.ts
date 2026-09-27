@@ -12,7 +12,9 @@ const okResponse = <T>(data: T) =>
   }) as const;
 
 describe("api/rules", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   it("listRules forwards limit/type and unwraps the rules array", async () => {
     const get = vi.spyOn(apiClient, "get").mockResolvedValueOnce(

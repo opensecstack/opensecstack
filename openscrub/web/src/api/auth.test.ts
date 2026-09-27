@@ -3,7 +3,9 @@ import { apiClient } from "./client";
 import { login } from "./auth";
 
 describe("api/auth", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   it("POSTs credentials to /api/v1/auth/login and returns the access token", async () => {
     const post = vi.spyOn(apiClient, "post").mockResolvedValueOnce({

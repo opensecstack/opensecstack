@@ -19,7 +19,9 @@ describe("Mitigations route", () => {
   // fake timers, which @testing-library's findByText/waitFor need for their
   // internal setTimeout-based polling to ever resolve -- without it, every
   // findByText/waitFor call below hangs until vitest's own test timeout.
-  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();

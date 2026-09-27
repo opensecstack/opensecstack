@@ -3,7 +3,9 @@ import { apiClient } from "./client";
 import { listMitigations } from "./mitigations";
 
 describe("api/mitigations", () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   it("hits /api/v1/mitigations with the requested limit", async () => {
     const get = vi.spyOn(apiClient, "get").mockResolvedValueOnce({

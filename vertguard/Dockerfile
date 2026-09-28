@@ -28,12 +28,15 @@ WORKDIR /build
 # OpenSSL build deps for c2pa-rs's `openssl_sign` feature. Adds
 # ~30 MB to the build image; final-stage runtime only needs libssl3
 # which is already present in distroless/base-debian12. Without these
-# the c2pa-verify build fails at link-time on `-lssl -lcrypto`. `perl`
-# (not just the slim image's default perl-base) is needed too --
-# openssl-src builds OpenSSL from source via its Configure script,
-# which requires FindBin.pm, not present in perl-base.
+# the c2pa-verify build fails at link-time on `-lssl -lcrypto`.
+# openssl-src builds OpenSSL from source via its Configure script and a
+# generated Makefile, neither of which the slim base image can run out
+# of the box: `perl` (not just perl-base) is needed for Configure's
+# FindBin.pm dependency, and `make` + a C compiler (build-essential)
+# for the actual build.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends pkg-config libssl-dev perl && \
+    apt-get install -y --no-install-recommends \
+        pkg-config libssl-dev perl make build-essential && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy only Cargo manifests first for dependency caching. All 5 workspace

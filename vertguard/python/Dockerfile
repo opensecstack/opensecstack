@@ -33,6 +33,10 @@ RUN curl -fsSL -o /usr/local/bin/grpc_health_probe \
 # Copy proto contract before sources so generation is cacheable.
 COPY proto /src/proto
 COPY python/pyproject.toml /src/python/
+# pyproject.toml declares readme = "README.md" -- pip's build backend
+# reads it from disk during metadata generation, not just at publish
+# time, so it has to be present even for a --target install.
+COPY python/README.md /src/python/
 COPY python/vertguard_ml /src/python/vertguard_ml
 COPY python/scripts /src/python/scripts
 

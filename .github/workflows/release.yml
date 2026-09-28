@@ -962,9 +962,23 @@ jobs:
         run: |
           if [[ "${GITHUB_REF}" != refs/tags/ecosystem/v* ]]; then
             echo "No ecosystem/v* tag on this run (workflow_dispatch dry run) — nothing to extract." > release-notes.md
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           VERSION="${GITHUB_REF#refs/tags/ecosystem/v}"
+
+          # An RC tag (ecosystem/v1.1.0-rc.1) has no CHANGELOG heading of
+          # its own — CHANGELOG.md documents the final version
+          # (ecosystem/v1.1.0), not each RC iteration. Strip a trailing
+          # "-rc.N" (or any "-<pre-release>" suffix) before looking up the
+          # heading, and flag the tag as a pre-release so the GitHub
+          # release created below is marked accordingly.
+          if [[ "${VERSION}" == *-* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+            VERSION="${VERSION%%-*}"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
 
           # Real CHANGELOG.md headings are e.g.
           # "## [ecosystem/v1.2.0] - 2026-05-23" or
@@ -983,6 +997,7 @@ jobs:
         with:
           body_path: release-notes.md
           draft: ${{ needs.resolve-release-mode.outputs.publish != 'true' }}
+          prerelease: ${{ steps.changelog.outputs.is_prerelease == 'true' }}
           files: |
             release-assets/**
 

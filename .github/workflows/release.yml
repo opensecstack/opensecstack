@@ -524,6 +524,37 @@ jobs:
         # ci.yml's test-community job.
         run: go test -race -count=1 ./cmd/... ./internal/...
 
+  test-vertguard:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vertguard
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: vertguard_test
+          POSTGRES_USER: vertguard
+          POSTGRES_PASSWORD: vertguard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: vertguard/go.sum
+      - name: Go tests
+        env:
+          VERTGUARD_TEST_DB_URL: postgres://vertguard:vertguard@localhost:5432/vertguard_test?sslmode=disable
+        # -p 1: store tests share/truncate the same live database, same as
+        # ci.yml's test-vertguard job. tests/integration's ML e2e test is
+        # opt-in via VERTGUARD_ML_E2E (unset here) and skips cleanly.
+        run: go test -race -count=1 -tags=integration -p 1 ./...
+
   # ---------------------------------------------------------------------------
   # 2. Docker build + push + sign + SBOM (needs all test jobs)
   # ---------------------------------------------------------------------------
@@ -544,6 +575,7 @@ jobs:
       - test-cyberpath
       - test-securelab
       - test-community
+      - test-vertguard
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -634,6 +666,19 @@ jobs:
           - component: community
             context: .
             dockerfile: community/Dockerfile
+          # vertguard: go.mod's replace directive for sdk/go/sinauth points
+          # outside vertguard/ -- needs repo root, like the others above.
+          - component: vertguard
+            context: .
+            dockerfile: vertguard/Dockerfile
+          # vertguard-ml (Python gRPC service) and vertguard-web (React) are
+          # self-contained -- no cross-directory go.mod replace to satisfy.
+          - component: vertguard-ml
+            context: vertguard/python
+            dockerfile: vertguard/python/Dockerfile
+          - component: vertguard-web
+            context: vertguard/web
+            dockerfile: vertguard/web/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -1006,6 +1051,7 @@ jobs:
       - test-cyberpath
       - test-securelab
       - test-community
+      - test-vertguard
       - docker
       - sdk-publish
       - github-release

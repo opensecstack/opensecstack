@@ -2,13 +2,21 @@
 # runtime image. Produces ~80 MB image with Go binary + Rust libraries
 # statically linked.
 #
-# Build: docker build -t ghcr.io/opensecstack/vertguard:dev .
+# Build context is the REPO ROOT, not vertguard/ — go.mod's `replace`
+# directive for sdk/go/sinauth (imported by internal/auth/middleware.go)
+# points outside this directory, and only resolves if sdk/ is present
+# alongside vertguard/ in the build context, the same reason
+# citadel/Dockerfile and securelab/Dockerfile use root context.
+#
+# Build: docker build -f vertguard/Dockerfile -t ghcr.io/opensecstack/vertguard:dev .
 # Run:   docker compose up -d (preferred) or see README.md quick-start
 
 # ─────────────────────────────────────────────────────────────────────
-# Stage 1 — Rust builder (pattern engine, C2PA)
+# Stage 1 — Rust builder (pattern engine, C2PA, audio, triple-hash)
 # ─────────────────────────────────────────────────────────────────────
-FROM rust:1.76-slim-bookworm AS rust-builder
+# 1.85 minimum: Cargo.lock pins clap_lex 1.1.0, which needs edition2024 /
+# Rust >=1.85 (same trap hit and fixed in openscrub/rust/dataplane).
+FROM rust:1.85-slim-bookworm AS rust-builder
 
 WORKDIR /build
 
@@ -20,23 +28,33 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends pkg-config libssl-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy only Cargo manifests first for dependency caching.
-COPY rust/Cargo.toml rust/Cargo.lock* ./rust/
-COPY rust/prompt-patterns/Cargo.toml ./rust/prompt-patterns/
-COPY rust/c2pa/Cargo.toml             ./rust/c2pa/
-COPY rust/c2pa-verify/Cargo.toml      ./rust/c2pa-verify/
+# Copy only Cargo manifests first for dependency caching. All 5 workspace
+# members (see rust/Cargo.toml) must be present before any `cargo build`
+# at the workspace root — it's a virtual workspace with no default-members
+# restriction, so a plain `cargo build` builds every listed member.
+COPY vertguard/rust/Cargo.toml vertguard/rust/Cargo.lock* ./rust/
+COPY vertguard/rust/prompt-patterns/Cargo.toml   ./rust/prompt-patterns/
+COPY vertguard/rust/c2pa/Cargo.toml               ./rust/c2pa/
+COPY vertguard/rust/c2pa-verify/Cargo.toml        ./rust/c2pa-verify/
+COPY vertguard/rust/audio-fingerprint/Cargo.toml  ./rust/audio-fingerprint/
+COPY vertguard/rust/triple-hash/Cargo.toml        ./rust/triple-hash/
 
 # Placeholder src to warm cache.
-RUN mkdir -p rust/prompt-patterns/src rust/c2pa/src rust/c2pa-verify/src && \
+RUN mkdir -p rust/prompt-patterns/src rust/c2pa/src rust/c2pa-verify/src \
+             rust/audio-fingerprint/src rust/triple-hash/src && \
     echo "// placeholder" > rust/prompt-patterns/src/lib.rs && \
     echo "// placeholder" > rust/c2pa/src/lib.rs && \
     echo "fn main() {}" > rust/c2pa-verify/src/main.rs && \
+    echo "// placeholder" > rust/audio-fingerprint/src/lib.rs && \
+    echo "// placeholder" > rust/triple-hash/src/lib.rs && \
     cd rust && cargo build --release --features ffi || true
 
 # Copy real sources, rebuild.
-COPY rust/prompt-patterns/src ./rust/prompt-patterns/src
-COPY rust/c2pa/src             ./rust/c2pa/src
-COPY rust/c2pa-verify/src      ./rust/c2pa-verify/src
+COPY vertguard/rust/prompt-patterns/src   ./rust/prompt-patterns/src
+COPY vertguard/rust/c2pa/src               ./rust/c2pa/src
+COPY vertguard/rust/c2pa-verify/src        ./rust/c2pa-verify/src
+COPY vertguard/rust/audio-fingerprint/src  ./rust/audio-fingerprint/src
+COPY vertguard/rust/triple-hash/src        ./rust/triple-hash/src
 
 RUN cd rust && \
     cargo build --release --features ffi && \
@@ -50,7 +68,7 @@ RUN cd rust && \
 # ─────────────────────────────────────────────────────────────────────
 # Stage 2 — Go builder
 # ─────────────────────────────────────────────────────────────────────
-FROM golang:1.24-bookworm AS go-builder
+FROM golang:1.25-bookworm AS go-builder
 
 WORKDIR /build
 
@@ -60,15 +78,20 @@ ARG GIT_COMMIT=unknown
 ARG BUILD_DATE=unknown
 
 # Go-module dependency caching.
-COPY go.mod go.sum* ./
+COPY vertguard/go.mod vertguard/go.sum* ./vertguard/
+COPY sdk/go/sinauth/go.mod sdk/go/sinauth/go.sum ./sdk/go/sinauth/
+WORKDIR /build/vertguard
 RUN go mod download
+WORKDIR /build
 
 # Rust artefacts from stage 1 (for CGO linking when FFI lands in v0.1+).
 COPY --from=rust-builder /out/lib /usr/local/lib
 
 # Copy Go sources.
-COPY cmd/     ./cmd/
-COPY internal/ ./internal/
+COPY vertguard/cmd/      ./vertguard/cmd/
+COPY vertguard/internal/ ./vertguard/internal/
+COPY sdk/go/sinauth/     ./sdk/go/sinauth/
+WORKDIR /build/vertguard
 
 # Build server + CLI binaries with version injection.
 # CGO_ENABLED=1 once Rust FFI integration lands (VG-003); for the

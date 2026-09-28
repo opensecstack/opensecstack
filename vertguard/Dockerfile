@@ -14,12 +14,14 @@
 # ─────────────────────────────────────────────────────────────────────
 # Stage 1 — Rust builder (pattern engine, C2PA, audio, triple-hash)
 # ─────────────────────────────────────────────────────────────────────
-# 1.86 minimum: Cargo.lock pins clap_lex 1.1.0 (needs edition2024 / Rust
-# >=1.85, same trap hit and fixed in openscrub/rust/dataplane) and, one
-# step further, icu_collections/icu_locale_core/icu_normalizer(_data)/
-# icu_properties(_data) 2.2.0 (pulled in transitively via c2pa-rs), which
-# need Rust >=1.86.
-FROM rust:1.86-slim-bookworm AS rust-builder
+# 1.88 minimum: Cargo.lock pins several crates (all pulled in
+# transitively via c2pa-rs) with MSRVs discovered one at a time against
+# a real build -- clap_lex 1.1.0 needs Rust >=1.85 (edition2024, same
+# trap hit and fixed in openscrub/rust/dataplane), icu_collections /
+# icu_locale_core / icu_normalizer(_data) / icu_properties(_data) 2.2.0
+# need >=1.86, and time/time-core/time-macros 0.3.47/0.1.8/0.2.27 need
+# >=1.88.
+FROM rust:1.88-slim-bookworm AS rust-builder
 
 WORKDIR /build
 

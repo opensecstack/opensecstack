@@ -671,10 +671,15 @@ jobs:
           - component: vertguard
             context: .
             dockerfile: vertguard/Dockerfile
-          # vertguard-ml (Python gRPC service) and vertguard-web (React) are
-          # self-contained -- no cross-directory go.mod replace to satisfy.
+          # vertguard-web (React) is self-contained -- no cross-directory
+          # go.mod replace to satisfy, unlike vertguard/vertguard-ml.
+          # vertguard-ml's Dockerfile COPYs `proto`, `python/pyproject.toml`,
+          # etc -- paths relative to vertguard/, not vertguard/python/ (see
+          # its own header comment: `docker build ... python/` run from
+          # inside vertguard/) -- so its context is vertguard, not
+          # vertguard/python.
           - component: vertguard-ml
-            context: vertguard/python
+            context: vertguard
             dockerfile: vertguard/python/Dockerfile
           - component: vertguard-web
             context: vertguard/web

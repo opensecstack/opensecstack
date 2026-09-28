@@ -10,13 +10,21 @@ For the ecosystem-wide changelog, see [../CHANGELOG.md](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-28
+
+First real release — build, test, and version-tracking milestones
+below predate this project ever actually being published; this is
+the first version cut through a real release pipeline. Folds in the
+work previously drafted as `1.0.0` (2026-05-10) and everything
+accumulated since.
+
 ### Added
 
 - sinauth SSO integration — authenticate via the SIN identity provider (OAuth 2.0 / OIDC, authorization_code + PKCE); web dashboard added a sinauth.ts client and /auth/callback route.
 
 ---
 
-## [1.0.0] - 2026-05-10
+### Also delivered as part of this release (originally drafted 2026-05-10)
 
 ### Phase 4.3 — Real-time AI Threat Detection (v1.0.0 stable)
 
@@ -119,7 +127,7 @@ For the ecosystem-wide changelog, see [../CHANGELOG.md](../CHANGELOG.md).
 | **v0.2.0 – v0.4.0** (alpha iterations) | 4.1 | Pattern-engine expansion, ATLAS coverage, operator handbook hardening | 2027 Q1–Q2 |
 | **v0.5.0** (beta) | 4.2 | Python ML layer added: Module 1 deepfake detection + Module 2 AI phishing | 2027 Q3 |
 | **v0.6.0 – v0.9.0** (beta iterations) | 4.2 | Model zoo expansion, accuracy benchmarking, adversarial robustness | 2027 Q4 – 2028 Q2 |
-| **v1.0.0** (stable) | 4.3 | Module 5 complete; real-time video call analysis; NIS3-ready | 2028 Q3 |
+| **v1.0.0** (stable) | 4.3 | Module 5 complete; real-time video call analysis; NIS3-ready | 2026-09-28 (shipped) |
 | **v1.x** | — | NIS3 consultation feedback; post-quantum C2PA migration path | 2028 Q4 – 2030 |
 
 ## Versioning policy

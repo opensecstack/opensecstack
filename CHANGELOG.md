@@ -14,10 +14,56 @@ Per-platform changelogs:
 [SecureLab](securelab/CHANGELOG.md) ·
 [sinauth](sinauth/CHANGELOG.md) ·
 [SIN Community](community/CHANGELOG.md) ·
+[VertGuard](vertguard/CHANGELOG.md) ·
 [SDK](sdk/CHANGELOG.md)
 
 For how releases are cut and ecosystem-release tags are produced, see
 [docs/release-process.md](docs/release-process.md).
+
+---
+
+## [ecosystem/v1.2.0] - 2026-09-28
+
+**VertGuard — the 8th and last unreleased platform — cut through the real
+release pipeline.** VertGuard had real, substantial, feature-complete
+AI-attack-defence work sitting in-repo (documented in its own
+`CHANGELOG.md`), but `release.yml` never built, tested, or published it —
+no test job, no docker matrix entry. This release closes that gap:
+`release.yml` now has a `test-vertguard` job (mirroring `ci.yml`'s
+already-proven Go/Postgres setup) and docker build matrix entries for all
+three of its images (`vertguard` Go server, `vertguard-ml` Python gRPC
+inference service, `vertguard-web` React dashboard), and it cuts its first
+real `1.0.0`. Deliberately kept separate from `ecosystem/v1.1.0` (whose RC
+was already soaking when this work started) rather than folding it in and
+restarting that soak clock.
+
+Getting VertGuard's own `Dockerfile` to actually build for the first time
+surfaced a chain of real, previously-undiscovered bugs, each found and
+fixed against a real CI run rather than guessed: build context was
+`vertguard/` instead of repo root (same class of bug fixed in
+securelab/opencsirt/cyberpath/threatflow/openscrub-api for `ecosystem/v1.1.0`
+— go.mod's `replace` directive for `sdk/go/sinauth` needs `sdk/` present in
+the context); its Rust workspace (`rust/Cargo.toml`) lists 5 members but the
+Dockerfile only ever copied 3, so `cargo build` at the workspace root would
+have failed the moment it was ever actually invoked; three separate
+transitive-dependency MSRV walls in a row (`clap_lex` needing Rust ≥1.85,
+`icu_*` needing ≥1.86, `time` needing ≥1.88 — all pulled in via `c2pa-rs`);
+a wrong `context:` for the `vertguard-ml` docker matrix entry; a missing
+`README.md` copy that `pyproject.toml`'s `readme` field needs at build time,
+not just publish time; and two missing system packages (`perl`, then
+`make`/`build-essential`) that `openssl-src`'s from-source OpenSSL build
+needs on the slim Rust base image.
+
+### VertGuard v1.0.0
+
+- sinauth SSO integration.
+- Everything from the original scaffold across Phases 4.1–4.3: real-time
+  video deepfake detection (WebSocket stream, CLIP embeddings, temporal
+  smoothing), voice clone detection, Zoom/Teams/WebEx meeting plugins,
+  prompt injection / AI phishing / identity-fraud detection modules, MITRE
+  ATLAS mapping, mTLS API↔ML, OPA Gatekeeper secret gate, public status
+  page, tabletop runbook.
+- See [vertguard/CHANGELOG.md](vertguard/CHANGELOG.md).
 
 ---
 
@@ -229,7 +275,13 @@ here actually builds, tests, or publishes it.
 
 ---
 
-## [ecosystem/v1.2.0] - 2026-05-23
+## [ecosystem/v1.2.0-draft] (superseded, never tagged) - 2026-05-23
+
+**Renamed from `v1.2.0`.** Same situation as the `v1.1.0-draft` entry
+below: real work that had accumulated pre-pipeline but was never cut
+through a release — no `ecosystem/v1.2.0` tag existed until the actual
+third release (see the real `[ecosystem/v1.2.0]` entry above). Kept as
+history of what had shipped by this point; superseded by the real entry.
 
 **Single sign-on across the stack.** Introduces **sinauth**, a dedicated identity layer, and wires every platform to it over OpenID Connect.
 

@@ -20,17 +20,17 @@ The matrix has three dimensions:
 
 ## Current ecosystem release
 
-### `ecosystem/v1.1.0` (2026-09-28)
+### `ecosystem/v1.2.0` (2026-09-28)
 
-**Adds 7 platforms to the release pipeline.** ThreatFlow, OpenCSIRT,
-OpenScrub, CyberPath, SecureLab, sinauth, and SIN Community had real,
-substantial, feature-complete work sitting in-repo but had never been
-through a real release pipeline — `release.yml` didn't build, test, or
-publish any of them. This release extends `release.yml`'s test suite and
-docker build matrix to cover all 7, fixes the Docker image version-injection
-gap (containers previously always self-reported a hardcoded default
-regardless of the git tag they were built from — see each platform's own
-`CHANGELOG.md`), and cuts each platform's first real `1.0.0`.
+**VertGuard — the 8th and last unreleased platform — added to the release
+pipeline.** It had real, substantial, feature-complete AI-attack-defence
+work sitting in-repo but had never been through a real release pipeline —
+`release.yml` didn't build, test, or publish it. This release extends
+`release.yml`'s test suite and docker build matrix to cover it (3 images:
+`vertguard`, `vertguard-ml`, `vertguard-web`) and cuts its first real
+`1.0.0`. Kept as its own ecosystem release rather than folded into
+`ecosystem/v1.1.0`, whose RC soak was already running when this work
+started.
 
 | Platform | Version | Status | PQC status |
 |---|---|---|---|
@@ -46,16 +46,12 @@ regardless of the git tag they were built from — see each platform's own
 | SecureLab | `1.0.0` | Stable | HMAC-SHA256 evidence emission (PQ-safe); no signing |
 | sinauth | `1.0.0` | Stable | Classical (no anchor signing) |
 | SIN Community | `1.0.0` | Stable | HMAC-SHA256 evidence emission (PQ-safe); no signing |
+| VertGuard | `1.0.0` | Stable | Classical (no anchor signing) |
 
 All platforms above are production-ready per the
-[security maturity](./security-maturity.md) tier-1 profile.
-
-**Not part of this release:** VertGuard has real, substantial work sitting
-in its own `[Unreleased]` changelog section and is feature-complete in-repo,
-but has not yet been through a real release pipeline — `release.yml`
-doesn't build, test, or publish it, so there is no version of it to list
-here yet. It will be added to this table the first time it is actually cut
-and published.
+[security maturity](./security-maturity.md) tier-1 profile. Every platform
+that exists in this repo now has a real `1.0.0` — nothing remains
+unreleased.
 
 ### Post-quantum migration status
 
@@ -74,12 +70,18 @@ Target: **PQ-default by v3.0 (2030)** — aligned with expected NIS3 transpositi
 
 ### Prior ecosystem releases
 
+#### `ecosystem/v1.1.0` (2026-09-28)
+
+Adds ThreatFlow, OpenCSIRT, OpenScrub, CyberPath, SecureLab, sinauth, and
+SIN Community, all at `1.0.0`. Its RC (`ecosystem/v1.1.0-rc.2`) was still
+mid-soak when `ecosystem/v1.2.0` was cut — the two are independent, not
+sequential blockers on each other.
+
 #### `ecosystem/v1.0.0` (2026-09-19)
 
 The first ecosystem release actually published. Scope: APIGuard, NIS2
-Compass, CITADEL, IRFlow, and the SDK, all at `1.0.0`. Superseded by
-`ecosystem/v1.1.0` above, which adds 7 more platforms on top — nothing in
-the original 5 changed version.
+Compass, CITADEL, IRFlow, and the SDK, all at `1.0.0`. Nothing in the
+original 5 has changed version since.
 
 Earlier version numbers referenced elsewhere in this repo's history (e.g.
 `v1.0.0-2026-Q2`, `v1.1.0-2026-Q2`) describe work that genuinely happened
@@ -157,7 +159,7 @@ VertGuard emits WORM evidence via CITADEL for all scan verdicts.
 
 |                    | CITADEL 1.0.x |
 |--------------------|:-:|
-| **VertGuard (partial, unreleased)** | Tested |
+| **VertGuard 1.0.x** | Tested |
 
 ### VertGuard ↔ IRFlow
 
@@ -165,7 +167,7 @@ VertGuard emits incidents to IRFlow on HIGH-confidence detections.
 
 |                    | IRFlow 1.0.x |
 |--------------------|:-:|
-| **VertGuard (partial, unreleased)** | Tested |
+| **VertGuard 1.0.x** | Tested |
 
 ### VertGuard ML gRPC service
 
@@ -198,7 +200,8 @@ How long each version continues to receive fixes.
 | **Current stable** | v1.1.x (latest minor) | When v1.3 ships |
 | **Previous stable** | v1.0.x | 12 months after v1.1 ships |
 | **Older** | v0.9 and earlier | Unsupported immediately |
-| **Ecosystem release** | `ecosystem/v1.1.0` (2026-09-28) | 12 months from the release date (through 2027-09-28) |
+| **Ecosystem release** | `ecosystem/v1.2.0` (2026-09-28) | 12 months from the release date (through 2027-09-28) |
+| **Prior ecosystem release** | `ecosystem/v1.1.0` (2026-09-28) | 12 months from the release date (through 2027-09-28) |
 | **Prior ecosystem release** | `ecosystem/v1.0.0` (2026-09-19) | 12 months from the release date (through 2027-09-19) |
 
 **In practice:** two minor versions back are always supported for

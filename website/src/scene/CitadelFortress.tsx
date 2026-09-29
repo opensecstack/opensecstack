@@ -1,108 +1,17 @@
-import { useRef, useState, useCallback, useMemo } from 'react'
+import { useRef, useState, useCallback } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Float, Html } from '@react-three/drei'
-import * as THREE from 'three'
 import { marshalGates } from '../data/marshalGates'
 import { useHoverScale } from '../hooks/useHoverScale'
-import { useLowPowerDevice } from '../hooks/useLowPowerDevice'
 import type { Group, Mesh } from 'three'
 
 const ICOSAHEDRON_RADIUS = 1.4
 const ICOSAHEDRON_DETAIL = 1
-/** Particles sampled per edge of the (subdivided) icosahedron -- ~120 edges
- * at detail=1, so this yields roughly 1000-1500 points total: dense enough
- * to read as a glowing point-cloud tracing the shape (matching the "Vertex
- * 4023"-style reference), while staying a single cheap Points draw call. */
-const PARTICLES_PER_EDGE = 10
-
-/**
- * Builds a point cloud tracing every edge of an icosahedron (radius/detail
- * matching the wireframe mesh below), with a small amount of jitter so it
- * reads as an organic glowing point-field rather than perfectly straight
- * lines of dots. Computed once (geometry/detail never change at runtime),
- * so the one-time THREE.EdgesGeometry allocation here is not a per-frame
- * concern.
- */
-function buildEdgeParticlePositions(radius: number, detail: number, perEdge: number): Float32Array {
-  const base = new THREE.IcosahedronGeometry(radius, detail)
-  const edges = new THREE.EdgesGeometry(base)
-  const posAttr = edges.getAttribute('position')
-  const points: number[] = []
-  const a = new THREE.Vector3()
-  const b = new THREE.Vector3()
-  const mid = new THREE.Vector3()
-
-  // Push each point outward along its own radial direction so the cloud
-  // reads as a halo standing proud of the wireframe rather than dots
-  // painted directly on top of the existing edge lines (indistinguishable
-  // at a glance from the mesh itself).
-  const OUTWARD_OFFSET = radius * 0.18
-
-  for (let i = 0; i < posAttr.count; i += 2) {
-    a.fromBufferAttribute(posAttr, i)
-    b.fromBufferAttribute(posAttr, i + 1)
-    for (let k = 0; k < perEdge; k++) {
-      const t = perEdge > 1 ? k / (perEdge - 1) : 0
-      mid.lerpVectors(a, b, t)
-      const outward = mid.clone().normalize().multiplyScalar(OUTWARD_OFFSET)
-      const jitter = () => (Math.random() - 0.5) * 0.05
-      points.push(
-        mid.x + outward.x + jitter(),
-        mid.y + outward.y + jitter(),
-        mid.z + outward.z + jitter(),
-      )
-    }
-  }
-
-  base.dispose()
-  edges.dispose()
-  return new Float32Array(points)
-}
-
-interface EdgeParticlesProps {
-  hovered: boolean
-}
-
-/** The dense glowing point-cloud layered over the wireframe hub, skipped entirely on low-power devices. */
-function EdgeParticles({ hovered }: EdgeParticlesProps) {
-  const positions = useMemo(
-    () => buildEdgeParticlePositions(ICOSAHEDRON_RADIUS, ICOSAHEDRON_DETAIL, PARTICLES_PER_EDGE),
-    [],
-  )
-  const materialRef = useRef<THREE.PointsMaterial>(null)
-
-  useFrame((_state, delta) => {
-    const mat = materialRef.current
-    if (!mat) return
-    const targetOpacity = hovered ? 1 : 0.9
-    mat.opacity = THREE.MathUtils.damp(mat.opacity, targetOpacity, 8, delta)
-  })
-
-  return (
-    <points>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" count={positions.length / 3} array={positions} itemSize={3} />
-      </bufferGeometry>
-      <pointsMaterial
-        ref={materialRef}
-        color="#e0feff"
-        size={5}
-        sizeAttenuation={false}
-        transparent
-        opacity={0.9}
-        blending={THREE.AdditiveBlending}
-        depthWrite={false}
-        toneMapped={false}
-      />
-    </points>
-  )
-}
 
 export default function CitadelFortress() {
   const groupRef = useRef<Group>(null)
   const meshRef = useRef<Mesh>(null)
   const [hovered, setHovered] = useState(false)
-  const lowPower = useLowPowerDevice()
 
   useFrame(() => {
     if (!groupRef.current) return
@@ -131,8 +40,6 @@ export default function CitadelFortress() {
             toneMapped={false}
           />
         </mesh>
-
-        {!lowPower && <EdgeParticles hovered={hovered} />}
 
         <Html
           center

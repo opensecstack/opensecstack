@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'all-platforms', label: 'All platforms' },
@@ -36,8 +37,8 @@ export default function PlatformsPage() {
       <h1>Platforms Overview</h1>
       <p>
         opensecstack ships <strong>11 security platforms</strong> plus two cross-cutting
-        layers (<a href="/docs/identity">sinauth</a> for identity and{' '}
-        <a href="/docs/governance">CITADEL</a> for governance). All platforms are at
+        layers (<Link to="/docs/identity">sinauth</Link> for identity and{' '}
+        <Link to="/docs/governance">CITADEL</Link> for governance). All platforms are at
         v1.0.0 production. Tool platforms are licensed under Apache 2.0 so they can be
         embedded in CI/CD pipelines; governance platforms are AGPL-3.0 so modifications
         to the audit trail and compliance reporting remain open source.
@@ -57,61 +58,61 @@ export default function PlatformsPage() {
           </thead>
           <tbody>
             <tr>
-              <td><strong><a href="/docs/platforms/apiguard">APIGuard</a></strong></td>
+              <td><strong><Link to="/docs/platforms/apiguard">APIGuard</Link></strong></td>
               <td>API security testing — OWASP API Top 10 (A1–A10), CVSS 3.1, SARIF/HTML/PDF/JSON reports</td>
               <td>Go + Rust + Python + React</td>
               <td>Apache 2.0</td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/platforms/nis2compass">NIS2 Compass</a></strong></td>
+              <td><strong><Link to="/docs/platforms/nis2compass">NIS2 Compass</Link></strong></td>
               <td>NIS2 Article 21(2) compliance assessment, evidence management, Article 23 notification</td>
               <td>Python + Go + React</td>
               <td>AGPL-3.0</td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/platforms/irflow">IRFlow</a></strong></td>
+              <td><strong><Link to="/docs/platforms/irflow">IRFlow</Link></strong></td>
               <td>Incident response orchestration — playbooks, governed actions, NIS2 72-hour notification</td>
               <td>Go + Python</td>
               <td>AGPL-3.0</td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/platforms/threatflow">ThreatFlow</a></strong></td>
+              <td><strong><Link to="/docs/platforms/threatflow">ThreatFlow</Link></strong></td>
               <td>Threat intelligence aggregation — IOC ingestion, STIX 2.1, MITRE ATT&amp;CK</td>
               <td>Rust + Go</td>
               <td>Apache 2.0</td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/platforms/openscrub">OpenScrub</a></strong></td>
+              <td><strong><Link to="/docs/platforms/openscrub">OpenScrub</Link></strong></td>
               <td>DDoS mitigation at kernel level — XDP/eBPF programs, GoBGP blackhole routing</td>
               <td>Rust + C + Go</td>
               <td>Apache 2.0</td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/platforms/cyberpath">CyberPath</a></strong></td>
+              <td><strong><Link to="/docs/platforms/cyberpath">CyberPath</Link></strong></td>
               <td>Security training — Docker/Wasm labs, NIS2 Art. 21(2)(g) evidence records</td>
               <td>Go + React + Python</td>
               <td>Apache 2.0</td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/platforms/securelab">SecureLab</a></strong></td>
+              <td><strong><Link to="/docs/platforms/securelab">SecureLab</Link></strong></td>
               <td>Attack simulation &amp; detection validation — MITRE ATT&amp;CK scenario library</td>
               <td>Python + Rust + Go</td>
               <td>Apache 2.0</td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/platforms/opencsirt">OpenCSIRT</a></strong></td>
+              <td><strong><Link to="/docs/platforms/opencsirt">OpenCSIRT</Link></strong></td>
               <td>National/sector CSIRT operations — TAXII 2.1, STIX 2.1, CSAF 2.0 advisory generation</td>
               <td>Go + Python</td>
               <td>AGPL-3.0</td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/platforms/vertguard">VertGuard</a></strong></td>
+              <td><strong><Link to="/docs/platforms/vertguard">VertGuard</Link></strong></td>
               <td>AI-attack defence — deepfake detection, prompt injection (OWASP LLM Top 10), MITRE ATLAS threat feed, C2PA media authenticity</td>
               <td>Go + Rust + Python</td>
               <td>AGPL-3.0</td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/platforms/community">SIN Community</a></strong></td>
+              <td><strong><Link to="/docs/platforms/community">SIN Community</Link></strong></td>
               <td>Developer knowledge hub — posts, tags, full-text search (Meilisearch), notifications, TOTP, API keys, spaces</td>
               <td>Go + React + TypeScript + PostgreSQL</td>
               <td>Apache 2.0</td>
@@ -220,7 +221,7 @@ export default function PlatformsPage() {
           alongside individual users, with optional org-scoped token claims and an
           org picker for users belonging to more than one organization. What Auth0 is
           globally, sinauth is for the SIN ecosystem. See{' '}
-          <a href="/docs/identity">Identity (sinauth)</a>.
+          <Link to="/docs/identity">Identity (sinauth)</Link>.
         </li>
         <li>
           <strong>CITADEL</strong> (Go, AGPL-3.0) — the governance layer. Every
@@ -228,7 +229,7 @@ export default function PlatformsPage() {
           engine and recorded in an append-only WORM audit chain with TripleHash
           integrity (SHA-256 + SHA-512 + BLAKE3) and Ed25519 chain anchors. NDS enforces
           separation of duties at the protocol level. See{' '}
-          <a href="/docs/governance">Governance (CITADEL)</a>.
+          <Link to="/docs/governance">Governance (CITADEL)</Link>.
         </li>
       </ul>
     </DocsLayout>

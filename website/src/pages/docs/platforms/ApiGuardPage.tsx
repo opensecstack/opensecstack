@@ -1,6 +1,7 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -213,7 +214,7 @@ export default function ApiGuardPage() {
 
       <h3>sinauth (identity)</h3>
       <p>
-        APIGuard delegates all user authentication to <a href="/docs/identity"><strong>sinauth</strong></a> via OpenID Connect
+        APIGuard delegates all user authentication to <Link to="/docs/identity"><strong>sinauth</strong></Link> via OpenID Connect
         (authorization code + PKCE). ID and access tokens are RS256-signed and validated against
         the sinauth JWKS endpoint (<code>https://auth.sin.to/.well-known/jwks.json</code>). The
         web dashboard uses <code>sinauth.ts</code> for popup-based login and an{' '}
@@ -225,14 +226,14 @@ export default function ApiGuardPage() {
       <p>
         APIGuard emits scan lifecycle events — <code>scan_started</code>,{' '}
         <code>scan_completed</code>, <code>finding_critical</code>, and{' '}
-        <code>finding_high</code> — to the <a href="/docs/governance">CITADEL</a> <a href="/docs/citadel/worm">WORM</a> audit chain via a one-way outbound
+        <code>finding_high</code> — to the <Link to="/docs/governance">CITADEL</Link> <Link to="/docs/citadel/worm">WORM</Link> audit chain via a one-way outbound
         webhook. CITADEL cannot write back to APIGuard scan data. Configure with{' '}
         <code>CITADEL_WEBHOOK_URL</code> and <code>CITADEL_API_KEY</code>.
       </p>
 
       <h3>IRFlow (incident response)</h3>
       <p>
-        APIGuard sends HMAC-SHA256 signed webhook events to <a href="/docs/platforms/irflow">IRFlow</a> when critical or high findings
+        APIGuard sends HMAC-SHA256 signed webhook events to <Link to="/docs/platforms/irflow">IRFlow</Link> when critical or high findings
         are detected, allowing IRFlow to automatically open or update security incidents. IRFlow
         listens on <code>POST /api/v1/webhooks/apiguard</code> with replay protection (±5 min
         window).
@@ -240,14 +241,14 @@ export default function ApiGuardPage() {
 
       <h3>ThreatFlow (threat intelligence)</h3>
       <p>
-        APIGuard sends scan target URLs and discovered API endpoints to <a href="/docs/platforms/threatflow">ThreatFlow</a> for IOC
+        APIGuard sends scan target URLs and discovered API endpoints to <Link to="/docs/platforms/threatflow">ThreatFlow</Link> for IOC
         matching. ThreatFlow in turn enriches APIGuard scans with known-malicious URL and IP
         indicators from its STIX 2.1 bundle store.
       </p>
 
       <h3>NIS2 Compass (compliance)</h3>
       <p>
-        APIGuard findings are mapped to <a href="/docs/nis2">NIS2</a> Article 21 security measures. See{' '}
+        APIGuard findings are mapped to <Link to="/docs/nis2">NIS2</Link> Article 21 security measures. See{' '}
         <a href="https://github.com/opensecstack/opensecstack/tree/main/apiguard/docs/nis2-mapping.md" target="_blank" rel="noopener noreferrer">
           docs/nis2-mapping.md
         </a>{' '}
@@ -257,7 +258,7 @@ export default function ApiGuardPage() {
       <div className="callout-note">
         <strong>Note:</strong> All inter-platform communication uses HMAC-SHA256 signed payloads
         over the typed <code>opensecstack/sdk</code> contracts. See{' '}
-        <a href="/docs/contracts">SDK &amp; Contracts</a> for the event schemas.
+        <Link to="/docs/contracts">SDK &amp; Contracts</Link> for the event schemas.
       </div>
 
       <h3>Quick start</h3>

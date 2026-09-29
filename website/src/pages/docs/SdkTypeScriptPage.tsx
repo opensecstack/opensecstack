@@ -1,6 +1,7 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'installation', label: 'Installation' },
@@ -38,11 +39,11 @@ export default function SdkTypeScriptPage() {
       </Helmet>
       <h1>TypeScript SDK</h1>
       <p>
-        The TypeScript client provides typed clients for <strong><a href="/docs/platforms/apiguard">APIGuard</a></strong>,{' '}
-        <strong><a href="/docs/platforms/nis2compass">NIS2 Compass</a></strong>, and <strong><a href="/docs/governance">CITADEL</a></strong>, plus a{' '}
-        <strong><a href="/docs/webhooks">webhook router</a></strong> with HMAC-SHA256 signature verification. It requires{' '}
+        The TypeScript client provides typed clients for <strong><Link to="/docs/platforms/apiguard">APIGuard</Link></strong>,{' '}
+        <strong><Link to="/docs/platforms/nis2compass">NIS2 Compass</Link></strong>, and <strong><Link to="/docs/governance">CITADEL</Link></strong>, plus a{' '}
+        <strong><Link to="/docs/webhooks">webhook router</Link></strong> with HMAC-SHA256 signature verification. It requires{' '}
         <strong>Node.js 18+</strong> or a modern browser, and has{' '}
-        <strong>zero external runtime dependencies</strong>. See <a href="/docs/contracts">SDK &amp; Contracts</a> for the full integration contract reference.
+        <strong>zero external runtime dependencies</strong>. See <Link to="/docs/contracts">SDK &amp; Contracts</Link> for the full integration contract reference.
       </p>
 
       <h2 id="installation">Installation</h2>
@@ -179,7 +180,7 @@ const pdf = await nis2.generateReport(assessment.id);`}
 
       <h2 id="citadel-client">CITADEL client</h2>
       <p>
-        Send security events to the <a href="/docs/citadel/worm">WORM</a> audit chain and verify chain integrity locally.
+        Send security events to the <Link to="/docs/citadel/worm">WORM</Link> audit chain and verify chain integrity locally.
         The CITADEL client also exposes AUGUR advisories for threat intelligence lookups.
       </p>
       <CodeBlock
@@ -278,9 +279,9 @@ try {
 
       <h2 id="full-documentation">Full documentation</h2>
       <p>
-        Other SDK language clients: <a href="/docs/sdk/go">Go SDK</a>,{' '}
-        <a href="/docs/sdk/python">Python SDK</a>,{' '}
-        <a href="/docs/sdk/rust">Rust SDK</a>.
+        Other SDK language clients: <Link to="/docs/sdk/go">Go SDK</Link>,{' '}
+        <Link to="/docs/sdk/python">Python SDK</Link>,{' '}
+        <Link to="/docs/sdk/rust">Rust SDK</Link>.
       </p>
       <p>
         The complete TypeScript client reference — including all method signatures, option

@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -64,17 +65,17 @@ export default function ArchitecturePage() {
       <p>
         Each platform has a defined scope and emits typed SDK events when significant things
         happen (scan completed, incident opened, compliance control updated, and so on). A
-        full list with stacks and licences is on the <a href="/docs/platforms">Platforms
-        Overview</a> page.
+        full list with stacks and licences is on the <Link to="/docs/platforms">Platforms
+        Overview</Link> page.
       </p>
 
       <h3>SDK contract layer</h3>
       <p>
-        The <code>opensecstack/sdk</code> provides typed clients in <a href="/docs/sdk/go">Go</a>, <a href="/docs/sdk/python">Python</a>, <a href="/docs/sdk/typescript">TypeScript</a>,
-        and <a href="/docs/sdk/rust">Rust</a>. All inter-platform communication uses the typed event schemas defined in
+        The <code>opensecstack/sdk</code> provides typed clients in <Link to="/docs/sdk/go">Go</Link>, <Link to="/docs/sdk/python">Python</Link>, <Link to="/docs/sdk/typescript">TypeScript</Link>,
+        and <Link to="/docs/sdk/rust">Rust</Link>. All inter-platform communication uses the typed event schemas defined in
         the SDK. This means a consumer of a <code>ScanResult</code> never needs to know
         which version of APIGuard produced it — the contract absorbs the change. See
-        <a href="/docs/contracts"> SDK &amp; Contracts</a> for the full event schema table
+        <Link to="/docs/contracts"> SDK &amp; Contracts</Link> for the full event schema table
         and usage examples.
       </p>
 
@@ -89,15 +90,15 @@ export default function ArchitecturePage() {
           <code> https://auth.sin.to/.well-known/jwks.json</code>, authorization-code +
           PKCE (S256) flow, TOTP MFA, and social login (Google, GitHub). Every platform
           validates sinauth-issued tokens against the JWKS endpoint instead of maintaining
-          its own user credentials. See <a href="/docs/identity">Identity (sinauth)</a>.
+          its own user credentials. See <Link to="/docs/identity">Identity (sinauth)</Link>.
         </li>
         <li>
           <strong>CITADEL</strong> — the governance layer. Every privileged action is
-          evaluated by the <a href="/docs/citadel/marshal">MARSHAL</a> 5-gate engine (Authority → Scope → Determinism →
+          evaluated by the <Link to="/docs/citadel/marshal">MARSHAL</Link> 5-gate engine (Authority → Scope → Determinism →
           Evidence → Schema) and the outcome — EXECUTE, REFUSE, or HARD STOP — is written
-          into an append-only <a href="/docs/citadel/worm">WORM</a> audit chain with TripleHash integrity (SHA-256 +
+          into an append-only <Link to="/docs/citadel/worm">WORM</Link> audit chain with TripleHash integrity (SHA-256 +
           SHA-512 + BLAKE3) and Ed25519-signed chain anchors every 100 entries. See
-          <a href="/docs/governance"> Governance (CITADEL)</a>.
+          <Link to="/docs/governance"> Governance (CITADEL)</Link>.
         </li>
       </ul>
 
@@ -167,23 +168,23 @@ export default function ArchitecturePage() {
       </p>
       <ol>
         <li>A developer pushes an OpenAPI spec to the CI pipeline.</li>
-        <li><a href="/docs/platforms/apiguard">APIGuard</a> scans it and produces a <code>ScanResult</code> with findings and CVSS scores.</li>
+        <li><Link to="/docs/platforms/apiguard">APIGuard</Link> scans it and produces a <code>ScanResult</code> with findings and CVSS scores.</li>
         <li>APIGuard emits a <code>scan_completed</code> event to the CITADEL WORM log.</li>
         <li>APIGuard exports a NIS2 evidence bundle.</li>
-        <li><a href="/docs/platforms/nis2compass">NIS2 Compass</a> receives the bundle and attaches it to the Art. 21(2)(e) control.</li>
+        <li><Link to="/docs/platforms/nis2compass">NIS2 Compass</Link> receives the bundle and attaches it to the Art. 21(2)(e) control.</li>
         <li>NIS2 Compass emits a <code>control_updated</code> event to the CITADEL WORM log.</li>
-        <li>An <a href="/docs/citadel/evidence">auditor</a> verifies the unbroken chain in CITADEL.</li>
+        <li>An <Link to="/docs/citadel/evidence">auditor</Link> verifies the unbroken chain in CITADEL.</li>
       </ol>
       <p>
         Parallel flows include: APIGuard CRITICAL findings auto-creating incidents in
-        <a href="/docs/platforms/irflow">IRFlow</a>; <a href="/docs/platforms/threatflow">ThreatFlow</a> IOC bundles triggering automatic IP blocks in <a href="/docs/platforms/openscrub">OpenScrub</a>; and
-        <a href="/docs/platforms/cyberpath">CyberPath</a> training completions providing NIS2 Art. 21(2)(g) evidence records.
+        <Link to="/docs/platforms/irflow">IRFlow</Link>; <Link to="/docs/platforms/threatflow">ThreatFlow</Link> IOC bundles triggering automatic IP blocks in <Link to="/docs/platforms/openscrub">OpenScrub</Link>; and
+        <Link to="/docs/platforms/cyberpath">CyberPath</Link> training completions providing NIS2 Art. 21(2)(g) evidence records.
         The full data-flow map is in <code>ECOSYSTEM.md</code> in the repository.
       </p>
 
       <h2 id="time-dimension-segmentation">Time Dimension Segmentation</h2>
       <p>
-        All platforms classify operations by latency tier (<a href="/docs/tds">Time Dimension Segmentation</a>,
+        All platforms classify operations by latency tier (<Link to="/docs/tds">Time Dimension Segmentation</Link>,
         ADR-009) to ensure the runtime profile matches the operation's urgency:
       </p>
 
@@ -205,7 +206,7 @@ export default function ArchitecturePage() {
             <tr>
               <td>Minute hand</td>
               <td>300 ms – 30 s</td>
-              <td>Report generation, standard scans, <a href="/docs/citadel/augur-vigil">VIGIL</a>_REALTIME</td>
+              <td>Report generation, standard scans, <Link to="/docs/citadel/augur-vigil">VIGIL</Link>_REALTIME</td>
             </tr>
             <tr>
               <td>Hour hand</td>
@@ -220,7 +221,7 @@ export default function ArchitecturePage() {
         <strong>Note:</strong> For the full repository layout, port assignments, and
         network segmentation see <code>docs/deployment-topology.md</code> in the
         repository. For the security maturity tiers (Standard / Elevated / High Assurance)
-        see <a href="/docs/security">Security</a>.
+        see <Link to="/docs/security">Security</Link>.
       </div>
     </DocsLayout>
   )

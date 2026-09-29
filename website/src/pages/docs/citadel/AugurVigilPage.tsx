@@ -1,6 +1,7 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -47,8 +48,8 @@ export default function AugurVigilPage() {
       <h1>AUGUR &amp; VIGIL</h1>
       <p>
         This page covers the two behavioural and health-monitoring subsystems of CITADEL.
-        <strong> AUGUR</strong> is the behavioural-heuristics layer at Gate 4 of the <a href="/docs/citadel/marshal">MARSHAL
-        engine</a> — it asks whether a request <em>fits the normal pattern</em> of how the caller
+        <strong> AUGUR</strong> is the behavioural-heuristics layer at Gate 4 of the <Link to="/docs/citadel/marshal">MARSHAL
+        engine</Link> — it asks whether a request <em>fits the normal pattern</em> of how the caller
         behaves, catching insider abuse and credential-compromise attacks that pass cleanly
         through the first three gates. <strong>VIGIL</strong> is the ecosystem-wide health
         monitor that synthesises telemetry from every SIN platform into a single colour-coded
@@ -62,7 +63,7 @@ export default function AugurVigilPage() {
         fit the normal behavioural pattern for this caller?"</em>. A credential-compromise
         or insider attack may clear every permission check while still exhibiting observable
         anomalies — unusual timing, burst frequency, or a data export with no associated
-        investigation. AUGUR surfaces those signals before the action reaches the <a href="/docs/citadel/worm">WORM log</a>.
+        investigation. AUGUR surfaces those signals before the action reaches the <Link to="/docs/citadel/worm">WORM log</Link>.
       </p>
       <p>
         AUGUR reads from a <strong>read-only mirror database</strong>. It does not hold locks
@@ -278,7 +279,7 @@ if kerkese.Action.Type == "DATA_EXPORT" && kerkese.Action.IncidentID == "" {
 
       <h2 id="irflow-interaction">Interaction with IRFlow</h2>
       <p>
-        When AUGUR emits <code>HARD_STOP</code>, the downstream effect in <a href="/docs/platforms/irflow">IRFlow</a> is automatic:
+        When AUGUR emits <code>HARD_STOP</code>, the downstream effect in <Link to="/docs/platforms/irflow">IRFlow</Link> is automatic:
       </p>
       <ol>
         <li>

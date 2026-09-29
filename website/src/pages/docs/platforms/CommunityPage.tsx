@@ -1,6 +1,7 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -92,7 +93,7 @@ export default function CommunityPage() {
           useful for posting from CI/CD pipelines.
         </li>
         <li>
-          <a href="/docs/identity"><strong>sinauth SSO</strong></a> — "Continue with SIN" button on the Login and
+          <Link to="/docs/identity"><strong>sinauth SSO</strong></Link> — "Continue with SIN" button on the Login and
           Register pages uses OAuth 2.0 / OIDC (authorization code + PKCE via
           the server-side flow). A first sinauth login auto-provisions a Community
           account; an existing account is linked by verified email. sinauth also provides
@@ -110,7 +111,7 @@ export default function CommunityPage() {
           <code> COMMUNITY_ALLOWED_EMAIL_DOMAINS</code> to limit to specific domains.
         </li>
         <li>
-          <a href="/docs/governance"><strong>CITADEL tamper evidence</strong></a> — <code>community.post.published</code>{' '}
+          <Link to="/docs/governance"><strong>CITADEL tamper evidence</strong></Link> — <code>community.post.published</code>{' '}
           events are emitted to CITADEL on publish, recording an immutable anchor for each
           published post.
         </li>

@@ -1,6 +1,7 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -279,7 +280,7 @@ export default function OpenScrubPage() {
 
       <h2 id="integration">Integration</h2>
       <p>
-        OpenScrub authenticates dashboard users via <a href="/docs/identity"><strong>sinauth</strong></a> SSO using the
+        OpenScrub authenticates dashboard users via <Link to="/docs/identity"><strong>sinauth</strong></Link> SSO using the
         OAuth 2.0 <code>authorization_code + PKCE (S256)</code> flow. The API validates
         RS256-signed tokens against the sinauth JWKS endpoint at{' '}
         <code>https://auth.sin.to/.well-known/jwks.json</code>.
@@ -314,9 +315,9 @@ curl -H "Authorization: Bearer $TOKEN" \\
      http://localhost:8087/api/v1/rules`}
       />
       <p>
-        <a href="/docs/platforms/securelab">SecureLab</a> polls <code>GET /api/v1/alerts?technique={'{id}'}&amp;since={'{ts}'}</code> (read-only,
+        <Link to="/docs/platforms/securelab">SecureLab</Link> polls <code>GET /api/v1/alerts?technique={'{id}'}&amp;since={'{ts}'}</code> (read-only,
         HMAC-signed) to validate that OpenScrub detections fire as expected during attack
-        simulations. <a href="/docs/platforms/threatflow">ThreatFlow</a> pushes malicious-IP IOCs inbound; <a href="/docs/governance">CITADEL</a> receives outbound
+        simulations. <Link to="/docs/platforms/threatflow">ThreatFlow</Link> pushes malicious-IP IOCs inbound; <Link to="/docs/governance">CITADEL</Link> receives outbound
         mitigation evidence.
       </p>
 

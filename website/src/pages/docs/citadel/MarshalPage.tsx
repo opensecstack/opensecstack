@@ -1,6 +1,7 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -47,7 +48,7 @@ export default function MarshalPage() {
         privileged action from every platform in the opensecstack ecosystem passes through it
         before execution. The outcome — <code>EXECUTE</code>, <code>REFUSE</code>, or{' '}
         <code>HARD_STOP</code> — plus the gate-by-gate reasoning is unconditionally appended to
-        the <a href="/docs/citadel/worm">WORM audit chain</a> at Gate 5, regardless of whether prior gates passed.
+        the <Link to="/docs/citadel/worm">WORM audit chain</Link> at Gate 5, regardless of whether prior gates passed.
       </p>
       <div className="callout-note">
         <strong>Note:</strong> MARSHAL was called <strong>ARBITER</strong> in early CITADEL
@@ -66,7 +67,7 @@ export default function MarshalPage() {
       </p>
       <p>
         MARSHAL is invoked by calling <code>POST /api/v1/marshal/evaluate</code> on port{' '}
-        <code>8099</code>. See the <a href="/docs/citadel-integration">CITADEL Integration</a> guide for how platforms register and connect.
+        <code>8099</code>. See the <Link to="/docs/citadel-integration">CITADEL Integration</Link> guide for how platforms register and connect.
         Every platform connector must include an{' '}
         <code>X-Citadel-Signature</code> HMAC-SHA256 header computed over{' '}
         <code>key_id + timestamp + body_hash</code>. Requests outside a ±300-second timestamp
@@ -108,13 +109,13 @@ export default function MarshalPage() {
             <tr>
               <td>3</td>
               <td>NDS</td>
-              <td><a href="/docs/citadel/sod">Separation of Duties</a> — <code>operator_user_id ≠ verifier_user_id</code> and the two identities must belong to different role groups</td>
+              <td><Link to="/docs/citadel/sod">Separation of Duties</Link> — <code>operator_user_id ≠ verifier_user_id</code> and the two identities must belong to different role groups</td>
               <td><code>HARD_STOP</code></td>
             </tr>
             <tr>
               <td>4</td>
               <td>AUGUR</td>
-              <td><a href="/docs/citadel/augur-vigil">Behavioural heuristics</a> — flags off-hours actions, high-frequency submissions, and <code>DATA_EXPORT</code> without a linked incident</td>
+              <td><Link to="/docs/citadel/augur-vigil">Behavioural heuristics</Link> — flags off-hours actions, high-frequency submissions, and <code>DATA_EXPORT</code> without a linked incident</td>
               <td><code>WARN</code> / <code>HARD_STOP</code></td>
             </tr>
             <tr>
@@ -406,7 +407,7 @@ if opSession.roleGroup == vfSession.roleGroup && opSession.roleGroup != "unknown
 
       <h2 id="worked-example">Worked example</h2>
       <p>
-        The following Kerkese represents <a href="/docs/platforms/irflow">IRFlow</a> asking CITADEL to authorise a containment action
+        The following Kerkese represents <Link to="/docs/platforms/irflow">IRFlow</Link> asking CITADEL to authorise a containment action
         on incident <code>inc_2026_0123</code>. Operator user 42 (role: <code>operator</code>)
         initiates; verifier user 77 (a different role group) approves.
       </p>
@@ -498,7 +499,7 @@ if opSession.roleGroup == vfSession.roleGroup && opSession.roleGroup != "unknown
         <code>reasons</code> is empty when <code>outcome == EXECUTE</code>. Otherwise it contains
         the concatenated reason strings from all failing gates in gate order. The{' '}
         <code>worm_entry_id</code> is present whenever Gate 5 succeeded — callers can quote this
-        ID when later retrieving the WORM entry for <a href="/docs/citadel/evidence">forensics</a>. The entry is present even when
+        ID when later retrieving the WORM entry for <Link to="/docs/citadel/evidence">forensics</Link>. The entry is present even when
         gates 1–4 rejected the call, because Gate 5 always runs.
       </p>
       <p>

@@ -1,6 +1,7 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -42,7 +43,7 @@ export default function SodPage() {
       <h1>Separation of Duties</h1>
       <p>
         <strong>NDS</strong> (Ndarja e Detyrimeve të Sigurisë — Separation of Security Duties)
-        is <a href="/docs/citadel/marshal">MARSHAL</a>'s Gate 3. It ensures that no single operator can unilaterally authorise a
+        is <Link to="/docs/citadel/marshal">MARSHAL</Link>'s Gate 3. It ensures that no single operator can unilaterally authorise a
         governance-relevant action: every such action requires an <strong>initiating</strong>{' '}
         identity (the operator) and a <strong>verifying</strong> identity (the verifier) that
         are cryptographically distinct at both the user and role-group levels.
@@ -52,7 +53,7 @@ export default function SodPage() {
         enforced at the cryptographic protocol level: a stolen operator credential cannot
         self-approve a privileged action because it cannot also control the verifier account.
         Violating the SoD constraint causes an immediate <code>HARD_STOP</code> verdict and
-        an automatic P1 incident in <a href="/docs/platforms/irflow">IRFlow</a> — not a permission-denied error that an operator
+        an automatic P1 incident in <Link to="/docs/platforms/irflow">IRFlow</Link> — not a permission-denied error that an operator
         might attempt to route around.
       </p>
 
@@ -341,7 +342,7 @@ if opSession.roleGroup == vfSession.roleGroup && opSession.roleGroup != "unknown
           a separate verifier credential in a different role group.
         </li>
         <li>
-          The constraint is auditable: every Gate 3 evaluation appears in the <a href="/docs/citadel/worm">WORM chain</a>,
+          The constraint is auditable: every Gate 3 evaluation appears in the <Link to="/docs/citadel/worm">WORM chain</Link>,
           and every <code>HARD_STOP</code> creates an immutable incident record.
         </li>
       </ul>

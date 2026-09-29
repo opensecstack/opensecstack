@@ -1,6 +1,7 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -49,7 +50,7 @@ export default function EvidencePage() {
       </Helmet>
       <h1>Evidence &amp; Auditor Walkthrough</h1>
       <p>
-        The <a href="/docs/citadel/worm">WORM chain</a> is evidence. Making it <em>admissible</em> evidence — for a regulator,
+        The <Link to="/docs/citadel/worm">WORM chain</Link> is evidence. Making it <em>admissible</em> evidence — for a regulator,
         a court, or an internal audit — requires a chain of custody that documents who had
         access to it, when, how integrity was verified at each handover, and what proof
         accompanies the data when it leaves CITADEL. This page explains the chain-of-custody
@@ -252,7 +253,7 @@ integrity:
       <h2 id="export-authorisation">Export authorisation</h2>
       <p>
         Exporting evidence is itself a governance-relevant action. It passes through the full
-        <a href="/docs/citadel/marshal"> MARSHAL</a> pipeline:
+        <Link to="/docs/citadel/marshal"> MARSHAL</Link> pipeline:
       </p>
       <ul>
         <li>
@@ -262,7 +263,7 @@ integrity:
           immediate <code>HARD_STOP</code>.
         </li>
         <li>
-          Gate 3 (<a href="/docs/citadel/sod">NDS</a>) enforces separation of duties — two distinct identities must sign off:
+          Gate 3 (<Link to="/docs/citadel/sod">NDS</Link>) enforces separation of duties — two distinct identities must sign off:
           the operator requesting the export and a verifier from a different role group.
         </li>
         <li>

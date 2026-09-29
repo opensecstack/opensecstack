@@ -1,6 +1,7 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -177,15 +178,15 @@ export default function CyberPathPage() {
       <p>Outbound integrations:</p>
       <ul>
         <li>
-          <a href="/docs/governance"><strong>CITADEL</strong></a> — receives <code>cyberpath.completion</code> events
+          <Link to="/docs/governance"><strong>CITADEL</strong></Link> — receives <code>cyberpath.completion</code> events
           asynchronously after every lesson completion.
         </li>
         <li>
-          <a href="/docs/platforms/nis2compass"><strong>NIS2 Compass</strong></a> — calls CyberPath synchronously to query coverage
+          <Link to="/docs/platforms/nis2compass"><strong>NIS2 Compass</strong></Link> — calls CyberPath synchronously to query coverage
           and fetch gap-driven track recommendations.
         </li>
         <li>
-          <a href="/docs/platforms/irflow"><strong>IRFlow</strong></a> — pushes incident signals inbound to CyberPath; CyberPath
+          <Link to="/docs/platforms/irflow"><strong>IRFlow</strong></Link> — pushes incident signals inbound to CyberPath; CyberPath
           maps incident type to a recommended training track.
         </li>
       </ul>
@@ -277,7 +278,7 @@ export default function CyberPathPage() {
 
       <h2 id="integration">Integration</h2>
       <p>
-        CyberPath authenticates users via <a href="/docs/identity"><strong>sinauth</strong></a> SSO using the OAuth 2.0{' '}
+        CyberPath authenticates users via <Link to="/docs/identity"><strong>sinauth</strong></Link> SSO using the OAuth 2.0{' '}
         <code>authorization_code + PKCE (S256)</code> flow. The API validates RS256-signed
         tokens against the sinauth JWKS endpoint at{' '}
         <code>https://auth.sin.to/.well-known/jwks.json</code>.

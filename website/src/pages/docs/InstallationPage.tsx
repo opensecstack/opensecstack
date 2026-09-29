@@ -1,6 +1,7 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'requirements', label: 'Requirements' },
@@ -36,7 +37,7 @@ export default function InstallationPage() {
       <h1>Installation</h1>
       <p>
         opensecstack can be installed in three ways: via Docker Compose (recommended for{' '}
-        <a href="/docs/local-dev">local development</a> and small deployments), via Kubernetes
+        <Link to="/docs/local-dev">local development</Link> and small deployments), via Kubernetes
         manifests or Helm (production), or built from source per platform.
       </p>
 
@@ -217,10 +218,10 @@ cd sinauth/web && npm ci && npm run dev    # :5173`}
 
       <h2 id="next-steps">Next steps</h2>
       <ul>
-        <li><a href="/docs/quickstart">Quick Start</a> — bring up the full stack in under ten minutes with Docker Compose</li>
-        <li><a href="/docs/architecture">Architecture overview</a> — understand how the platforms fit together</li>
-        <li><a href="/docs/deployment">Deployment</a> — production topology, env/secrets, and Kubernetes networking</li>
-        <li><a href="/docs/identity">Identity (sinauth)</a> — configure single sign-on for the ecosystem</li>
+        <li><Link to="/docs/quickstart">Quick Start</Link> — bring up the full stack in under ten minutes with Docker Compose</li>
+        <li><Link to="/docs/architecture">Architecture overview</Link> — understand how the platforms fit together</li>
+        <li><Link to="/docs/deployment">Deployment</Link> — production topology, env/secrets, and Kubernetes networking</li>
+        <li><Link to="/docs/identity">Identity (sinauth)</Link> — configure single sign-on for the ecosystem</li>
       </ul>
     </DocsLayout>
   )

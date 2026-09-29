@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -39,7 +40,7 @@ export default function Nis2Page() {
         landscape. This page maps how the 11 platforms satisfy the security measures mandated
         by <strong>NIS2 Directive 2022/2555</strong> (Articles 21 and 23) and explains the
         additional obligations introduced by the <strong>EU AI Act (Regulation 2024/1689)</strong>,
-        which intersect with <a href="/docs/platforms/vertguard">VertGuard</a> and the projected NIS3 trajectory.
+        which intersect with <Link to="/docs/platforms/vertguard">VertGuard</Link> and the projected NIS3 trajectory.
       </p>
 
       <h2 id="overview">Overview</h2>
@@ -53,8 +54,8 @@ export default function Nis2Page() {
       <p>
         No single platform covers every measure. The ecosystem is designed so each platform is
         the <em>primary</em> evidence source for one or two measures, with secondary contributions
-        across others. The combination of platforms — particularly the <a href="/docs/governance">CITADEL</a> WORM audit chain
-        and <a href="/docs/platforms/nis2compass">NIS2 Compass</a> as the assessment hub — means auditors can trace every control back to
+        across others. The combination of platforms — particularly the <Link to="/docs/governance">CITADEL</Link> WORM audit chain
+        and <Link to="/docs/platforms/nis2compass">NIS2 Compass</Link> as the assessment hub — means auditors can trace every control back to
         tamper-evident, independently verifiable records.
       </p>
 
@@ -151,7 +152,7 @@ export default function Nis2Page() {
           </thead>
           <tbody>
             <tr>
-              <td><strong><a href="/docs/platforms/nis2compass">NIS2 Compass</a></strong></td>
+              <td><strong><Link to="/docs/platforms/nis2compass">NIS2 Compass</Link></strong></td>
               <td>(a) (b) (c) — all measures (assessment hub)</td>
               <td>All</td>
               <td>
@@ -160,7 +161,7 @@ export default function Nis2Page() {
               </td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/platforms/irflow">IRFlow</a></strong></td>
+              <td><strong><Link to="/docs/platforms/irflow">IRFlow</Link></strong></td>
               <td>(b) Incident handling</td>
               <td>(a) (c) (d) (e) (f) (h) (i) (j)</td>
               <td>
@@ -169,7 +170,7 @@ export default function Nis2Page() {
               </td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/platforms/apiguard">APIGuard</a></strong></td>
+              <td><strong><Link to="/docs/platforms/apiguard">APIGuard</Link></strong></td>
               <td>(e) Vulnerability handling</td>
               <td>(a) (d) (h) (i) (j)</td>
               <td>
@@ -178,7 +179,7 @@ export default function Nis2Page() {
               </td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/platforms/threatflow">ThreatFlow</a></strong></td>
+              <td><strong><Link to="/docs/platforms/threatflow">ThreatFlow</Link></strong></td>
               <td>(b) (d) (e)</td>
               <td>(h)</td>
               <td>
@@ -187,7 +188,7 @@ export default function Nis2Page() {
               </td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/platforms/openscrub">OpenScrub</a></strong></td>
+              <td><strong><Link to="/docs/platforms/openscrub">OpenScrub</Link></strong></td>
               <td>(b) (c) Availability &amp; DDoS response</td>
               <td>(a) (e)</td>
               <td>
@@ -205,7 +206,7 @@ export default function Nis2Page() {
               </td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/platforms/opencsirt">OpenCSIRT</a></strong></td>
+              <td><strong><Link to="/docs/platforms/opencsirt">OpenCSIRT</Link></strong></td>
               <td>(b) CSIRT operations</td>
               <td>(d) (e)</td>
               <td>
@@ -214,7 +215,7 @@ export default function Nis2Page() {
               </td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/platforms/cyberpath">CyberPath</a></strong></td>
+              <td><strong><Link to="/docs/platforms/cyberpath">CyberPath</Link></strong></td>
               <td>(g) Cyber hygiene &amp; training</td>
               <td>(b)</td>
               <td>
@@ -223,7 +224,7 @@ export default function Nis2Page() {
               </td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/platforms/securelab">SecureLab</a></strong></td>
+              <td><strong><Link to="/docs/platforms/securelab">SecureLab</Link></strong></td>
               <td>(f) Effectiveness assessment</td>
               <td>(b) (e)</td>
               <td>
@@ -232,17 +233,17 @@ export default function Nis2Page() {
               </td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/governance">CITADEL</a></strong></td>
+              <td><strong><Link to="/docs/governance">CITADEL</Link></strong></td>
               <td>(h) Cryptography; (i) Access control</td>
               <td>All (governance layer)</td>
               <td>
-                <a href="/docs/citadel/marshal">MARSHAL</a> 5-gate policy engine; <a href="/docs/citadel/worm">WORM</a> audit chain with TripleHash integrity
-                (SHA-256 + SHA-512 + BLAKE3) and Ed25519 anchors; <a href="/docs/citadel/sod">SoD</a> enforcement across
+                <Link to="/docs/citadel/marshal">MARSHAL</Link> 5-gate policy engine; <Link to="/docs/citadel/worm">WORM</Link> audit chain with TripleHash integrity
+                (SHA-256 + SHA-512 + BLAKE3) and Ed25519 anchors; <Link to="/docs/citadel/sod">SoD</Link> enforcement across
                 all platforms
               </td>
             </tr>
             <tr>
-              <td><strong><a href="/docs/identity">sinauth</a></strong></td>
+              <td><strong><Link to="/docs/identity">sinauth</Link></strong></td>
               <td>(j) MFA &amp; authenticated access</td>
               <td>(i)</td>
               <td>

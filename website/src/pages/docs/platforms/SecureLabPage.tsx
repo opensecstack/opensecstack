@@ -1,6 +1,7 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -115,8 +116,8 @@ export default function SecureLabPage() {
             <tr>
               <td>Detection Validator</td>
               <td>
-                Polls <a href="/docs/platforms/openscrub">OpenScrub</a> (<code>/api/v1/alerts</code>), <a href="/docs/platforms/apiguard">APIGuard</a> (
-                <code>/api/v1/anomalies</code>), and <a href="/docs/platforms/threatflow">ThreatFlow</a> (
+                Polls <Link to="/docs/platforms/openscrub">OpenScrub</Link> (<code>/api/v1/alerts</code>), <Link to="/docs/platforms/apiguard">APIGuard</Link> (
+                <code>/api/v1/anomalies</code>), and <Link to="/docs/platforms/threatflow">ThreatFlow</Link> (
                 <code>/api/v1/ioc-matches</code>) read-only over HMAC-signed requests;
                 returns per-step verdicts within a configurable detection window
               </td>
@@ -132,7 +133,7 @@ export default function SecureLabPage() {
             <tr>
               <td>CITADEL Evidence Emitter</td>
               <td>
-                Async <code>securelab.run_completed</code> events to <a href="/docs/governance">CITADEL</a> <a href="/docs/citadel/worm">WORM</a>; dry-run
+                Async <code>securelab.run_completed</code> events to <Link to="/docs/governance">CITADEL</Link> <Link to="/docs/citadel/worm">WORM</Link>; dry-run
                 executions do not emit; circuit breaker marks runs <code>evidence_pending</code>{' '}
                 if emission fails
               </td>
@@ -140,7 +141,7 @@ export default function SecureLabPage() {
             <tr>
               <td>IRFlow Integration</td>
               <td>
-                Pushes execution results and ATT&amp;CK coverage gaps to <a href="/docs/platforms/irflow">IRFlow</a> via{' '}
+                Pushes execution results and ATT&amp;CK coverage gaps to <Link to="/docs/platforms/irflow">IRFlow</Link> via{' '}
                 <code>POST /api/v1/securelab/results</code> for incident-response correlation
               </td>
             </tr>
@@ -278,7 +279,7 @@ export default function SecureLabPage() {
 
       <h2 id="integration">Integration</h2>
       <p>
-        SecureLab authenticates dashboard users via <a href="/docs/identity"><strong>sinauth</strong></a> SSO using the
+        SecureLab authenticates dashboard users via <Link to="/docs/identity"><strong>sinauth</strong></Link> SSO using the
         OAuth 2.0 <code>authorization_code + PKCE (S256)</code> flow. The API validates
         RS256-signed tokens against the sinauth JWKS endpoint at{' '}
         <code>https://auth.sin.to/.well-known/jwks.json</code>.

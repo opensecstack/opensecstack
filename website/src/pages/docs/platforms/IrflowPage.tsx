@@ -1,6 +1,7 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -224,7 +225,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8083/api/v1/incidents`}
 
       <h3>sinauth (identity)</h3>
       <p>
-        IRFlow authenticates operators via <a href="/docs/identity"><strong>sinauth</strong></a> SSO — the SIN identity
+        IRFlow authenticates operators via <Link to="/docs/identity"><strong>sinauth</strong></Link> SSO — the SIN identity
         provider (OAuth 2.0 / OIDC, authorization code + PKCE). Access tokens are RS256-signed
         JWTs issued by <code>https://auth.sin.to</code> and validated against the sinauth JWKS
         endpoint at <code>https://auth.sin.to/.well-known/jwks.json</code>. See the{' '}
@@ -236,10 +237,10 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8083/api/v1/incidents`}
 
       <h3>CITADEL (governance)</h3>
       <p>
-        IRFlow integrates with <a href="/docs/governance">CITADEL</a> at two points. Every privileged action is evaluated by
-        CITADEL <a href="/docs/citadel/marshal">MARSHAL</a> via a dual-control Kerkese call; a <code>REFUSE</code> or{' '}
+        IRFlow integrates with <Link to="/docs/governance">CITADEL</Link> at two points. Every privileged action is evaluated by
+        CITADEL <Link to="/docs/citadel/marshal">MARSHAL</Link> via a dual-control Kerkese call; a <code>REFUSE</code> or{' '}
         <code>HARD_STOP</code> outcome returns HTTP 403 and the action is never persisted locally.
-        Incident creation is anchored in the CITADEL <a href="/docs/citadel/worm">WORM</a> audit chain. Set{' '}
+        Incident creation is anchored in the CITADEL <Link to="/docs/citadel/worm">WORM</Link> audit chain. Set{' '}
         <code>IRFLOW_CITADEL_API_URL</code> and <code>IRFLOW_CITADEL_KEY_SECRET</code> in
         production — omitting these leaves IRFlow in dev mode where governance is not enforced.
       </p>
@@ -247,14 +248,14 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8083/api/v1/incidents`}
       <h3>NIS2 Compass (compliance)</h3>
       <p>
         When an incident with severity P1, P2, or P3 is created, IRFlow fires an asynchronous
-        notification to <a href="/docs/platforms/nis2compass">NIS2 Compass</a> (<code>IRFLOW_NIS2_API_URL</code>) to update the Article
+        notification to <Link to="/docs/platforms/nis2compass">NIS2 Compass</Link> (<code>IRFLOW_NIS2_API_URL</code>) to update the Article
         21(2)(b) Incident Handling control. The notification has a 30-second per-attempt timeout;
         failures are logged and <code>nis2_notified_at</code> is only persisted on success.
       </p>
 
       <h3>APIGuard (API security)</h3>
       <p>
-        IRFlow accepts HMAC-signed webhook events from <a href="/docs/platforms/apiguard">APIGuard</a> at{' '}
+        IRFlow accepts HMAC-signed webhook events from <Link to="/docs/platforms/apiguard">APIGuard</Link> at{' '}
         <code>POST /api/v1/webhooks/apiguard</code>. Critical or high findings from APIGuard can
         automatically open new incidents or enrich existing ones. Configure the shared secret
         with <code>IRFLOW_WEBHOOK_APIGUARD_SECRET</code>.
@@ -262,7 +263,7 @@ curl -H "Authorization: Bearer $TOKEN" http://localhost:8083/api/v1/incidents`}
 
       <h3>ThreatFlow (threat intelligence)</h3>
       <p>
-        IRFlow accepts HMAC-signed events from <a href="/docs/platforms/threatflow">ThreatFlow</a> at{' '}
+        IRFlow accepts HMAC-signed events from <Link to="/docs/platforms/threatflow">ThreatFlow</Link> at{' '}
         <code>POST /api/v1/webhooks/threatflow</code>. ThreatFlow also receives incident artefacts
         from IRFlow for retroactive IOC matching, and pushes STIX 2.1 IOC bundles back for
         incident enrichment. Configure the shared secret with{' '}

@@ -1,6 +1,7 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -217,7 +218,7 @@ curl http://localhost:8090/health
 
       <h3>sinauth (identity)</h3>
       <p>
-        NIS2 Compass authenticates users via <a href="/docs/identity"><strong>sinauth</strong></a> SSO using OpenID Connect
+        NIS2 Compass authenticates users via <Link to="/docs/identity"><strong>sinauth</strong></Link> SSO using OpenID Connect
         (authorization code + PKCE). RS256-signed tokens are validated against the sinauth JWKS
         endpoint via <code>app/sinauth.py</code>. The web dashboard uses <code>sinauth.ts</code>{' '}
         for popup-based login and handles the OIDC callback. See the{' '}
@@ -229,16 +230,16 @@ curl http://localhost:8090/health
 
       <h3>CITADEL (governance)</h3>
       <p>
-        Every write operation appends a row to the <a href="/docs/citadel/worm">WORM</a> <code>audit_log</code> table. The chain
+        Every write operation appends a row to the <Link to="/docs/citadel/worm">WORM</Link> <code>audit_log</code> table. The chain
         hash construction uses SHA-256 over the row's fields plus the preceding row's hash,
         producing a tamper-evident ledger. Immutability is enforced at both the application layer
         and the database layer via a PostgreSQL trigger. This satisfies the evidentiary requirements
-        of <a href="/docs/nis2">NIS2</a> Article 21 and Article 23 audits.
+        of <Link to="/docs/nis2">NIS2</Link> Article 21 and Article 23 audits.
       </p>
 
       <h3>IRFlow (incident response)</h3>
       <p>
-        <a href="/docs/platforms/irflow">IRFlow</a> notifies NIS2 Compass asynchronously via{' '}
+        <Link to="/docs/platforms/irflow">IRFlow</Link> notifies NIS2 Compass asynchronously via{' '}
         <code>IRFLOW_NIS2_API_URL</code> when a regulatory-significant incident (P1, P2, or P3)
         is created. The notification updates the Article 21(2)(b) Incident Handling control with
         incident evidence. The async design means a slow NIS2 Compass API can never block the
@@ -247,7 +248,7 @@ curl http://localhost:8090/health
 
       <h3>APIGuard (API security)</h3>
       <p>
-        <a href="/docs/platforms/apiguard">APIGuard</a> scan findings are mapped to NIS2 Article 21 measures and can be submitted as
+        <Link to="/docs/platforms/apiguard">APIGuard</Link> scan findings are mapped to NIS2 Article 21 measures and can be submitted as
         control evidence. See{' '}
         <a href="https://github.com/opensecstack/opensecstack/tree/main/apiguard/docs/nis2-mapping.md" target="_blank" rel="noopener noreferrer">
           apiguard/docs/nis2-mapping.md
@@ -257,7 +258,7 @@ curl http://localhost:8090/health
 
       <h3>ThreatFlow (threat intelligence)</h3>
       <p>
-        <a href="/docs/platforms/threatflow">ThreatFlow</a> forwards supply chain IOCs to NIS2 Compass as evidence artefacts for the
+        <Link to="/docs/platforms/threatflow">ThreatFlow</Link> forwards supply chain IOCs to NIS2 Compass as evidence artefacts for the
         Article 21(2)(d) supply chain security control, in STIX 2.1 format.
       </p>
 

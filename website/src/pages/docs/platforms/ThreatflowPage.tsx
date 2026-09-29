@@ -1,6 +1,7 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -241,7 +242,7 @@ curl -X POST http://localhost:8091/api/v1/iocs \\
 
       <h3>sinauth (identity)</h3>
       <p>
-        ThreatFlow authenticates operators via <a href="/docs/identity"><strong>sinauth</strong></a> SSO (OAuth 2.0 / OIDC,
+        ThreatFlow authenticates operators via <Link to="/docs/identity"><strong>sinauth</strong></Link> SSO (OAuth 2.0 / OIDC,
         authorization code + PKCE). Access tokens are RS256-signed JWTs issued by{' '}
         <code>https://auth.sin.to</code> and validated against the sinauth JWKS endpoint at{' '}
         <code>https://auth.sin.to/.well-known/jwks.json</code>. See the{' '}
@@ -254,8 +255,8 @@ curl -X POST http://localhost:8091/api/v1/iocs \\
       <h3>CITADEL (governance)</h3>
       <p>
         ThreatFlow evaluates every mutation (<code>IOC_INGEST</code>,{' '}
-        <code>STIX_BUNDLE_IMPORT</code>, and others) through <a href="/docs/governance">CITADEL</a> <a href="/docs/citadel/marshal">MARSHAL</a> before persisting
-        anything. <a href="/docs/citadel/worm">WORM</a> events are emitted via a bounded async queue — the queue drains gracefully
+        <code>STIX_BUNDLE_IMPORT</code>, and others) through <Link to="/docs/governance">CITADEL</Link> <Link to="/docs/citadel/marshal">MARSHAL</Link> before persisting
+        anything. <Link to="/docs/citadel/worm">WORM</Link> events are emitted via a bounded async queue — the queue drains gracefully
         on shutdown. Configure with <code>THREATFLOW_CITADEL_API_URL</code>,{' '}
         <code>THREATFLOW_CITADEL_KEY_ID</code>, and <code>THREATFLOW_CITADEL_KEY_SECRET</code>.
         When <code>THREATFLOW_CITADEL_API_URL</code> is empty, CITADEL governance is disabled
@@ -264,7 +265,7 @@ curl -X POST http://localhost:8091/api/v1/iocs \\
 
       <h3>IRFlow (incident response)</h3>
       <p>
-        ThreatFlow pushes STIX 2.1 IOC bundles to <a href="/docs/platforms/irflow">IRFlow</a> for enrichment of open incidents, and
+        ThreatFlow pushes STIX 2.1 IOC bundles to <Link to="/docs/platforms/irflow">IRFlow</Link> for enrichment of open incidents, and
         receives incident artefacts from IRFlow for retroactive IOC matching. High-confidence
         correlation matches trigger HMAC-signed outbound webhook notifications to IRFlow. IRFlow
         also forwards sighting events to <code>POST /api/v1/sightings</code> when it observes
@@ -273,14 +274,14 @@ curl -X POST http://localhost:8091/api/v1/iocs \\
 
       <h3>APIGuard (API security)</h3>
       <p>
-        ThreatFlow receives scan target URLs and discovered API endpoints from <a href="/docs/platforms/apiguard">APIGuard</a> for IOC
+        ThreatFlow receives scan target URLs and discovered API endpoints from <Link to="/docs/platforms/apiguard">APIGuard</Link> for IOC
         extraction. It returns enrichment data — known-malicious URLs and IP indicators — as STIX
         2.1 bundles for the APIGuard Unsafe Consumption of APIs (A10) and SSRF (A7) modules.
       </p>
 
       <h3>NIS2 Compass (compliance)</h3>
       <p>
-        ThreatFlow forwards supply chain IOCs to <a href="/docs/platforms/nis2compass">NIS2 Compass</a> as STIX 2.1 artefacts for the
+        ThreatFlow forwards supply chain IOCs to <Link to="/docs/platforms/nis2compass">NIS2 Compass</Link> as STIX 2.1 artefacts for the
         Article 21(2)(d) supply chain security control. This provides verifiable, machine-readable
         evidence of threat intelligence coverage.
       </p>

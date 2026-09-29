@@ -1,6 +1,7 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'installation', label: 'Installation' },
@@ -37,12 +38,12 @@ export default function SdkRustPage() {
       </Helmet>
       <h1>Rust SDK</h1>
       <p>
-        The Rust client provides async, type-safe clients for <strong><a href="/docs/platforms/apiguard">APIGuard</a></strong> and{' '}
-        <strong><a href="/docs/platforms/nis2compass">NIS2 Compass</a></strong> built on <strong>tokio</strong> +{' '}
+        The Rust client provides async, type-safe clients for <strong><Link to="/docs/platforms/apiguard">APIGuard</Link></strong> and{' '}
+        <strong><Link to="/docs/platforms/nis2compass">NIS2 Compass</Link></strong> built on <strong>tokio</strong> +{' '}
         <strong>reqwest</strong>, with <code>serde</code> for JSON,{' '}
         <code>thiserror</code> for structured errors, and a builder pattern for client
         configuration. It requires <strong>Rust 1.75+</strong> (stable).
-        See <a href="/docs/contracts">SDK &amp; Contracts</a> for the full integration contract reference.
+        See <Link to="/docs/contracts">SDK &amp; Contracts</Link> for the full integration contract reference.
       </p>
 
       <h2 id="installation">Installation</h2>
@@ -154,7 +155,7 @@ let scan = client.create_scan_full(CreateScanOptions {
 
       <h2 id="nis2-compass-client">NIS2 Compass client</h2>
       <p>
-        Manage organisations and <a href="/docs/nis2">NIS2</a> assessments. Controls follow NIS2 Article 21(2) and
+        Manage organisations and <Link to="/docs/nis2">NIS2</Link> assessments. Controls follow NIS2 Article 21(2) and
         are identified by letters <code>'a'</code> through <code>'j'</code>. Audit log
         entries include a tamper-evident hash chain (<code>prev_hash</code> /{' '}
         <code>chain_hash</code>).
@@ -259,9 +260,9 @@ match result {
 
       <h2 id="full-documentation">Full documentation</h2>
       <p>
-        Other SDK language clients: <a href="/docs/sdk/go">Go SDK</a>,{' '}
-        <a href="/docs/sdk/python">Python SDK</a>,{' '}
-        <a href="/docs/sdk/typescript">TypeScript SDK</a>.
+        Other SDK language clients: <Link to="/docs/sdk/go">Go SDK</Link>,{' '}
+        <Link to="/docs/sdk/python">Python SDK</Link>,{' '}
+        <Link to="/docs/sdk/typescript">TypeScript SDK</Link>.
       </p>
       <p>
         The complete Rust client reference — including all type definitions, builder

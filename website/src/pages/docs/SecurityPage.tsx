@@ -1,5 +1,6 @@
 import DocsLayout from './DocsLayout'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'deployment-tiers', label: 'Deployment tiers' },
@@ -41,7 +42,7 @@ export default function SecurityPage() {
         are defending against. This page defines the three deployment tiers and the
         cross-platform security guarantees that every opensecstack deployment provides. For the
         release cadence and version compatibility, see{' '}
-        <a href="/docs/releases">Versioning &amp; Releases</a>.
+        <Link to="/docs/releases">Versioning &amp; Releases</Link>.
       </p>
       <p>
         For the detailed per-tier control matrix and known gaps, see{' '}
@@ -83,7 +84,7 @@ export default function SecurityPage() {
             </tr>
             <tr>
               <td><strong>High assurance</strong></td>
-              <td>Banking Tier 1, national CSIRTs, <a href="/docs/nis2">NIS2</a> essential entities, defence contractors</td>
+              <td>Banking Tier 1, national CSIRTs, <Link to="/docs/nis2">NIS2</Link> essential entities, defence contractors</td>
               <td><strong>Not yet</strong> — wait for v1.1 or add compensating controls</td>
             </tr>
           </tbody>
@@ -123,7 +124,7 @@ export default function SecurityPage() {
             </tr>
             <tr>
               <td>Audit integrity</td>
-              <td><a href="/docs/governance">CITADEL</a> <a href="/docs/citadel/worm">WORM chain</a> — TripleHash (SHA-256 + SHA-512 + BLAKE3), Ed25519 anchors every 100 entries</td>
+              <td><Link to="/docs/governance">CITADEL</Link> <Link to="/docs/citadel/worm">WORM chain</Link> — TripleHash (SHA-256 + SHA-512 + BLAKE3), Ed25519 anchors every 100 entries</td>
             </tr>
             <tr>
               <td>Dual-control enforcement</td>
@@ -199,7 +200,7 @@ export default function SecurityPage() {
           <tbody>
             <tr>
               <td>Every privileged action is cryptographically evaluated</td>
-              <td>CITADEL <a href="/docs/citadel/marshal">MARSHAL</a> 5-gate engine</td>
+              <td>CITADEL <Link to="/docs/citadel/marshal">MARSHAL</Link> 5-gate engine</td>
             </tr>
             <tr>
               <td>Every decision is WORM-logged with TripleHash integrity</td>
@@ -219,7 +220,7 @@ export default function SecurityPage() {
             </tr>
             <tr>
               <td>Single sign-on with central MFA across all platforms</td>
-              <td><a href="/docs/identity">sinauth</a> OIDC (RS256 + JWKS, PKCE S256, TOTP)</td>
+              <td><Link to="/docs/identity">sinauth</Link> OIDC (RS256 + JWKS, PKCE S256, TOTP)</td>
             </tr>
             <tr>
               <td>All API clients JWT-authenticated with RBAC</td>

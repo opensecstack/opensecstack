@@ -1,6 +1,7 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -51,12 +52,12 @@ export default function WebhooksPage() {
       </p>
       <ul>
         <li>
-          <strong><a href="/docs/platforms/irflow">IRFlow</a></strong> — receives events from APIGuard,{' '}
-          <a href="/docs/citadel-integration">CITADEL</a>, and ThreatFlow to
+          <strong><Link to="/docs/platforms/irflow">IRFlow</Link></strong> — receives events from APIGuard,{' '}
+          <Link to="/docs/citadel-integration">CITADEL</Link>, and ThreatFlow to
           create or enrich incidents automatically.
         </li>
         <li>
-          <strong><a href="/docs/platforms/threatflow">ThreatFlow</a></strong> — receives events from APIGuard, CITADEL, and generic
+          <strong><Link to="/docs/platforms/threatflow">ThreatFlow</Link></strong> — receives events from APIGuard, CITADEL, and generic
           external sources; pushes outbound events to IRFlow, NIS2Compass, and OpenCSIRT.
         </li>
       </ul>
@@ -287,7 +288,7 @@ Content-Type: application/json
       />
 
       <p>
-        The <a href="/docs/contracts">SDK</a> ships pre-built sender clients that handle signing automatically — prefer those
+        The <Link to="/docs/contracts">SDK</Link> ships pre-built sender clients that handle signing automatically — prefer those
         over rolling your own implementation.
       </p>
 

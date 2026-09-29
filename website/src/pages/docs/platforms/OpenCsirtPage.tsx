@@ -1,6 +1,7 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -40,7 +41,7 @@ export default function OpenCsirtPage() {
         opensecstack ecosystem. It gives a national or sector CSIRT a single working surface
         for constituency tracking, incident coordination, CSAF 2.0 advisory authoring, and
         federated peer trust — all with every privileged action attested by{' '}
-        <a href="/docs/governance">CITADEL</a>.
+        <Link to="/docs/governance">CITADEL</Link>.
       </p>
       <p>
         Version <strong>v1.0.0</strong> (shipped 2026-05-10) is feature complete across all
@@ -110,7 +111,7 @@ export default function OpenCsirtPage() {
         </li>
         <li>
           <strong>sinauth SSO</strong> — dashboard login uses OAuth 2.0 / OIDC (authorization
-          code + PKCE S256) delegated to <a href="/docs/identity">sinauth</a>; the API validates RS256 tokens against the
+          code + PKCE S256) delegated to <Link to="/docs/identity">sinauth</Link>; the API validates RS256 tokens against the
           sinauth JWKS endpoint.
         </li>
       </ul>
@@ -259,22 +260,22 @@ export default function OpenCsirtPage() {
           </thead>
           <tbody>
             <tr>
-              <td><a href="/docs/platforms/threatflow"><strong>ThreatFlow</strong></a></td>
+              <td><Link to="/docs/platforms/threatflow"><strong>ThreatFlow</strong></Link></td>
               <td>Pull (60 s default)</td>
               <td>IOC bundles attached to incidents; CSAF advisories pushed on publish</td>
             </tr>
             <tr>
-              <td><a href="/docs/platforms/irflow"><strong>IRFlow</strong></a></td>
+              <td><Link to="/docs/platforms/irflow"><strong>IRFlow</strong></Link></td>
               <td>Inbound webhook</td>
               <td>HMAC-SHA256 verified — IRFlow incidents become OpenCSIRT incidents</td>
             </tr>
             <tr>
-              <td><a href="/docs/platforms/nis2compass"><strong>NIS2 Compass</strong></a></td>
+              <td><Link to="/docs/platforms/nis2compass"><strong>NIS2 Compass</strong></Link></td>
               <td>Push on publish</td>
               <td>Article 23 notification when a NIS2-scoped advisory is published</td>
             </tr>
             <tr>
-              <td><a href="/docs/platforms/vertguard"><strong>VertGuard</strong></a></td>
+              <td><Link to="/docs/platforms/vertguard"><strong>VertGuard</strong></Link></td>
               <td>Subscriber</td>
               <td>CVE advisories pulled from VertGuard, embedded into outbound CSAF</td>
             </tr>

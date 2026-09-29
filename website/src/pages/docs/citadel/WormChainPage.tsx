@@ -1,6 +1,7 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -43,7 +44,7 @@ export default function WormChainPage() {
       </Helmet>
       <h1>WORM Chain &amp; TripleHash</h1>
       <p>
-        Every <a href="/docs/citadel/marshal">MARSHAL</a> decision and every cross-platform governance event is recorded in
+        Every <Link to="/docs/citadel/marshal">MARSHAL</Link> decision and every cross-platform governance event is recorded in
         CITADEL's <strong>WORM</strong> (Write-Once, Read-Many) audit chain — an append-only
         PostgreSQL table where no entry is ever mutable. Integrity is provable by recomputing
         hashes from the raw payload bytes: each entry carries a 128-byte{' '}
@@ -162,7 +163,7 @@ export default function WormChainPage() {
         = f0c8e9...  (64 hex chars)`}
       />
       <p>
-        <a href="/docs/citadel/evidence">Auditors</a> can independently compute this value. Changing the genesis constant would
+        <Link to="/docs/citadel/evidence">Auditors</Link> can independently compute this value. Changing the genesis constant would
         change every downstream hash in the chain, so the constant is implicitly covered by
         any chain verification pass.
       </p>

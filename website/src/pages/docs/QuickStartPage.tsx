@@ -1,6 +1,7 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'prerequisites', label: 'Prerequisites' },
@@ -99,12 +100,12 @@ docker compose -f deploy/docker-compose.yml ps`}
             </tr>
           </thead>
           <tbody>
-            <tr><td><a href="/docs/platforms/apiguard">APIGuard</a> API</td><td><code>http://localhost:8080</code></td><td>API security scanner</td></tr>
+            <tr><td><Link to="/docs/platforms/apiguard">APIGuard</Link> API</td><td><code>http://localhost:8080</code></td><td>API security scanner</td></tr>
             <tr><td>APIGuard UI</td><td><code>http://localhost:3000</code></td><td>Scanner dashboard</td></tr>
-            <tr><td><a href="/docs/platforms/nis2compass">NIS2 Compass</a> API</td><td><code>http://localhost:8090</code></td><td>NIS2 compliance engine</td></tr>
+            <tr><td><Link to="/docs/platforms/nis2compass">NIS2 Compass</Link> API</td><td><code>http://localhost:8090</code></td><td>NIS2 compliance engine</td></tr>
             <tr><td>NIS2 Compass UI</td><td><code>http://localhost:3001</code></td><td>Compliance dashboard</td></tr>
-            <tr><td><a href="/docs/platforms/threatflow">ThreatFlow</a> API</td><td><code>http://localhost:8091</code></td><td>Threat intelligence (STIX 2.1)</td></tr>
-            <tr><td><a href="/docs/platforms/community">SIN Community</a> API</td><td><code>http://localhost:8089</code></td><td>Developer knowledge hub</td></tr>
+            <tr><td><Link to="/docs/platforms/threatflow">ThreatFlow</Link> API</td><td><code>http://localhost:8091</code></td><td>Threat intelligence (STIX 2.1)</td></tr>
+            <tr><td><Link to="/docs/platforms/community">SIN Community</Link> API</td><td><code>http://localhost:8089</code></td><td>Developer knowledge hub</td></tr>
             <tr><td>CITADEL API</td><td><code>http://localhost:8099</code></td><td>Governance engine (internal)</td></tr>
             <tr><td>sinauth API</td><td><code>http://localhost:8100</code></td><td>OAuth 2.0 / OIDC identity provider</td></tr>
             <tr><td>sinauth UI</td><td><code>http://localhost:5173</code></td><td>Login portal</td></tr>
@@ -175,11 +176,11 @@ docker compose up -d
         Now that the stack is running, explore further:
       </p>
       <ul>
-        <li><a href="/docs/installation">Installation</a> — requirements, build-from-source, and Kubernetes setup</li>
-        <li><a href="/docs/architecture">Architecture overview</a> — how the platforms fit together</li>
-        <li><a href="/docs/deployment">Deployment</a> — Docker Compose vs Kubernetes, env/secrets, production topology</li>
-        <li><a href="/docs/identity">Identity (sinauth)</a> — single sign-on and OIDC configuration</li>
-        <li><a href="/docs/governance">Governance (CITADEL)</a> — MARSHAL engine and WORM audit chain</li>
+        <li><Link to="/docs/installation">Installation</Link> — requirements, build-from-source, and Kubernetes setup</li>
+        <li><Link to="/docs/architecture">Architecture overview</Link> — how the platforms fit together</li>
+        <li><Link to="/docs/deployment">Deployment</Link> — Docker Compose vs Kubernetes, env/secrets, production topology</li>
+        <li><Link to="/docs/identity">Identity (sinauth)</Link> — single sign-on and OIDC configuration</li>
+        <li><Link to="/docs/governance">Governance (CITADEL)</Link> — MARSHAL engine and WORM audit chain</li>
       </ul>
     </DocsLayout>
   )

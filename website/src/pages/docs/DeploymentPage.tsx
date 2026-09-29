@@ -1,6 +1,7 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'deployment-options', label: 'Deployment options' },
@@ -40,7 +41,7 @@ export default function DeploymentPage() {
         opensecstack supports two primary deployment topologies: a single-host Docker Compose stack
         (Tier 1) for standard deployments, and a multi-host Kubernetes deployment with optional Helm
         chart (Tier 2) for elevated or production environments. For environment requirements and
-        toolchain setup, see <a href="/docs/installation">Installation</a>.
+        toolchain setup, see <Link to="/docs/installation">Installation</Link>.
       </p>
 
       <h2 id="deployment-options">Deployment options</h2>
@@ -171,16 +172,16 @@ helm upgrade opensecstack deploy/helm/opensecstack/ \\
             </tr>
           </thead>
           <tbody>
-            <tr><td><a href="/docs/platforms/apiguard">APIGuard</a></td><td>8080</td><td>3000</td><td>Public-facing scanning engine</td></tr>
-            <tr><td><a href="/docs/platforms/nis2compass">NIS2 Compass</a></td><td>8090</td><td>3001</td><td>Python + Flask</td></tr>
-            <tr><td><a href="/docs/platforms/threatflow">ThreatFlow</a></td><td>8091</td><td>—</td><td>Threat intelligence (STIX 2.1)</td></tr>
-            <tr><td><a href="/docs/platforms/irflow">IRFlow</a></td><td>8083</td><td>—</td><td>Incident response orchestrator</td></tr>
-            <tr><td><a href="/docs/platforms/community">SIN Community</a></td><td>8089</td><td>—</td><td>Developer knowledge hub; Meilisearch on :7700 (internal)</td></tr>
-            <tr><td><a href="/docs/governance">CITADEL</a></td><td>8099</td><td>—</td><td>Internal-only; governance engine</td></tr>
+            <tr><td><Link to="/docs/platforms/apiguard">APIGuard</Link></td><td>8080</td><td>3000</td><td>Public-facing scanning engine</td></tr>
+            <tr><td><Link to="/docs/platforms/nis2compass">NIS2 Compass</Link></td><td>8090</td><td>3001</td><td>Python + Flask</td></tr>
+            <tr><td><Link to="/docs/platforms/threatflow">ThreatFlow</Link></td><td>8091</td><td>—</td><td>Threat intelligence (STIX 2.1)</td></tr>
+            <tr><td><Link to="/docs/platforms/irflow">IRFlow</Link></td><td>8083</td><td>—</td><td>Incident response orchestrator</td></tr>
+            <tr><td><Link to="/docs/platforms/community">SIN Community</Link></td><td>8089</td><td>—</td><td>Developer knowledge hub; Meilisearch on :7700 (internal)</td></tr>
+            <tr><td><Link to="/docs/governance">CITADEL</Link></td><td>8099</td><td>—</td><td>Internal-only; governance engine</td></tr>
             <tr><td>sinauth</td><td>8100</td><td>5173</td><td>OAuth 2.0 / OIDC identity provider</td></tr>
-            <tr><td><a href="/docs/platforms/vertguard">VertGuard</a></td><td>8091</td><td>3009</td><td>AI-attack defence; ML gRPC side-car on :50051 (internal)</td></tr>
-            <tr><td><a href="/docs/platforms/opencsirt">OpenCSIRT</a></td><td>8088</td><td>3088</td><td>Python advisory sub-system on :8089 (internal)</td></tr>
-            <tr><td><a href="/docs/platforms/openscrub">OpenScrub</a></td><td>8087</td><td>3087</td><td>XDP/eBPF DDoS mitigation; hostNetwork on edge nodes</td></tr>
+            <tr><td><Link to="/docs/platforms/vertguard">VertGuard</Link></td><td>8091</td><td>3009</td><td>AI-attack defence; ML gRPC side-car on :50051 (internal)</td></tr>
+            <tr><td><Link to="/docs/platforms/opencsirt">OpenCSIRT</Link></td><td>8088</td><td>3088</td><td>Python advisory sub-system on :8089 (internal)</td></tr>
+            <tr><td><Link to="/docs/platforms/openscrub">OpenScrub</Link></td><td>8087</td><td>3087</td><td>XDP/eBPF DDoS mitigation; hostNetwork on edge nodes</td></tr>
             <tr><td>PostgreSQL</td><td>5432</td><td>—</td><td>One DB instance per platform for isolation</td></tr>
             <tr><td>Redis</td><td>6379</td><td>—</td><td>Queue and cache (internal)</td></tr>
           </tbody>
@@ -231,7 +232,7 @@ SINAUTH_SITE_URL=https://auth.example.com`}
         <strong>Warning:</strong> Never commit <code>deploy/.env</code> to source control. For
         production, replace env var injection with a secret manager (HashiCorp Vault, AWS Secrets
         Manager, or GCP Secret Manager) and rotate HMAC secrets quarterly and the CITADEL anchor
-        key yearly. See <a href="/docs/security">Security</a> for the full deployment-tier
+        key yearly. See <Link to="/docs/security">Security</Link> for the full deployment-tier
         control matrix.
       </div>
 

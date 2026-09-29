@@ -1,6 +1,7 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -44,20 +45,20 @@ export default function CitadelIntegrationPage() {
       </p>
       <ul>
         <li>
-          <strong><a href="/docs/citadel/marshal">MARSHAL</a></strong> — the deterministic 5-gate decision engine. Before any
+          <strong><Link to="/docs/citadel/marshal">MARSHAL</Link></strong> — the deterministic 5-gate decision engine. Before any
           high-impact operation executes, the platform submits a <em>Kerkese</em> (governed action
           request) and waits for one of three verdicts: <code>EXECUTE</code>,{' '}
           <code>REFUSE</code>, or <code>HARD_STOP</code>.
         </li>
         <li>
-          <strong><a href="/docs/citadel/worm">WORM chain</a></strong> — the append-only, immutable audit ledger. Every
+          <strong><Link to="/docs/citadel/worm">WORM chain</Link></strong> — the append-only, immutable audit ledger. Every
           significant state change is emitted as an evidence packet, triple-hashed (BLAKE3 +
           SHA-256 + SHA-512), Ed25519-anchored, and permanently recorded.
         </li>
       </ul>
       <p>
         For the governance engine internals (gate logic, SoD enforcement, AUGUR, VIGIL) see{' '}
-        <a href="/docs/governance">Governance (CITADEL)</a>.
+        <Link to="/docs/governance">Governance (CITADEL)</Link>.
       </p>
 
       <h2 id="overview">Overview</h2>
@@ -93,7 +94,7 @@ export default function CitadelIntegrationPage() {
 Content-Type: application/json
 Authorization: Bearer <jwt>      # or HMAC headers for connector auth`}
       />
-      <p>Example Kerkese payload (<a href="/docs/platforms/threatflow">ThreatFlow</a> bulk IOC ingestion):</p>
+      <p>Example Kerkese payload (<Link to="/docs/platforms/threatflow">ThreatFlow</Link> bulk IOC ingestion):</p>
       <CodeBlock
         language="typescript"
         code={`{
@@ -300,7 +301,7 @@ result = connector.emit(
         All platforms authenticate to CITADEL as connectors using HMAC-SHA256 request signing.
         The exact header names vary slightly per platform (each prefixes with its own service
         name), but the signing scheme is uniform — the same scheme used for{' '}
-        <a href="/docs/webhooks">Webhooks &amp; Events</a> between platforms:
+        <Link to="/docs/webhooks">Webhooks &amp; Events</Link> between platforms:
       </p>
       <CodeBlock
         language="bash"
@@ -441,7 +442,7 @@ export CITADEL_DRY_RUN=true`}
               </td>
             </tr>
             <tr>
-              <td><a href="/docs/platforms/openscrub">OpenScrub</a></td>
+              <td><Link to="/docs/platforms/openscrub">OpenScrub</Link></td>
               <td>—</td>
               <td>
                 <code>openscrub.mitigation</code> (per drop window),{' '}
@@ -449,7 +450,7 @@ export CITADEL_DRY_RUN=true`}
               </td>
             </tr>
             <tr>
-              <td><a href="/docs/platforms/opencsirt">OpenCSIRT</a></td>
+              <td><Link to="/docs/platforms/opencsirt">OpenCSIRT</Link></td>
               <td>—</td>
               <td>
                 <code>opencsirt.incident_opened</code>,{' '}
@@ -459,17 +460,17 @@ export CITADEL_DRY_RUN=true`}
               </td>
             </tr>
             <tr>
-              <td><a href="/docs/platforms/apiguard">APIGuard</a></td>
+              <td><Link to="/docs/platforms/apiguard">APIGuard</Link></td>
               <td>Scan requested (Gate 1 authority + Gate 2 scope)</td>
               <td>Scan completed + findings linked to <code>citadel.evidence</code></td>
             </tr>
             <tr>
-              <td><a href="/docs/platforms/irflow">IRFlow</a></td>
+              <td><Link to="/docs/platforms/irflow">IRFlow</Link></td>
               <td>—</td>
               <td>Incident created → <code>citadel.incident</code> auto-created</td>
             </tr>
             <tr>
-              <td><a href="/docs/platforms/nis2compass">NIS2 Compass</a></td>
+              <td><Link to="/docs/platforms/nis2compass">NIS2 Compass</Link></td>
               <td>—</td>
               <td>Assessment evidence → <code>citadel.evidence</code></td>
             </tr>

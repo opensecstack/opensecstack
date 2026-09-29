@@ -1,6 +1,7 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'the-sdk', label: 'The SDK' },
@@ -59,22 +60,22 @@ export default function ContractsPage() {
           </thead>
           <tbody>
             <tr>
-              <td><a href="/docs/sdk/go">Go</a></td>
+              <td><Link to="/docs/sdk/go">Go</Link></td>
               <td><code>github.com/opensecstack/sdk/go/opensecstack</code></td>
               <td>Go 1.21+. Zero external dependencies.</td>
             </tr>
             <tr>
-              <td><a href="/docs/sdk/python">Python</a></td>
+              <td><Link to="/docs/sdk/python">Python</Link></td>
               <td><code>pip install opensecstack-sdk</code></td>
               <td>Python 3.10+</td>
             </tr>
             <tr>
-              <td><a href="/docs/sdk/typescript">TypeScript</a></td>
+              <td><Link to="/docs/sdk/typescript">TypeScript</Link></td>
               <td><code>@opensecstack/sdk</code></td>
               <td>Node.js 18+ or browser. Zero external runtime dependencies.</td>
             </tr>
             <tr>
-              <td><a href="/docs/sdk/rust">Rust</a></td>
+              <td><Link to="/docs/sdk/rust">Rust</Link></td>
               <td><code>opensecstack</code> crate</td>
               <td>Rust 1.75+. Async-first with tokio + reqwest.</td>
             </tr>
@@ -108,20 +109,20 @@ export default function ContractsPage() {
             <tr>
               <td><strong>Scan Result</strong></td>
               <td>JSON v1</td>
-              <td><a href="/docs/platforms/apiguard">APIGuard</a></td>
-              <td><a href="/docs/platforms/irflow">IRFlow</a>, <a href="/docs/platforms/threatflow">ThreatFlow</a>, <a href="/docs/platforms/nis2compass">NIS2 Compass</a></td>
+              <td><Link to="/docs/platforms/apiguard">APIGuard</Link></td>
+              <td><Link to="/docs/platforms/irflow">IRFlow</Link>, <Link to="/docs/platforms/threatflow">ThreatFlow</Link>, <Link to="/docs/platforms/nis2compass">NIS2 Compass</Link></td>
             </tr>
             <tr>
               <td><strong>IOC Bundle</strong></td>
               <td>STIX 2.1 v1</td>
               <td>ThreatFlow</td>
-              <td><a href="/docs/platforms/openscrub">OpenScrub</a>, IRFlow, <a href="/docs/platforms/opencsirt">OpenCSIRT</a></td>
+              <td><Link to="/docs/platforms/openscrub">OpenScrub</Link>, IRFlow, <Link to="/docs/platforms/opencsirt">OpenCSIRT</Link></td>
             </tr>
             <tr>
               <td><strong>Incident Record</strong></td>
               <td>JSON v1</td>
               <td>IRFlow</td>
-              <td>NIS2 Compass, OpenCSIRT, <a href="/docs/governance">CITADEL</a></td>
+              <td>NIS2 Compass, OpenCSIRT, <Link to="/docs/governance">CITADEL</Link></td>
             </tr>
             <tr>
               <td><strong>Compliance Evidence</strong></td>
@@ -138,7 +139,7 @@ export default function ContractsPage() {
             <tr>
               <td><strong>Training Record</strong></td>
               <td>JSON v1</td>
-              <td><a href="/docs/platforms/cyberpath">CyberPath</a></td>
+              <td><Link to="/docs/platforms/cyberpath">CyberPath</Link></td>
               <td>NIS2 Compass, CITADEL</td>
             </tr>
             <tr>
@@ -150,8 +151,8 @@ export default function ContractsPage() {
             <tr>
               <td><strong>Simulation Result</strong></td>
               <td>JSON v1</td>
-              <td><a href="/docs/platforms/securelab">SecureLab</a></td>
-              <td>IRFlow, OpenScrub, ThreatFlow, <a href="/docs/platforms/vertguard">VertGuard</a></td>
+              <td><Link to="/docs/platforms/securelab">SecureLab</Link></td>
+              <td>IRFlow, OpenScrub, ThreatFlow, <Link to="/docs/platforms/vertguard">VertGuard</Link></td>
             </tr>
             <tr>
               <td><strong>AI-Attack Detection</strong></td>
@@ -172,7 +173,7 @@ export default function ContractsPage() {
       <div className="callout-note">
         <strong>Note:</strong> The <strong>Identity</strong> contract (OpenID Connect 1.0,
         RS256) is handled separately by sinauth — it is not an SDK event schema but an
-        OIDC token flow. See <a href="/docs/identity">Identity (sinauth)</a> for details.
+        OIDC token flow. See <Link to="/docs/identity">Identity (sinauth)</Link> for details.
       </div>
 
       <h2 id="go-sdk-example">Go SDK example</h2>
@@ -218,7 +219,7 @@ citadel.EmitWORM(ctx, entry)`}
         with <strong>HMAC-SHA256</strong> using a per-source secret. The receiving platform
         must verify the signature before processing the payload. A <strong>±5-minute
         replay window</strong> is enforced on the timestamp in every request to prevent
-        replay attacks. See <a href="/docs/webhooks">Webhooks &amp; Events</a> for the
+        replay attacks. See <Link to="/docs/webhooks">Webhooks &amp; Events</Link> for the
         full specification.
       </p>
       <p>

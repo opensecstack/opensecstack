@@ -1,6 +1,7 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'versioning', label: 'Semantic versioning' },
@@ -40,7 +41,7 @@ export default function ReleasesPage() {
         tested combination of platform versions for operators who want a single blessed
         configuration. This page covers the versioning rules, the compatibility matrix concept,
         the deprecation policy, and the post-quantum migration timeline. For how the platforms
-        fit together structurally, see the <a href="/docs/architecture">Architecture overview</a>.
+        fit together structurally, see the <Link to="/docs/architecture">Architecture overview</Link>.
       </p>
 
       <h2 id="versioning">Semantic versioning</h2>
@@ -155,7 +156,7 @@ apiguard/v1.3.0`}
       <h2 id="compatibility-matrix">Compatibility matrix</h2>
       <p>
         The <a href="https://github.com/opensecstack/opensecstack/blob/main/docs/compatibility-matrix.md" target="_blank" rel="noopener noreferrer">compatibility matrix</a>{' '}
-        is the authoritative answer to "can IRFlow 1.1 talk to <a href="/docs/governance">CITADEL</a> 1.0?" — the answer is
+        is the authoritative answer to "can IRFlow 1.1 talk to <Link to="/docs/governance">CITADEL</Link> 1.0?" — the answer is
         in the table, not in a Slack thread. It has three dimensions: per-platform pair-wise
         compatibility, ecosystem release version pins, and support windows.
       </p>
@@ -360,7 +361,7 @@ apiguard/v1.3.0`}
         in a patch release without the full deprecation window. This requires a published
         security advisory (GitHub Security Advisory + CVE if applicable) and a replacement
         feature in the same or prior version. This exception is rare — almost every case admits
-        a normal deprecation path. See the <a href="/docs/security">Security</a> page for the
+        a normal deprecation path. See the <Link to="/docs/security">Security</Link> page for the
         deployment-tier guarantee matrix.
       </div>
 

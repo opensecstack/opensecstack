@@ -1,6 +1,7 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'what-is-sinauth', label: 'What is sinauth?' },
@@ -200,13 +201,13 @@ ID token signing:    RS256`}
         and the org picker. Machine-to-machine credentials for organizations
         (<code>client_credentials</code>) and CITADEL-gated organization verification are
         planned for a later release and are not available yet — see{' '}
-        <a href="/docs/governance">Governance (CITADEL)</a> for how governed actions work
+        <Link to="/docs/governance">Governance (CITADEL)</Link> for how governed actions work
         today.
       </div>
 
       <h2 id="sdk-clients">SDK clients</h2>
       <p>
-        The opensecstack <a href="/docs/contracts">SDK &amp; Contracts</a> ships sinauth client helpers in Go and TypeScript. These
+        The opensecstack <Link to="/docs/contracts">SDK &amp; Contracts</Link> ships sinauth client helpers in Go and TypeScript. These
         implement the OIDC discovery fetch, JWKS caching, and RS256 token verification so
         platform teams do not need to re-implement them.
       </p>
@@ -220,11 +221,11 @@ ID token signing:    RS256`}
           </thead>
           <tbody>
             <tr>
-              <td><a href="/docs/sdk/go">Go</a></td>
+              <td><Link to="/docs/sdk/go">Go</Link></td>
               <td><code>github.com/opensecstack/sdk/go/sinauth</code></td>
             </tr>
             <tr>
-              <td><a href="/docs/sdk/typescript">TypeScript</a></td>
+              <td><Link to="/docs/sdk/typescript">TypeScript</Link></td>
               <td><code>@opensecstack/sdk</code> (sinauth sub-module)</td>
             </tr>
           </tbody>
@@ -236,15 +237,15 @@ ID token signing:    RS256`}
         Each SIN platform has a dedicated integration guide under
         <code> sinauth/docs/integration/</code>. The guides cover client registration,
         redirect URI configuration, scope selection, and token verification for:
-        <a href="/docs/platforms/apiguard">APIGuard</a>, <a href="/docs/platforms/irflow">IRFlow</a>, <a href="/docs/platforms/nis2compass">NIS2 Compass</a>, <a href="/docs/platforms/threatflow">ThreatFlow</a>, <a href="/docs/platforms/opencsirt">OpenCSIRT</a>, <a href="/docs/platforms/cyberpath">CyberPath</a>, <a href="/docs/platforms/securelab">SecureLab</a>,
-        <a href="/docs/platforms/openscrub">OpenScrub</a>, <a href="/docs/platforms/vertguard">VertGuard</a>, and the <a href="/docs/platforms/community">SIN Community</a> platform.
+        <Link to="/docs/platforms/apiguard">APIGuard</Link>, <Link to="/docs/platforms/irflow">IRFlow</Link>, <Link to="/docs/platforms/nis2compass">NIS2 Compass</Link>, <Link to="/docs/platforms/threatflow">ThreatFlow</Link>, <Link to="/docs/platforms/opencsirt">OpenCSIRT</Link>, <Link to="/docs/platforms/cyberpath">CyberPath</Link>, <Link to="/docs/platforms/securelab">SecureLab</Link>,
+        <Link to="/docs/platforms/openscrub">OpenScrub</Link>, <Link to="/docs/platforms/vertguard">VertGuard</Link>, and the <Link to="/docs/platforms/community">SIN Community</Link> platform.
       </p>
       <div className="callout-note">
         <strong>Note:</strong> All end-user and operator authentication is delegated to
         sinauth over OpenID Connect. Platforms validate sinauth-issued RS256 tokens
         against the JWKS endpoint rather than minting their own user credentials.
-        See <a href="/docs/governance">CITADEL</a> for the governance layer and{' '}
-        <a href="/docs/architecture">Architecture</a> for how sinauth fits into
+        See <Link to="/docs/governance">CITADEL</Link> for the governance layer and{' '}
+        <Link to="/docs/architecture">Architecture</Link> for how sinauth fits into
         the wider ecosystem.
       </div>
     </DocsLayout>

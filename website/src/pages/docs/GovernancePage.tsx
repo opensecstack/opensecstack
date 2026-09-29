@@ -1,6 +1,7 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'what-is-citadel', label: 'What is CITADEL?' },
@@ -40,8 +41,8 @@ export default function GovernancePage() {
       <p>
         <strong>CITADEL</strong> is the cryptographic governance engine for the opensecstack
         ecosystem. Every privileged action across all SIN platforms passes through CITADEL's
-        5-gate <a href="/docs/citadel/marshal"><strong>MARSHAL</strong></a> decision engine before execution, and every decision
-        is recorded in an append-only <a href="/docs/citadel/worm"><strong>WORM</strong></a> audit chain with cryptographic
+        5-gate <Link to="/docs/citadel/marshal"><strong>MARSHAL</strong></Link> decision engine before execution, and every decision
+        is recorded in an append-only <Link to="/docs/citadel/worm"><strong>WORM</strong></Link> audit chain with cryptographic
         integrity guarantees.
       </p>
       <p>
@@ -56,8 +57,8 @@ export default function GovernancePage() {
       <ul>
         <li><strong>MARSHAL</strong> — the 5-gate decision engine that evaluates every governance request (Kerkese)</li>
         <li><strong>WORM chain</strong> — the append-only audit log with TripleHash integrity and Ed25519 chain anchors</li>
-        <li><a href="/docs/citadel/sod"><strong>NDS</strong></a> — cryptographic separation-of-duties enforcement</li>
-        <li><a href="/docs/citadel/augur-vigil"><strong>AUGUR</strong></a> — behavioural heuristics for pre-emptive anomaly detection</li>
+        <li><Link to="/docs/citadel/sod"><strong>NDS</strong></Link> — cryptographic separation-of-duties enforcement</li>
+        <li><Link to="/docs/citadel/augur-vigil"><strong>AUGUR</strong></Link> — behavioural heuristics for pre-emptive anomaly detection</li>
       </ul>
       <p>
         A fifth component, <strong>VIGIL</strong> (ecosystem health monitor,
@@ -199,7 +200,7 @@ anchor = Ed25519_sign(master_key, chain_hash_at_entry_n)`}
             </tr>
             <tr>
               <td><code>HARD_STOP</code></td>
-              <td>A critical violation detected (SoD breach, spoofing, contradictory <a href="/docs/citadel/evidence">evidence</a>) — action denied, P1 incident auto-created, chain anchored immediately</td>
+              <td>A critical violation detected (SoD breach, spoofing, contradictory <Link to="/docs/citadel/evidence">evidence</Link>) — action denied, P1 incident auto-created, chain anchored immediately</td>
             </tr>
           </tbody>
         </table>
@@ -293,7 +294,7 @@ anchor = Ed25519_sign(master_key, chain_hash_at_entry_n)`}
         </table>
       </div>
       <p>
-        For how platforms connect to CITADEL, see the <a href="/docs/citadel-integration">CITADEL Integration</a> guide.
+        For how platforms connect to CITADEL, see the <Link to="/docs/citadel-integration">CITADEL Integration</Link> guide.
         All connector requests to CITADEL must include an <code>X-Citadel-Signature</code>{' '}
         HMAC-SHA256 header computed over <code>key_id + timestamp + body_hash</code>.
         Requests outside the ±300-second timestamp window are rejected.

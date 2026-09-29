@@ -1,6 +1,7 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'prerequisites', label: 'Prerequisites' },
@@ -47,7 +48,7 @@ export default function LocalDevPage() {
       <h2 id="prerequisites">Prerequisites</h2>
       <p>
         Install the following tools before cloning the repo. For full environment requirements
-        and alternative install paths see <a href="/docs/installation">Installation</a>.
+        and alternative install paths see <Link to="/docs/installation">Installation</Link>.
       </p>
       <div className="docs-table-wrapper">
         <table className="docs-table">
@@ -114,7 +115,7 @@ cd opensecstack`}
         directory (<code>apiguard/</code>, <code>nis2compass/</code>, etc.). Shared SDK contracts
         are in <code>sdk/</code>, CITADEL governance in <code>.citadel/</code>, and the ecosystem
         website in <code>website/</code>. For a map of how all components relate, see the{' '}
-        <a href="/docs/architecture">Architecture overview</a>.
+        <Link to="/docs/architecture">Architecture overview</Link>.
       </p>
 
       <h2 id="full-stack-hot-reload">Full-stack hot-reload workflow</h2>
@@ -164,7 +165,7 @@ curl http://localhost:8080/api/v1/health
         </table>
       </div>
       <p>
-        The full stack starts: <strong><a href="/docs/platforms/apiguard">APIGuard</a> API</strong> on port 8080,{' '}
+        The full stack starts: <strong><Link to="/docs/platforms/apiguard">APIGuard</Link> API</strong> on port 8080,{' '}
         <strong>Dashboard</strong> on port 3000, <strong>PostgreSQL</strong> on 5432, and{' '}
         <strong>Redis</strong> on 6379.
       </p>
@@ -253,8 +254,8 @@ cd apiguard/rust && cargo build --release`}
         <strong>CITADEL variables:</strong> If your platform is configured to emit governance
         events, you will also need <code>CITADEL_API_URL</code> and <code>CITADEL_API_KEY</code>.
         Leave these unset (or set <code>CITADEL_DRY_RUN=true</code>) for local development
-        without a running CITADEL instance. See <a href="/docs/citadel-integration">CITADEL
-        Integration</a> for details.
+        without a running CITADEL instance. See <Link to="/docs/citadel-integration">CITADEL
+        Integration</Link> for details.
       </div>
 
       <h2 id="common-tasks">Common dev tasks</h2>

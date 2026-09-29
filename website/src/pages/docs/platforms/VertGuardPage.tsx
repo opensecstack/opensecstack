@@ -1,6 +1,7 @@
 import DocsLayout from '../DocsLayout'
 import CodeBlock from '../../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'overview', label: 'Overview' },
@@ -146,7 +147,7 @@ export default function VertGuardPage() {
         </li>
         <li>
           <strong>sinauth SSO</strong> — dashboard login uses OAuth 2.0 / OIDC
-          (authorization code + PKCE S256) delegated to <a href="/docs/identity">sinauth</a>; the API validates RS256
+          (authorization code + PKCE S256) delegated to <Link to="/docs/identity">sinauth</Link>; the API validates RS256
           tokens against the sinauth JWKS endpoint.
         </li>
       </ul>
@@ -309,17 +310,17 @@ curl -X POST http://localhost:8091/api/v1/prompt/scan \\
           </thead>
           <tbody>
             <tr>
-              <td><a href="/docs/platforms/threatflow"><strong>ThreatFlow</strong></a></td>
+              <td><Link to="/docs/platforms/threatflow"><strong>ThreatFlow</strong></Link></td>
               <td>Push (every 15 min)</td>
               <td>AI-specific IOCs pushed as <code>ai_attack_pattern</code> type</td>
             </tr>
             <tr>
-              <td><a href="/docs/governance"><strong>CITADEL</strong></a></td>
+              <td><Link to="/docs/governance"><strong>CITADEL</strong></Link></td>
               <td>Outbox push</td>
-              <td>Every positive detection generates a <a href="/docs/citadel/worm">WORM</a> entry with <code>worm_entry_id</code></td>
+              <td>Every positive detection generates a <Link to="/docs/citadel/worm">WORM</Link> entry with <code>worm_entry_id</code></td>
             </tr>
             <tr>
-              <td><a href="/docs/platforms/opencsirt"><strong>OpenCSIRT</strong></a></td>
+              <td><Link to="/docs/platforms/opencsirt"><strong>OpenCSIRT</strong></Link></td>
               <td>Subscriber (OpenCSIRT pulls)</td>
               <td>CVE advisories pulled by OpenCSIRT for embedding in outbound CSAF</td>
             </tr>

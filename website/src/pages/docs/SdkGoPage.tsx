@@ -1,6 +1,7 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'installation', label: 'Installation' },
@@ -37,9 +38,9 @@ export default function SdkGoPage() {
       </Helmet>
       <h1>Go SDK</h1>
       <p>
-        The Go client provides typed clients for <strong><a href="/docs/platforms/apiguard">APIGuard</a></strong>,{' '}
-        <strong><a href="/docs/platforms/nis2compass">NIS2 Compass</a></strong>, and <strong><a href="/docs/governance">CITADEL</a></strong>, plus shared types for
-        all opensecstack <a href="/docs/contracts">SDK &amp; Contracts</a> integration contracts. It requires <strong>Go 1.22+</strong> and
+        The Go client provides typed clients for <strong><Link to="/docs/platforms/apiguard">APIGuard</Link></strong>,{' '}
+        <strong><Link to="/docs/platforms/nis2compass">NIS2 Compass</Link></strong>, and <strong><Link to="/docs/governance">CITADEL</Link></strong>, plus shared types for
+        all opensecstack <Link to="/docs/contracts">SDK &amp; Contracts</Link> integration contracts. It requires <strong>Go 1.22+</strong> and
         has <strong>zero external dependencies</strong> — only the standard library.
       </p>
 
@@ -192,7 +193,7 @@ os.WriteFile("nis2-report.pdf", pdf, 0644)`}
 
       <h2 id="citadel-client">CITADEL client</h2>
       <p>
-        The CITADEL client delivers structured security events to the immutable <a href="/docs/citadel/worm">WORM</a> audit
+        The CITADEL client delivers structured security events to the immutable <Link to="/docs/citadel/worm">WORM</Link> audit
         chain via HMAC-SHA256 signed HTTP POST. <code>SendEvent</code> is non-blocking — it
         enqueues the event and a background goroutine handles delivery.
       </p>
@@ -278,9 +279,9 @@ if err != nil {
 
       <h2 id="full-documentation">Full documentation</h2>
       <p>
-        Other SDK language clients: <a href="/docs/sdk/python">Python SDK</a>,{' '}
-        <a href="/docs/sdk/typescript">TypeScript SDK</a>,{' '}
-        <a href="/docs/sdk/rust">Rust SDK</a>.
+        Other SDK language clients: <Link to="/docs/sdk/python">Python SDK</Link>,{' '}
+        <Link to="/docs/sdk/typescript">TypeScript SDK</Link>,{' '}
+        <Link to="/docs/sdk/rust">Rust SDK</Link>.
       </p>
       <p>
         The complete Go client reference — including all method signatures, option structs,

@@ -1,6 +1,7 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'installation', label: 'Installation' },
@@ -37,9 +38,9 @@ export default function SdkPythonPage() {
       </Helmet>
       <h1>Python SDK</h1>
       <p>
-        The Python client provides typed clients for <strong><a href="/docs/platforms/apiguard">APIGuard</a></strong>,{' '}
-        <strong><a href="/docs/platforms/nis2compass">NIS2 Compass</a></strong>, and <strong><a href="/docs/governance">CITADEL</a></strong>, plus dataclasses for
-        all opensecstack <a href="/docs/contracts">SDK &amp; Contracts</a> integration contracts. It requires <strong>Python 3.11+</strong>.
+        The Python client provides typed clients for <strong><Link to="/docs/platforms/apiguard">APIGuard</Link></strong>,{' '}
+        <strong><Link to="/docs/platforms/nis2compass">NIS2 Compass</Link></strong>, and <strong><Link to="/docs/governance">CITADEL</Link></strong>, plus dataclasses for
+        all opensecstack <Link to="/docs/contracts">SDK &amp; Contracts</Link> integration contracts. It requires <strong>Python 3.11+</strong>.
         Both synchronous and async clients are available.
       </p>
 
@@ -173,7 +174,7 @@ updated = nis2.patch_control(
 
       <h2 id="citadel-client">CITADEL client</h2>
       <p>
-        Submit a governance <em>Kerkese</em> request to the <a href="/docs/citadel/marshal">MARSHAL</a> 5-gate engine and check
+        Submit a governance <em>Kerkese</em> request to the <Link to="/docs/citadel/marshal">MARSHAL</Link> 5-gate engine and check
         the outcome before proceeding with a privileged action.
       </p>
       <CodeBlock
@@ -264,9 +265,9 @@ except NotFoundError:
 
       <h2 id="full-documentation">Full documentation</h2>
       <p>
-        Other SDK language clients: <a href="/docs/sdk/go">Go SDK</a>,{' '}
-        <a href="/docs/sdk/typescript">TypeScript SDK</a>,{' '}
-        <a href="/docs/sdk/rust">Rust SDK</a>.
+        Other SDK language clients: <Link to="/docs/sdk/go">Go SDK</Link>,{' '}
+        <Link to="/docs/sdk/typescript">TypeScript SDK</Link>,{' '}
+        <Link to="/docs/sdk/rust">Rust SDK</Link>.
       </p>
       <p>
         The complete Python client reference — including all method signatures, dataclass

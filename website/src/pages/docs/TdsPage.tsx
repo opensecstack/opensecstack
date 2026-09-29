@@ -1,6 +1,7 @@
 import DocsLayout from './DocsLayout'
 import CodeBlock from '../../components/CodeBlock'
 import { Helmet } from 'react-helmet-async'
+import { Link } from 'react-router-dom'
 
 const toc = [
   { id: 'what-is-tds', label: 'What is TDS?' },
@@ -42,7 +43,7 @@ export default function TdsPage() {
         principle for all opensecstack platforms. It assigns every API endpoint and background
         job to one of three named latency tiers, prescribes the implementation pattern for each
         tier, and provides a tool — <code>tds-scanner</code> — to measure compliance at runtime.
-        TDS is defined across the full <a href="/docs/architecture">Architecture</a> and applies
+        TDS is defined across the full <Link to="/docs/architecture">Architecture</Link> and applies
         to every platform in the ecosystem.
       </p>
       <p>
@@ -91,7 +92,7 @@ export default function TdsPage() {
               <td>Synchronous HTTP response</td>
               <td>
                 Health check, status poll, per-endpoint CVSS scoring,{' '}
-                <a href="/docs/citadel/marshal">MARSHAL</a> gate evaluation,
+                <Link to="/docs/citadel/marshal">MARSHAL</Link> gate evaluation,
                 AUGUR advisory fetch, control status update
               </td>
             </tr>
@@ -271,7 +272,7 @@ func (h *Handler) TriggerDeepScan(w http.ResponseWriter, r *http.Request) {
 
       <h2 id="triplehash-alignment">TripleHash alignment</h2>
       <p>
-        The <a href="/docs/governance">CITADEL</a> TripleHash scheme (BLAKE3 + SHA-256 + SHA-512) maps directly to TDS tiers,
+        The <Link to="/docs/governance">CITADEL</Link> TripleHash scheme (BLAKE3 + SHA-256 + SHA-512) maps directly to TDS tiers,
         making the relationship between cryptographic assurance level and operational latency
         explicit:
       </p>

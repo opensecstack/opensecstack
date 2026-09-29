@@ -95,6 +95,15 @@ async function prerenderRoute(browser, route) {
   const page = await browser.newPage()
   const url = `http://localhost:${PORT}${BASE}${route}`
   try {
+    // Tell the app it's being prerendered so routes with a WebGL scene
+    // (/, /runix) skip mounting it: the static HTML this script writes is
+    // only ever consumed by crawlers, and rendering the scene pegs the CPU
+    // hard enough on constrained CI runners to stall networkidle0 below
+    // past its timeout even though the same routes render fine for real
+    // visitors and on more powerful local machines.
+    await page.evaluateOnNewDocument(() => {
+      window.__PRERENDER__ = true
+    })
     await page.goto(url, { waitUntil: 'networkidle0', timeout: 30000 })
     // Wait for the lazy-loaded route chunk to render real content into
     // #root (Suspense fallback is `null`, so an empty root means "still

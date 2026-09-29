@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Link } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
 import { motion } from 'framer-motion'
+import { isPrerendering } from '../lib/prerender'
 import { desktopLayers, sandboxTiers, osPhases } from '../data/runix'
 
 const DesktopScene = lazy(() => import('../scene/DesktopScene'))
@@ -30,9 +31,11 @@ export default function RunixPage() {
           content="A Rust microkernel + WebAssembly OS built for security from the ground up, with CITADEL governance running natively at the kernel level."
         />
       </Helmet>
-      <Suspense fallback={null}>
-        <DesktopScene />
-      </Suspense>
+      {!isPrerendering() && (
+        <Suspense fallback={null}>
+          <DesktopScene />
+        </Suspense>
+      )}
 
       {/* Nav */}
       <nav style={{

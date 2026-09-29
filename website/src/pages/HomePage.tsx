@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import ErrorBoundary from '../components/ErrorBoundary'
+import { isPrerendering } from '../lib/prerender'
 import { useWebGL } from '../hooks/useWebGL'
 import { useNarrowViewport } from '../hooks/useNarrowViewport'
 import { useThemeToggle } from '../hooks/useThemeToggle'
@@ -84,7 +85,7 @@ export default function HomePage() {
           content="APIGuard, NIS2 Compass, and CITADEL governance engine — open-source tools for EU Digital Decade compliance."
         />
       </Helmet>
-      {webgl && !narrowViewport && deferredReady && (
+      {webgl && !narrowViewport && deferredReady && !isPrerendering() && (
         // Isolate WebGL / Three.js failures so a driver issue or runtime
         // error in the 3D scene never takes down the whole page. Falling
         // back to null leaves the static content intact. Mounting is

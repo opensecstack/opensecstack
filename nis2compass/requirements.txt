@@ -5,7 +5,7 @@ SQLAlchemy==2.0.35
 alembic==1.13.3
 psycopg2-binary==2.9.9
 redis==5.0.8
-PyJWT==2.13.0
+PyJWT==2.15.1
 Werkzeug==3.1.6
 gunicorn==22.0.0
 python-dotenv==1.2.2

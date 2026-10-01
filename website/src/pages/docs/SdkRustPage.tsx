@@ -9,6 +9,7 @@ const toc = [
   { id: 'running-a-scan', label: 'Running a scan' },
   { id: 'nis2-compass-client', label: 'NIS2 Compass client' },
   { id: 'error-handling', label: 'Error handling' },
+  { id: 'citadel-kerkese-core', label: 'CITADEL MARSHAL (Kerkese)' },
   { id: 'security-notes', label: 'Security notes' },
   { id: 'full-documentation', label: 'Full documentation' },
 ]
@@ -236,6 +237,31 @@ match result {
     _ => {}
 }`}
       />
+
+      <h2 id="citadel-kerkese-core">CITADEL MARSHAL (Kerkese)</h2>
+      <p>
+        <code>opensecstack::citadel::CITADELClient</code> (above) is a WORM{' '}
+        <em>event-delivery</em> client — <code>send_event</code>/<code>get_events</code>/
+        <code>verify_chain</code> — it does not submit a Kerkese for{' '}
+        <Link to="/docs/governance">MARSHAL</Link> evaluation. That's a separate crate,{' '}
+        <strong><code>citadel-kerkese-core</code></strong>, published from the same{' '}
+        <code>sdk/rust/</code> directory: a <code>no_std</code> + <code>alloc</code> core for
+        building, Ed25519-signing, and submitting CITADEL MARSHAL Kerkese requests, for hosts
+        that can't pull in Tokio/reqwest at all (a freestanding kernel being the motivating
+        case). It does no networking of its own — a <code>KerkeseTransport</code> trait is the
+        host-supplied I/O boundary, so the same core works both from a freestanding kernel and
+        from a hosted <code>std</code> process via a <code>reqwest</code>-backed transport.
+      </p>
+      <CodeBlock
+        language="bash"
+        code={`[dependencies]
+citadel-kerkese-core = "1.0.0"`}
+      />
+      <p>
+        See <code>sdk/rust/citadel-kerkese-core</code>'s own README and{' '}
+        <code>examples/</code> for the full API and a worked <code>std</code> transport
+        example.
+      </p>
 
       <h2 id="security-notes">Security notes</h2>
       <ul>

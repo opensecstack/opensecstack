@@ -1,6 +1,6 @@
 [package]
 name = "citadel-kerkese-core"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 rust-version = "1.75"
 description = "no_std + alloc core for building, signing, and submitting CITADEL MARSHAL Kerkese requests, for hosts (e.g. Runix's freestanding kernel) that can't pull in Tokio/reqwest. See opensecstack/opensecstack#34."

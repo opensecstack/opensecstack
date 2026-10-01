@@ -6,6 +6,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [Unreleased]
 
+### Added
+- **`citadel-kerkese-core`** (Rust, `sdk/rust/citadel-kerkese-core`) — cut as `1.0.0`, the Rust SDK's CITADEL MARSHAL Kerkese (Evaluate/Sign) client, closing the gap noted in `1.0.0`'s release (below): "a separate, in-progress `citadel-kerkese-core` no_std crate... is not part of this release." `no_std` + `alloc`, matched field-for-field against `citadel/internal/marshal/types.go` and `citadel/internal/marshal/sig.go`, with a known-answer test reproducing `sig_test.go`'s exact Go fixture. Deliberately does no networking of its own — a `KerkeseTransport` trait is the host-supplied I/O boundary, so the same core serves both a freestanding kernel (Runix) and a hosted `std` process (a `reqwest`-backed transport, see `examples/async_proxy_sketch.rs`)
+
+### Fixed
+- Rust SDK's CITADEL coverage was WORM event delivery only (`opensecstack::citadel::CITADELClient` — `send_event`/`get_events`/`verify_chain`); there was no way to submit a Kerkese for MARSHAL evaluation from Rust at all. `citadel-kerkese-core` does not replace that client (different concern, see its own module doc comment) — it adds the missing one
+
 ## [1.0.0] — 2026-09-19
 
 Production release of the opensecstack SDK across all four languages —

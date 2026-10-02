@@ -174,19 +174,27 @@ apiguard/v1.3.0`}
           </thead>
           <tbody>
             <tr>
-              <td><code>ecosystem/v1.0.0-2026-Q2</code></td>
-              <td>APIGuard, NIS2 Compass, CITADEL, IRFlow, ThreatFlow, SDK — all at v1.0.0</td>
-              <td>First stable 5-platform foundation</td>
+              <td><code>ecosystem/v1.0.0</code></td>
+              <td>APIGuard, NIS2 Compass, CITADEL, IRFlow, SDK — all at v1.0.0</td>
+              <td>First stable release — 5-platform foundation</td>
             </tr>
             <tr>
-              <td><code>ecosystem/v1.1.0-2026-Q2</code></td>
+              <td><code>ecosystem/v1.1.0</code></td>
               <td>
-                All v1.0.0 platforms above, plus OpenScrub, CyberPath, OpenCSIRT, VertGuard
-                (all v1.0.0)
+                +ThreatFlow, OpenCSIRT, OpenScrub, CyberPath, SecureLab, sinauth,
+                SIN Community (all v1.0.0)
               </td>
               <td>
-                Full 10-platform stack; VertGuard AI-attack defence; OpenCSIRT CSAF 2.0;
-                APIGuard JWT multi-secret rotation
+                7 more platforms through the real release pipeline; sinauth SSO adopted
+                ecosystem-wide; OpenCSIRT CSAF 2.0
+              </td>
+            </tr>
+            <tr>
+              <td><code>ecosystem/v1.2.0</code></td>
+              <td>+VertGuard (v1.0.0)</td>
+              <td>
+                The full originally-planned platform set complete — AI-attack defence,
+                real-time deepfake/voice-clone detection, NIS3-ready security audit
               </td>
             </tr>
           </tbody>
@@ -284,7 +292,7 @@ apiguard/v1.3.0`}
             </tr>
             <tr>
               <td>Ecosystem release</td>
-              <td><code>ecosystem/v1.0.0-2026-Q2</code></td>
+              <td><code>ecosystem/v1.2.0</code> (latest)</td>
               <td>12 months from the release date</td>
             </tr>
           </tbody>

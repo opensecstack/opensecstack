@@ -5,17 +5,17 @@ import ScrollSection, { SECTION_EASE, SECTION_VIEWPORT_MARGIN } from '../compone
 const MAX_STAGGER_INDEX = 6
 
 const phases = [
-  { n: 1, title: 'Ecosystem v1.0.0',          status: 'done',  items: ['11 platforms + SDK', 'CITADEL governance layer', '4-language SDK (Go · Python · TypeScript · Rust)', 'All platforms Apache 2.0 / AGPL-3.0'] },
-  { n: 2, title: 'v1.1 — Security Hardening', status: 'next',  items: ['JWKS endpoint', 'mTLS between platforms', 'PQ algorithm-identifier fields', 'Third-party security audit'] },
-  { n: 3, title: 'v2.0 — Post-Quantum',       status: 'plan',  items: ['Hybrid Ed25519 + ML-DSA signatures', 'VIGIL ecosystem health monitor', 'QuintHash (PQ-resistant primitives)'] },
-  { n: 4, title: 'v3.0 — Sovereignty Stack',  status: 'plan',  items: ['ML-DSA default (aligned with NIS3)', 'vantage-hash extracted library', 'Phase 5 Tier A governance tooling'] },
+  { n: 1, title: 'v1.0.0 → v1.2.0 — Full Ecosystem', status: 'done', items: ['12 platforms + SDK', 'CITADEL governance layer', '4-language SDK (Go · Python · TypeScript · Rust)', 'All platforms Apache 2.0 / AGPL-3.0'] },
+  { n: 2, title: 'v2.0.0 — Post-Quantum',     status: 'next', items: ['Hybrid Ed25519 + ML-DSA signatures', 'SHA-256 → quintHash migration', 'AI governance — MARSHAL gate for AI-initiated actions'] },
+  { n: 3, title: 'v2.5.0 — Sovereignty Tooling', status: 'plan', items: ['vantage-hash standalone crate', 'pyramid-registry v1.0 — DAG + W3C DID + FROST', 'Runix alpha — kernel, capability manager, Wasm already live'] },
+  { n: 4, title: 'v3.0.0 — NIS3-Ready Bundle', status: 'plan',  items: ['NIS3 adoption alignment (2030-2032)', 'Ecosystem-wide compliance mapping refresh'] },
 ]
 
 export default function RoadmapSection() {
   return (
     <ScrollSection id="roadmap">
       <h2 className="section-title"><span className="gradient-text">Roadmap</span></h2>
-      <p className="section-subtitle">From the shipped v1.0 ecosystem to the post-quantum, sovereignty-focused v3.0 roadmap.</p>
+      <p className="section-subtitle">From the shipped, full-platform v1.2 ecosystem to the post-quantum, sovereignty-focused v3.0 roadmap.</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         {phases.map((p, i) => {
           const isDone = p.status === 'done'

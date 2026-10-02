@@ -2,47 +2,43 @@
 
 > Public roadmap for the opensecstack ecosystem.
 >
-> Updated: 2026-09-19. Next review: Q4 2026.
+> Updated: 2026-10-02. Next review: Q4 2026.
 
-## Current Status (as of 2026-09-19)
+## Current Status (as of 2026-10-02)
 
-### ✅ Released (ecosystem/v1.0.0, published 2026-09-19)
+### ✅ Released — the full ecosystem is live
 
-The first real release of this ecosystem. Only the following are actually
-live — tagged, built, and published to a registry a deployer could install
-from (see [CHANGELOG.md](CHANGELOG.md) `[ecosystem/v1.0.0]` entry for the
-full accounting):
+Three releases in nine days closed out the entire originally-planned
+platform set: `ecosystem/v1.0.0` (2026-09-19, 5 platforms + SDK),
+`ecosystem/v1.1.0` (2026-09-28, +7 platforms), and `ecosystem/v1.2.0`
+(2026-09-28, +VertGuard — "the 8th and last unreleased platform," per
+that release's own changelog entry). Every platform below is tagged,
+built, and published to a registry a deployer could install from — see
+[CHANGELOG.md](CHANGELOG.md) for the full accounting of each release.
 
-| Platform | Highlights |
-|---|---|
-| **CITADEL** | MARSHAL 5-gate engine (AuthN → AuthZ → NDS → AUGUR → WORM), TripleHash (SHA-256 + SHA-512 + BLAKE3), Ed25519 chain anchors, 25 tests, benchmarks (7.55 µs MARSHAL, 4.22 ms WORM append, 1.52 µs TripleHash) |
-| **APIGuard** | OWASP API Top 10 (A1–A10), CVSS 3.1, SARIF/HTML/PDF/JSON reports, React dashboard, CI/CD integration, HA deployment, security audit complete |
-| **NIS2 Compass** | All 10 Article 21(2) measures, PDF reports, CITADEL webhook integration, artifact evidence management, NIS2 → NIST CSF mapping |
-| **IRFlow** | Graph-based playbook executor, HMAC-signed webhooks (APIGuard/CITADEL/ThreatFlow), JWT + RBAC with 5 roles, CITADEL MARSHAL + WORM integration, NIS2 Article 23 async notification, Prometheus metrics, real-DB integration tests |
-| **opensecstack/sdk** | Go + Python + TypeScript + Rust typed clients, event schemas, OpenAPI contracts, Argon2id + pepper password hashing module |
-
-### 🔨 Feature-complete in-repo, never released (no tag, no package, no image)
-
-These platforms have substantial implementation and tests in this repo, but
-have never been through a real release pipeline — nothing has ever been
-published for them to crates.io, npm, PyPI, or GHCR.
-
-| Platform | Highlights |
-|---|---|
-| **ThreatFlow** | IOC aggregation (MISP, AlienVault OTX, VirusTotal), MITRE ATT&CK mapping (19 techniques + 16 auto-rules), TAXII feed, STIX integration, CITADEL + IRFlow webhooks |
-| **OpenScrub** | XDP/eBPF DDoS mitigation (XDP blocklist, rate-limiting, SYN-cookie mitigation, ThreatFlow IOC auto-block, CITADEL evidence emitter), Rust + Aya + Go — GoBGP blackhole routing not yet implemented, see Phase 2 below |
-| **CyberPath** | Security training platform, Docker/Wasm labs, NIS2 Art.21(2)(g) completion records to CITADEL WORM, Go + React + Rust |
-| **OpenCSIRT** | CSIRT operations — constituency lifecycle, CSAF 2.0 advisory authoring, incident coordination with IRFlow, CITADEL WORM emission, peer-CSIRT federation, Go + Python |
-| **VertGuard** | AI-attack defence — prompt injection (OWASP LLM Top 10), C2PA media authenticity (Rust c2pa-rs), AI threat feed (MITRE ATLAS), Zoom/Teams/WebEx meeting integrations, 28 API endpoints, NIS3-ready security audit, Go + Rust + Python — deepfake video/voice detection is a heuristic sub-check today, not a real detector; real-time video call analysis is not implemented |
-| **SecureLab** | Attack simulation, MITRE ATT&CK coverage mapping, detection validation against APIGuard/OpenScrub/ThreatFlow/VertGuard, Python + Rust + Go |
-| **SIN Community** | Developer knowledge hub — posts, comments, tags, full-text search (Meilisearch, with a PostgreSQL tsvector fallback), notifications, API keys, series, spaces, Go + React + TypeScript + PostgreSQL — TOTP 2FA has a DB schema but no implementation yet |
+| Platform | Released in | Highlights |
+|---|---|---|
+| **CITADEL** | v1.0.0 | MARSHAL 5-gate engine (AuthN → AuthZ → NDS → AUGUR → WORM), TripleHash (SHA-256 + SHA-512 + BLAKE3), Ed25519 chain anchors, 25 tests, benchmarks (7.55 µs MARSHAL, 4.22 ms WORM append, 1.52 µs TripleHash) |
+| **APIGuard** | v1.0.0 | OWASP API Top 10 (A1–A10), CVSS 3.1, SARIF/HTML/PDF/JSON reports, React dashboard, CI/CD integration, HA deployment, security audit complete |
+| **NIS2 Compass** | v1.0.0 | All 10 Article 21(2) measures, PDF reports, CITADEL webhook integration, artifact evidence management, NIS2 → NIST CSF mapping |
+| **IRFlow** | v1.0.0 | Graph-based playbook executor, HMAC-signed webhooks (APIGuard/CITADEL/ThreatFlow), JWT + RBAC with 5 roles, CITADEL MARSHAL + WORM integration, NIS2 Article 23 async notification, Prometheus metrics, real-DB integration tests |
+| **opensecstack/sdk** | v1.0.0 | Go + Python + TypeScript + Rust typed clients, event schemas, OpenAPI contracts, Argon2id + pepper password hashing module. `citadel-kerkese-core` (Rust, CITADEL MARSHAL Kerkese client) added since as a standalone `1.0.0` crate |
+| **ThreatFlow** | v1.1.0 | IOC aggregation (MISP, AlienVault OTX, VirusTotal), MITRE ATT&CK mapping (19 techniques + 16 auto-rules), TAXII feed, STIX integration, CSAF 2.0 advisory ingestion from OpenCSIRT, CITADEL + IRFlow webhooks, sinauth SSO |
+| **OpenCSIRT** | v1.1.0 | CSIRT operations — constituency lifecycle, CSAF 2.0 advisory authoring, incident coordination with IRFlow, CITADEL WORM emission, peer-CSIRT federation |
+| **OpenScrub** | v1.1.0 | XDP/eBPF DDoS mitigation (XDP blocklist, rate-limiting, SYN-cookie mitigation, ThreatFlow IOC auto-block, CITADEL evidence emitter), Rust + Aya + Go — GoBGP blackhole routing still not implemented, see Phase 2 below |
+| **CyberPath** | v1.1.0 | Security training platform, Docker/Wasm labs, NIS2 Art.21(2)(g) completion records to CITADEL WORM |
+| **SecureLab** | v1.1.0 | Attack simulation, MITRE ATT&CK coverage mapping, detection validation against APIGuard/OpenScrub/ThreatFlow/VertGuard |
+| **sinauth** | v1.1.0 | SSO identity provider — OAuth 2.0/OIDC, now the adopted login for every platform above |
+| **SIN Community** | v1.1.0 | Developer knowledge hub — posts, comments, tags, full-text search (Meilisearch, with a PostgreSQL tsvector fallback), notifications, API keys, series, spaces — TOTP 2FA still has a DB schema but no implementation |
+| **VertGuard** | v1.2.0 | AI-attack defence — prompt injection (OWASP LLM Top 10), real-time video deepfake detection (WebSocket stream, CLIP embeddings), voice clone detection, C2PA media authenticity, AI threat feed (MITRE ATLAS), Zoom/Teams/WebEx integrations, sinauth SSO, NIS3-ready security audit |
 
 ---
 
 ## Phase 1 — Foundation ✅ Complete
 
 Feature-complete Q1-Q2 2026; actually released as `ecosystem/v1.0.0` on
-2026-09-19 (ThreatFlow excepted — see below).
+2026-09-19 (ThreatFlow excepted — it shipped nine days later in
+`ecosystem/v1.1.0` instead, see below).
 
 | Deliverable | Version | Status |
 |---|---|---|
@@ -50,7 +46,7 @@ Feature-complete Q1-Q2 2026; actually released as `ecosystem/v1.0.0` on
 | APIGuard — OpenAPI parser, A1-A10 modules, CLI, reports, HA | v1.0.0 | ✅ Done — released |
 | NIS2 Compass — All Article 21(2), PDF reports, CITADEL integration | v1.0.0 | ✅ Done — released |
 | IRFlow — Playbook executor, webhooks, MARSHAL+WORM, NIS2 Art. 23 | v1.0.0 | ✅ Done — released |
-| ThreatFlow — IOC aggregation, MITRE ATT&CK, STIX/TAXII | v1.0.0 | 🔨 Feature-complete — never released (not part of `ecosystem/v1.0.0`) |
+| ThreatFlow — IOC aggregation, MITRE ATT&CK, STIX/TAXII | v1.0.0 | ✅ Done — released in `ecosystem/v1.1.0` (not part of `ecosystem/v1.0.0` itself) |
 | opensecstack/sdk — 4-language clients, password hashing module | v1.0.0 | ✅ Done — released |
 | Ecosystem documentation — 136 docs covering 5 platforms + meta | — | ✅ Done |
 | Release discipline — CODEOWNERS, release-process, deprecation-policy, compatibility-matrix, migration template | — | ✅ Done |
@@ -79,7 +75,7 @@ Close the loop — validate defences against offensive scenarios, coordinate acr
 | SecureLab v1.0.0 — OpenScrub + APIGuard + ThreatFlow detection validation, payload fuzzing | 2028 Q1 | ✅ Done |
 | OpenCSIRT v0.1.0 — TAXII 2.1 server/client, STIX 2.1 builder, constituency management | 2026 Q2 | ✅ Done |
 | OpenCSIRT v1.0.0 — CSAF 2.0, CITADEL WORM emission, IRFlow incident bridge, peer-CSIRT federation, HMAC replay protection | 2026 Q2 | ✅ Done |
-| **Ecosystem v1.0.0 — 11-platform stack** | 2026 Q2 | 📋 Not shipped — see [Ecosystem release milestones](#ecosystem-release-milestones) below; the real `ecosystem/v1.0.0` (published 2026-09-19) covers a 5-platform + SDK scope, not the full 11-platform stack |
+| **Ecosystem — full platform stack** | 2026 Q2 | ✅ Done — ~5 quarters late and under different version numbers than planned (shipped as `v1.0.0` + `v1.1.0` + `v1.2.0` across 2026-09-19 to 2026-09-28, not a single `v1.0.0`), but complete; see [Ecosystem release milestones](#ecosystem-release-milestones) below |
 
 ## Phase 4 — AI-Attack Defence (2026 Q3 – 2028 Q4)
 
@@ -97,11 +93,11 @@ Go + Rust only. Leverages existing engineering team.
 
 Product-market fit: every organisation deploying LLM-using apps today.
 
-### Phase 4.2 — SIN Community v1.0.0 🔨 Feature-complete, not released
+### Phase 4.2 — SIN Community v1.0.0 ✅ Released (`ecosystem/v1.1.0`)
 
 | Deliverable | Status |
 |---|---|
-| SIN Community v1.0.0 — posts, comments, tags, Meilisearch FTS, notifications, TOTP, API keys, series, spaces, Docker deployment | 🔨 Implemented in-repo — never published (no Docker image ever pushed, no `ecosystem/*` release has included it); TOTP 2FA also has a DB schema but no implementation yet |
+| SIN Community v1.0.0 — posts, comments, tags, Meilisearch FTS, notifications, API keys, series, spaces, Docker deployment | ✅ Done — released 2026-09-28; TOTP 2FA still has a DB schema but no implementation yet |
 
 ### Phase 4.4 — VertGuard v0.5 (Python ML layer, Q1-Q3 2027)
 
@@ -120,9 +116,9 @@ ML expertise required. Funded by Phase 1 revenue + EU grants.
 |---|---|---|
 | **Module 5: Synthetic Identity Detection** | Python ML | GAN-generated profile detection |
 | Real-time video call analysis | Python + WebRTC | Live deepfake detection mid-call |
-| v1.0.0 stable — NIS3-ready, security audit checklist 100% complete | — | 🔨 Partial — Modules 3-4 live, Module 1 ML path and Modules 2/5 still pending; see [README Known Gaps](README.md#known-gaps) |
+| v1.0.0 stable — NIS3-ready, security audit checklist 100% complete | — | ✅ Done — released as `ecosystem/v1.2.0` (2026-09-28), 2 years ahead of this table's original Q3 2028 target; see [vertguard/CHANGELOG.md](vertguard/CHANGELOG.md) |
 
-**Ecosystem v1.1.0 — 11-platform stack — 📋 planned, not yet shipped** (no `ecosystem/v1.1.0` tag exists; see [Ecosystem release milestones](#ecosystem-release-milestones) below)
+**Ecosystem — full platform stack — ✅ Shipped** (across `ecosystem/v1.0.0`, `v1.1.0`, and `v1.2.0`, 2026-09-19 to 2026-09-28; see [Ecosystem release milestones](#ecosystem-release-milestones) below)
 
 ---
 
@@ -162,23 +158,24 @@ ML expertise required. Funded by Phase 1 revenue + EU grants.
 
 ## Version Summary
 
-| Platform | Current (2026-09-19) | Target v1.0.0 |
+| Platform | Current (2026-10-02) | Target v1.0.0 |
 |---|---|---|
 | CITADEL | ✅ Released — ecosystem/v1.0.0 | — |
 | APIGuard | ✅ Released — ecosystem/v1.0.0 | — |
 | NIS2 Compass | ✅ Released — ecosystem/v1.0.0 | — |
 | IRFlow | ✅ Released — ecosystem/v1.0.0 | — |
-| ThreatFlow | 🔨 Feature-complete, never released | No published Docker image or tag yet |
 | opensecstack/sdk | ✅ Released — ecosystem/v1.0.0 | — |
-| OpenScrub | 🔨 Feature-complete, never released | No published Docker image or tag yet |
-| CyberPath | 🔨 Feature-complete, never released | No published Docker image or tag yet |
-| SecureLab | 🔨 Feature-complete, never released | No published Docker image or tag yet |
-| OpenCSIRT | 🔨 Feature-complete, never released | No published Docker image or tag yet |
-| VertGuard | 🔨 Partial, never released | 2 Phase 4.1 endpoints pending; no published Docker image or tag yet |
-| SIN Community | 🔨 Feature-complete, never released | No published Docker image or tag yet |
+| ThreatFlow | ✅ Released — ecosystem/v1.1.0 | — |
+| OpenScrub | ✅ Released — ecosystem/v1.1.0 | GoBGP blackhole routing still not implemented |
+| CyberPath | ✅ Released — ecosystem/v1.1.0 | — |
+| SecureLab | ✅ Released — ecosystem/v1.1.0 | — |
+| OpenCSIRT | ✅ Released — ecosystem/v1.1.0 | — |
+| sinauth | ✅ Released — ecosystem/v1.1.0 | — |
+| SIN Community | ✅ Released — ecosystem/v1.1.0 | TOTP 2FA still has a DB schema but no implementation |
+| VertGuard | ✅ Released — ecosystem/v1.2.0 | — |
 | vantage-hash | 📋 — | Phase 5 Tier A (2029) |
 | pyramid-registry | 📋 — | Phase 5 Tier A/B (2030+) |
-| Runix | 🔨 Alpha in progress | Kernel bring-up done; full desktop OS (layers 1-6) is Phase 5 Tier C (2033+) |
+| Runix | 🔨 Alpha in progress — ahead of schedule | Kernel bring-up, capability manager, and Wasm engine already live and CI-tested; full desktop OS (layers 1-6) is Phase 5 Tier C (2033+) |
 | Runix Mobile | 📋 — | Phase 5 Tier C (2034+) |
 | runix-mvno | 📋 — | Phase 5 Tier C (2033+) |
 
@@ -187,17 +184,21 @@ ML expertise required. Funded by Phase 1 revenue + EU grants.
 | Release | Scope | Target |
 |---|---|---|
 | **ecosystem/v1.0.0** | 5-platform foundation (CITADEL, APIGuard, NIS2 Compass, IRFlow) + SDK (Go/Python/TypeScript/Rust, incl. `vantage-hash`) | ✅ Shipped 2026-09-19 — the real, first-ever ecosystem release; see [CHANGELOG.md](CHANGELOG.md) |
-| **ecosystem/v1.1.0** (planned) | +OpenScrub v1.0 + CyberPath v1.0 + OpenCSIRT v1.0 + ThreatFlow v1.0 + VertGuard v1.0 + SecureLab v1.0 + SIN Community v1.0 — 11-platform stack | 📋 Planned — not yet shipped, no tag exists |
-| **ecosystem/v2.0.0** | 11-platform stack + PQC migration (Ed25519 → ML-DSA hybrid) | 2028 Q4 |
+| **ecosystem/v1.1.0** | +ThreatFlow, OpenCSIRT, OpenScrub, CyberPath, SecureLab, sinauth, SIN Community v1.0 (7 platforms) | ✅ Shipped 2026-09-28 — see [CHANGELOG.md](CHANGELOG.md) |
+| **ecosystem/v1.2.0** | +VertGuard v1.0 — the full originally-planned platform set complete | ✅ Shipped 2026-09-28 — see [CHANGELOG.md](CHANGELOG.md) |
+| **ecosystem/v2.0.0** | Full platform stack + PQC migration (Ed25519 → ML-DSA hybrid) | 2028 Q4 |
 | **ecosystem/v2.5.0** | +vantage-hash + pyramid-registry v1.0 | 2030 |
 | **ecosystem/v3.0.0** | NIS3-ready bundle | 2032 |
 | **ecosystem/v4.0.0** | +Runix (if Tier C funded) | 2034-2036 |
 
-> Note: `ecosystem/v1.0.0-2026-Q2` and `ecosystem/v1.1.0` were previously
-> drafted names for planned milestones that were never actually tagged or
-> published. The real first release is `ecosystem/v1.0.0` (2026-09-19,
-> renumbered down from what had been planned as a later version, for the
-> same reason described in [CHANGELOG.md](CHANGELOG.md)).
+> Note: `ecosystem/v1.0.0-2026-Q2` and an earlier `ecosystem/v1.1.0` draft
+> were previously planned names for a single, larger 11-platform milestone
+> that was never actually tagged or published that way. In practice the
+> full platform set shipped as three separate, smaller releases instead
+> (`v1.0.0` → `v1.1.0` → `v1.2.0`, 2026-09-19 to 2026-09-28) — the version
+> numbers above are the real, tagged history, not the originally-drafted
+> plan; see [CHANGELOG.md](CHANGELOG.md) for why each was split out this
+> way.
 
 ## Platform-specific roadmaps
 
@@ -225,7 +226,7 @@ ML expertise required. Funded by Phase 1 revenue + EU grants.
 2. **File an RFC** under [rfcs/](rfcs/) for proposals that change the
    ecosystem's direction (new platform, cross-platform contract change,
    licensing change).
-3. **Contribute to the ecosystem** — 5 platforms plus the SDK are released as `ecosystem/v1.0.0`; the remaining 6 are feature-complete in-repo but not yet released. Contributions that improve integration depth, expand test coverage, help get the remaining platforms through the release pipeline, or accelerate Phase 5 Tier A components are welcome.
+3. **Contribute to the ecosystem** — every originally-planned platform is now released (`ecosystem/v1.0.0` through `v1.2.0`). Contributions that improve integration depth, expand test coverage, close remaining gaps (GoBGP blackhole routing, SIN Community TOTP, VertGuard model weights), or accelerate Phase 5 Tier A components are welcome.
 4. **Sponsor development** — Tier C feasibility depends on funding. Get
    in touch via `contact@opensecstack.org` if your organisation wants to
    accelerate a specific component.

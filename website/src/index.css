@@ -251,6 +251,14 @@ a:hover { color: #66f7ff; text-shadow: 0 0 8px rgba(0,240,255,0.4); text-decorat
 .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 2rem; }
 .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
 
+/* Grid items default to min-width: auto, i.e. they refuse to shrink below
+   their own content's min-content size. One card with unbreakable content
+   (e.g. a long line with no wrap point) can then force its whole column --
+   and the page -- wider than the viewport on mobile, overriding the
+   minmax() above. Force them shrinkable; cards that need a true minimum
+   should set their own min-width. */
+.grid-2 > *, .grid-3 > * { min-width: 0; }
+
 /* ── Badges ── */
 
 .badge {

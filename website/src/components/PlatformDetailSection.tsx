@@ -118,11 +118,19 @@ export function FlowStepsCard({
   return (
     <div className="glass-card">
       <h3 className="card-title" style={{ marginBottom: '0.5rem' }}>{heading}</h3>
-      <div style={{ fontFamily: 'var(--mono)', fontSize: '0.85rem', color: '#94a3b8' }}>
+      {/* Each step+arrow is one flex item so the row can wrap on narrow
+          viewports -- adjacent <span>s with no space/text between them
+          have no line-break opportunity, so without flex-wrap here the
+          whole chain becomes a single unbreakable run that forces the
+          card (and the grid column it sits in) wider than the viewport. */}
+      <div style={{
+        fontFamily: 'var(--mono)', fontSize: '0.85rem', color: '#94a3b8',
+        display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.4rem',
+      }}>
         {steps.map((s, i, arr) => (
-          <span key={s}>
+          <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
             <span style={{ color }}>{s}</span>
-            {i < arr.length - 1 && <span style={{ color: '#334155', margin: '0 6px' }}>&rarr;</span>}
+            {i < arr.length - 1 && <span style={{ color: '#334155' }}>&rarr;</span>}
           </span>
         ))}
       </div>

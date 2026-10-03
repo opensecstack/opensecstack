@@ -131,6 +131,7 @@ var rbacMap = map[string][]string{
 		"USER_CREATE", "USER_DELETE",
 		"PLAYBOOK_EXECUTE", "IOC_INGEST",
 		"grid_sandbox.spawn_instance",
+		"esim.enable", "esim.delete",
 	},
 	"operator": {
 		"API_SCAN_INITIATE",
@@ -143,6 +144,16 @@ var rbacMap = map[string][]string{
 		// infrastructure-execution action, the same category as
 		// PLAYBOOK_EXECUTE — "operator" is the closest existing role fit.
 		"grid_sandbox.spawn_instance",
+		// Runix's mobile/ARM eSIM lifecycle (kernel-arm/src/sim.rs's
+		// Created/Disabled/Enabled/Deleted profile state machine) routes
+		// its two destructive transitions — enabling a profile (which
+		// silently demotes whatever was previously active) and deleting
+		// one (irreversible) — through a MARSHAL gate
+		// (kernel-arm/src/esim_marshal.rs, a fail-open stub today since
+		// kernel-arm has no network transport yet). Same category as
+		// grid_sandbox.spawn_instance above: kernel-driven infrastructure
+		// execution, no human in the loop, "operator" the closest fit.
+		"esim.enable", "esim.delete",
 	},
 	"analyst": {
 		"API_SCAN_INITIATE",

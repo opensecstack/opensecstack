@@ -18,7 +18,7 @@ concurrency:
 # Shared defaults
 # ---------------------------------------------------------------------------
 env:
-  GO_VERSION: "1.25"
+  GO_VERSION: "1.26"
   PYTHON_VERSION: "3.12"
 
 jobs:
@@ -187,7 +187,7 @@ jobs:
           # against a stdlib with the known CVE fixes applied — the go.mod
           # `toolchain` directive alone was not reliably triggering the
           # auto-switch for govulncheck's subprocess calls in CI.
-          go-version: "1.25.13"
+          go-version: "1.26.9"
           cache-dependency-path: apiguard/go.sum
       - name: govulncheck
         working-directory: apiguard
@@ -600,7 +600,7 @@ jobs:
           # against a stdlib with the known CVE fixes applied — the go.mod
           # `toolchain` directive alone was not reliably triggering the
           # auto-switch for govulncheck's subprocess calls in CI.
-          go-version: "1.25.13"
+          go-version: "1.26.9"
           cache-dependency-path: citadel/go.sum
       - name: govulncheck
         working-directory: citadel

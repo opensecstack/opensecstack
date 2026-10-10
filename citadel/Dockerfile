@@ -3,7 +3,7 @@
 # it only resolves if sdk/ is present alongside citadel/ in the build
 # context.
 
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 RUN apk --no-cache add git
 

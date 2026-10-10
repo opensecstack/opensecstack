@@ -133,6 +133,7 @@ var rbacMap = map[string][]string{
 		"grid_sandbox.spawn_instance",
 		"esim.enable", "esim.delete",
 		"mvno.bind_profile", "mvno.suspend_account", "mvno.reactivate_account",
+		"data.reset_usage",
 	},
 	"operator": {
 		"API_SCAN_INITIATE",
@@ -163,6 +164,13 @@ var rbacMap = map[string][]string{
 		// service). Same category as esim.enable/esim.delete above: no human
 		// in the loop, "operator" the closest fit.
 		"mvno.bind_profile", "mvno.suspend_account", "mvno.reactivate_account",
+		// Runix mobile data policy engine (kernel-arm/src/data.rs): resetting
+		// an account's data-usage period lifts a data cap and so restores
+		// service. Consequential, kernel-driven infrastructure action routed
+		// through a MARSHAL gate, no human in the loop, "operator" the closest
+		// fit. It is the one data action that is gated (the other data
+		// syscalls never reach MARSHAL).
+		"data.reset_usage",
 	},
 	"analyst": {
 		"API_SCAN_INITIATE",

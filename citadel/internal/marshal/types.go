@@ -132,6 +132,7 @@ var rbacMap = map[string][]string{
 		"PLAYBOOK_EXECUTE", "IOC_INGEST",
 		"grid_sandbox.spawn_instance",
 		"esim.enable", "esim.delete",
+		"mvno.bind_profile", "mvno.suspend_account", "mvno.reactivate_account",
 	},
 	"operator": {
 		"API_SCAN_INITIATE",
@@ -154,6 +155,14 @@ var rbacMap = map[string][]string{
 		// grid_sandbox.spawn_instance above: kernel-driven infrastructure
 		// execution, no human in the loop, "operator" the closest fit.
 		"esim.enable", "esim.delete",
+		// Runix's mobile MVNO account lifecycle (kernel-arm/src/mvno.rs)
+		// routes binding a profile to a subscriber account, suspending an
+		// account, and reactivating one through a MARSHAL gate. Each is a
+		// consequential, kernel-driven infrastructure action (it changes
+		// which subscriber identity is live on the network, or cuts/restores
+		// service). Same category as esim.enable/esim.delete above: no human
+		// in the loop, "operator" the closest fit.
+		"mvno.bind_profile", "mvno.suspend_account", "mvno.reactivate_account",
 	},
 	"analyst": {
 		"API_SCAN_INITIATE",

@@ -10,7 +10,7 @@ COPY apiguard/rust/ ./rust/
 RUN cd rust && cargo build --release
 
 # Stage 2 — Go builder
-FROM golang:1.25-alpine AS go-builder
+FROM golang:1.26-alpine AS go-builder
 WORKDIR /src
 COPY apiguard/go.mod apiguard/go.sum ./apiguard/
 COPY sdk/go/sinauth/go.mod sdk/go/sinauth/go.sum ./sdk/go/sinauth/

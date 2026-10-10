@@ -79,7 +79,7 @@ RUN cd rust && \
 # ─────────────────────────────────────────────────────────────────────
 # Stage 2 — Go builder
 # ─────────────────────────────────────────────────────────────────────
-FROM golang:1.25-bookworm AS go-builder
+FROM golang:1.26-bookworm AS go-builder
 
 WORKDIR /build
 

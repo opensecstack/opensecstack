@@ -6,7 +6,7 @@
 #
 #   docker build -f opencsirt/Dockerfile -t opensecstack/opencsirt-api:dev .
 
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates
 

@@ -752,7 +752,7 @@ jobs:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
       - name: Start full stack
         run: |
-          docker compose -f deploy/docker-compose.dev.yml up -d --wait --wait-timeout 120
+          docker compose -f deploy/docker-compose.dev.yml up -d --wait --wait-timeout 600
       - name: Health check — APIGuard
         run: |
           curl -sf --retry 10 --retry-delay 3 --retry-connrefused \
@@ -791,7 +791,7 @@ jobs:
     steps:
       - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4
       - name: Start full stack
-        run: docker compose -f deploy/docker-compose.dev.yml up -d --wait --wait-timeout 120
+        run: docker compose -f deploy/docker-compose.dev.yml up -d --wait --wait-timeout 600
       - name: Install Nuclei
         # go install intermittently hits transient network errors talking to
         # sum.golang.org (checksum verification) — retry rather than

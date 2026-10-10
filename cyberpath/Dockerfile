@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.6
 # Multi-stage build for the cyberpath-server binary.
-# Builder uses golang:1.25-alpine; final image is distroless static.
+# Builder uses golang:1.26-alpine; final image is distroless static.
 #
 # Build context is the REPO ROOT, not cyberpath/ — go.mod's `replace`
 # directives for sdk/go/citadel and sdk/go/sinauth point outside this
@@ -8,7 +8,7 @@
 # in the build context, the same reason citadel/Dockerfile and
 # threatflow/Dockerfile use root context.
 
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /src
 RUN apk add --no-cache git ca-certificates
 

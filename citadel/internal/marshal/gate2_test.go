@@ -280,6 +280,95 @@ func TestGate2_EsimLifecycle_ViewerRole_Refuse(t *testing.T) {
 	}
 }
 
+// "mvno.bind_profile"/"mvno.suspend_account"/"mvno.reactivate_account"
+// (Runix's mobile MVNO account lifecycle gate — see kernel-arm/src/mvno.rs)
+// are now recognized rbacMap action types for the "operator" role, same
+// category as grid_sandbox.spawn_instance above.
+func TestGate2_MvnoAccountLifecycle_OperatorRole_Pass(t *testing.T) {
+	for _, actionType := range []string{"mvno.bind_profile", "mvno.suspend_account", "mvno.reactivate_account"} {
+		store, verifier, opPriv, vfPriv := storeWithUsers("operator", "analyst")
+		engine := New(store, verifier)
+		k := baseKerkese()
+		k.Action.Type = actionType
+		signKerkese(k, opPriv, vfPriv)
+
+		d, err := engine.Evaluate(context.Background(), k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d.Gates[1].Status != GatePass {
+			t.Errorf("gate2: expected PASS for %s/operator, got %s: %s", actionType, d.Gates[1].Status, d.Gates[1].Reason)
+		}
+	}
+}
+
+// Regression guard: "mvno.bind_profile"/"mvno.suspend_account"/"mvno.reactivate_account" are still absent from
+// roles that were never granted them (this addition must stay additive
+// and scoped to admin/operator only, not open the action to every role).
+func TestGate2_MvnoAccountLifecycle_ViewerRole_Refuse(t *testing.T) {
+	for _, actionType := range []string{"mvno.bind_profile", "mvno.suspend_account", "mvno.reactivate_account"} {
+		store, verifier, opPriv, vfPriv := storeWithUsers("viewer", "analyst")
+		engine := New(store, verifier)
+		k := baseKerkese()
+		k.Actor.Role = "viewer"
+		k.Action.Type = actionType
+		signKerkese(k, opPriv, vfPriv)
+
+		d, err := engine.Evaluate(context.Background(), k)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if d.Gates[1].Status != GateFail {
+			t.Errorf("gate2: expected FAIL for %s/viewer, got %s: %s", actionType, d.Gates[1].Status, d.Gates[1].Reason)
+		}
+		if d.Outcome != OutcomeRefuse {
+			t.Errorf("expected REFUSE, got %s", d.Outcome)
+		}
+	}
+}
+
+// "data.reset_usage" (Runix's mobile data policy engine gate -- see
+// kernel-arm/src/data.rs) is now a recognized rbacMap action type for the
+// "operator" role, same category as the mvno.* and esim.* actions above.
+func TestGate2_DataResetUsage_OperatorRole_Pass(t *testing.T) {
+	store, verifier, opPriv, vfPriv := storeWithUsers("operator", "analyst")
+	engine := New(store, verifier)
+	k := baseKerkese()
+	k.Action.Type = "data.reset_usage"
+	signKerkese(k, opPriv, vfPriv)
+
+	d, err := engine.Evaluate(context.Background(), k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Gates[1].Status != GatePass {
+		t.Errorf("gate2: expected PASS for data.reset_usage/operator, got %s: %s", d.Gates[1].Status, d.Gates[1].Reason)
+	}
+}
+
+// Regression guard: "data.reset_usage" is still absent from roles that were
+// never granted it (this addition must stay additive and scoped to
+// admin/operator only, not open the action to every role).
+func TestGate2_DataResetUsage_ViewerRole_Refuse(t *testing.T) {
+	store, verifier, opPriv, vfPriv := storeWithUsers("viewer", "analyst")
+	engine := New(store, verifier)
+	k := baseKerkese()
+	k.Actor.Role = "viewer"
+	k.Action.Type = "data.reset_usage"
+	signKerkese(k, opPriv, vfPriv)
+
+	d, err := engine.Evaluate(context.Background(), k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Gates[1].Status != GateFail {
+		t.Errorf("gate2: expected FAIL for data.reset_usage/viewer, got %s: %s", d.Gates[1].Status, d.Gates[1].Reason)
+	}
+	if d.Outcome != OutcomeRefuse {
+		t.Errorf("expected REFUSE, got %s", d.Outcome)
+	}
+}
+
 // A nil (never-wired) PermifySnapshot behaves identically to a
 // known-nothing snapshot: Gate 2 outcome depends only on rbacMap.
 func TestGate2_NilSnapshot_BehavesLikeUnknown(t *testing.T) {

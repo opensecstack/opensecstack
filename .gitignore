@@ -109,6 +109,13 @@ sdk/pkg/
 deploy/helm/opensecstack/values.prod.yaml
 deploy/helm/opensecstack/values.staging.yaml
 
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# securelab/web: stray tsc output emitted next to the .ts/.tsx sources
+securelab/web/src/**/*.js
+securelab/web/vite.config.js
+
 # Website build output
 website/.next/
 website/out/

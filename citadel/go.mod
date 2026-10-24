@@ -2,7 +2,7 @@ module github.com/opensecstack/citadel
 
 go 1.26.0
 
-toolchain go1.26.9
+toolchain go1.26.10
 
 require (
 	buf.build/gen/go/permifyco/permify/protocolbuffers/go v1.36.11-20260417170026-08b37474f24f.1

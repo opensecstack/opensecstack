@@ -22,7 +22,9 @@ For how releases are cut and ecosystem-release tags are produced, see
 
 ---
 
-## [ecosystem/v1.2.0] - 2026-09-28
+## [ecosystem/v1.2.0] - 2026-10-21
+
+> Final tag and GitHub release: 2026-10-21, cut from the soaked `ecosystem/v1.2.0-rc.2` commit. Release candidates were published 2026-09-29.
 
 **VertGuard — the 8th and last unreleased platform — cut through the real
 release pipeline.** VertGuard had real, substantial, feature-complete
@@ -67,7 +69,9 @@ needs on the slim Rust base image.
 
 ---
 
-## [ecosystem/v1.1.0] - 2026-09-28
+## [ecosystem/v1.1.0] - 2026-10-21
+
+> Final tag and GitHub release: 2026-10-21, cut from the soaked `ecosystem/v1.1.0-rc.2` commit. Release candidates were published 2026-09-28.
 
 **7 more platforms cut through the real release pipeline.** ThreatFlow,
 OpenCSIRT, OpenScrub, CyberPath, SecureLab, sinauth, and SIN Community had
@@ -75,9 +79,9 @@ real, substantial, feature-complete work sitting in-repo (each documented in
 its own `CHANGELOG.md`), but `release.yml` never built, tested, or published
 any of them — no test job, no docker matrix entry. This release closes that
 gap: `release.yml` now has a `test-<platform>` job and docker build matrix
-entries for all 7, and each cuts its first real `1.0.0`. The 5 platforms
-released in `ecosystem/v1.0.0` (APIGuard, NIS2 Compass, CITADEL, IRFlow,
-SDK) are unchanged — this release only adds to the set, nothing in it was
+entries for all 7, and each cuts its first real `1.0.0`. The 4 platforms and
+the SDK released in `ecosystem/v1.0.0` (APIGuard, NIS2 Compass, CITADEL,
+IRFlow, SDK) are unchanged — this release only adds to the set, nothing in it was
 re-cut.
 
 Also fixes a Docker image version-injection gap found while wiring these 7

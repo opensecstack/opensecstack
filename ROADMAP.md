@@ -2,17 +2,19 @@
 
 > Public roadmap for the opensecstack ecosystem.
 >
-> Updated: 2026-10-02. Next review: Q4 2026.
+> Updated: 2026-10-24. Next review: Q1 2027.
 
-## Current Status (as of 2026-10-02)
+## Current Status (as of 2026-10-24)
 
 ### ✅ Released — the full ecosystem is live
 
-Three releases in nine days closed out the entire originally-planned
-platform set: `ecosystem/v1.0.0` (2026-09-19, 5 platforms + SDK),
-`ecosystem/v1.1.0` (2026-09-28, +7 platforms), and `ecosystem/v1.2.0`
-(2026-09-28, +VertGuard — "the 8th and last unreleased platform," per
-that release's own changelog entry). Every platform below is tagged,
+Three ecosystem releases closed out the entire originally-planned
+platform set — 12 platforms plus the SDK: `ecosystem/v1.0.0` (2026-09-19,
+4 platforms + SDK), `ecosystem/v1.1.0` (2026-10-21, +7 platforms), and
+`ecosystem/v1.2.0` (2026-10-21, +VertGuard — "the 8th and last unreleased
+platform," per that release's own changelog entry). The v1.1.0 and v1.2.0
+release candidates were published on 2026-09-28 and 2026-09-29; the final
+tags were cut from those soaked RCs on 2026-10-21. Every platform below is tagged,
 built, and published to a registry a deployer could install from — see
 [CHANGELOG.md](CHANGELOG.md) for the full accounting of each release.
 
@@ -37,8 +39,8 @@ built, and published to a registry a deployer could install from — see
 ## Phase 1 — Foundation ✅ Complete
 
 Feature-complete Q1-Q2 2026; actually released as `ecosystem/v1.0.0` on
-2026-09-19 (ThreatFlow excepted — it shipped nine days later in
-`ecosystem/v1.1.0` instead, see below).
+2026-09-19 (ThreatFlow excepted — it shipped in
+`ecosystem/v1.1.0` (2026-10-21) instead, see below).
 
 | Deliverable | Version | Status |
 |---|---|---|
@@ -48,7 +50,7 @@ Feature-complete Q1-Q2 2026; actually released as `ecosystem/v1.0.0` on
 | IRFlow — Playbook executor, webhooks, MARSHAL+WORM, NIS2 Art. 23 | v1.0.0 | ✅ Done — released |
 | ThreatFlow — IOC aggregation, MITRE ATT&CK, STIX/TAXII | v1.0.0 | ✅ Done — released in `ecosystem/v1.1.0` (not part of `ecosystem/v1.0.0` itself) |
 | opensecstack/sdk — 4-language clients, password hashing module | v1.0.0 | ✅ Done — released |
-| Ecosystem documentation — 136 docs covering 5 platforms + meta | — | ✅ Done |
+| Ecosystem documentation — 136 docs covering 4 platforms + SDK + meta | — | ✅ Done |
 | Release discipline — CODEOWNERS, release-process, deprecation-policy, compatibility-matrix, migration template | — | ✅ Done |
 | Security maturity framework — 3-tier deployment profile (standard/elevated/high-assurance) | — | ✅ Done |
 
@@ -75,13 +77,13 @@ Close the loop — validate defences against offensive scenarios, coordinate acr
 | SecureLab v1.0.0 — OpenScrub + APIGuard + ThreatFlow detection validation, payload fuzzing | 2028 Q1 | ✅ Done |
 | OpenCSIRT v0.1.0 — TAXII 2.1 server/client, STIX 2.1 builder, constituency management | 2026 Q2 | ✅ Done |
 | OpenCSIRT v1.0.0 — CSAF 2.0, CITADEL WORM emission, IRFlow incident bridge, peer-CSIRT federation, HMAC replay protection | 2026 Q2 | ✅ Done |
-| **Ecosystem — full platform stack** | 2026 Q2 | ✅ Done — ~5 quarters late and under different version numbers than planned (shipped as `v1.0.0` + `v1.1.0` + `v1.2.0` across 2026-09-19 to 2026-09-28, not a single `v1.0.0`), but complete; see [Ecosystem release milestones](#ecosystem-release-milestones) below |
+| **Ecosystem — full platform stack** | 2026 Q2 | ✅ Done — ~5 quarters late and under different version numbers than planned (shipped as `v1.0.0` + `v1.1.0` + `v1.2.0` across 2026-09-19 to 2026-10-21, not a single `v1.0.0`), but complete; see [Ecosystem release milestones](#ecosystem-release-milestones) below |
 
-## Phase 4 — AI-Attack Defence (2026 Q3 – 2028 Q4)
+## Phase 4 — AI-Attack Defence ✅ Complete (planned 2026 Q3 – 2028 Q4; shipped 2026-10-21)
 
 **Staggered phased launch** to deliver immediate value without requiring ML expertise up front.
 
-### Phase 4.1 — VertGuard v0.1 (no ML, Q3 2026)
+### Phase 4.1 — VertGuard v0.1 (no ML) ✅ Shipped (planned Q3 2026)
 
 Go + Rust only. Leverages existing engineering team.
 
@@ -89,17 +91,19 @@ Go + Rust only. Leverages existing engineering team.
 |---|---|---|
 | **Module 3: Prompt Injection Defense** | Rust pattern engine + Go scanner | OWASP LLM Top 10 coverage, LLM firewall integration (NeMo Guardrails) |
 | **Module 4: AI Threat Intelligence Feed** | Go + ThreatFlow SDK | Feed collector, MITRE ATLAS mapping, AI-specific IOC types |
-| API server, dashboard, CITADEL integration | Go + React | Consistent with 11-platform pattern |
+| API server, dashboard, CITADEL integration | Go + React | Consistent with the ecosystem's Go + React pattern |
 
 Product-market fit: every organisation deploying LLM-using apps today.
 
-### Phase 4.2 — SIN Community v1.0.0 ✅ Released (`ecosystem/v1.1.0`)
+**Status:** ✅ Delivered as part of VertGuard v1.0.0 in `ecosystem/v1.2.0` (2026-10-21).
+
+### Phase 4.2 — SIN Community v1.0.0 ✅ Released (`ecosystem/v1.1.0`, 2026-10-21)
 
 | Deliverable | Status |
 |---|---|
-| SIN Community v1.0.0 — posts, comments, tags, Meilisearch FTS, notifications, API keys, series, spaces, Docker deployment | ✅ Done — released 2026-09-28; TOTP 2FA still has a DB schema but no implementation yet |
+| SIN Community v1.0.0 — posts, comments, tags, Meilisearch FTS, notifications, API keys, series, spaces, Docker deployment | ✅ Done — released 2026-10-21 (`ecosystem/v1.1.0`); TOTP 2FA still has a DB schema but no implementation yet |
 
-### Phase 4.4 — VertGuard v0.5 (Python ML layer, Q1-Q3 2027)
+### Phase 4.4 — VertGuard v0.5 (Python ML layer) ✅ Shipped (planned Q1-Q3 2027)
 
 ML expertise required. Funded by Phase 1 revenue + EU grants.
 
@@ -110,15 +114,17 @@ ML expertise required. Funded by Phase 1 revenue + EU grants.
 | gRPC ML service, model registry with SHA-256 checksums | Python + Go | Supply chain security for ML |
 | Dataset registry, adversarial robustness testing | Python | Dataset hygiene |
 
-### Phase 4.5 — VertGuard v1.0 (Q3 2028)
+**Status:** ✅ Delivered as part of VertGuard v1.0.0 in `ecosystem/v1.2.0` (2026-10-21). Trained model weights are not bundled — see [Honest caveats](#honest-caveats).
+
+### Phase 4.5 — VertGuard v1.0 ✅ Shipped (planned Q3 2028)
 
 | Deliverable | Tech | Justification |
 |---|---|---|
 | **Module 5: Synthetic Identity Detection** | Python ML | GAN-generated profile detection |
 | Real-time video call analysis | Python + WebRTC | Live deepfake detection mid-call |
-| v1.0.0 stable — NIS3-ready, security audit checklist 100% complete | — | ✅ Done — released as `ecosystem/v1.2.0` (2026-09-28), 2 years ahead of this table's original Q3 2028 target; see [vertguard/CHANGELOG.md](vertguard/CHANGELOG.md) |
+| v1.0.0 stable — NIS3-ready, security audit checklist 100% complete | — | ✅ Done — released as `ecosystem/v1.2.0` (2026-10-21), 2 years ahead of this table's original Q3 2028 target; see [vertguard/CHANGELOG.md](vertguard/CHANGELOG.md) |
 
-**Ecosystem — full platform stack — ✅ Shipped** (across `ecosystem/v1.0.0`, `v1.1.0`, and `v1.2.0`, 2026-09-19 to 2026-09-28; see [Ecosystem release milestones](#ecosystem-release-milestones) below)
+**Ecosystem — full platform stack — ✅ Shipped** (across `ecosystem/v1.0.0`, `v1.1.0`, and `v1.2.0`, 2026-09-19 to 2026-10-21; see [Ecosystem release milestones](#ecosystem-release-milestones) below)
 
 ---
 
@@ -158,7 +164,7 @@ ML expertise required. Funded by Phase 1 revenue + EU grants.
 
 ## Version Summary
 
-| Platform | Current (2026-10-02) | Target v1.0.0 |
+| Platform | Current (2026-10-24) | Target v1.0.0 |
 |---|---|---|
 | CITADEL | ✅ Released — ecosystem/v1.0.0 | — |
 | APIGuard | ✅ Released — ecosystem/v1.0.0 | — |
@@ -183,19 +189,19 @@ ML expertise required. Funded by Phase 1 revenue + EU grants.
 
 | Release | Scope | Target |
 |---|---|---|
-| **ecosystem/v1.0.0** | 5-platform foundation (CITADEL, APIGuard, NIS2 Compass, IRFlow) + SDK (Go/Python/TypeScript/Rust, incl. `vantage-hash`) | ✅ Shipped 2026-09-19 — the real, first-ever ecosystem release; see [CHANGELOG.md](CHANGELOG.md) |
-| **ecosystem/v1.1.0** | +ThreatFlow, OpenCSIRT, OpenScrub, CyberPath, SecureLab, sinauth, SIN Community v1.0 (7 platforms) | ✅ Shipped 2026-09-28 — see [CHANGELOG.md](CHANGELOG.md) |
-| **ecosystem/v1.2.0** | +VertGuard v1.0 — the full originally-planned platform set complete | ✅ Shipped 2026-09-28 — see [CHANGELOG.md](CHANGELOG.md) |
+| **ecosystem/v1.0.0** | 4-platform foundation (CITADEL, APIGuard, NIS2 Compass, IRFlow) + SDK (Go/Python/TypeScript/Rust, incl. `vantage-hash`) | ✅ Shipped 2026-09-19 — the real, first-ever ecosystem release; see [CHANGELOG.md](CHANGELOG.md) |
+| **ecosystem/v1.1.0** | +ThreatFlow, OpenCSIRT, OpenScrub, CyberPath, SecureLab, sinauth, SIN Community v1.0 (7 platforms) | ✅ Shipped 2026-10-21 (RC 2026-09-28) — see [CHANGELOG.md](CHANGELOG.md) |
+| **ecosystem/v1.2.0** | +VertGuard v1.0 — the full originally-planned platform set complete | ✅ Shipped 2026-10-21 (RC 2026-09-29) — see [CHANGELOG.md](CHANGELOG.md) |
 | **ecosystem/v2.0.0** | Full platform stack + PQC migration (Ed25519 → ML-DSA hybrid) | 2028 Q4 |
 | **ecosystem/v2.5.0** | +vantage-hash + pyramid-registry v1.0 | 2030 |
 | **ecosystem/v3.0.0** | NIS3-ready bundle | 2032 |
 | **ecosystem/v4.0.0** | +Runix (if Tier C funded) | 2034-2036 |
 
 > Note: `ecosystem/v1.0.0-2026-Q2` and an earlier `ecosystem/v1.1.0` draft
-> were previously planned names for a single, larger 11-platform milestone
+> were previously planned names for a single, larger all-platform milestone
 > that was never actually tagged or published that way. In practice the
 > full platform set shipped as three separate, smaller releases instead
-> (`v1.0.0` → `v1.1.0` → `v1.2.0`, 2026-09-19 to 2026-09-28) — the version
+> (`v1.0.0` → `v1.1.0` → `v1.2.0`, 2026-09-19 to 2026-10-21) — the version
 > numbers above are the real, tagged history, not the originally-drafted
 > plan; see [CHANGELOG.md](CHANGELOG.md) for why each was split out this
 > way.
@@ -207,10 +213,17 @@ ML expertise required. Funded by Phase 1 revenue + EU grants.
 - [CITADEL Roadmap](citadel/ROADMAP.md)
 - [IRFlow Roadmap](irflow/ROADMAP.md)
 - [ThreatFlow Roadmap](threatflow/ROADMAP.md)
+- [OpenCSIRT Roadmap](opencsirt/ROADMAP.md)
+- [OpenScrub Roadmap](openscrub/ROADMAP.md)
+- [CyberPath Roadmap](cyberpath/ROADMAP.md)
+- [SecureLab Roadmap](securelab/ROADMAP.md)
+- [sinauth Roadmap](sinauth/ROADMAP.md)
+- [SIN Community Roadmap](community/ROADMAP.md)
+- [VertGuard Roadmap](vertguard/ROADMAP.md)
 
 ## How we plan
 
-- Roadmap is reviewed **quarterly**. Next review: **Q4 2026**.
+- Roadmap is reviewed **quarterly**. Next review: **Q1 2027**.
 - Phase ordering is not contractual — a later phase may start early if
   contributor capacity allows, but quality gates (see
   [docs/release-process.md](docs/release-process.md)) must hold.
@@ -242,7 +255,7 @@ ML expertise required. Funded by Phase 1 revenue + EU grants.
   implemented and CI-tested today in [opensecstack/runix](https://github.com/opensecstack/runix),
   independent of Tier C funding materialising. Runix Mobile and
   runix-mvno remain designs, not code, pending the funding/backing
-  described above. The core 11-platform security stack continues
+  described above. The core 12-platform security stack continues
   regardless of any of this.
 - **VertGuard ML model weights** are not bundled — operators must supply trained weights for the video/voice/identity models or run with the stub backend. The model training pipeline and configs are included.
 - **Post-quantum migration is not optional** — NIST PQC standards

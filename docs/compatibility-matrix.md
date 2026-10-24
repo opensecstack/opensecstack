@@ -20,7 +20,7 @@ The matrix has three dimensions:
 
 ## Current ecosystem release
 
-### `ecosystem/v1.2.0` (2026-09-28)
+### `ecosystem/v1.2.0` (2026-10-21)
 
 **VertGuard — the 8th and last unreleased platform — added to the release
 pipeline.** It had real, substantial, feature-complete AI-attack-defence
@@ -70,7 +70,7 @@ Target: **PQ-default by v3.0 (2030)** — aligned with expected NIS3 transpositi
 
 ### Prior ecosystem releases
 
-#### `ecosystem/v1.1.0` (2026-09-28)
+#### `ecosystem/v1.1.0` (2026-10-21)
 
 Adds ThreatFlow, OpenCSIRT, OpenScrub, CyberPath, SecureLab, sinauth, and
 SIN Community, all at `1.0.0`. Its RC (`ecosystem/v1.1.0-rc.2`) was still
@@ -200,8 +200,8 @@ How long each version continues to receive fixes.
 | **Current stable** | v1.1.x (latest minor) | When v1.3 ships |
 | **Previous stable** | v1.0.x | 12 months after v1.1 ships |
 | **Older** | v0.9 and earlier | Unsupported immediately |
-| **Ecosystem release** | `ecosystem/v1.2.0` (2026-09-28) | 12 months from the release date (through 2027-09-28) |
-| **Prior ecosystem release** | `ecosystem/v1.1.0` (2026-09-28) | 12 months from the release date (through 2027-09-28) |
+| **Ecosystem release** | `ecosystem/v1.2.0` (2026-10-21) | 12 months from the release date (through 2027-10-21) |
+| **Prior ecosystem release** | `ecosystem/v1.1.0` (2026-10-21) | 12 months from the release date (through 2027-10-21) |
 | **Prior ecosystem release** | `ecosystem/v1.0.0` (2026-09-19) | 12 months from the release date (through 2027-09-19) |
 
 **In practice:** two minor versions back are always supported for

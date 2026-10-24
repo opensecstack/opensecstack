@@ -1,0 +1,202 @@
+name: opensecstack-live-minimal
+
+# Minimal live deployment: CITADEL (governance engine, including the MARSHAL
+# Kerkese evaluation endpoint Runix needs a real target for) plus sinauth
+# (its Gate 1 AuthN identity provider) and sinauth's own Permify dependency.
+#
+# CITADEL and sinauth are each normally brought up via their own
+# docker-compose.yml (citadel/docker-compose.yml, sinauth/docker-compose.yml)
+# in isolation, with no path between them. This file combines both onto one
+# shared network and points CITADEL_SINAUTH_ISSUER_URL at sinauth's
+# in-network hostname so MARSHAL's Gate 1 can actually validate sinauth
+# tokens -- the one piece neither service's own standalone compose file
+# provides.
+#
+# LOCAL / DEMO STACK ONLY. Database passwords are required and have no
+# defaults: copy .env.example to .env and fill in CITADEL_DB_PASSWORD,
+# SINAUTH_DB_PASSWORD and PERMIFY_DB_PASSWORD (CITADEL_MASTER_KEY is optional).
+# Leaving CITADEL_MASTER_KEY empty skips WORM chain anchoring; set an Ed25519 hex key for anything beyond a demo.
+# Do not expose these ports beyond localhost.
+
+services:
+  citadel-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: citadel
+      POSTGRES_PASSWORD: ${CITADEL_DB_PASSWORD:?set CITADEL_DB_PASSWORD in .env}
+      POSTGRES_DB: citadel
+    volumes:
+      - citadel_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U citadel -d citadel"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  citadel-migrate:
+    image: migrate/migrate:v4.19.1
+    volumes:
+      - ../../citadel/migrations:/migrations
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://citadel:${CITADEL_DB_PASSWORD:?set CITADEL_DB_PASSWORD in .env}@citadel-postgres:5432/citadel?sslmode=disable"
+      - "up"
+    depends_on:
+      citadel-postgres:
+        condition: service_healthy
+
+  citadel:
+    build:
+      # Repo root, not citadel/ -- see citadel/Dockerfile's own comment:
+      # go.mod's replace directive for sdk/go/sinauth only resolves if sdk/
+      # is present alongside citadel/ in the build context.
+      context: ../..
+      dockerfile: citadel/Dockerfile
+    ports:
+      - "127.0.0.1:8099:8099"
+    environment:
+      CITADEL_PORT: 8099
+      CITADEL_LOG_LEVEL: info
+      CITADEL_DB_URL: postgres://citadel:${CITADEL_DB_PASSWORD:?set CITADEL_DB_PASSWORD in .env}@citadel-postgres:5432/citadel?sslmode=disable
+      CITADEL_CITADEL_MASTER_KEY: "${CITADEL_MASTER_KEY:-}"
+      CITADEL_CITADEL_ANCHOR_INTERVAL: 100
+      # In-network hostname, not sinauth's public issuer string -- CITADEL
+      # dials this directly for OIDC discovery + JWKS, so it must be
+      # something this container can actually open a TCP connection to.
+      CITADEL_SINAUTH_ISSUER_URL: http://sinauth:8100
+    depends_on:
+      citadel-postgres:
+        condition: service_healthy
+      citadel-migrate:
+        condition: service_completed_successfully
+      sinauth:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8099/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sinauth-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: sinauth
+      POSTGRES_USER: sinauth
+      POSTGRES_PASSWORD: ${SINAUTH_DB_PASSWORD:?set SINAUTH_DB_PASSWORD in .env}
+    volumes:
+      - sinauth_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sinauth"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  permify-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: permify
+      POSTGRES_USER: permify
+      POSTGRES_PASSWORD: ${PERMIFY_DB_PASSWORD:?set PERMIFY_DB_PASSWORD in .env}
+    volumes:
+      - permify_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U permify"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  permify:
+    image: ghcr.io/permify/permify:latest
+    command: ["serve"]
+    environment:
+      PERMIFY_DATABASE_ENGINE: "postgres"
+      PERMIFY_DATABASE_URI: "postgres://permify:${PERMIFY_DB_PASSWORD:?set PERMIFY_DB_PASSWORD in .env}@permify-postgres:5432/permify?sslmode=disable"
+      PERMIFY_DATABASE_AUTO_MIGRATE: "true"
+    healthcheck:
+      test: ["CMD", "grpc_health_probe", "-addr=localhost:3478"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      permify-postgres:
+        condition: service_healthy
+
+  # Fixes the sinauth-keys volume's ownership to the distroless nonroot
+  # image's UID (65532) before sinauth tries to write its signing key there
+  # -- a fresh named volume is root-owned by default, which the nonroot
+  # container can't write to. Same fix deploy/docker-compose.yml's own
+  # sinauth-keyinit uses.
+  sinauth-keyinit:
+    image: alpine:3.20
+    command: ["sh", "-c", "mkdir -p /keys && chown -R 65532:65532 /keys && chmod 700 /keys"]
+    volumes:
+      - sinauth_keys:/keys
+    restart: on-failure
+
+  sinauth-migrate:
+    build:
+      context: ../../sinauth
+      dockerfile: Dockerfile
+    command: ["migrate", "--dir", "/migrations"]
+    volumes:
+      - ../../sinauth/migrations:/migrations:ro
+    environment:
+      SINAUTH_DB_URL: "postgres://sinauth:${SINAUTH_DB_PASSWORD:?set SINAUTH_DB_PASSWORD in .env}@sinauth-postgres:5432/sinauth?sslmode=disable"
+      SINAUTH_ISSUER: "http://sinauth:8100"
+      SINAUTH_SIGNING_KEY_PATH: "/keys/sinauth.pem"
+    depends_on:
+      sinauth-postgres:
+        condition: service_healthy
+
+  sinauth:
+    build:
+      context: ../../sinauth
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:8100:8100"
+    environment:
+      SINAUTH_HTTP_ADDR: ":8100"
+      SINAUTH_DB_URL: "postgres://sinauth:${SINAUTH_DB_PASSWORD:?set SINAUTH_DB_PASSWORD in .env}@sinauth-postgres:5432/sinauth?sslmode=disable"
+      # Matches CITADEL_SINAUTH_ISSUER_URL above -- both sides must agree on
+      # this string (it's the JWT `iss` claim CITADEL checks), and it must
+      # also be a URL CITADEL can dial for OIDC discovery, so this is the
+      # in-network hostname, not the real sin.to domain this crate would use
+      # in actual production.
+      SINAUTH_ISSUER: "http://sinauth:8100"
+      SINAUTH_SITE_URL: "http://sinauth:8100"
+      SINAUTH_SIGNING_KEY_PATH: "/keys/sinauth.pem"
+      SINAUTH_SIGNING_KEY_ID: "sinauth-1"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
+      GOOGLE_REDIRECT_URI: "http://sinauth:8100/api/v1/auth/google/callback"
+      GITHUB_CLIENT_ID: "${GITHUB_CLIENT_ID:-}"
+      GITHUB_CLIENT_SECRET: "${GITHUB_CLIENT_SECRET:-}"
+      GITHUB_REDIRECT_URI: "http://sinauth:8100/api/v1/auth/github/callback"
+      SINAUTH_RATE_LIMIT_AUTH: "5"
+      SINAUTH_RATE_LIMIT_GLOBAL: "120"
+      SINAUTH_PERMIFY_URL: "permify:3478"
+      SINAUTH_PERMIFY_TIMEOUT: "3s"
+    volumes:
+      - sinauth_keys:/keys
+    depends_on:
+      sinauth-postgres:
+        condition: service_healthy
+      permify:
+        condition: service_healthy
+      sinauth-migrate:
+        condition: service_completed_successfully
+      sinauth-keyinit:
+        condition: service_completed_successfully
+    healthcheck:
+      # The distroless:nonroot runtime image has no shell/wget at all -- use
+      # the binary's own built-in `health` subcommand instead of CMD-SHELL.
+      test: ["CMD", "/sinauth", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  citadel_pgdata:
+  sinauth_pgdata:
+  permify_pgdata:
+  sinauth_keys:
